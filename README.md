@@ -32,10 +32,8 @@ System dependencies (must be installed):
 ### Install System Dependencies (Ubuntu/Debian)
 
 ```bash
-sudo apt install libasio-dev libglew-dev libglm-dev libgl1-mesa-dev
+sudo apt install libsdl3-dev libsdl3-ttf-dev libasio-dev libglew-dev libglm-dev libgl1-mesa-dev
 ```
-
-SDL3 and SDL3_ttf may need to be built from source if not available in your package manager.
 
 ### Build
 

@@ -3,9 +3,7 @@
 #include <cmath>
 #include <vector>
 #include <iostream>
-
-// stb_image already defined in model_loader.cpp
-#include "stb_image.h"
+#include <SDL3_image/SDL_image.h>
 
 namespace mmo {
 
@@ -53,29 +51,38 @@ void TerrainRenderer::shutdown() {
 }
 
 void TerrainRenderer::load_grass_texture() {
-    int tex_width, tex_height, tex_channels;
-    unsigned char* tex_data = stbi_load("assets/textures/grass_seamless.png", 
-                                        &tex_width, &tex_height, &tex_channels, 4);
-    if (tex_data) {
-        glGenTextures(1, &grass_texture_);
-        glBindTexture(GL_TEXTURE_2D, grass_texture_);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex_width, tex_height, 0, 
-                     GL_RGBA, GL_UNSIGNED_BYTE, tex_data);
-        glGenerateMipmap(GL_TEXTURE_2D);
+    SDL_Surface* surface = IMG_Load("assets/textures/grass_seamless.png");
+    if (surface) {
+        // Convert to RGBA format if needed
+        SDL_Surface* rgba_surface = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
+        SDL_DestroySurface(surface);
         
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        
-        float max_aniso;
-        glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &max_aniso);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, std::min(max_aniso, 8.0f));
-        
-        stbi_image_free(tex_data);
-        std::cout << "Loaded grass texture: " << tex_width << "x" << tex_height << std::endl;
+        if (rgba_surface) {
+            int tex_width = rgba_surface->w;
+            int tex_height = rgba_surface->h;
+            
+            glGenTextures(1, &grass_texture_);
+            glBindTexture(GL_TEXTURE_2D, grass_texture_);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex_width, tex_height, 0, 
+                         GL_RGBA, GL_UNSIGNED_BYTE, rgba_surface->pixels);
+            glGenerateMipmap(GL_TEXTURE_2D);
+            
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            
+            float max_aniso;
+            glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &max_aniso);
+            glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, std::min(max_aniso, 8.0f));
+            
+            SDL_DestroySurface(rgba_surface);
+            std::cout << "Loaded grass texture: " << tex_width << "x" << tex_height << std::endl;
+        } else {
+            std::cerr << "Failed to convert grass texture to RGBA" << std::endl;
+        }
     } else {
-        std::cerr << "Failed to load grass texture" << std::endl;
+        std::cerr << "Failed to load grass texture: " << SDL_GetError() << std::endl;
     }
 }
 

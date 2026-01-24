@@ -22,6 +22,7 @@ Dependencies are managed via CMake FetchContent (automatically downloaded):
 System dependencies (must be installed):
 - SDL3
 - SDL3_ttf
+- SDL3_image
 - OpenGL
 - GLEW
 - GLM
@@ -32,7 +33,7 @@ System dependencies (must be installed):
 ### Install System Dependencies (Ubuntu/Debian)
 
 ```bash
-sudo apt install libsdl3-dev libsdl3-ttf-dev libasio-dev libglew-dev libglm-dev libgl1-mesa-dev
+sudo apt install libsdl3-dev libsdl3-ttf-dev libsdl3-image-dev libasio-dev libglew-dev libglm-dev libgl1-mesa-dev
 ```
 
 ### Build

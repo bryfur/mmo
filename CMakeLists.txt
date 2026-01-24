@@ -51,6 +51,7 @@ if(NOT asio_FOUND)
 endif()
 find_package(SDL3 REQUIRED)
 find_package(SDL3_ttf REQUIRED)
+find_package(SDL3_image REQUIRED)
 find_package(OpenGL REQUIRED)
 find_package(GLEW REQUIRED)
 find_package(glm REQUIRED)
@@ -111,6 +112,7 @@ target_link_libraries(mmo_client PRIVATE
     mmo_common 
     SDL3::SDL3
     SDL3_ttf::SDL3_ttf
+    SDL3_image::SDL3_image
     OpenGL::GL
     GLEW::GLEW
     glm::glm

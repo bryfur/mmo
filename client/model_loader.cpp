@@ -1,13 +1,80 @@
 #include "model_loader.hpp"
 
 #define TINYGLTF_IMPLEMENTATION
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_WRITE_IMPLEMENTATION
+#define TINYGLTF_NO_STB_IMAGE
+#define TINYGLTF_NO_STB_IMAGE_WRITE
 #include "tiny_gltf.h"
+#include <SDL3_image/SDL_image.h>
 
 #include <iostream>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+
+namespace {
+
+// Custom image loader for tinygltf using SDL3_image
+bool load_image_data(tinygltf::Image* image, const int image_idx, std::string* err,
+                     std::string* warn, int req_width, int req_height,
+                     const unsigned char* bytes, int size, void* user_data) {
+    (void)image_idx;
+    (void)warn;
+    (void)req_width;
+    (void)req_height;
+    (void)user_data;
+    
+    SDL_IOStream* io = SDL_IOFromConstMem(bytes, size);
+    if (!io) {
+        if (err) *err = "Failed to create SDL IOStream from memory";
+        return false;
+    }
+    
+    SDL_Surface* surface = IMG_Load_IO(io, true);  // true = close IOStream when done
+    if (!surface) {
+        if (err) *err = std::string("SDL_image failed to load: ") + SDL_GetError();
+        return false;
+    }
+    
+    // Convert to RGBA format
+    SDL_Surface* rgba_surface = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
+    SDL_DestroySurface(surface);
+    
+    if (!rgba_surface) {
+        if (err) *err = std::string("Failed to convert to RGBA: ") + SDL_GetError();
+        return false;
+    }
+    
+    image->width = rgba_surface->w;
+    image->height = rgba_surface->h;
+    image->component = 4;
+    image->bits = 8;
+    image->pixel_type = TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE;
+    
+    size_t data_size = static_cast<size_t>(rgba_surface->w * rgba_surface->h * 4);
+    image->image.resize(data_size);
+    memcpy(image->image.data(), rgba_surface->pixels, data_size);
+    
+    SDL_DestroySurface(rgba_surface);
+    return true;
+}
+
+// Dummy write function (not used but required by tinygltf)
+bool write_image_data(const std::string* basepath, const std::string* filename,
+                      const tinygltf::Image* image, bool embedImages,
+                      const tinygltf::FsCallbacks* fs_cb,
+                      const tinygltf::URICallbacks* uri_cb, std::string* out_uri,
+                      void* user_pointer) {
+    (void)basepath;
+    (void)filename;
+    (void)image;
+    (void)embedImages;
+    (void)fs_cb;
+    (void)uri_cb;
+    (void)out_uri;
+    (void)user_pointer;
+    return false;  // Writing not supported
+}
+
+}  // anonymous namespace
 
 namespace mmo {
 
@@ -39,6 +106,10 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
     tinygltf::Model gltf;
     tinygltf::TinyGLTF loader;
     std::string err, warn;
+    
+    // Set custom SDL3_image loader
+    loader.SetImageLoader(load_image_data, nullptr);
+    loader.SetImageWriter(write_image_data, nullptr);
     
     bool ret = loader.LoadBinaryFromFile(&gltf, &err, &warn, path);
     

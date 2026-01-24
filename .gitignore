@@ -1,0 +1,60 @@
+# Build directories
+build/
+cmake-build-*/
+out/
+
+# Clangd cache
+.cache/
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+*.cmake
+!CMakeLists.txt
+
+# Compiled binaries
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.exe
+mmo_client
+mmo_server
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.cproject
+.settings/
+*.user
+*.suo
+*.ncrunch*
+*.aps
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Dependencies (fetched by CMake)
+_deps/
+
+# Debug files
+*.dSYM/
+*.pdb
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp

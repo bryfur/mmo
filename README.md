@@ -66,7 +66,11 @@ Or use the convenience script:
 
 ## Controls
 
-- WASD / Arrow Keys - Move
+- WASD / Arrow Keys - Move (camera-relative)
+- Right Mouse Button + Drag - Orbit camera
+- Mouse Wheel - Zoom in/out
+- Left Mouse Button / Space - Attack
+- Shift - Sprint
 - ESC - Quit
 
 ## Project Structure

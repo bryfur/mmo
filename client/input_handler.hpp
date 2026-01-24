@@ -2,12 +2,14 @@
 
 #include "common/protocol.hpp"
 #include <SDL3/SDL.h>
+#include <vector>
 
 namespace mmo {
 
 class InputHandler {
 public:
     InputHandler();
+    ~InputHandler();
     
     // Process SDL events, returns false if quit requested
     bool process_events();
@@ -68,9 +70,30 @@ public:
     void set_game_input_enabled(bool enabled) { game_input_enabled_ = enabled; }
     bool is_game_input_enabled() const { return game_input_enabled_; }
     
+    // Controller support
+    bool has_controller() const { return gamepad_ != nullptr; }
+    const char* get_controller_name() const;
+    
+    // Camera inversion settings
+    bool is_camera_x_inverted() const { return invert_camera_x_; }
+    bool is_camera_y_inverted() const { return invert_camera_y_; }
+    void set_camera_x_inverted(bool inverted) { invert_camera_x_ = inverted; }
+    void set_camera_y_inverted(bool inverted) { invert_camera_y_ = inverted; }
+    void toggle_camera_x_invert() { invert_camera_x_ = !invert_camera_x_; }
+    void toggle_camera_y_invert() { invert_camera_y_ = !invert_camera_y_; }
+    
+    // Sensitivity settings
+    float get_mouse_sensitivity() const { return mouse_sensitivity_; }
+    float get_controller_sensitivity() const { return controller_sensitivity_; }
+    void set_mouse_sensitivity(float sens) { mouse_sensitivity_ = sens; }
+    void set_controller_sensitivity(float sens) { controller_sensitivity_ = sens; }
+    
 private:
     void update_input_from_keyboard();
     void update_camera_from_mouse();
+    void update_input_from_controller();
+    void handle_controller_added(SDL_JoystickID id);
+    void handle_controller_removed(SDL_JoystickID id);
     
     PlayerInput current_input_;
     PlayerInput last_input_;
@@ -110,8 +133,27 @@ private:
     bool menu_select_pressed_ = false;
     bool game_input_enabled_ = true;
     
-    // Sensitivity - slightly higher for responsive action feel
-    static constexpr float MOUSE_SENSITIVITY = 0.35f;
+    // Sensitivity settings (configurable)
+    float mouse_sensitivity_ = 0.35f;
+    float controller_sensitivity_ = 2.5f;
+    static constexpr float CONTROLLER_STICK_DEADZONE = 0.15f;
+    static constexpr float CONTROLLER_TRIGGER_DEADZONE = 0.1f;
+    
+    // Camera inversion settings (default: not inverted)
+    bool invert_camera_x_ = false;
+    bool invert_camera_y_ = false;
+    
+    // Controller state
+    SDL_Gamepad* gamepad_ = nullptr;
+    SDL_JoystickID gamepad_id_ = 0;
+    
+    // Controller input state (for smooth analog input)
+    float controller_move_x_ = 0.0f;
+    float controller_move_y_ = 0.0f;
+    float controller_camera_x_ = 0.0f;
+    float controller_camera_y_ = 0.0f;
+    bool controller_attack_ = false;
+    bool controller_sprint_ = false;
 };
 
 } // namespace mmo

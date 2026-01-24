@@ -1,6 +1,7 @@
 #include "input_handler.hpp"
 #include <cmath>
 #include <algorithm>
+#include <cstdio>
 
 namespace mmo {
 
@@ -9,6 +10,37 @@ InputHandler::InputHandler() {
     SDL_GetMouseState(&mouse_x_, &mouse_y_);
     last_mouse_x_ = mouse_x_;
     last_mouse_y_ = mouse_y_;
+    
+    // Initialize controller subsystem
+    if (!SDL_WasInit(SDL_INIT_GAMEPAD)) {
+        SDL_InitSubSystem(SDL_INIT_GAMEPAD);
+    }
+    
+    // Check for any already-connected controllers
+    int num_joysticks = 0;
+    SDL_JoystickID* joysticks = SDL_GetJoysticks(&num_joysticks);
+    if (joysticks) {
+        for (int i = 0; i < num_joysticks && !gamepad_; i++) {
+            if (SDL_IsGamepad(joysticks[i])) {
+                handle_controller_added(joysticks[i]);
+            }
+        }
+        SDL_free(joysticks);
+    }
+}
+
+InputHandler::~InputHandler() {
+    if (gamepad_) {
+        SDL_CloseGamepad(gamepad_);
+        gamepad_ = nullptr;
+    }
+}
+
+const char* InputHandler::get_controller_name() const {
+    if (gamepad_) {
+        return SDL_GetGamepadName(gamepad_);
+    }
+    return "No Controller";
 }
 
 bool InputHandler::process_events() {
@@ -25,6 +57,38 @@ bool InputHandler::process_events() {
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_EVENT_QUIT) {
             return false;
+        }
+        
+        // Handle controller connection/disconnection
+        if (event.type == SDL_EVENT_GAMEPAD_ADDED) {
+            handle_controller_added(event.gdevice.which);
+        }
+        if (event.type == SDL_EVENT_GAMEPAD_REMOVED) {
+            handle_controller_removed(event.gdevice.which);
+        }
+        
+        // Handle controller button events for menu
+        if (event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN && gamepad_) {
+            switch (event.gbutton.button) {
+                case SDL_GAMEPAD_BUTTON_START:
+                    menu_toggle_pressed_ = true;
+                    break;
+                case SDL_GAMEPAD_BUTTON_DPAD_UP:
+                    if (!game_input_enabled_) menu_up_pressed_ = true;
+                    break;
+                case SDL_GAMEPAD_BUTTON_DPAD_DOWN:
+                    if (!game_input_enabled_) menu_down_pressed_ = true;
+                    break;
+                case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
+                    if (!game_input_enabled_) menu_left_pressed_ = true;
+                    break;
+                case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
+                    if (!game_input_enabled_) menu_right_pressed_ = true;
+                    break;
+                case SDL_GAMEPAD_BUTTON_SOUTH: // A button
+                    if (!game_input_enabled_) menu_select_pressed_ = true;
+                    break;
+            }
         }
         
         // Handle key events for menu
@@ -83,8 +147,11 @@ bool InputHandler::process_events() {
             
             // Mouse motion for camera orbit (only when right button held)
             if (event.type == SDL_EVENT_MOUSE_MOTION && right_mouse_down_) {
-                camera_yaw_ += event.motion.xrel * MOUSE_SENSITIVITY;
-                camera_pitch_ -= event.motion.yrel * MOUSE_SENSITIVITY;
+                float x_mult = invert_camera_x_ ? 1.0f : -1.0f;
+                float y_mult = invert_camera_y_ ? -1.0f : 1.0f;
+                
+                camera_yaw_ += event.motion.xrel * mouse_sensitivity_ * x_mult;
+                camera_pitch_ += event.motion.yrel * mouse_sensitivity_ * y_mult;
                 
                 // Clamp pitch for over-the-shoulder action cam
                 // Allow looking up high into sky (-70°) and down toward ground (70°)
@@ -101,6 +168,11 @@ bool InputHandler::process_events() {
     // Save previous input for change detection
     last_input_ = current_input_;
     
+    // Update controller state
+    if (gamepad_ && game_input_enabled_) {
+        update_input_from_controller();
+    }
+    
     // Only update game input if enabled
     if (game_input_enabled_) {
         // Update keyboard state
@@ -108,6 +180,22 @@ bool InputHandler::process_events() {
         
         // Update camera-relative movement direction
         update_camera_from_mouse();
+        
+        // Apply controller camera input (smooth analog)
+        if (gamepad_) {
+            float x_mult = invert_camera_x_ ? 1.0f : -1.0f;
+            float y_mult = invert_camera_y_ ? -1.0f : 1.0f;
+            
+            camera_yaw_ += controller_camera_x_ * controller_sensitivity_ * x_mult;
+            camera_pitch_ += controller_camera_y_ * controller_sensitivity_ * y_mult;
+            
+            // Clamp pitch
+            camera_pitch_ = std::clamp(camera_pitch_, -70.0f, 70.0f);
+            
+            // Normalize yaw
+            while (camera_yaw_ < 0.0f) camera_yaw_ += 360.0f;
+            while (camera_yaw_ >= 360.0f) camera_yaw_ -= 360.0f;
+        }
     } else {
         // Clear movement when in menu
         move_forward_ = false;
@@ -135,17 +223,25 @@ bool InputHandler::process_events() {
 void InputHandler::update_input_from_keyboard() {
     const bool* keys = SDL_GetKeyboardState(nullptr);
     
-    move_forward_ = keys[SDL_SCANCODE_W] || keys[SDL_SCANCODE_UP];
-    move_backward_ = keys[SDL_SCANCODE_S] || keys[SDL_SCANCODE_DOWN];
-    move_left_ = keys[SDL_SCANCODE_A] || keys[SDL_SCANCODE_LEFT];
-    move_right_ = keys[SDL_SCANCODE_D] || keys[SDL_SCANCODE_RIGHT];
-    sprinting_ = keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT];
+    // Keyboard input
+    bool kb_forward = keys[SDL_SCANCODE_W] || keys[SDL_SCANCODE_UP];
+    bool kb_backward = keys[SDL_SCANCODE_S] || keys[SDL_SCANCODE_DOWN];
+    bool kb_left = keys[SDL_SCANCODE_A] || keys[SDL_SCANCODE_LEFT];
+    bool kb_right = keys[SDL_SCANCODE_D] || keys[SDL_SCANCODE_RIGHT];
+    bool kb_sprint = keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT];
     
-    // Space or left mouse button for attack
+    // Merge with controller digital input (left stick beyond deadzone)
+    move_forward_ = kb_forward || (controller_move_y_ < -0.5f);
+    move_backward_ = kb_backward || (controller_move_y_ > 0.5f);
+    move_left_ = kb_left || (controller_move_x_ < -0.5f);
+    move_right_ = kb_right || (controller_move_x_ > 0.5f);
+    sprinting_ = kb_sprint || controller_sprint_;
+    
+    // Space or left mouse button for attack (or controller)
     bool space_attack = keys[SDL_SCANCODE_SPACE];
     uint32_t mouse_state = SDL_GetMouseState(nullptr, nullptr);
     bool mouse_attack = (mouse_state & SDL_BUTTON_LMASK) != 0;
-    attacking_ = space_attack || mouse_attack;
+    attacking_ = space_attack || mouse_attack || controller_attack_;
 }
 
 void InputHandler::update_camera_from_mouse() {
@@ -169,26 +265,39 @@ void InputHandler::update_camera_from_mouse() {
     float move_x = 0.0f;
     float move_z = 0.0f;
     
-    if (move_forward_) {
-        move_x += forward_x;
-        move_z += forward_z;
-    }
-    if (move_backward_) {
-        move_x -= forward_x;
-        move_z -= forward_z;
-    }
-    if (move_left_) {
-        move_x -= right_x;
-        move_z -= right_z;
-    }
-    if (move_right_) {
-        move_x += right_x;
-        move_z += right_z;
+    // Check if controller has analog movement input
+    bool has_controller_analog = (std::abs(controller_move_x_) > 0.01f || 
+                                   std::abs(controller_move_y_) > 0.01f);
+    
+    if (has_controller_analog) {
+        // Use smooth analog controller input
+        // Controller Y is inverted (up is negative), map to forward
+        move_x = controller_move_x_ * right_x + (-controller_move_y_) * forward_x;
+        move_z = controller_move_x_ * right_z + (-controller_move_y_) * forward_z;
+    } else {
+        // Use digital keyboard input
+        if (move_forward_) {
+            move_x += forward_x;
+            move_z += forward_z;
+        }
+        if (move_backward_) {
+            move_x -= forward_x;
+            move_z -= forward_z;
+        }
+        if (move_left_) {
+            move_x -= right_x;
+            move_z -= right_z;
+        }
+        if (move_right_) {
+            move_x += right_x;
+            move_z += right_z;
+        }
     }
     
     // Normalize movement direction
     float move_len = std::sqrt(move_x * move_x + move_z * move_z);
-    if (move_len > 0.001f) {
+    if (move_len > 1.0f) {
+        // Only normalize if magnitude > 1 (allow controller to have partial movement)
         move_x /= move_len;
         move_z /= move_len;
     }
@@ -209,6 +318,99 @@ void InputHandler::update_camera_from_mouse() {
     current_input_.attack_dir_y = forward_z;
     
     current_input_.attacking = attacking_;
+}
+
+void InputHandler::update_input_from_controller() {
+    if (!gamepad_) return;
+    
+    // Read left stick for movement (raw axis values are -32768 to 32767)
+    float raw_lx = SDL_GetGamepadAxis(gamepad_, SDL_GAMEPAD_AXIS_LEFTX) / 32767.0f;
+    float raw_ly = SDL_GetGamepadAxis(gamepad_, SDL_GAMEPAD_AXIS_LEFTY) / 32767.0f;
+    
+    // Apply deadzone to left stick
+    float left_magnitude = std::sqrt(raw_lx * raw_lx + raw_ly * raw_ly);
+    if (left_magnitude > CONTROLLER_STICK_DEADZONE) {
+        // Rescale to 0-1 range outside deadzone
+        float scale = (left_magnitude - CONTROLLER_STICK_DEADZONE) / (1.0f - CONTROLLER_STICK_DEADZONE);
+        scale = std::min(scale, 1.0f);
+        controller_move_x_ = (raw_lx / left_magnitude) * scale;
+        controller_move_y_ = (raw_ly / left_magnitude) * scale;
+    } else {
+        controller_move_x_ = 0.0f;
+        controller_move_y_ = 0.0f;
+    }
+    
+    // Read right stick for camera (raw axis values are -32768 to 32767)
+    float raw_rx = SDL_GetGamepadAxis(gamepad_, SDL_GAMEPAD_AXIS_RIGHTX) / 32767.0f;
+    float raw_ry = SDL_GetGamepadAxis(gamepad_, SDL_GAMEPAD_AXIS_RIGHTY) / 32767.0f;
+    
+    // Apply deadzone to right stick
+    float right_magnitude = std::sqrt(raw_rx * raw_rx + raw_ry * raw_ry);
+    if (right_magnitude > CONTROLLER_STICK_DEADZONE) {
+        float scale = (right_magnitude - CONTROLLER_STICK_DEADZONE) / (1.0f - CONTROLLER_STICK_DEADZONE);
+        scale = std::min(scale, 1.0f);
+        controller_camera_x_ = (raw_rx / right_magnitude) * scale;
+        controller_camera_y_ = (raw_ry / right_magnitude) * scale;
+    } else {
+        controller_camera_x_ = 0.0f;
+        controller_camera_y_ = 0.0f;
+    }
+    
+    // Read triggers for attack (right trigger) and sprint (left trigger)
+    float right_trigger = SDL_GetGamepadAxis(gamepad_, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER) / 32767.0f;
+    float left_trigger = SDL_GetGamepadAxis(gamepad_, SDL_GAMEPAD_AXIS_LEFT_TRIGGER) / 32767.0f;
+    
+    controller_attack_ = right_trigger > CONTROLLER_TRIGGER_DEADZONE || 
+                         SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_SOUTH); // A button
+    controller_sprint_ = left_trigger > CONTROLLER_TRIGGER_DEADZONE ||
+                         SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER); // LB button
+    
+    // Bumpers for zoom
+    if (SDL_GetGamepadButton(gamepad_, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER)) {
+        camera_zoom_delta_ += 2.0f; // Zoom out
+    }
+}
+
+void InputHandler::handle_controller_added(SDL_JoystickID id) {
+    // Only connect one controller at a time
+    if (gamepad_) return;
+    
+    if (SDL_IsGamepad(id)) {
+        gamepad_ = SDL_OpenGamepad(id);
+        if (gamepad_) {
+            gamepad_id_ = id;
+            printf("Controller connected: %s\n", SDL_GetGamepadName(gamepad_));
+        }
+    }
+}
+
+void InputHandler::handle_controller_removed(SDL_JoystickID id) {
+    if (gamepad_ && gamepad_id_ == id) {
+        printf("Controller disconnected: %s\n", SDL_GetGamepadName(gamepad_));
+        SDL_CloseGamepad(gamepad_);
+        gamepad_ = nullptr;
+        gamepad_id_ = 0;
+        
+        // Reset controller input state
+        controller_move_x_ = 0.0f;
+        controller_move_y_ = 0.0f;
+        controller_camera_x_ = 0.0f;
+        controller_camera_y_ = 0.0f;
+        controller_attack_ = false;
+        controller_sprint_ = false;
+        
+        // Try to find another controller
+        int num_joysticks = 0;
+        SDL_JoystickID* joysticks = SDL_GetJoysticks(&num_joysticks);
+        if (joysticks) {
+            for (int i = 0; i < num_joysticks && !gamepad_; i++) {
+                if (SDL_IsGamepad(joysticks[i])) {
+                    handle_controller_added(joysticks[i]);
+                }
+            }
+            SDL_free(joysticks);
+        }
+    }
 }
 
 } // namespace mmo

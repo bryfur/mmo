@@ -787,28 +787,151 @@ void Game::update_attack_effects(float dt) {
 // ============================================================================
 
 void Game::init_menu_items() {
+    current_menu_page_ = MenuPage::Main;
+    init_main_menu();
+}
+
+void Game::init_main_menu() {
     menu_items_.clear();
+    menu_selected_index_ = 0;
     
-    // Graphics settings toggles
-    menu_items_.push_back({"Shadows", MenuItemType::Toggle, &graphics_settings_.shadows_enabled, nullptr, 0, 0, nullptr});
-    menu_items_.push_back({"SSAO (Ambient Occlusion)", MenuItemType::Toggle, &graphics_settings_.ssao_enabled, nullptr, 0, 0, nullptr});
-    menu_items_.push_back({"Fog", MenuItemType::Toggle, &graphics_settings_.fog_enabled, nullptr, 0, 0, nullptr});
-    menu_items_.push_back({"Grass", MenuItemType::Toggle, &graphics_settings_.grass_enabled, nullptr, 0, 0, nullptr});
-    menu_items_.push_back({"Skybox", MenuItemType::Toggle, &graphics_settings_.skybox_enabled, nullptr, 0, 0, nullptr});
-    menu_items_.push_back({"Mountains", MenuItemType::Toggle, &graphics_settings_.mountains_enabled, nullptr, 0, 0, nullptr});
-    menu_items_.push_back({"Trees", MenuItemType::Toggle, &graphics_settings_.trees_enabled, nullptr, 0, 0, nullptr});
-    menu_items_.push_back({"Rocks", MenuItemType::Toggle, &graphics_settings_.rocks_enabled, nullptr, 0, 0, nullptr});
+    // Submenu buttons
+    MenuItem controls_item;
+    controls_item.label = "Controls";
+    controls_item.type = MenuItemType::Submenu;
+    controls_item.target_page = MenuPage::Controls;
+    menu_items_.push_back(controls_item);
+    
+    MenuItem graphics_item;
+    graphics_item.label = "Graphics";
+    graphics_item.type = MenuItemType::Submenu;
+    graphics_item.target_page = MenuPage::Graphics;
+    menu_items_.push_back(graphics_item);
     
     // Resume button
-    menu_items_.push_back({"Resume Game", MenuItemType::Button, nullptr, nullptr, 0, 0, [this]() { 
+    MenuItem resume_item;
+    resume_item.label = "Resume Game";
+    resume_item.type = MenuItemType::Button;
+    resume_item.action = [this]() { 
         menu_open_ = false;
         input_.set_game_input_enabled(true);
-    }});
+    };
+    menu_items_.push_back(resume_item);
     
     // Quit button
-    menu_items_.push_back({"Quit to Desktop", MenuItemType::Button, nullptr, nullptr, 0, 0, [this]() { 
+    MenuItem quit_item;
+    quit_item.label = "Quit to Desktop";
+    quit_item.type = MenuItemType::Button;
+    quit_item.action = [this]() { 
         running_ = false;
-    }});
+    };
+    menu_items_.push_back(quit_item);
+}
+
+void Game::init_controls_menu() {
+    menu_items_.clear();
+    menu_selected_index_ = 0;
+    
+    // Mouse sensitivity
+    MenuItem mouse_sens;
+    mouse_sens.label = "Mouse Sensitivity";
+    mouse_sens.type = MenuItemType::FloatSlider;
+    mouse_sens.float_value = &controls_settings_.mouse_sensitivity;
+    mouse_sens.float_min = 0.05f;
+    mouse_sens.float_max = 1.0f;
+    mouse_sens.float_step = 0.05f;
+    menu_items_.push_back(mouse_sens);
+    
+    // Controller sensitivity
+    MenuItem ctrl_sens;
+    ctrl_sens.label = "Controller Sensitivity";
+    ctrl_sens.type = MenuItemType::FloatSlider;
+    ctrl_sens.float_value = &controls_settings_.controller_sensitivity;
+    ctrl_sens.float_min = 0.5f;
+    ctrl_sens.float_max = 5.0f;
+    ctrl_sens.float_step = 0.25f;
+    menu_items_.push_back(ctrl_sens);
+    
+    // Camera inversion
+    MenuItem invert_x;
+    invert_x.label = "Invert Camera X";
+    invert_x.type = MenuItemType::Toggle;
+    invert_x.toggle_value = &controls_settings_.invert_camera_x;
+    menu_items_.push_back(invert_x);
+    
+    MenuItem invert_y;
+    invert_y.label = "Invert Camera Y";
+    invert_y.type = MenuItemType::Toggle;
+    invert_y.toggle_value = &controls_settings_.invert_camera_y;
+    menu_items_.push_back(invert_y);
+    
+    // Back button
+    MenuItem back_item;
+    back_item.label = "< Back";
+    back_item.type = MenuItemType::Submenu;
+    back_item.target_page = MenuPage::Main;
+    menu_items_.push_back(back_item);
+}
+
+void Game::init_graphics_menu() {
+    menu_items_.clear();
+    menu_selected_index_ = 0;
+    
+    // Graphics settings toggles
+    MenuItem shadows;
+    shadows.label = "Shadows";
+    shadows.type = MenuItemType::Toggle;
+    shadows.toggle_value = &graphics_settings_.shadows_enabled;
+    menu_items_.push_back(shadows);
+    
+    MenuItem ssao;
+    ssao.label = "SSAO (Ambient Occlusion)";
+    ssao.type = MenuItemType::Toggle;
+    ssao.toggle_value = &graphics_settings_.ssao_enabled;
+    menu_items_.push_back(ssao);
+    
+    MenuItem fog;
+    fog.label = "Fog";
+    fog.type = MenuItemType::Toggle;
+    fog.toggle_value = &graphics_settings_.fog_enabled;
+    menu_items_.push_back(fog);
+    
+    MenuItem grass;
+    grass.label = "Grass";
+    grass.type = MenuItemType::Toggle;
+    grass.toggle_value = &graphics_settings_.grass_enabled;
+    menu_items_.push_back(grass);
+    
+    MenuItem skybox;
+    skybox.label = "Skybox";
+    skybox.type = MenuItemType::Toggle;
+    skybox.toggle_value = &graphics_settings_.skybox_enabled;
+    menu_items_.push_back(skybox);
+    
+    MenuItem mountains;
+    mountains.label = "Mountains";
+    mountains.type = MenuItemType::Toggle;
+    mountains.toggle_value = &graphics_settings_.mountains_enabled;
+    menu_items_.push_back(mountains);
+    
+    MenuItem trees;
+    trees.label = "Trees";
+    trees.type = MenuItemType::Toggle;
+    trees.toggle_value = &graphics_settings_.trees_enabled;
+    menu_items_.push_back(trees);
+    
+    MenuItem rocks;
+    rocks.label = "Rocks";
+    rocks.type = MenuItemType::Toggle;
+    rocks.toggle_value = &graphics_settings_.rocks_enabled;
+    menu_items_.push_back(rocks);
+    
+    // Back button
+    MenuItem back_item;
+    back_item.label = "< Back";
+    back_item.type = MenuItemType::Submenu;
+    back_item.target_page = MenuPage::Main;
+    menu_items_.push_back(back_item);
 }
 
 void Game::update_menu(float dt) {
@@ -816,8 +939,15 @@ void Game::update_menu(float dt) {
     
     // Handle menu toggle
     if (input_.menu_toggle_pressed()) {
-        menu_open_ = !menu_open_;
-        input_.set_game_input_enabled(!menu_open_);
+        if (current_menu_page_ != MenuPage::Main) {
+            // Go back to main menu
+            current_menu_page_ = MenuPage::Main;
+            init_main_menu();
+        } else {
+            // Toggle menu open/closed
+            menu_open_ = !menu_open_;
+            input_.set_game_input_enabled(!menu_open_);
+        }
         input_.clear_menu_inputs();
         return;
     }
@@ -839,12 +969,39 @@ void Game::update_menu(float dt) {
             if (item.toggle_value) {
                 *item.toggle_value = !*item.toggle_value;
                 apply_graphics_settings();
+                apply_controls_settings();
+            }
+        }
+    } else if (item.type == MenuItemType::FloatSlider) {
+        if (item.float_value) {
+            if (input_.menu_left_pressed()) {
+                *item.float_value = std::max(item.float_min, *item.float_value - item.float_step);
+                apply_controls_settings();
+            }
+            if (input_.menu_right_pressed()) {
+                *item.float_value = std::min(item.float_max, *item.float_value + item.float_step);
+                apply_controls_settings();
             }
         }
     } else if (item.type == MenuItemType::Button) {
         if (input_.menu_select_pressed()) {
             if (item.action) {
                 item.action();
+            }
+        }
+    } else if (item.type == MenuItemType::Submenu) {
+        if (input_.menu_select_pressed()) {
+            current_menu_page_ = item.target_page;
+            switch (item.target_page) {
+                case MenuPage::Main:
+                    init_main_menu();
+                    break;
+                case MenuPage::Controls:
+                    init_controls_menu();
+                    break;
+                case MenuPage::Graphics:
+                    init_graphics_menu();
+                    break;
             }
         }
     }
@@ -861,8 +1018,8 @@ void Game::render_menu() {
     float screen_h = static_cast<float>(renderer_.height());
     
     // Menu panel
-    float panel_w = 500.0f;
-    float panel_h = 50.0f + menu_items_.size() * 50.0f + 50.0f;
+    float panel_w = 550.0f;
+    float panel_h = 70.0f + menu_items_.size() * 50.0f + 50.0f;
     float panel_x = (screen_w - panel_w) / 2.0f;
     float panel_y = (screen_h - panel_h) / 2.0f;
     
@@ -870,11 +1027,17 @@ void Game::render_menu() {
     renderer_.draw_filled_rect(panel_x, panel_y, panel_w, panel_h, 0xE0222222);
     renderer_.draw_rect_outline(panel_x, panel_y, panel_w, panel_h, 0xFFFFFFFF, 2.0f);
     
-    // Title
-    renderer_.draw_ui_text("SETTINGS", panel_x + panel_w / 2.0f - 60.0f, panel_y + 15.0f, 1.5f, 0xFFFFFFFF);
+    // Title based on current page
+    const char* title = "SETTINGS";
+    switch (current_menu_page_) {
+        case MenuPage::Main: title = "SETTINGS"; break;
+        case MenuPage::Controls: title = "CONTROLS"; break;
+        case MenuPage::Graphics: title = "GRAPHICS"; break;
+    }
+    renderer_.draw_ui_text(title, panel_x + panel_w / 2.0f - 60.0f, panel_y + 15.0f, 1.5f, 0xFFFFFFFF);
     
     // Menu items
-    float item_y = panel_y + 60.0f;
+    float item_y = panel_y + 70.0f;
     for (size_t i = 0; i < menu_items_.size(); ++i) {
         const MenuItem& item = menu_items_[i];
         bool selected = (static_cast<int>(i) == menu_selected_index_);
@@ -888,19 +1051,40 @@ void Game::render_menu() {
         uint32_t text_color = selected ? 0xFFFFFFFF : 0xFFAAAAAA;
         renderer_.draw_ui_text(item.label, panel_x + 30.0f, item_y + 10.0f, 1.0f, text_color);
         
-        // Value display
+        // Value display based on type
         if (item.type == MenuItemType::Toggle && item.toggle_value) {
             std::string value_str = *item.toggle_value ? "ON" : "OFF";
             uint32_t value_color = *item.toggle_value ? 0xFF00FF00 : 0xFFFF6666;
             renderer_.draw_ui_text(value_str, panel_x + panel_w - 80.0f, item_y + 10.0f, 1.0f, value_color);
+        } else if (item.type == MenuItemType::FloatSlider && item.float_value) {
+            // Draw slider bar
+            float slider_x = panel_x + panel_w - 200.0f;
+            float slider_w = 120.0f;
+            float slider_h = 8.0f;
+            float slider_y_center = item_y + 18.0f;
+            
+            // Background bar
+            renderer_.draw_filled_rect(slider_x, slider_y_center - slider_h/2, slider_w, slider_h, 0xFF444444);
+            
+            // Filled portion
+            float fill_pct = (*item.float_value - item.float_min) / (item.float_max - item.float_min);
+            renderer_.draw_filled_rect(slider_x, slider_y_center - slider_h/2, slider_w * fill_pct, slider_h, 0xFF00AAFF);
+            
+            // Value text
+            char value_buf[32];
+            snprintf(value_buf, sizeof(value_buf), "%.2f", *item.float_value);
+            renderer_.draw_ui_text(value_buf, panel_x + panel_w - 65.0f, item_y + 10.0f, 0.9f, 0xFFFFFFFF);
+        } else if (item.type == MenuItemType::Submenu) {
+            // Draw arrow indicator
+            renderer_.draw_ui_text(">", panel_x + panel_w - 40.0f, item_y + 10.0f, 1.0f, text_color);
         }
         
         item_y += 50.0f;
     }
     
     // Controls hint
-    renderer_.draw_ui_text("W/S: Navigate  |  SPACE/ENTER: Select  |  ESC: Close", 
-                          panel_x + 20.0f, panel_y + panel_h - 30.0f, 0.8f, 0xFF888888);
+    const char* hint = "W/S: Navigate  |  A/D: Adjust  |  SPACE: Select  |  ESC: Back";
+    renderer_.draw_ui_text(hint, panel_x + 20.0f, panel_y + panel_h - 30.0f, 0.75f, 0xFF888888);
     
     renderer_.end_ui();
 }
@@ -914,6 +1098,13 @@ void Game::apply_graphics_settings() {
     renderer_.set_mountains_enabled(graphics_settings_.mountains_enabled);
     renderer_.set_trees_enabled(graphics_settings_.trees_enabled);
     renderer_.set_rocks_enabled(graphics_settings_.rocks_enabled);
+}
+
+void Game::apply_controls_settings() {
+    input_.set_mouse_sensitivity(controls_settings_.mouse_sensitivity);
+    input_.set_controller_sensitivity(controls_settings_.controller_sensitivity);
+    input_.set_camera_x_inverted(controls_settings_.invert_camera_x);
+    input_.set_camera_y_inverted(controls_settings_.invert_camera_y);
 }
 
 } // namespace mmo

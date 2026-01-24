@@ -37,11 +37,28 @@ struct GraphicsSettings {
     int grass_density = 2;   // 0=off, 1=low, 2=high
 };
 
+// Controls settings
+struct ControlsSettings {
+    float mouse_sensitivity = 0.35f;
+    float controller_sensitivity = 2.5f;
+    bool invert_camera_x = false;
+    bool invert_camera_y = false;
+};
+
+// Menu pages
+enum class MenuPage {
+    Main,
+    Controls,
+    Graphics
+};
+
 // Menu item types
 enum class MenuItemType {
     Toggle,
     Slider,
-    Button
+    FloatSlider,
+    Button,
+    Submenu
 };
 
 // Menu item definition
@@ -50,9 +67,14 @@ struct MenuItem {
     MenuItemType type;
     bool* toggle_value = nullptr;
     int* slider_value = nullptr;
+    float* float_value = nullptr;
+    float float_min = 0.0f;
+    float float_max = 1.0f;
+    float float_step = 0.05f;
     int slider_min = 0;
     int slider_max = 2;
     std::function<void()> action = nullptr;
+    MenuPage target_page = MenuPage::Main;
 };
 
 class Game {
@@ -81,7 +103,11 @@ private:
     void update_menu(float dt);
     void render_menu();
     void init_menu_items();
+    void init_main_menu();
+    void init_controls_menu();
+    void init_graphics_menu();
     void apply_graphics_settings();
+    void apply_controls_settings();
     
     void on_connection_accepted(const std::vector<uint8_t>& payload);
     void on_world_state(const std::vector<uint8_t>& payload);
@@ -113,8 +139,10 @@ private:
     // Menu system
     bool menu_open_ = false;
     int menu_selected_index_ = 0;
+    MenuPage current_menu_page_ = MenuPage::Main;
     std::vector<MenuItem> menu_items_;
     GraphicsSettings graphics_settings_;
+    ControlsSettings controls_settings_;
     
     uint32_t local_player_id_ = 0;
     PlayerClass local_player_class_ = PlayerClass::Warrior;

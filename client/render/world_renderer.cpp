@@ -1,7 +1,10 @@
 #include "world_renderer.hpp"
+#include "bgfx_utils.hpp"
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 
 namespace mmo {
 
@@ -16,53 +19,132 @@ bool WorldRenderer::init(float world_width, float world_height, ModelManager* mo
     world_height_ = world_height;
     model_manager_ = model_manager;
     
-    // Create shaders
-    skybox_shader_ = std::make_unique<Shader>();
-    if (!skybox_shader_->load(shaders::skybox_vertex, shaders::skybox_fragment)) {
-        std::cerr << "Failed to load skybox shader" << std::endl;
-        return false;
-    }
+    // Initialize vertex layouts
+    skybox_layout_
+        .begin()
+        .add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float)
+        .end();
     
-    grid_shader_ = std::make_unique<Shader>();
-    if (!grid_shader_->load(shaders::grid_vertex, shaders::grid_fragment)) {
-        std::cerr << "Failed to load grid shader" << std::endl;
-        return false;
-    }
+    grid_layout_
+        .begin()
+        .add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float)
+        .add(bgfx::Attrib::Color0, 4, bgfx::AttribType::Float, true)
+        .end();
     
-    model_shader_ = std::make_unique<Shader>();
-    if (!model_shader_->load(shaders::model_vertex, shaders::model_fragment)) {
-        std::cerr << "Failed to load model shader" << std::endl;
-        return false;
-    }
+    // Note: u_viewProj is a bgfx predefined uniform - use setViewTransform
+    // Create only custom uniforms - skybox
+    u_skybox_params_ = bgfx::createUniform("u_skyboxParams", bgfx::UniformType::Vec4);
+    u_skybox_sunDir_ = bgfx::createUniform("u_sunDirection", bgfx::UniformType::Vec4);
+    
+    // Create uniforms - grid (uses predefined u_viewProj via setViewTransform)
+    
+    // Create uniforms - model rendering (u_viewProj/u_model are bgfx predefined)
+    u_cameraPos_ = bgfx::createUniform("u_cameraPos", bgfx::UniformType::Vec4);
+    u_lightDir_ = bgfx::createUniform("u_lightDir", bgfx::UniformType::Vec4);
+    u_lightColor_ = bgfx::createUniform("u_lightColor", bgfx::UniformType::Vec4);
+    u_ambientColor_ = bgfx::createUniform("u_ambientColor", bgfx::UniformType::Vec4);
+    u_tintColor_ = bgfx::createUniform("u_tintColor", bgfx::UniformType::Vec4);
+    u_fogParams_ = bgfx::createUniform("u_fogParams", bgfx::UniformType::Vec4);
+    u_fogParams2_ = bgfx::createUniform("u_fogParams2", bgfx::UniformType::Vec4);
+    u_lightSpaceMatrix_ = bgfx::createUniform("u_lightSpaceMatrix", bgfx::UniformType::Mat4);
+    u_screenParams_ = bgfx::createUniform("u_screenParams", bgfx::UniformType::Vec4);
+    
+    // Create samplers
+    s_baseColorTexture_ = bgfx::createUniform("s_baseColorTexture", bgfx::UniformType::Sampler);
+    s_shadowMap_ = bgfx::createUniform("s_shadowMap", bgfx::UniformType::Sampler);
+    s_ssaoTexture_ = bgfx::createUniform("s_ssaoTexture", bgfx::UniformType::Sampler);
+    
+    // Load shaders
+    load_shaders();
     
     create_skybox_mesh();
     create_grid_mesh();
     generate_mountain_positions();
     
-    return true;
+    return bgfx::isValid(skybox_program_);
+}
+
+void WorldRenderer::load_shaders() {
+    skybox_program_ = bgfx_utils::load_program("skybox_vs", "skybox_fs");
+    if (!bgfx::isValid(skybox_program_)) {
+        std::cerr << "Failed to load skybox shaders" << std::endl;
+    }
+    
+    // Grid uses a simple UI-style shader - we can use ui shaders or create grid shaders
+    // For now, use ui shaders with position+color
+    grid_program_ = bgfx_utils::load_program("ui_vs", "ui_fs");
+    if (!bgfx::isValid(grid_program_)) {
+        std::cerr << "Failed to load grid shaders" << std::endl;
+    }
+    
+    model_program_ = bgfx_utils::load_program("model_vs", "model_fs");
+    if (!bgfx::isValid(model_program_)) {
+        std::cerr << "Failed to load model shaders" << std::endl;
+    }
+    
+    std::cout << "WorldRenderer shaders loaded" << std::endl;
 }
 
 void WorldRenderer::shutdown() {
-    if (skybox_vao_) {
-        glDeleteVertexArrays(1, &skybox_vao_);
-        skybox_vao_ = 0;
+    // Destroy vertex buffers
+    if (bgfx::isValid(skybox_vbh_)) {
+        bgfx::destroy(skybox_vbh_);
+        skybox_vbh_ = BGFX_INVALID_HANDLE;
     }
-    if (skybox_vbo_) {
-        glDeleteBuffers(1, &skybox_vbo_);
-        skybox_vbo_ = 0;
-    }
-    if (grid_vao_) {
-        glDeleteVertexArrays(1, &grid_vao_);
-        grid_vao_ = 0;
-    }
-    if (grid_vbo_) {
-        glDeleteBuffers(1, &grid_vbo_);
-        grid_vbo_ = 0;
+    if (bgfx::isValid(grid_vbh_)) {
+        bgfx::destroy(grid_vbh_);
+        grid_vbh_ = BGFX_INVALID_HANDLE;
     }
     
-    skybox_shader_.reset();
-    grid_shader_.reset();
-    model_shader_.reset();
+    // Destroy programs
+    if (bgfx::isValid(skybox_program_)) {
+        bgfx::destroy(skybox_program_);
+        skybox_program_ = BGFX_INVALID_HANDLE;
+    }
+    if (bgfx::isValid(grid_program_)) {
+        bgfx::destroy(grid_program_);
+        grid_program_ = BGFX_INVALID_HANDLE;
+    }
+    if (bgfx::isValid(model_program_)) {
+        bgfx::destroy(model_program_);
+        model_program_ = BGFX_INVALID_HANDLE;
+    }
+    
+    // Destroy uniforms - skybox (u_viewProj is bgfx predefined, not created by us)
+    if (bgfx::isValid(u_skybox_params_)) bgfx::destroy(u_skybox_params_);
+    if (bgfx::isValid(u_skybox_sunDir_)) bgfx::destroy(u_skybox_sunDir_);
+    
+    // Destroy uniforms - grid (u_viewProj is bgfx predefined)
+    
+    // Destroy uniforms - model (u_model and u_viewProj are bgfx predefined)
+    if (bgfx::isValid(u_cameraPos_)) bgfx::destroy(u_cameraPos_);
+    if (bgfx::isValid(u_lightDir_)) bgfx::destroy(u_lightDir_);
+    if (bgfx::isValid(u_lightColor_)) bgfx::destroy(u_lightColor_);
+    if (bgfx::isValid(u_ambientColor_)) bgfx::destroy(u_ambientColor_);
+    if (bgfx::isValid(u_tintColor_)) bgfx::destroy(u_tintColor_);
+    if (bgfx::isValid(u_fogParams_)) bgfx::destroy(u_fogParams_);
+    if (bgfx::isValid(u_fogParams2_)) bgfx::destroy(u_fogParams2_);
+    if (bgfx::isValid(u_lightSpaceMatrix_)) bgfx::destroy(u_lightSpaceMatrix_);
+    if (bgfx::isValid(u_screenParams_)) bgfx::destroy(u_screenParams_);
+    if (bgfx::isValid(s_baseColorTexture_)) bgfx::destroy(s_baseColorTexture_);
+    if (bgfx::isValid(s_shadowMap_)) bgfx::destroy(s_shadowMap_);
+    if (bgfx::isValid(s_ssaoTexture_)) bgfx::destroy(s_ssaoTexture_);
+    
+    // Reset handles (u_skybox_viewProj_, u_grid_viewProj_, u_model_, u_viewProj_ are bgfx predefined)
+    u_skybox_params_ = BGFX_INVALID_HANDLE;
+    u_skybox_sunDir_ = BGFX_INVALID_HANDLE;
+    u_cameraPos_ = BGFX_INVALID_HANDLE;
+    u_lightDir_ = BGFX_INVALID_HANDLE;
+    u_lightColor_ = BGFX_INVALID_HANDLE;
+    u_ambientColor_ = BGFX_INVALID_HANDLE;
+    u_tintColor_ = BGFX_INVALID_HANDLE;
+    u_fogParams_ = BGFX_INVALID_HANDLE;
+    u_fogParams2_ = BGFX_INVALID_HANDLE;
+    u_lightSpaceMatrix_ = BGFX_INVALID_HANDLE;
+    u_screenParams_ = BGFX_INVALID_HANDLE;
+    s_baseColorTexture_ = BGFX_INVALID_HANDLE;
+    s_shadowMap_ = BGFX_INVALID_HANDLE;
+    s_ssaoTexture_ = BGFX_INVALID_HANDLE;
 }
 
 void WorldRenderer::update(float dt) {
@@ -98,17 +180,8 @@ void WorldRenderer::create_skybox_mesh() {
          1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f,  1.0f,
     };
     
-    glGenVertexArrays(1, &skybox_vao_);
-    glGenBuffers(1, &skybox_vbo_);
-    
-    glBindVertexArray(skybox_vao_);
-    glBindBuffer(GL_ARRAY_BUFFER, skybox_vbo_);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    
-    glBindVertexArray(0);
+    const bgfx::Memory* mem = bgfx::copy(vertices, sizeof(vertices));
+    skybox_vbh_ = bgfx::createVertexBuffer(mem, skybox_layout_);
 }
 
 void WorldRenderer::create_grid_mesh() {
@@ -135,22 +208,10 @@ void WorldRenderer::create_grid_mesh() {
     grid_data.insert(grid_data.end(), {0.0f, 0.0f, world_height_, 0.4f, 0.4f, 0.5f, 1.0f});
     grid_data.insert(grid_data.end(), {0.0f, 0.0f, 0.0f, 0.4f, 0.4f, 0.5f, 1.0f});
     
-    grid_vertex_count_ = grid_data.size() / 7;
+    grid_vertex_count_ = static_cast<uint32_t>(grid_data.size() / 7);
     
-    glGenVertexArrays(1, &grid_vao_);
-    glGenBuffers(1, &grid_vbo_);
-    
-    glBindVertexArray(grid_vao_);
-    glBindBuffer(GL_ARRAY_BUFFER, grid_vbo_);
-    glBufferData(GL_ARRAY_BUFFER, grid_data.size() * sizeof(float), 
-                 grid_data.data(), GL_STATIC_DRAW);
-    
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    
-    glBindVertexArray(0);
+    const bgfx::Memory* mem = bgfx::copy(grid_data.data(), static_cast<uint32_t>(grid_data.size() * sizeof(float)));
+    grid_vbh_ = bgfx::createVertexBuffer(mem, grid_layout_);
 }
 
 void WorldRenderer::generate_mountain_positions() {
@@ -385,31 +446,35 @@ void WorldRenderer::generate_tree_positions() {
     }
 }
 
-void WorldRenderer::render_skybox(const glm::mat4& view, const glm::mat4& projection) {
-    if (!skybox_shader_ || !skybox_vao_) return;
+void WorldRenderer::render_skybox(bgfx::ViewId view_id, const glm::mat4& view, const glm::mat4& projection) {
+    if (!bgfx::isValid(skybox_program_) || !bgfx::isValid(skybox_vbh_)) return;
     
-    glDepthFunc(GL_LEQUAL);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_CULL_FACE);
+    // Remove translation from view matrix for skybox
+    glm::mat4 skybox_view = glm::mat4(glm::mat3(view));
     
-    skybox_shader_->use();
-    skybox_shader_->set_mat4("view", view);
-    skybox_shader_->set_mat4("projection", projection);
-    skybox_shader_->set_float("time", skybox_time_);
-    skybox_shader_->set_vec3("sunDirection", sun_direction_);
+    // Use bgfx's predefined u_viewProj via setViewTransform
+    bgfx::setViewTransform(view_id, glm::value_ptr(skybox_view), glm::value_ptr(projection));
     
-    glBindVertexArray(skybox_vao_);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-    glBindVertexArray(0);
+    float params[4] = { skybox_time_, 0.0f, 0.0f, 0.0f };
+    bgfx::setUniform(u_skybox_params_, params);
     
-    glDepthMask(GL_TRUE);
-    glDepthFunc(GL_LESS);
-    glEnable(GL_CULL_FACE);
+    float sunDir[4] = { sun_direction_.x, sun_direction_.y, sun_direction_.z, 0.0f };
+    bgfx::setUniform(u_skybox_sunDir_, sunDir);
+    
+    bgfx::setVertexBuffer(0, skybox_vbh_);
+    
+    // Skybox state: depth test <= (so skybox is at far plane), no depth write, no culling
+    uint64_t state = BGFX_STATE_WRITE_RGB
+                   | BGFX_STATE_WRITE_A
+                   | BGFX_STATE_DEPTH_TEST_LEQUAL;
+    bgfx::setState(state);
+    
+    bgfx::submit(view_id, skybox_program_);
 }
 
-void WorldRenderer::render_mountains(const glm::mat4& view, const glm::mat4& projection,
+void WorldRenderer::render_mountains(bgfx::ViewId view_id, const glm::mat4& view, const glm::mat4& projection,
                                       const glm::vec3& camera_pos, const glm::vec3& light_dir) {
-    if (!model_manager_ || !model_shader_) return;
+    if (!model_manager_ || !bgfx::isValid(model_program_)) return;
     
     Model* mountain_small = model_manager_->get_model("mountain_small");
     Model* mountain_medium = model_manager_->get_model("mountain_medium");
@@ -417,20 +482,30 @@ void WorldRenderer::render_mountains(const glm::mat4& view, const glm::mat4& pro
     
     if (!mountain_small && !mountain_medium && !mountain_large) return;
     
-    model_shader_->use();
-    model_shader_->set_mat4("view", view);
-    model_shader_->set_mat4("projection", projection);
-    model_shader_->set_vec3("cameraPos", camera_pos);
-    model_shader_->set_vec3("lightDir", light_dir);
-    model_shader_->set_vec3("lightColor", glm::vec3(1.0f, 0.95f, 0.9f));
-    model_shader_->set_vec3("ambientColor", glm::vec3(0.5f, 0.5f, 0.55f));
-    model_shader_->set_vec4("tintColor", glm::vec4(1.0f));
-    model_shader_->set_int("fogEnabled", 1);
-    model_shader_->set_vec3("fogColor", glm::vec3(0.55f, 0.55f, 0.6f));
-    model_shader_->set_float("fogStart", 3000.0f);
-    model_shader_->set_float("fogEnd", 12000.0f);
-    model_shader_->set_int("shadowsEnabled", 0);
-    model_shader_->set_int("ssaoEnabled", 0);
+    // Use bgfx's predefined u_viewProj via setViewTransform
+    bgfx::setViewTransform(view_id, glm::value_ptr(view), glm::value_ptr(projection));
+    
+    float camPos[4] = { camera_pos.x, camera_pos.y, camera_pos.z, 0.0f };
+    bgfx::setUniform(u_cameraPos_, camPos);
+    
+    float lightDirVec[4] = { light_dir.x, light_dir.y, light_dir.z, 0.0f };
+    bgfx::setUniform(u_lightDir_, lightDirVec);
+    
+    float lightColor[4] = { 1.0f, 0.95f, 0.9f, 1.0f };
+    bgfx::setUniform(u_lightColor_, lightColor);
+    
+    float ambientColor[4] = { 0.5f, 0.5f, 0.55f, 1.0f };
+    bgfx::setUniform(u_ambientColor_, ambientColor);
+    
+    float tintColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    bgfx::setUniform(u_tintColor_, tintColor);
+    
+    // Fog for mountains - extended range
+    float fogParams[4] = { 0.55f, 0.55f, 0.6f, 3000.0f };  // fogColor.rgb, fogStart
+    bgfx::setUniform(u_fogParams_, fogParams);
+    
+    float fogParams2[4] = { 12000.0f, 1.0f, 0.0f, 0.0f };  // fogEnd, fogEnabled, shadowsEnabled, ssaoEnabled
+    bgfx::setUniform(u_fogParams2_, fogParams2);
     
     for (const auto& mp : mountain_positions_) {
         Model* mountain = nullptr;
@@ -454,33 +529,38 @@ void WorldRenderer::render_mountains(const glm::mat4& view, const glm::mat4& pro
         float cz = (mountain->min_z + mountain->max_z) / 2.0f;
         model_mat = model_mat * glm::translate(glm::mat4(1.0f), glm::vec3(-cx, -cy, -cz));
         
-        model_shader_->set_mat4("model", model_mat);
+        // Use bgfx's predefined u_model via setTransform
+        bgfx::setTransform(glm::value_ptr(model_mat));
         
         for (auto& mesh : mountain->meshes) {
             if (!mesh.uploaded) ModelLoader::upload_to_gpu(*mountain);
-            if (mesh.vao && !mesh.indices.empty()) {
-                if (mesh.has_texture && mesh.texture_id > 0) {
-                    glActiveTexture(GL_TEXTURE0);
-                    glBindTexture(GL_TEXTURE_2D, mesh.texture_id);
-                    model_shader_->set_int("baseColorTexture", 0);
-                    model_shader_->set_int("hasTexture", 1);
-                } else {
-                    model_shader_->set_int("hasTexture", 0);
+            if (bgfx::isValid(mesh.vbh) && bgfx::isValid(mesh.ibh) && !mesh.indices.empty()) {
+                if (mesh.has_texture && bgfx::isValid(mesh.texture)) {
+                    bgfx::setTexture(0, s_baseColorTexture_, mesh.texture);
                 }
-                glBindVertexArray(mesh.vao);
-                glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, 0);
+                
+                bgfx::setVertexBuffer(0, mesh.vbh);
+                bgfx::setIndexBuffer(mesh.ibh);
+                
+                uint64_t state = BGFX_STATE_WRITE_RGB
+                               | BGFX_STATE_WRITE_A
+                               | BGFX_STATE_WRITE_Z
+                               | BGFX_STATE_DEPTH_TEST_LESS
+                               | BGFX_STATE_CULL_CCW;
+                bgfx::setState(state);
+                
+                bgfx::submit(view_id, model_program_);
             }
         }
     }
-    glBindVertexArray(0);
 }
 
-void WorldRenderer::render_rocks(const glm::mat4& view, const glm::mat4& projection,
+void WorldRenderer::render_rocks(bgfx::ViewId view_id, const glm::mat4& view, const glm::mat4& projection,
                                   const glm::vec3& camera_pos, const glm::mat4& light_space_matrix,
-                                  GLuint shadow_map, bool shadows_enabled,
-                                  GLuint ssao_texture, bool ssao_enabled,
+                                  bgfx::TextureHandle shadow_map, bool shadows_enabled,
+                                  bgfx::TextureHandle ssao_texture, bool ssao_enabled,
                                   const glm::vec3& light_dir, const glm::vec2& screen_size) {
-    if (!model_manager_ || !model_shader_) return;
+    if (!model_manager_ || !bgfx::isValid(model_program_)) return;
     
     Model* rocks[5] = {
         model_manager_->get_model("rock_boulder"),
@@ -496,29 +576,34 @@ void WorldRenderer::render_rocks(const glm::mat4& view, const glm::mat4& project
     }
     if (!any_rock) return;
     
-    model_shader_->use();
-    model_shader_->set_mat4("view", view);
-    model_shader_->set_mat4("projection", projection);
-    model_shader_->set_vec3("cameraPos", camera_pos);
-    model_shader_->set_vec3("lightDir", light_dir);
-    model_shader_->set_vec3("lightColor", glm::vec3(1.0f, 0.95f, 0.9f));
-    model_shader_->set_vec3("ambientColor", glm::vec3(0.4f, 0.4f, 0.5f));
-    model_shader_->set_vec4("tintColor", glm::vec4(1.0f));
-    model_shader_->set_int("fogEnabled", 1);
-    model_shader_->set_vec3("fogColor", fog_color_);
-    model_shader_->set_float("fogStart", fog_start_);
-    model_shader_->set_float("fogEnd", fog_end_);
-    model_shader_->set_mat4("lightSpaceMatrix", light_space_matrix);
-    model_shader_->set_int("shadowsEnabled", shadows_enabled ? 1 : 0);
-    model_shader_->set_int("ssaoEnabled", ssao_enabled ? 1 : 0);
-    model_shader_->set_vec2("screenSize", screen_size);
+    // Use bgfx's predefined u_viewProj via setViewTransform
+    bgfx::setViewTransform(view_id, glm::value_ptr(view), glm::value_ptr(projection));
     
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, shadow_map);
-    model_shader_->set_int("shadowMap", 2);
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, ssao_texture);
-    model_shader_->set_int("ssaoTexture", 3);
+    float camPos[4] = { camera_pos.x, camera_pos.y, camera_pos.z, 0.0f };
+    bgfx::setUniform(u_cameraPos_, camPos);
+    
+    float lightDirVec[4] = { light_dir.x, light_dir.y, light_dir.z, 0.0f };
+    bgfx::setUniform(u_lightDir_, lightDirVec);
+    
+    float lightColor[4] = { 1.0f, 0.95f, 0.9f, 1.0f };
+    bgfx::setUniform(u_lightColor_, lightColor);
+    
+    float ambientColor[4] = { 0.4f, 0.4f, 0.5f, 1.0f };
+    bgfx::setUniform(u_ambientColor_, ambientColor);
+    
+    float tintColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    bgfx::setUniform(u_tintColor_, tintColor);
+    
+    float fogParams[4] = { fog_color_.r, fog_color_.g, fog_color_.b, fog_start_ };
+    bgfx::setUniform(u_fogParams_, fogParams);
+    
+    float fogParams2[4] = { fog_end_, 1.0f, shadows_enabled ? 1.0f : 0.0f, ssao_enabled ? 1.0f : 0.0f };
+    bgfx::setUniform(u_fogParams2_, fogParams2);
+    
+    bgfx::setUniform(u_lightSpaceMatrix_, glm::value_ptr(light_space_matrix));
+    
+    float screenParams[4] = { screen_size.x, screen_size.y, 0.0f, 0.0f };
+    bgfx::setUniform(u_screenParams_, screenParams);
     
     float cull_dist_sq = 4000.0f * 4000.0f;
     
@@ -535,10 +620,7 @@ void WorldRenderer::render_rocks(const glm::mat4& view, const glm::mat4& project
         }
         if (!rock) continue;
         
-        // Get terrain height at render time (not at init time)
         float terrain_y = get_terrain_height(rp.x, rp.z);
-        
-        // Sink rocks into ground slightly for natural look
         float sink_depth = rp.scale * 0.2f;
         
         glm::mat4 model_mat = glm::mat4(1.0f);
@@ -551,33 +633,44 @@ void WorldRenderer::render_rocks(const glm::mat4& view, const glm::mat4& project
         float cz = (rock->min_z + rock->max_z) / 2.0f;
         model_mat = model_mat * glm::translate(glm::mat4(1.0f), glm::vec3(-cx, -cy, -cz));
         
-        model_shader_->set_mat4("model", model_mat);
+        // Use bgfx's predefined u_model via setTransform
+        bgfx::setTransform(glm::value_ptr(model_mat));
         
         for (auto& mesh : rock->meshes) {
             if (!mesh.uploaded) ModelLoader::upload_to_gpu(*rock);
-            if (mesh.vao && !mesh.indices.empty()) {
-                if (mesh.has_texture && mesh.texture_id > 0) {
-                    glActiveTexture(GL_TEXTURE0);
-                    glBindTexture(GL_TEXTURE_2D, mesh.texture_id);
-                    model_shader_->set_int("baseColorTexture", 0);
-                    model_shader_->set_int("hasTexture", 1);
-                } else {
-                    model_shader_->set_int("hasTexture", 0);
+            if (bgfx::isValid(mesh.vbh) && bgfx::isValid(mesh.ibh) && !mesh.indices.empty()) {
+                if (mesh.has_texture && bgfx::isValid(mesh.texture)) {
+                    bgfx::setTexture(0, s_baseColorTexture_, mesh.texture);
                 }
-                glBindVertexArray(mesh.vao);
-                glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, 0);
+                if (bgfx::isValid(shadow_map)) {
+                    bgfx::setTexture(2, s_shadowMap_, shadow_map);
+                }
+                if (bgfx::isValid(ssao_texture)) {
+                    bgfx::setTexture(3, s_ssaoTexture_, ssao_texture);
+                }
+                
+                bgfx::setVertexBuffer(0, mesh.vbh);
+                bgfx::setIndexBuffer(mesh.ibh);
+                
+                uint64_t state = BGFX_STATE_WRITE_RGB
+                               | BGFX_STATE_WRITE_A
+                               | BGFX_STATE_WRITE_Z
+                               | BGFX_STATE_DEPTH_TEST_LESS
+                               | BGFX_STATE_CULL_CCW;
+                bgfx::setState(state);
+                
+                bgfx::submit(view_id, model_program_);
             }
         }
     }
-    glBindVertexArray(0);
 }
 
-void WorldRenderer::render_trees(const glm::mat4& view, const glm::mat4& projection,
+void WorldRenderer::render_trees(bgfx::ViewId view_id, const glm::mat4& view, const glm::mat4& projection,
                                   const glm::vec3& camera_pos, const glm::mat4& light_space_matrix,
-                                  GLuint shadow_map, bool shadows_enabled,
-                                  GLuint ssao_texture, bool ssao_enabled,
+                                  bgfx::TextureHandle shadow_map, bool shadows_enabled,
+                                  bgfx::TextureHandle ssao_texture, bool ssao_enabled,
                                   const glm::vec3& light_dir, const glm::vec2& screen_size) {
-    if (!model_manager_ || !model_shader_) return;
+    if (!model_manager_ || !bgfx::isValid(model_program_)) return;
     
     Model* trees[3] = {
         model_manager_->get_model("tree_oak"),
@@ -591,29 +684,34 @@ void WorldRenderer::render_trees(const glm::mat4& view, const glm::mat4& project
     }
     if (!any_tree) return;
     
-    model_shader_->use();
-    model_shader_->set_mat4("view", view);
-    model_shader_->set_mat4("projection", projection);
-    model_shader_->set_vec3("cameraPos", camera_pos);
-    model_shader_->set_vec3("lightDir", light_dir);
-    model_shader_->set_vec3("lightColor", glm::vec3(1.0f, 0.95f, 0.9f));
-    model_shader_->set_vec3("ambientColor", glm::vec3(0.4f, 0.4f, 0.5f));
-    model_shader_->set_vec4("tintColor", glm::vec4(1.0f));
-    model_shader_->set_int("fogEnabled", 1);
-    model_shader_->set_vec3("fogColor", fog_color_);
-    model_shader_->set_float("fogStart", fog_start_);
-    model_shader_->set_float("fogEnd", fog_end_);
-    model_shader_->set_mat4("lightSpaceMatrix", light_space_matrix);
-    model_shader_->set_int("shadowsEnabled", shadows_enabled ? 1 : 0);
-    model_shader_->set_int("ssaoEnabled", ssao_enabled ? 1 : 0);
-    model_shader_->set_vec2("screenSize", screen_size);
+    // Use bgfx's predefined u_viewProj via setViewTransform
+    bgfx::setViewTransform(view_id, glm::value_ptr(view), glm::value_ptr(projection));
     
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, shadow_map);
-    model_shader_->set_int("shadowMap", 2);
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, ssao_texture);
-    model_shader_->set_int("ssaoTexture", 3);
+    float camPos[4] = { camera_pos.x, camera_pos.y, camera_pos.z, 0.0f };
+    bgfx::setUniform(u_cameraPos_, camPos);
+    
+    float lightDirVec[4] = { light_dir.x, light_dir.y, light_dir.z, 0.0f };
+    bgfx::setUniform(u_lightDir_, lightDirVec);
+    
+    float lightColor[4] = { 1.0f, 0.95f, 0.9f, 1.0f };
+    bgfx::setUniform(u_lightColor_, lightColor);
+    
+    float ambientColor[4] = { 0.4f, 0.4f, 0.5f, 1.0f };
+    bgfx::setUniform(u_ambientColor_, ambientColor);
+    
+    float tintColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
+    bgfx::setUniform(u_tintColor_, tintColor);
+    
+    float fogParams[4] = { fog_color_.r, fog_color_.g, fog_color_.b, fog_start_ };
+    bgfx::setUniform(u_fogParams_, fogParams);
+    
+    float fogParams2[4] = { fog_end_, 1.0f, shadows_enabled ? 1.0f : 0.0f, ssao_enabled ? 1.0f : 0.0f };
+    bgfx::setUniform(u_fogParams2_, fogParams2);
+    
+    bgfx::setUniform(u_lightSpaceMatrix_, glm::value_ptr(light_space_matrix));
+    
+    float screenParams[4] = { screen_size.x, screen_size.y, 0.0f, 0.0f };
+    bgfx::setUniform(u_screenParams_, screenParams);
     
     float cull_dist_sq = 3500.0f * 3500.0f;
     
@@ -630,7 +728,6 @@ void WorldRenderer::render_trees(const glm::mat4& view, const glm::mat4& project
         }
         if (!tree) continue;
         
-        // Get terrain height at render time (not at init time)
         float terrain_y = get_terrain_height(tp.x, tp.z);
         
         glm::mat4 model_mat = glm::mat4(1.0f);
@@ -643,37 +740,53 @@ void WorldRenderer::render_trees(const glm::mat4& view, const glm::mat4& project
         float cz = (tree->min_z + tree->max_z) / 2.0f;
         model_mat = model_mat * glm::translate(glm::mat4(1.0f), glm::vec3(-cx, -cy, -cz));
         
-        model_shader_->set_mat4("model", model_mat);
+        // Use bgfx's predefined u_model via setTransform
+        bgfx::setTransform(glm::value_ptr(model_mat));
         
         for (auto& mesh : tree->meshes) {
             if (!mesh.uploaded) ModelLoader::upload_to_gpu(*tree);
-            if (mesh.vao && !mesh.indices.empty()) {
-                if (mesh.has_texture && mesh.texture_id > 0) {
-                    glActiveTexture(GL_TEXTURE0);
-                    glBindTexture(GL_TEXTURE_2D, mesh.texture_id);
-                    model_shader_->set_int("baseColorTexture", 0);
-                    model_shader_->set_int("hasTexture", 1);
-                } else {
-                    model_shader_->set_int("hasTexture", 0);
+            if (bgfx::isValid(mesh.vbh) && bgfx::isValid(mesh.ibh) && !mesh.indices.empty()) {
+                if (mesh.has_texture && bgfx::isValid(mesh.texture)) {
+                    bgfx::setTexture(0, s_baseColorTexture_, mesh.texture);
                 }
-                glBindVertexArray(mesh.vao);
-                glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, 0);
+                if (bgfx::isValid(shadow_map)) {
+                    bgfx::setTexture(2, s_shadowMap_, shadow_map);
+                }
+                if (bgfx::isValid(ssao_texture)) {
+                    bgfx::setTexture(3, s_ssaoTexture_, ssao_texture);
+                }
+                
+                bgfx::setVertexBuffer(0, mesh.vbh);
+                bgfx::setIndexBuffer(mesh.ibh);
+                
+                uint64_t state = BGFX_STATE_WRITE_RGB
+                               | BGFX_STATE_WRITE_A
+                               | BGFX_STATE_WRITE_Z
+                               | BGFX_STATE_DEPTH_TEST_LESS
+                               | BGFX_STATE_CULL_CCW;
+                bgfx::setState(state);
+                
+                bgfx::submit(view_id, model_program_);
             }
         }
     }
-    glBindVertexArray(0);
 }
 
-void WorldRenderer::render_grid(const glm::mat4& view, const glm::mat4& projection) {
-    if (!grid_shader_ || !grid_vao_) return;
+void WorldRenderer::render_grid(bgfx::ViewId view_id, const glm::mat4& view, const glm::mat4& projection) {
+    if (!bgfx::isValid(grid_program_) || !bgfx::isValid(grid_vbh_)) return;
     
-    grid_shader_->use();
-    grid_shader_->set_mat4("view", view);
-    grid_shader_->set_mat4("projection", projection);
+    // Use bgfx's predefined u_viewProj via setViewTransform
+    bgfx::setViewTransform(view_id, glm::value_ptr(view), glm::value_ptr(projection));
     
-    glBindVertexArray(grid_vao_);
-    glDrawArrays(GL_LINES, 0, grid_vertex_count_);
-    glBindVertexArray(0);
+    bgfx::setVertexBuffer(0, grid_vbh_);
+    
+    uint64_t state = BGFX_STATE_WRITE_RGB
+                   | BGFX_STATE_WRITE_A
+                   | BGFX_STATE_PT_LINES
+                   | BGFX_STATE_BLEND_ALPHA;
+    bgfx::setState(state);
+    
+    bgfx::submit(view_id, grid_program_);
 }
 
 std::vector<WorldRenderer::TreePositionData> WorldRenderer::get_tree_positions_for_shadows() const {

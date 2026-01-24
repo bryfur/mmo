@@ -1,11 +1,46 @@
 #include "terrain_renderer.hpp"
-#include "../shader.hpp"
 #include <cmath>
 #include <vector>
 #include <iostream>
+#include <fstream>
 #include <SDL3_image/SDL_image.h>
+#include <glm/gtc/type_ptr.hpp>
 
 namespace mmo {
+
+namespace {
+
+// Terrain vertex structure
+struct TerrainVertex {
+    float x, y, z;    // Position
+    float u, v;       // UV
+    float r, g, b, a; // Color
+};
+
+// Load shader binary file
+bgfx::ShaderHandle load_shader(const char* name) {
+    std::string path = std::string("shaders/") + name + ".bin";
+    
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file.is_open()) {
+        std::cerr << "Failed to open shader: " << path << std::endl;
+        return BGFX_INVALID_HANDLE;
+    }
+    
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    
+    const bgfx::Memory* mem = bgfx::alloc(static_cast<uint32_t>(size + 1));
+    if (!file.read(reinterpret_cast<char*>(mem->data), size)) {
+        std::cerr << "Failed to read shader: " << path << std::endl;
+        return BGFX_INVALID_HANDLE;
+    }
+    mem->data[size] = '\0';
+    
+    return bgfx::createShader(mem);
+}
+
+} // anonymous namespace
 
 TerrainRenderer::TerrainRenderer() = default;
 
@@ -17,37 +52,86 @@ bool TerrainRenderer::init(float world_width, float world_height) {
     world_width_ = world_width;
     world_height_ = world_height;
     
-    // Create terrain shader
-    terrain_shader_ = std::make_unique<Shader>();
-    if (!terrain_shader_->load(shaders::terrain_vertex, shaders::terrain_fragment)) {
-        std::cerr << "Failed to load terrain shader" << std::endl;
-        return false;
-    }
+    // Initialize vertex layout
+    layout_
+        .begin()
+        .add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float)
+        .add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
+        .add(bgfx::Attrib::Color0, 4, bgfx::AttribType::Float, true)
+        .end();
     
+    // Note: u_viewProj and u_model are bgfx predefined uniforms - use setViewTransform/setTransform
+    // Create only custom uniforms
+    u_cameraPos_ = bgfx::createUniform("u_cameraPos", bgfx::UniformType::Vec4);
+    u_fogParams_ = bgfx::createUniform("u_fogParams", bgfx::UniformType::Vec4);
+    u_fogParams2_ = bgfx::createUniform("u_fogParams2", bgfx::UniformType::Vec4);
+    u_lightSpaceMatrix_ = bgfx::createUniform("u_lightSpaceMatrix", bgfx::UniformType::Mat4);
+    u_lightDir_ = bgfx::createUniform("u_lightDir", bgfx::UniformType::Vec4);
+    u_screenParams_ = bgfx::createUniform("u_screenParams", bgfx::UniformType::Vec4);
+    s_grassTexture_ = bgfx::createUniform("s_grassTexture", bgfx::UniformType::Sampler);
+    s_shadowMap_ = bgfx::createUniform("s_shadowMap", bgfx::UniformType::Sampler);
+    s_ssaoTexture_ = bgfx::createUniform("s_ssaoTexture", bgfx::UniformType::Sampler);
+    
+    load_shaders();
     load_grass_texture();
     generate_terrain_mesh();
     
-    return true;
+    return bgfx::isValid(program_);
+}
+
+void TerrainRenderer::load_shaders() {
+    bgfx::ShaderHandle vs = load_shader("terrain_vs");
+    bgfx::ShaderHandle fs = load_shader("terrain_fs");
+    
+    if (bgfx::isValid(vs) && bgfx::isValid(fs)) {
+        program_ = bgfx::createProgram(vs, fs, true);
+        std::cout << "Loaded terrain shaders" << std::endl;
+    } else {
+        std::cerr << "Failed to load terrain shaders" << std::endl;
+        if (bgfx::isValid(vs)) bgfx::destroy(vs);
+        if (bgfx::isValid(fs)) bgfx::destroy(fs);
+    }
 }
 
 void TerrainRenderer::shutdown() {
-    if (vao_) {
-        glDeleteVertexArrays(1, &vao_);
-        vao_ = 0;
+    if (bgfx::isValid(vbh_)) {
+        bgfx::destroy(vbh_);
+        vbh_ = BGFX_INVALID_HANDLE;
     }
-    if (vbo_) {
-        glDeleteBuffers(1, &vbo_);
-        vbo_ = 0;
+    if (bgfx::isValid(ibh_)) {
+        bgfx::destroy(ibh_);
+        ibh_ = BGFX_INVALID_HANDLE;
     }
-    if (ibo_) {
-        glDeleteBuffers(1, &ibo_);
-        ibo_ = 0;
+    if (bgfx::isValid(grass_texture_)) {
+        bgfx::destroy(grass_texture_);
+        grass_texture_ = BGFX_INVALID_HANDLE;
     }
-    if (grass_texture_) {
-        glDeleteTextures(1, &grass_texture_);
-        grass_texture_ = 0;
+    if (bgfx::isValid(program_)) {
+        bgfx::destroy(program_);
+        program_ = BGFX_INVALID_HANDLE;
     }
-    terrain_shader_.reset();
+    
+    // Destroy uniforms (Note: u_viewProj is bgfx predefined, not created by us)
+    if (bgfx::isValid(u_cameraPos_)) bgfx::destroy(u_cameraPos_);
+    if (bgfx::isValid(u_fogParams_)) bgfx::destroy(u_fogParams_);
+    if (bgfx::isValid(u_fogParams2_)) bgfx::destroy(u_fogParams2_);
+    if (bgfx::isValid(u_lightSpaceMatrix_)) bgfx::destroy(u_lightSpaceMatrix_);
+    if (bgfx::isValid(u_lightDir_)) bgfx::destroy(u_lightDir_);
+    if (bgfx::isValid(u_screenParams_)) bgfx::destroy(u_screenParams_);
+    if (bgfx::isValid(s_grassTexture_)) bgfx::destroy(s_grassTexture_);
+    if (bgfx::isValid(s_shadowMap_)) bgfx::destroy(s_shadowMap_);
+    if (bgfx::isValid(s_ssaoTexture_)) bgfx::destroy(s_ssaoTexture_);
+    
+    // Reset handles (Note: u_viewProj is bgfx predefined)
+    u_cameraPos_ = BGFX_INVALID_HANDLE;
+    u_fogParams_ = BGFX_INVALID_HANDLE;
+    u_fogParams2_ = BGFX_INVALID_HANDLE;
+    u_lightSpaceMatrix_ = BGFX_INVALID_HANDLE;
+    u_lightDir_ = BGFX_INVALID_HANDLE;
+    u_screenParams_ = BGFX_INVALID_HANDLE;
+    s_grassTexture_ = BGFX_INVALID_HANDLE;
+    s_shadowMap_ = BGFX_INVALID_HANDLE;
+    s_ssaoTexture_ = BGFX_INVALID_HANDLE;
 }
 
 void TerrainRenderer::load_grass_texture() {
@@ -61,20 +145,19 @@ void TerrainRenderer::load_grass_texture() {
             int tex_width = rgba_surface->w;
             int tex_height = rgba_surface->h;
             
-            glGenTextures(1, &grass_texture_);
-            glBindTexture(GL_TEXTURE_2D, grass_texture_);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex_width, tex_height, 0, 
-                         GL_RGBA, GL_UNSIGNED_BYTE, rgba_surface->pixels);
-            glGenerateMipmap(GL_TEXTURE_2D);
+            const bgfx::Memory* mem = bgfx::copy(
+                rgba_surface->pixels,
+                static_cast<uint32_t>(tex_width * tex_height * 4)
+            );
             
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            
-            float max_aniso;
-            glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &max_aniso);
-            glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, std::min(max_aniso, 8.0f));
+            grass_texture_ = bgfx::createTexture2D(
+                static_cast<uint16_t>(tex_width),
+                static_cast<uint16_t>(tex_height),
+                true, 1,  // hasMips, numLayers
+                bgfx::TextureFormat::RGBA8,
+                BGFX_SAMPLER_U_MIRROR | BGFX_SAMPLER_V_MIRROR | BGFX_SAMPLER_MIN_ANISOTROPIC,
+                mem
+            );
             
             SDL_DestroySurface(rgba_surface);
             std::cout << "Loaded grass texture: " << tex_width << "x" << tex_height << std::endl;
@@ -160,40 +243,35 @@ void TerrainRenderer::generate_terrain_mesh() {
     
     float tex_scale = 0.01f;
     
-    std::vector<float> vertices;
+    std::vector<TerrainVertex> vertices;
     std::vector<uint32_t> indices;
     
     // Generate vertices: x, y, z, u, v, r, g, b, a
     for (int iz = 0; iz <= cells_z; ++iz) {
         for (int ix = 0; ix <= cells_x; ++ix) {
-            float x = start_x + ix * cell_size;
-            float z = start_z + iz * cell_size;
-            float y = get_height(x, z);
-            
-            vertices.push_back(x);
-            vertices.push_back(y);
-            vertices.push_back(z);
-            vertices.push_back(x * tex_scale);
-            vertices.push_back(z * tex_scale);
+            TerrainVertex v;
+            v.x = start_x + ix * cell_size;
+            v.z = start_z + iz * cell_size;
+            v.y = get_height(v.x, v.z);
+            v.u = v.x * tex_scale;
+            v.v = v.z * tex_scale;
             
             // Color tint based on position
             float world_center_x = world_width_ / 2.0f;
             float world_center_z = world_height_ / 2.0f;
-            float dx = x - world_center_x;
-            float dz = z - world_center_z;
+            float dx = v.x - world_center_x;
+            float dz = v.z - world_center_z;
             float dist = std::sqrt(dx * dx + dz * dz);
             
             float dist_factor = std::min(dist / 3000.0f, 1.0f);
-            float height_factor = std::min(std::max(y / 100.0f, 0.0f), 1.0f);
+            float height_factor = std::min(std::max(v.y / 100.0f, 0.0f), 1.0f);
             
-            float r = 0.95f + dist_factor * 0.05f;
-            float g = 1.0f - dist_factor * 0.05f - height_factor * 0.05f;
-            float b = 0.9f + dist_factor * 0.05f;
+            v.r = 0.95f + dist_factor * 0.05f;
+            v.g = 1.0f - dist_factor * 0.05f - height_factor * 0.05f;
+            v.b = 0.9f + dist_factor * 0.05f;
+            v.a = 1.0f;
             
-            vertices.push_back(r);
-            vertices.push_back(g);
-            vertices.push_back(b);
-            vertices.push_back(1.0f);
+            vertices.push_back(v);
         }
     }
     
@@ -214,79 +292,78 @@ void TerrainRenderer::generate_terrain_mesh() {
         }
     }
     
-    vertex_count_ = static_cast<GLuint>(indices.size());
+    index_count_ = static_cast<uint32_t>(indices.size());
     
-    glGenVertexArrays(1, &vao_);
-    glGenBuffers(1, &vbo_);
-    glGenBuffers(1, &ibo_);
+    // Create vertex buffer
+    const bgfx::Memory* vb_mem = bgfx::copy(
+        vertices.data(),
+        static_cast<uint32_t>(vertices.size() * sizeof(TerrainVertex))
+    );
+    vbh_ = bgfx::createVertexBuffer(vb_mem, layout_);
     
-    glBindVertexArray(vao_);
+    // Create index buffer
+    const bgfx::Memory* ib_mem = bgfx::copy(
+        indices.data(),
+        static_cast<uint32_t>(indices.size() * sizeof(uint32_t))
+    );
+    ibh_ = bgfx::createIndexBuffer(ib_mem, BGFX_BUFFER_INDEX32);
     
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), 
-                 vertices.data(), GL_STATIC_DRAW);
-    
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(uint32_t), 
-                 indices.data(), GL_STATIC_DRAW);
-    
-    // Position (3 floats)
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    
-    // UV (2 floats)
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    
-    // Color (4 floats)
-    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(5 * sizeof(float)));
-    glEnableVertexAttribArray(2);
-    
-    glBindVertexArray(0);
-    
-    std::cout << "Generated terrain mesh with " << vertex_count_ << " indices" << std::endl;
+    std::cout << "Generated terrain mesh with " << index_count_ << " indices" << std::endl;
 }
 
-void TerrainRenderer::render(const glm::mat4& view, const glm::mat4& projection,
+void TerrainRenderer::render(bgfx::ViewId view_id, const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& camera_pos, const glm::mat4& light_space_matrix,
-                             GLuint shadow_map, bool shadows_enabled,
-                             GLuint ssao_texture, bool ssao_enabled,
+                             bgfx::TextureHandle shadow_map, bool shadows_enabled,
+                             bgfx::TextureHandle ssao_texture, bool ssao_enabled,
                              const glm::vec3& light_dir, const glm::vec2& screen_size) {
-    if (!terrain_shader_ || !vao_) return;
+    if (!bgfx::isValid(program_) || !bgfx::isValid(vbh_)) return;
     
-    terrain_shader_->use();
-    terrain_shader_->set_mat4("view", view);
-    terrain_shader_->set_mat4("projection", projection);
-    terrain_shader_->set_vec3("cameraPos", camera_pos);
+    // Set view and projection matrices using bgfx's predefined uniforms
+    bgfx::setViewTransform(view_id, glm::value_ptr(view), glm::value_ptr(projection));
+    
+    // Camera position (vec4 for padding)
+    float cam_pos[4] = { camera_pos.x, camera_pos.y, camera_pos.z, 0.0f };
+    bgfx::setUniform(u_cameraPos_, cam_pos);
     
     // Fog settings
-    terrain_shader_->set_vec3("fogColor", fog_color_);
-    terrain_shader_->set_float("fogStart", fog_start_);
-    terrain_shader_->set_float("fogEnd", fog_end_);
+    float fog_params[4] = { fog_color_.r, fog_color_.g, fog_color_.b, fog_start_ };
+    bgfx::setUniform(u_fogParams_, fog_params);
+    float fog_params2[4] = { fog_end_, 0.0f, 0.0f, 0.0f };
+    bgfx::setUniform(u_fogParams2_, fog_params2);
     
-    // Shadow mapping
-    terrain_shader_->set_mat4("lightSpaceMatrix", light_space_matrix);
-    terrain_shader_->set_int("shadowsEnabled", shadows_enabled ? 1 : 0);
-    terrain_shader_->set_vec3("lightDir", light_dir);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, shadow_map);
-    terrain_shader_->set_int("shadowMap", 1);
+    // Light space matrix
+    bgfx::setUniform(u_lightSpaceMatrix_, glm::value_ptr(light_space_matrix));
     
-    // SSAO
-    terrain_shader_->set_int("ssaoEnabled", ssao_enabled ? 1 : 0);
-    terrain_shader_->set_vec2("screenSize", screen_size);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, ssao_texture);
-    terrain_shader_->set_int("ssaoTexture", 2);
+    // Light direction
+    float light_dir_v[4] = { light_dir.x, light_dir.y, light_dir.z, 0.0f };
+    bgfx::setUniform(u_lightDir_, light_dir_v);
     
-    // Grass texture
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, grass_texture_);
-    terrain_shader_->set_int("grassTexture", 0);
+    // Screen params: screenSize.xy, shadowsEnabled, ssaoEnabled
+    float screen_params[4] = { screen_size.x, screen_size.y, shadows_enabled ? 1.0f : 0.0f, ssao_enabled ? 1.0f : 0.0f };
+    bgfx::setUniform(u_screenParams_, screen_params);
     
-    glBindVertexArray(vao_);
-    glDrawElements(GL_TRIANGLES, vertex_count_, GL_UNSIGNED_INT, 0);
-    glBindVertexArray(0);
+    // Bind textures
+    bgfx::setTexture(0, s_grassTexture_, grass_texture_);
+    if (bgfx::isValid(shadow_map)) {
+        bgfx::setTexture(1, s_shadowMap_, shadow_map);
+    }
+    if (bgfx::isValid(ssao_texture)) {
+        bgfx::setTexture(2, s_ssaoTexture_, ssao_texture);
+    }
+    
+    // Set render state
+    uint64_t state = BGFX_STATE_WRITE_RGB
+                   | BGFX_STATE_WRITE_A
+                   | BGFX_STATE_WRITE_Z
+                   | BGFX_STATE_DEPTH_TEST_LESS
+                   | BGFX_STATE_CULL_CCW
+                   | BGFX_STATE_MSAA;
+    bgfx::setState(state);
+    
+    // Submit geometry
+    bgfx::setVertexBuffer(0, vbh_);
+    bgfx::setIndexBuffer(ibh_);
+    bgfx::submit(view_id, program_);
 }
 
 } // namespace mmo

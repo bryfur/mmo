@@ -1,28 +1,27 @@
 #pragma once
 
+#include "render_context.hpp"
 #include <SDL3/SDL.h>
 #include <SDL3_ttf/SDL_ttf.h>
-#include <GL/glew.h>
+#include <bgfx/bgfx.h>
 #include <glm/glm.hpp>
 #include <string>
-#include <unordered_map>
 
 namespace mmo {
 
-class Shader;
-
+/**
+ * TextRenderer handles text rendering using SDL_ttf and bgfx.
+ * Creates textures on-the-fly from rendered text.
+ */
 class TextRenderer {
 public:
     TextRenderer();
     ~TextRenderer();
     
-    bool init();
+    bool init(int screen_width, int screen_height);
     void shutdown();
     
-    // Set the shader and projection matrix before drawing
-    void set_shader(Shader* shader);
-    void set_projection(const glm::mat4& projection);
-    void set_vao_vbo(GLuint vao, GLuint vbo);
+    void set_screen_size(int width, int height);
     
     void draw_text(const std::string& text, float x, float y, uint32_t color = 0xFFFFFFFF, float scale = 1.0f);
     void draw_text_centered(const std::string& text, float x, float y, uint32_t color = 0xFFFFFFFF, float scale = 1.0f);
@@ -37,10 +36,15 @@ private:
     int font_size_ = 18;
     bool initialized_ = false;
     
-    Shader* shader_ = nullptr;
+    int screen_width_ = 0;
+    int screen_height_ = 0;
     glm::mat4 projection_;
-    GLuint vao_ = 0;
-    GLuint vbo_ = 0;
+    
+    bgfx::ProgramHandle text_program_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_textColor_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle s_textTexture_ = BGFX_INVALID_HANDLE;
+    
+    bgfx::VertexLayout text_layout_;
 };
 
 } // namespace mmo

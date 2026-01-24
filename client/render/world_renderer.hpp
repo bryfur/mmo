@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../shader.hpp"
 #include "../model_loader.hpp"
-#include <GL/glew.h>
+#include "render_context.hpp"
+#include <bgfx/bgfx.h>
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
@@ -11,7 +11,7 @@
 namespace mmo {
 
 /**
- * WorldRenderer handles environmental world rendering:
+ * WorldRenderer handles environmental world rendering using bgfx:
  * - Skybox
  * - Mountains
  * - Rocks  
@@ -52,36 +52,36 @@ public:
     /**
      * Render skybox (should be called first with depth write disabled).
      */
-    void render_skybox(const glm::mat4& view, const glm::mat4& projection);
+    void render_skybox(bgfx::ViewId view_id, const glm::mat4& view, const glm::mat4& projection);
     
     /**
      * Render distant mountains.
      */
-    void render_mountains(const glm::mat4& view, const glm::mat4& projection,
+    void render_mountains(bgfx::ViewId view_id, const glm::mat4& view, const glm::mat4& projection,
                           const glm::vec3& camera_pos, const glm::vec3& light_dir);
     
     /**
      * Render scattered rocks.
      */
-    void render_rocks(const glm::mat4& view, const glm::mat4& projection,
+    void render_rocks(bgfx::ViewId view_id, const glm::mat4& view, const glm::mat4& projection,
                       const glm::vec3& camera_pos, const glm::mat4& light_space_matrix,
-                      GLuint shadow_map, bool shadows_enabled,
-                      GLuint ssao_texture, bool ssao_enabled,
+                      bgfx::TextureHandle shadow_map, bool shadows_enabled,
+                      bgfx::TextureHandle ssao_texture, bool ssao_enabled,
                       const glm::vec3& light_dir, const glm::vec2& screen_size);
     
     /**
      * Render trees.
      */
-    void render_trees(const glm::mat4& view, const glm::mat4& projection,
+    void render_trees(bgfx::ViewId view_id, const glm::mat4& view, const glm::mat4& projection,
                       const glm::vec3& camera_pos, const glm::mat4& light_space_matrix,
-                      GLuint shadow_map, bool shadows_enabled,
-                      GLuint ssao_texture, bool ssao_enabled,
+                      bgfx::TextureHandle shadow_map, bool shadows_enabled,
+                      bgfx::TextureHandle ssao_texture, bool ssao_enabled,
                       const glm::vec3& light_dir, const glm::vec2& screen_size);
     
     /**
      * Render debug grid.
      */
-    void render_grid(const glm::mat4& view, const glm::mat4& projection);
+    void render_grid(bgfx::ViewId view_id, const glm::mat4& view, const glm::mat4& projection);
     
     /**
      * Get mountain positions for shadow rendering.
@@ -115,6 +115,7 @@ private:
     void generate_tree_positions();
     void create_skybox_mesh();
     void create_grid_mesh();
+    void load_shaders();
     
     float get_terrain_height(float x, float z) const;
     
@@ -124,20 +125,46 @@ private:
     ModelManager* model_manager_ = nullptr;
     std::function<float(float, float)> terrain_height_func_;
     
-    // Shaders
-    std::unique_ptr<Shader> skybox_shader_;
-    std::unique_ptr<Shader> grid_shader_;
-    std::unique_ptr<Shader> model_shader_;
+    // Shaders (bgfx programs)
+    bgfx::ProgramHandle skybox_program_ = BGFX_INVALID_HANDLE;
+    bgfx::ProgramHandle grid_program_ = BGFX_INVALID_HANDLE;
+    bgfx::ProgramHandle model_program_ = BGFX_INVALID_HANDLE;
     
-    // Skybox
-    GLuint skybox_vao_ = 0;
-    GLuint skybox_vbo_ = 0;
+    // Skybox mesh
+    bgfx::VertexBufferHandle skybox_vbh_ = BGFX_INVALID_HANDLE;
+    bgfx::VertexLayout skybox_layout_;
     float skybox_time_ = 0.0f;
     
-    // Grid
-    GLuint grid_vao_ = 0;
-    GLuint grid_vbo_ = 0;
-    GLuint grid_vertex_count_ = 0;
+    // Grid mesh
+    bgfx::VertexBufferHandle grid_vbh_ = BGFX_INVALID_HANDLE;
+    bgfx::VertexLayout grid_layout_;
+    uint32_t grid_vertex_count_ = 0;
+    
+    // Uniform handles - skybox
+    bgfx::UniformHandle u_skybox_viewProj_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_skybox_params_ = BGFX_INVALID_HANDLE;  // time, padding...
+    bgfx::UniformHandle u_skybox_sunDir_ = BGFX_INVALID_HANDLE;
+    
+    // Uniform handles - grid
+    bgfx::UniformHandle u_grid_viewProj_ = BGFX_INVALID_HANDLE;
+    
+    // Uniform handles - model rendering (mountains, rocks, trees)
+    bgfx::UniformHandle u_model_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_viewProj_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_cameraPos_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_lightDir_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_lightColor_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_ambientColor_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_tintColor_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_fogParams_ = BGFX_INVALID_HANDLE;    // fogColor.rgb, fogStart
+    bgfx::UniformHandle u_fogParams2_ = BGFX_INVALID_HANDLE;   // fogEnd, fogEnabled, shadowsEnabled, ssaoEnabled
+    bgfx::UniformHandle u_lightSpaceMatrix_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_screenParams_ = BGFX_INVALID_HANDLE;
+    
+    // Texture samplers
+    bgfx::UniformHandle s_baseColorTexture_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle s_shadowMap_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle s_ssaoTexture_ = BGFX_INVALID_HANDLE;
     
     // Lighting
     glm::vec3 sun_direction_ = glm::normalize(glm::vec3(0.5f, 0.8f, 0.3f));

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../shader.hpp"
-#include <GL/glew.h>
+#include "render_context.hpp"
+#include <bgfx/bgfx.h>
 #include <glm/glm.hpp>
 #include <memory>
 #include <string>
@@ -11,7 +11,7 @@ namespace mmo {
 class TextRenderer;
 
 /**
- * UIRenderer handles all 2D UI rendering:
+ * UIRenderer handles all 2D UI rendering using bgfx:
  * - Rectangles (filled/outline)
  * - Circles
  * - Lines
@@ -44,12 +44,12 @@ public:
     void set_screen_size(int width, int height);
     
     /**
-     * Begin UI rendering mode (disables depth test, culling).
+     * Begin UI rendering mode.
      */
     void begin();
     
     /**
-     * End UI rendering mode (restores state).
+     * End UI rendering mode.
      */
     void end();
     
@@ -77,23 +77,21 @@ public:
     int height() const { return height_; }
     
 private:
-    void draw_quad(float x, float y, float w, float h, const glm::vec4& color);
-    glm::vec4 color_from_uint32(uint32_t color) const;
+    void draw_quad(float x, float y, float w, float h, uint32_t abgr_color);
+    uint32_t rgba_to_abgr(uint32_t color) const;
     
     int width_ = 0;
     int height_ = 0;
     
-    std::unique_ptr<Shader> ui_shader_;
+    bgfx::ProgramHandle ui_program_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_projection_ = BGFX_INVALID_HANDLE;
+    
     std::unique_ptr<TextRenderer> text_renderer_;
-    std::unique_ptr<Shader> text_shader_;
     
     glm::mat4 projection_;
     
-    GLuint vao_ = 0;
-    GLuint vbo_ = 0;
-    
-    GLuint text_vao_ = 0;
-    GLuint text_vbo_ = 0;
+    // Vertex layout for UI quads (position, color)
+    bgfx::VertexLayout ui_layout_;
 };
 
 } // namespace mmo

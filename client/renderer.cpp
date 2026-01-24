@@ -1,9 +1,13 @@
 #include "renderer.hpp"
 #include "render/grass_renderer.hpp"
+#include "render/bgfx_utils.hpp"
+#include <bx/math.h>
 #include <iostream>
 #include <cmath>
 
 namespace mmo {
+
+// Use ViewId constants from render_context.hpp (included via renderer.hpp)
 
 Renderer::Renderer() 
     : model_manager_(std::make_unique<ModelManager>()),
@@ -14,10 +18,13 @@ Renderer::~Renderer() {
 }
 
 bool Renderer::init(int width, int height, const std::string& title) {
-    // Initialize render context (SDL window + OpenGL)
+    // Initialize render context (SDL window + bgfx)
     if (!context_.init(width, height, title)) {
         return false;
     }
+    
+    // Initialize vertex layouts for model loading (must be done after bgfx init)
+    ModelLoader::init_vertex_layouts();
     
     // Initialize terrain renderer
     if (!terrain_.init(WORLD_WIDTH, WORLD_HEIGHT)) {
@@ -76,36 +83,52 @@ bool Renderer::init(int width, int height, const std::string& title) {
 }
 
 void Renderer::init_shaders() {
-    model_shader_ = std::make_unique<Shader>();
-    if (!model_shader_->load(shaders::model_vertex, shaders::model_fragment)) {
-        std::cerr << "Failed to load model shader" << std::endl;
+    // Load model shader program
+    model_program_ = bgfx_utils::load_program("model_vs", "model_fs");
+    if (!bgfx::isValid(model_program_)) {
+        std::cerr << "Failed to load model shader program" << std::endl;
     }
     
-    skinned_model_shader_ = std::make_unique<Shader>();
-    if (!skinned_model_shader_->load(shaders::skinned_model_vertex, shaders::skinned_model_fragment)) {
-        std::cerr << "Failed to load skinned model shader" << std::endl;
+    // Load skinned model shader (for now use same as model, add skinning variant later)
+    skinned_model_program_ = bgfx_utils::load_program("skinned_model_vs", "model_fs");
+    if (!bgfx::isValid(skinned_model_program_)) {
+        // Fall back to regular model program
+        skinned_model_program_ = model_program_;
     }
     
-    billboard_shader_ = std::make_unique<Shader>();
-    if (!billboard_shader_->load(shaders::billboard_vertex, shaders::billboard_fragment)) {
-        std::cerr << "Failed to load billboard shader" << std::endl;
+    // Load billboard shader program
+    billboard_program_ = bgfx_utils::load_program("billboard_vs", "billboard_fs");
+    if (!bgfx::isValid(billboard_program_)) {
+        std::cerr << "Failed to load billboard shader program" << std::endl;
     }
+    
+    // Note: u_model is a bgfx predefined uniform - use setTransform instead
+    // Create only custom uniforms
+    u_lightSpaceMatrix_ = bgfx::createUniform("u_lightSpaceMatrix", bgfx::UniformType::Mat4);
+    u_lightDir_ = bgfx::createUniform("u_lightDir", bgfx::UniformType::Vec4);
+    u_lightColor_ = bgfx::createUniform("u_lightColor", bgfx::UniformType::Vec4);
+    u_ambientColor_ = bgfx::createUniform("u_ambientColor", bgfx::UniformType::Vec4);
+    u_viewPos_ = bgfx::createUniform("u_viewPos", bgfx::UniformType::Vec4);
+    u_fogParams_ = bgfx::createUniform("u_fogParams", bgfx::UniformType::Vec4);
+    u_fogColor_ = bgfx::createUniform("u_fogColor", bgfx::UniformType::Vec4);
+    u_tintColor_ = bgfx::createUniform("u_tintColor", bgfx::UniformType::Vec4);
+    u_baseColor_ = bgfx::createUniform("u_baseColor", bgfx::UniformType::Vec4);
+    u_params_ = bgfx::createUniform("u_params", bgfx::UniformType::Vec4);
+    u_boneMatrices_ = bgfx::createUniform("u_boneMatrices", bgfx::UniformType::Mat4, MAX_BONES);
+    
+    // Texture samplers
+    s_baseColorTexture_ = bgfx::createUniform("s_baseColorTexture", bgfx::UniformType::Sampler);
+    s_shadowMap_ = bgfx::createUniform("s_shadowMap", bgfx::UniformType::Sampler);
+    s_ssaoTexture_ = bgfx::createUniform("s_ssaoTexture", bgfx::UniformType::Sampler);
 }
 
 void Renderer::init_billboard_buffers() {
-    glGenVertexArrays(1, &billboard_vao_);
-    glGenBuffers(1, &billboard_vbo_);
-    
-    glBindVertexArray(billboard_vao_);
-    glBindBuffer(GL_ARRAY_BUFFER, billboard_vbo_);
-    glBufferData(GL_ARRAY_BUFFER, 6 * 7 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
-    
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    
-    glBindVertexArray(0);
+    // Set up vertex layout for billboards
+    billboard_layout_
+        .begin()
+        .add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float)
+        .add(bgfx::Attrib::Color0, 4, bgfx::AttribType::Float)
+        .end();
 }
 
 void Renderer::shutdown() {
@@ -117,18 +140,35 @@ void Renderer::shutdown() {
         grass_renderer_->shutdown();
     }
     
-    if (billboard_vao_) {
-        glDeleteVertexArrays(1, &billboard_vao_);
-        billboard_vao_ = 0;
+    // Destroy bgfx resources
+    if (bgfx::isValid(model_program_)) {
+        bgfx::destroy(model_program_);
+        model_program_ = BGFX_INVALID_HANDLE;
     }
-    if (billboard_vbo_) {
-        glDeleteBuffers(1, &billboard_vbo_);
-        billboard_vbo_ = 0;
+    if (bgfx::isValid(skinned_model_program_) && skinned_model_program_.idx != model_program_.idx) {
+        bgfx::destroy(skinned_model_program_);
+        skinned_model_program_ = BGFX_INVALID_HANDLE;
+    }
+    if (bgfx::isValid(billboard_program_)) {
+        bgfx::destroy(billboard_program_);
+        billboard_program_ = BGFX_INVALID_HANDLE;
     }
     
-    model_shader_.reset();
-    skinned_model_shader_.reset();
-    billboard_shader_.reset();
+    // Destroy uniforms (Note: u_model is bgfx predefined, not created by us)
+    if (bgfx::isValid(u_lightSpaceMatrix_)) bgfx::destroy(u_lightSpaceMatrix_);
+    if (bgfx::isValid(u_lightDir_)) bgfx::destroy(u_lightDir_);
+    if (bgfx::isValid(u_lightColor_)) bgfx::destroy(u_lightColor_);
+    if (bgfx::isValid(u_ambientColor_)) bgfx::destroy(u_ambientColor_);
+    if (bgfx::isValid(u_viewPos_)) bgfx::destroy(u_viewPos_);
+    if (bgfx::isValid(u_fogParams_)) bgfx::destroy(u_fogParams_);
+    if (bgfx::isValid(u_fogColor_)) bgfx::destroy(u_fogColor_);
+    if (bgfx::isValid(u_tintColor_)) bgfx::destroy(u_tintColor_);
+    if (bgfx::isValid(u_baseColor_)) bgfx::destroy(u_baseColor_);
+    if (bgfx::isValid(u_params_)) bgfx::destroy(u_params_);
+    if (bgfx::isValid(u_boneMatrices_)) bgfx::destroy(u_boneMatrices_);
+    if (bgfx::isValid(s_baseColorTexture_)) bgfx::destroy(s_baseColorTexture_);
+    if (bgfx::isValid(s_shadowMap_)) bgfx::destroy(s_shadowMap_);
+    if (bgfx::isValid(s_ssaoTexture_)) bgfx::destroy(s_ssaoTexture_);
     
     // Shutdown subsystems
     effects_.shutdown();
@@ -158,18 +198,16 @@ bool Renderer::load_models(const std::string& assets_path) {
     if (!model_manager_->load_model("archer", models_path + "archer_rigged.glb")) {
         success &= model_manager_->load_model("archer", models_path + "archer.glb");
     }
-    success &= model_manager_->load_model("npc", models_path + "npc_enemy.glb");
     
-    // Ground tiles
-    model_manager_->load_model("ground_grass", models_path + "ground_grass.glb");
-    model_manager_->load_model("ground_stone", models_path + "ground_stone.glb");
+    // NPC models
+    model_manager_->load_model("npc", models_path + "npc.glb");
+    model_manager_->load_model("npc_merchant", models_path + "npc_merchant.glb");
+    model_manager_->load_model("npc_guard", models_path + "npc_guard.glb");
+    model_manager_->load_model("npc_blacksmith", models_path + "npc_blacksmith.glb");
+    model_manager_->load_model("npc_innkeeper", models_path + "npc_innkeeper.glb");
+    model_manager_->load_model("npc_villager", models_path + "npc_villager.glb");
     
-    // Mountain models
-    model_manager_->load_model("mountain_small", models_path + "mountain_small.glb");
-    model_manager_->load_model("mountain_medium", models_path + "mountain_medium.glb");
-    model_manager_->load_model("mountain_large", models_path + "mountain_large.glb");
-    
-    // Buildings
+    // Building models
     model_manager_->load_model("building_tavern", models_path + "building_tavern.glb");
     model_manager_->load_model("building_blacksmith", models_path + "building_blacksmith.glb");
     model_manager_->load_model("building_tower", models_path + "building_tower.glb");
@@ -177,37 +215,13 @@ bool Renderer::load_models(const std::string& assets_path) {
     model_manager_->load_model("building_well", models_path + "building_well.glb");
     model_manager_->load_model("building_house", models_path + "building_house.glb");
     
-    // Town NPCs
-    model_manager_->load_model("npc_merchant", models_path + "npc_merchant.glb");
-    model_manager_->load_model("npc_guard", models_path + "npc_guard.glb");
-    model_manager_->load_model("npc_blacksmith", models_path + "npc_blacksmith.glb");
-    model_manager_->load_model("npc_innkeeper", models_path + "npc_innkeeper.glb");
-    model_manager_->load_model("npc_villager", models_path + "npc_villager.glb");
-    
     // Attack effect models
-    model_manager_->load_model("weapon_sword", models_path + "weapon_sword.glb");
-    model_manager_->load_model("spell_fireball", models_path + "spell_fireball.glb");
-    model_manager_->load_model("spell_bible", models_path + "spell_bible.glb");
+    model_manager_->load_model("sword_slash", models_path + "sword_slash.glb");
+    model_manager_->load_model("fireball", models_path + "fireball.glb");
+    model_manager_->load_model("paladin_aoe", models_path + "paladin_aoe.glb");
+    model_manager_->load_model("arrow", models_path + "arrow.glb");
     
-    // Rock models
-    model_manager_->load_model("rock_boulder", models_path + "rock_boulder.glb");
-    model_manager_->load_model("rock_slate", models_path + "rock_slate.glb");
-    model_manager_->load_model("rock_spire", models_path + "rock_spire.glb");
-    model_manager_->load_model("rock_cluster", models_path + "rock_cluster.glb");
-    model_manager_->load_model("rock_mossy", models_path + "rock_mossy.glb");
-    
-    // Tree models
-    model_manager_->load_model("tree_oak", models_path + "tree_oak.glb");
-    model_manager_->load_model("tree_pine", models_path + "tree_pine.glb");
-    model_manager_->load_model("tree_dead", models_path + "tree_dead.glb");
-    
-    if (success) {
-        models_loaded_ = true;
-        std::cout << "All 3D models loaded successfully" << std::endl;
-    } else {
-        std::cerr << "Warning: Some models failed to load" << std::endl;
-    }
-    
+    models_loaded_ = true;
     return success;
 }
 
@@ -216,15 +230,27 @@ bool Renderer::load_models(const std::string& assets_path) {
 // ============================================================================
 
 void Renderer::begin_frame() {
-    context_.begin_frame();
+    // Update camera matrices
+    update_camera();
     
-    // Update camera system screen size
-    camera_system_.set_screen_size(context_.width(), context_.height());
-    ui_.set_screen_size(context_.width(), context_.height());
+    // Set up main view
+    bgfx::setViewRect(ViewId::Main, 0, 0, uint16_t(context_.width()), uint16_t(context_.height()));
+    bgfx::setViewClear(ViewId::Main, BGFX_CLEAR_COLOR | BGFX_CLEAR_DEPTH, 0x303030FF, 1.0f, 0);
+    
+    // Convert GLM matrices to bgfx format (column-major float arrays)
+    float view_mtx[16];
+    float proj_mtx[16];
+    memcpy(view_mtx, &view_[0][0], sizeof(float) * 16);
+    memcpy(proj_mtx, &projection_[0][0], sizeof(float) * 16);
+    
+    bgfx::setViewTransform(ViewId::Main, view_mtx, proj_mtx);
+    
+    // Touch the view to ensure it's cleared even if nothing is rendered
+    bgfx::touch(ViewId::Main);
 }
 
 void Renderer::end_frame() {
-    context_.end_frame();
+    bgfx::frame();
 }
 
 // ============================================================================
@@ -232,10 +258,6 @@ void Renderer::end_frame() {
 // ============================================================================
 
 void Renderer::begin_shadow_pass() {
-    if (!shadows_.is_enabled()) return;
-    
-    // Update light space matrix based on camera position
-    shadows_.update_light_space_matrix(camera_x_, camera_y_, light_dir_);
     shadows_.begin_shadow_pass();
 }
 
@@ -244,8 +266,6 @@ void Renderer::end_shadow_pass() {
 }
 
 void Renderer::draw_entity_shadow(const EntityState& entity) {
-    if (!shadows_.is_enabled()) return;
-    
     Model* model = get_model_for_entity(entity);
     if (!model) return;
     
@@ -270,12 +290,6 @@ void Renderer::draw_entity_shadow(const EntityState& entity) {
 void Renderer::draw_model_shadow(Model* model, const glm::vec3& position, float rotation, float scale) {
     if (!model || !shadows_.is_enabled()) return;
     
-    Shader* shader = shadows_.shadow_shader();
-    if (!shader) return;
-    
-    shader->use();
-    shader->set_mat4("lightSpaceMatrix", shadows_.light_space_matrix());
-    
     glm::mat4 model_mat = glm::mat4(1.0f);
     model_mat = glm::translate(model_mat, position);
     model_mat = glm::rotate(model_mat, rotation, glm::vec3(0.0f, 1.0f, 0.0f));
@@ -286,13 +300,28 @@ void Renderer::draw_model_shadow(Model* model, const glm::vec3& position, float 
     float cz = (model->min_z + model->max_z) / 2.0f;
     model_mat = model_mat * glm::translate(glm::mat4(1.0f), glm::vec3(-cx, -cy, -cz));
     
-    shader->set_mat4("model", model_mat);
+    // Submit to shadow pass using shadow program
+    bgfx::setUniform(shadows_.u_model(), &model_mat[0][0]);
+    glm::mat4 lsm = shadows_.light_space_matrix();
+    bgfx::setUniform(shadows_.u_lightSpaceMatrix(), &lsm[0][0]);
     
-    for (const auto& mesh : model->meshes) {
-        glBindVertexArray(mesh.vao);
-        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh.indices.size()), GL_UNSIGNED_INT, 0);
+    bool is_skinned = model->has_skeleton && bgfx::isValid(shadows_.skinned_shadow_program());
+    bgfx::ProgramHandle program = is_skinned ? shadows_.skinned_shadow_program() : shadows_.shadow_program();
+    
+    for (auto& mesh : model->meshes) {
+        if (!mesh.uploaded) {
+            ModelLoader::upload_to_gpu(*model);
+        }
+        
+        bgfx::setVertexBuffer(0, mesh.vbh);
+        if (bgfx::isValid(mesh.ibh)) {
+            bgfx::setIndexBuffer(mesh.ibh);
+        }
+        
+        uint64_t state = BGFX_STATE_WRITE_Z | BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_CULL_CCW;
+        bgfx::setState(state);
+        bgfx::submit(ViewId::Shadow, program);
     }
-    glBindVertexArray(0);
 }
 
 void Renderer::draw_mountain_shadows() {
@@ -300,12 +329,6 @@ void Renderer::draw_mountain_shadows() {
     
     Model* mountain_large = model_manager_->get_model("mountain_large");
     if (!mountain_large) return;
-    
-    Shader* shader = shadows_.shadow_shader();
-    if (!shader) return;
-    
-    shader->use();
-    shader->set_mat4("lightSpaceMatrix", shadows_.light_space_matrix());
     
     for (const auto& mp : world_.get_mountain_positions()) {
         if (mp.size_type != 2) continue;  // Only large mountains
@@ -332,12 +355,6 @@ void Renderer::draw_tree_shadows() {
     
     bool any_tree = trees[0] || trees[1];
     if (!any_tree) return;
-    
-    Shader* shader = shadows_.shadow_shader();
-    if (!shader) return;
-    
-    shader->use();
-    shader->set_mat4("lightSpaceMatrix", shadows_.light_space_matrix());
     
     auto tree_positions = world_.get_tree_positions_for_shadows();
     for (const auto& tp : tree_positions) {
@@ -462,17 +479,17 @@ void Renderer::draw_skybox() {
     if (!skybox_enabled_) return;
     skybox_time_ += 0.016f;
     world_.update(0.016f);
-    world_.render_skybox(view_, projection_);
+    world_.render_skybox(ViewId::Main, view_, projection_);
 }
 
 void Renderer::draw_distant_mountains() {
     if (!mountains_enabled_) return;
-    world_.render_mountains(view_, projection_, actual_camera_pos_, light_dir_);
+    world_.render_mountains(ViewId::Main, view_, projection_, actual_camera_pos_, light_dir_);
 }
 
 void Renderer::draw_rocks() {
     if (!rocks_enabled_) return;
-    world_.render_rocks(view_, projection_, actual_camera_pos_,
+    world_.render_rocks(ViewId::Main, view_, projection_, actual_camera_pos_,
                         shadows_.light_space_matrix(), shadows_.shadow_depth_texture(),
                         shadows_.is_enabled(), ssao_.ssao_texture(), ssao_.is_enabled(),
                         light_dir_, glm::vec2(context_.width(), context_.height()));
@@ -480,14 +497,14 @@ void Renderer::draw_rocks() {
 
 void Renderer::draw_trees() {
     if (!trees_enabled_) return;
-    world_.render_trees(view_, projection_, actual_camera_pos_,
+    world_.render_trees(ViewId::Main, view_, projection_, actual_camera_pos_,
                         shadows_.light_space_matrix(), shadows_.shadow_depth_texture(),
                         shadows_.is_enabled(), ssao_.ssao_texture(), ssao_.is_enabled(),
                         light_dir_, glm::vec2(context_.width(), context_.height()));
 }
 
 void Renderer::draw_ground() {
-    terrain_.render(view_, projection_, actual_camera_pos_,
+    terrain_.render(ViewId::Main, view_, projection_, actual_camera_pos_,
                     shadows_.light_space_matrix(), shadows_.shadow_depth_texture(),
                     shadows_.is_enabled(), ssao_.ssao_texture(), ssao_.is_enabled(),
                     light_dir_, glm::vec2(context_.width(), context_.height()));
@@ -497,13 +514,13 @@ void Renderer::draw_grass() {
     if (!grass_renderer_ || !grass_enabled_) return;
     
     grass_renderer_->update(0.016f, skybox_time_);
-    grass_renderer_->render(view_, projection_, actual_camera_pos_,
+    grass_renderer_->render(ViewId::Main, view_, projection_, actual_camera_pos_,
                            shadows_.light_space_matrix(), shadows_.shadow_depth_texture(),
                            shadows_.is_enabled(), light_dir_);
 }
 
 void Renderer::draw_grid() {
-    world_.render_grid(view_, projection_);
+    world_.render_grid(ViewId::Main, view_, projection_);
 }
 
 // ============================================================================
@@ -633,13 +650,105 @@ void Renderer::draw_player(const PlayerState& player, bool is_local) {
     draw_entity(player, is_local);
 }
 
+void Renderer::render_model_bgfx(Model* model, const glm::mat4& model_mat, 
+                                  const glm::vec4& tint, bool use_fog, bool use_shadows, bool use_ssao) {
+    if (!model || !bgfx::isValid(model_program_)) return;
+    
+    bool is_skinned = model->has_skeleton && bgfx::isValid(skinned_model_program_);
+    bgfx::ProgramHandle program = is_skinned ? skinned_model_program_ : model_program_;
+    
+    // Set model matrix using bgfx's predefined u_model
+    bgfx::setTransform(&model_mat[0][0]);
+    
+    // Set view/projection (done via setViewTransform in begin_frame)
+    
+    // Set lighting
+    float lightDir[4] = { light_dir_.x, light_dir_.y, light_dir_.z, 0.0f };
+    float lightColor[4] = { 1.0f, 0.95f, 0.9f, 1.0f };
+    float ambientColor[4] = { 0.4f, 0.4f, 0.5f, 1.0f };
+    float viewPos[4] = { actual_camera_pos_.x, actual_camera_pos_.y, actual_camera_pos_.z, 1.0f };
+    
+    bgfx::setUniform(u_lightDir_, lightDir);
+    bgfx::setUniform(u_lightColor_, lightColor);
+    bgfx::setUniform(u_ambientColor_, ambientColor);
+    bgfx::setUniform(u_viewPos_, viewPos);
+    
+    // Set fog parameters
+    float fogColor[4] = { 0.35f, 0.45f, 0.6f, 1.0f };
+    float fogParams[4] = { 800.0f, 4000.0f, 0.0f, use_fog && fog_enabled_ ? 1.0f : 0.0f };
+    bgfx::setUniform(u_fogColor_, fogColor);
+    bgfx::setUniform(u_fogParams_, fogParams);
+    
+    // Set tint
+    float tintColor[4] = { tint.r, tint.g, tint.b, tint.a };
+    bgfx::setUniform(u_tintColor_, tintColor);
+    
+    // Set shadow/SSAO params
+    glm::mat4 lsm = shadows_.light_space_matrix();
+    bgfx::setUniform(u_lightSpaceMatrix_, &lsm[0][0]);
+    
+    float params[4] = { 
+        0.0f,  // hasTexture (set per mesh)
+        (use_shadows && shadows_.is_enabled()) ? 1.0f : 0.0f,
+        (use_ssao && ssao_.is_enabled()) ? 1.0f : 0.0f,
+        0.0f   // useSkinning
+    };
+    
+    // Set textures for shadow/SSAO
+    bgfx::setTexture(2, s_shadowMap_, shadows_.shadow_depth_texture());
+    bgfx::setTexture(3, s_ssaoTexture_, ssao_.ssao_texture());
+    
+    // Skinned animation matrices
+    if (is_skinned) {
+        AnimationState* anim_state = nullptr;
+        static const char* animated_models[] = {"warrior", "mage", "paladin"};
+        for (const char* name : animated_models) {
+            if (model_manager_->get_model(name) == model) {
+                anim_state = model_manager_->get_animation_state(name);
+                break;
+            }
+        }
+        
+        if (anim_state) {
+            params[3] = 1.0f;  // useSkinning = true
+            bgfx::setUniform(u_boneMatrices_, &anim_state->bone_matrices[0][0][0], MAX_BONES);
+        }
+    }
+    
+    // Render each mesh
+    for (auto& mesh : model->meshes) {
+        if (!mesh.uploaded) {
+            ModelLoader::upload_to_gpu(*model);
+        }
+        
+        if (!bgfx::isValid(mesh.vbh) || !bgfx::isValid(mesh.ibh)) continue;
+        
+        // Set hasTexture param
+        params[0] = (mesh.has_texture && bgfx::isValid(mesh.texture)) ? 1.0f : 0.0f;
+        bgfx::setUniform(u_params_, params);
+        
+        // Set base color texture
+        if (mesh.has_texture && bgfx::isValid(mesh.texture)) {
+            bgfx::setTexture(0, s_baseColorTexture_, mesh.texture);
+        }
+        
+        // Set vertex/index buffers
+        bgfx::setVertexBuffer(0, mesh.vbh);
+        bgfx::setIndexBuffer(mesh.ibh);
+        
+        // Set render state
+        uint64_t state = BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A | BGFX_STATE_WRITE_Z |
+                         BGFX_STATE_DEPTH_TEST_LESS | BGFX_STATE_CULL_CW | BGFX_STATE_MSAA;
+        bgfx::setState(state);
+        
+        // Submit
+        bgfx::submit(ViewId::Main, program);
+    }
+}
+
 void Renderer::draw_model(Model* model, const glm::vec3& position, float rotation, float scale, 
                           const glm::vec4& tint, float attack_tilt) {
     if (!model) return;
-    
-    Shader* shader = (model->has_skeleton && skinned_model_shader_) ? 
-                     skinned_model_shader_.get() : model_shader_.get();
-    shader->use();
     
     glm::mat4 model_mat = glm::mat4(1.0f);
     model_mat = glm::translate(model_mat, position);
@@ -654,83 +763,12 @@ void Renderer::draw_model(Model* model, const glm::vec3& position, float rotatio
     float cz = (model->min_z + model->max_z) / 2.0f;
     model_mat = model_mat * glm::translate(glm::mat4(1.0f), glm::vec3(-cx, -cy, -cz));
     
-    shader->set_mat4("model", model_mat);
-    shader->set_mat4("view", view_);
-    shader->set_mat4("projection", projection_);
-    shader->set_vec3("cameraPos", actual_camera_pos_);
-    shader->set_vec3("fogColor", glm::vec3(0.35f, 0.45f, 0.6f));
-    shader->set_float("fogStart", 800.0f);
-    shader->set_float("fogEnd", 4000.0f);
-    shader->set_int("fogEnabled", 1);
-    shader->set_vec3("lightDir", light_dir_);
-    shader->set_vec3("lightColor", glm::vec3(1.0f, 0.95f, 0.9f));
-    shader->set_vec3("ambientColor", glm::vec3(0.4f, 0.4f, 0.5f));
-    shader->set_vec4("tintColor", tint);
-    
-    shader->set_mat4("lightSpaceMatrix", shadows_.light_space_matrix());
-    shader->set_int("shadowsEnabled", shadows_.is_enabled() ? 1 : 0);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, shadows_.shadow_depth_texture());
-    shader->set_int("shadowMap", 2);
-    
-    shader->set_int("ssaoEnabled", ssao_.is_enabled() ? 1 : 0);
-    shader->set_vec2("screenSize", glm::vec2(context_.width(), context_.height()));
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, ssao_.ssao_texture());
-    shader->set_int("ssaoTexture", 3);
-    
-    if (model->has_skeleton && skinned_model_shader_) {
-        AnimationState* anim_state = nullptr;
-        static const char* animated_models[] = {"warrior", "mage", "paladin"};
-        for (const char* name : animated_models) {
-            if (model_manager_->get_model(name) == model) {
-                anim_state = model_manager_->get_animation_state(name);
-                break;
-            }
-        }
-        
-        if (anim_state) {
-            shader->set_int("useSkinning", 1);
-            GLint loc = glGetUniformLocation(shader->id(), "boneMatrices");
-            if (loc >= 0) {
-                glUniformMatrix4fv(loc, MAX_BONES, GL_FALSE, 
-                                   glm::value_ptr(anim_state->bone_matrices[0]));
-            }
-        } else {
-            shader->set_int("useSkinning", 0);
-        }
-    } else if (model->has_skeleton) {
-        shader->set_int("useSkinning", 0);
-    }
-    
-    for (auto& mesh : model->meshes) {
-        if (!mesh.uploaded) {
-            ModelLoader::upload_to_gpu(*model);
-        }
-        
-        if (mesh.vao && !mesh.indices.empty()) {
-            if (mesh.has_texture && mesh.texture_id > 0) {
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, mesh.texture_id);
-                shader->set_int("baseColorTexture", 0);
-                shader->set_int("hasTexture", 1);
-            } else {
-                shader->set_int("hasTexture", 0);
-            }
-            
-            glBindVertexArray(mesh.vao);
-            glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, 0);
-            glBindVertexArray(0);
-        }
-    }
+    render_model_bgfx(model, model_mat, tint, true, true, true);
 }
 
 void Renderer::draw_model_no_fog(Model* model, const glm::vec3& position, float rotation, 
                                   float scale, const glm::vec4& tint) {
     if (!model) return;
-    
-    Shader* shader = model_shader_.get();
-    shader->use();
     
     glm::mat4 model_mat = glm::mat4(1.0f);
     model_mat = glm::translate(model_mat, position);
@@ -742,41 +780,7 @@ void Renderer::draw_model_no_fog(Model* model, const glm::vec3& position, float 
     float cz = (model->min_z + model->max_z) / 2.0f;
     model_mat = model_mat * glm::translate(glm::mat4(1.0f), glm::vec3(-cx, -cy, -cz));
     
-    shader->set_mat4("model", model_mat);
-    shader->set_mat4("view", view_);
-    shader->set_mat4("projection", projection_);
-    shader->set_vec3("cameraPos", actual_camera_pos_);
-    shader->set_vec3("fogColor", glm::vec3(0.55f, 0.55f, 0.6f));
-    shader->set_float("fogStart", 3000.0f);
-    shader->set_float("fogEnd", 12000.0f);
-    shader->set_int("fogEnabled", 1);
-    shader->set_vec3("lightDir", light_dir_);
-    shader->set_vec3("lightColor", glm::vec3(1.0f, 0.95f, 0.9f));
-    shader->set_vec3("ambientColor", glm::vec3(0.5f, 0.5f, 0.55f));
-    shader->set_vec4("tintColor", tint);
-    shader->set_int("shadowsEnabled", 0);
-    shader->set_int("ssaoEnabled", 0);
-    
-    for (auto& mesh : model->meshes) {
-        if (!mesh.uploaded) {
-            ModelLoader::upload_to_gpu(*model);
-        }
-        
-        if (mesh.vao && !mesh.indices.empty()) {
-            if (mesh.has_texture && mesh.texture_id > 0) {
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, mesh.texture_id);
-                shader->set_int("baseColorTexture", 0);
-                shader->set_int("hasTexture", 1);
-            } else {
-                shader->set_int("hasTexture", 0);
-            }
-            
-            glBindVertexArray(mesh.vao);
-            glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, 0);
-            glBindVertexArray(0);
-        }
-    }
+    render_model_bgfx(model, model_mat, tint, false, false, false);
 }
 
 void Renderer::update_animations(float dt) {
@@ -813,6 +817,7 @@ void Renderer::draw_player_health_ui(float health_ratio, float max_health) {
 
 void Renderer::draw_enemy_health_bar_3d(float world_x, float world_y, float world_z, 
                                          float bar_width, float health_ratio) {
+    // Project world position to clip space
     glm::vec4 world_pos(world_x, world_y, world_z, 1.0f);
     glm::vec4 clip_pos = projection_ * view_ * world_pos;
     if (clip_pos.w <= 0.01f) return;
@@ -822,53 +827,35 @@ void Renderer::draw_enemy_health_bar_3d(float world_x, float world_y, float worl
         return;
     }
     
-    billboard_shader_->use();
-    billboard_shader_->set_mat4("view", view_);
-    billboard_shader_->set_mat4("projection", projection_);
-    billboard_shader_->set_vec3("worldPos", glm::vec3(world_x, world_y, world_z));
+    if (!bgfx::isValid(billboard_program_)) return;
     
-    float world_bar_width = bar_width * 0.5f;
-    float world_bar_height = bar_width * 0.1f;
+    // Calculate screen-space position
+    float screen_x = (ndc.x + 1.0f) * 0.5f * context_.width();
+    float screen_y = (1.0f - ndc.y) * 0.5f * context_.height();  // Y is flipped
     
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDisable(GL_CULL_FACE);
-    glDepthMask(GL_FALSE);
+    // Calculate bar size based on distance
+    float distance = clip_pos.w;
+    float base_scale = 100.0f / std::max(distance, 100.0f);
+    float pixel_width = bar_width * base_scale * 2.0f;
+    float pixel_height = bar_width * 0.2f * base_scale * 2.0f;
     
-    glBindVertexArray(billboard_vao_);
-    glBindBuffer(GL_ARRAY_BUFFER, billboard_vbo_);
+    // Clamp minimum size
+    pixel_width = std::max(pixel_width, 30.0f);
+    pixel_height = std::max(pixel_height, 6.0f);
     
-    auto draw_billboard_quad = [&](float offset_x, float offset_y, float w, float h, const glm::vec4& color) {
-        billboard_shader_->set_vec2("size", glm::vec2(w, h));
-        billboard_shader_->set_vec2("offset", glm::vec2(offset_x, offset_y));
-        
-        float vertices[] = {
-            -0.5f, -0.5f, 0.0f, color.r, color.g, color.b, color.a,
-             0.5f, -0.5f, 0.0f, color.r, color.g, color.b, color.a,
-             0.5f,  0.5f, 0.0f, color.r, color.g, color.b, color.a,
-            -0.5f, -0.5f, 0.0f, color.r, color.g, color.b, color.a,
-             0.5f,  0.5f, 0.0f, color.r, color.g, color.b, color.a,
-            -0.5f,  0.5f, 0.0f, color.r, color.g, color.b, color.a,
-        };
-        
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-    };
+    // Draw using UI renderer (2D)
+    float bar_x = screen_x - pixel_width / 2.0f;
+    float bar_y = screen_y - pixel_height / 2.0f;
     
-    glm::vec4 bg_color(0.0f, 0.0f, 0.0f, 0.8f);
-    glm::vec4 empty_color(0.4f, 0.0f, 0.0f, 0.9f);
-    glm::vec4 health_color(0.0f, 0.8f, 0.0f, 1.0f);
+    // Background
+    ui_.draw_filled_rect(bar_x - 1, bar_y - 1, pixel_width + 2, pixel_height + 2, 0xCC000000);
     
-    draw_billboard_quad(0.0f, 0.0f, world_bar_width + 2.0f, world_bar_height + 2.0f, bg_color);
-    draw_billboard_quad(0.0f, 0.0f, world_bar_width, world_bar_height, empty_color);
+    // Empty part (dark red)
+    ui_.draw_filled_rect(bar_x, bar_y, pixel_width, pixel_height, 0xE6660000);
     
-    float fill_width = world_bar_width * health_ratio;
-    float fill_offset_x = (fill_width - world_bar_width) * 0.5f;
-    draw_billboard_quad(fill_offset_x, 0.0f, fill_width, world_bar_height, health_color);
-    
-    glBindVertexArray(0);
-    glDepthMask(GL_TRUE);
-    glEnable(GL_CULL_FACE);
+    // Filled part (green)
+    float fill_width = pixel_width * health_ratio;
+    ui_.draw_filled_rect(bar_x, bar_y, fill_width, pixel_height, 0xFF00CC00);
 }
 
 // ============================================================================
@@ -876,7 +863,7 @@ void Renderer::draw_enemy_health_bar_3d(float world_x, float world_y, float worl
 // ============================================================================
 
 void Renderer::draw_attack_effect(const ecs::AttackEffect& effect) {
-    effects_.draw_attack_effect(effect, view_, projection_);
+    effects_.draw_attack_effect(effect, ViewId::Main, view_, projection_);
 }
 
 void Renderer::draw_warrior_slash(float x, float y, float dir_x, float dir_y, float progress) {
@@ -888,7 +875,7 @@ void Renderer::draw_warrior_slash(float x, float y, float dir_x, float dir_y, fl
     effect.direction_y = dir_y;
     effect.duration = 0.3f;
     effect.timer = effect.duration * (1.0f - progress);
-    effects_.draw_attack_effect(effect, view_, projection_);
+    effects_.draw_attack_effect(effect, ViewId::Main, view_, projection_);
 }
 
 void Renderer::draw_mage_beam(float x, float y, float dir_x, float dir_y, float progress, float range) {
@@ -901,7 +888,7 @@ void Renderer::draw_mage_beam(float x, float y, float dir_x, float dir_y, float 
     effect.duration = 0.4f;
     effect.timer = effect.duration * (1.0f - progress);
     (void)range;
-    effects_.draw_attack_effect(effect, view_, projection_);
+    effects_.draw_attack_effect(effect, ViewId::Main, view_, projection_);
 }
 
 void Renderer::draw_paladin_aoe(float x, float y, float dir_x, float dir_y, float progress, float range) {
@@ -914,7 +901,7 @@ void Renderer::draw_paladin_aoe(float x, float y, float dir_x, float dir_y, floa
     effect.duration = 0.6f;
     effect.timer = effect.duration * (1.0f - progress);
     (void)range;
-    effects_.draw_attack_effect(effect, view_, projection_);
+    effects_.draw_attack_effect(effect, ViewId::Main, view_, projection_);
 }
 
 void Renderer::draw_archer_arrow(float x, float y, float dir_x, float dir_y, float progress, float range) {
@@ -927,7 +914,7 @@ void Renderer::draw_archer_arrow(float x, float y, float dir_x, float dir_y, flo
     effect.duration = 0.5f;
     effect.timer = effect.duration * (1.0f - progress);
     (void)range;
-    effects_.draw_attack_effect(effect, view_, projection_);
+    effects_.draw_attack_effect(effect, ViewId::Main, view_, projection_);
 }
 
 // ============================================================================

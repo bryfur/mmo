@@ -1,15 +1,21 @@
 #include "shadow_system.hpp"
+#include "bgfx_utils.hpp"
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <iostream>
-#include <cstdlib>
 
 namespace mmo {
 
 // ============================================================================
-// ShadowSystem
+// ShadowSystem Implementation
 // ============================================================================
 
-ShadowSystem::ShadowSystem() = default;
+ShadowSystem::ShadowSystem()
+    : enabled_(true)
+    , shadow_map_size_(DEFAULT_SHADOW_MAP_SIZE)
+    , light_space_matrix_(1.0f)
+{
+}
 
 ShadowSystem::~ShadowSystem() {
     shutdown();
@@ -18,62 +24,79 @@ ShadowSystem::~ShadowSystem() {
 bool ShadowSystem::init(int shadow_map_size) {
     shadow_map_size_ = shadow_map_size;
     
-    std::cout << "Initializing shadow mapping..." << std::endl;
+    std::cout << "Initializing shadow mapping (bgfx)..." << std::endl;
     
-    // Create shadow depth texture
-    glGenTextures(1, &shadow_depth_texture_);
-    glBindTexture(GL_TEXTURE_2D, shadow_depth_texture_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, shadow_map_size_, shadow_map_size_,
-                 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-    float borderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
-    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
+    // Create shadow depth texture (render target)
+    shadow_depth_texture_ = bgfx::createTexture2D(
+        uint16_t(shadow_map_size_),
+        uint16_t(shadow_map_size_),
+        false, 1,
+        bgfx::TextureFormat::D32F,
+        BGFX_TEXTURE_RT | BGFX_SAMPLER_COMPARE_LEQUAL
+    );
     
-    // Create shadow framebuffer
-    glGenFramebuffers(1, &shadow_fbo_);
-    glBindFramebuffer(GL_FRAMEBUFFER, shadow_fbo_);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadow_depth_texture_, 0);
-    glDrawBuffer(GL_NONE);
-    glReadBuffer(GL_NONE);
-    
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::cerr << "Shadow framebuffer not complete!" << std::endl;
+    if (!bgfx::isValid(shadow_depth_texture_)) {
+        std::cerr << "Failed to create shadow depth texture" << std::endl;
         return false;
     }
     
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // Create shadow framebuffer with depth only
+    bgfx::Attachment attachment;
+    attachment.init(shadow_depth_texture_);
     
-    // Create shadow depth shaders
-    shadow_depth_shader_ = std::make_unique<Shader>();
-    if (!shadow_depth_shader_->load(shaders::shadow_depth_vertex, shaders::shadow_depth_fragment)) {
-        std::cerr << "Failed to load shadow depth shader" << std::endl;
+    shadow_fbo_ = bgfx::createFrameBuffer(1, &attachment, true);
+    
+    if (!bgfx::isValid(shadow_fbo_)) {
+        std::cerr << "Failed to create shadow framebuffer" << std::endl;
         return false;
     }
     
-    skinned_shadow_depth_shader_ = std::make_unique<Shader>();
-    if (!skinned_shadow_depth_shader_->load(shaders::skinned_shadow_depth_vertex, shaders::shadow_depth_fragment)) {
-        std::cerr << "Failed to load skinned shadow depth shader" << std::endl;
+    // Load shadow shaders
+    shadow_program_ = bgfx_utils::load_program("shadow_vs", "shadow_fs");
+    if (!bgfx::isValid(shadow_program_)) {
+        std::cerr << "Failed to load shadow program" << std::endl;
         return false;
     }
+    
+    skinned_shadow_program_ = bgfx_utils::load_program("skinned_shadow_vs", "shadow_fs");
+    if (!bgfx::isValid(skinned_shadow_program_)) {
+        std::cerr << "Warning: Failed to load skinned shadow program" << std::endl;
+        // Non-fatal - skinned shadows just won't work
+    }
+    
+    // Note: u_model is a bgfx predefined uniform - use setTransform
+    // Create only custom uniforms
+    u_lightSpaceMatrix_ = bgfx::createUniform("u_lightSpaceMatrix", bgfx::UniformType::Mat4);
     
     std::cout << "Shadow mapping initialized with " << shadow_map_size_ << "x" << shadow_map_size_ << " shadow map" << std::endl;
     return true;
 }
 
 void ShadowSystem::shutdown() {
-    if (shadow_fbo_) {
-        glDeleteFramebuffers(1, &shadow_fbo_);
-        shadow_fbo_ = 0;
+    if (bgfx::isValid(shadow_fbo_)) {
+        bgfx::destroy(shadow_fbo_);
+        shadow_fbo_ = BGFX_INVALID_HANDLE;
     }
-    if (shadow_depth_texture_) {
-        glDeleteTextures(1, &shadow_depth_texture_);
-        shadow_depth_texture_ = 0;
+    
+    // Note: shadow_depth_texture_ is destroyed with the framebuffer (destroyTexture=true)
+    shadow_depth_texture_ = BGFX_INVALID_HANDLE;
+    
+    if (bgfx::isValid(shadow_program_)) {
+        bgfx::destroy(shadow_program_);
+        shadow_program_ = BGFX_INVALID_HANDLE;
     }
-    shadow_depth_shader_.reset();
-    skinned_shadow_depth_shader_.reset();
+    
+    if (bgfx::isValid(skinned_shadow_program_)) {
+        bgfx::destroy(skinned_shadow_program_);
+        skinned_shadow_program_ = BGFX_INVALID_HANDLE;
+    }
+    
+    if (bgfx::isValid(u_lightSpaceMatrix_)) {
+        bgfx::destroy(u_lightSpaceMatrix_);
+        u_lightSpaceMatrix_ = BGFX_INVALID_HANDLE;
+    }
+    
+    // Note: u_model is bgfx predefined, so we don't destroy it
 }
 
 void ShadowSystem::update_light_space_matrix(float camera_x, float camera_z, const glm::vec3& light_dir) {
@@ -93,32 +116,39 @@ void ShadowSystem::update_light_space_matrix(float camera_x, float camera_z, con
 }
 
 void ShadowSystem::begin_shadow_pass() {
-    if (!enabled_ || !shadow_depth_shader_) return;
+    if (!enabled_) return;
     
-    glBindFramebuffer(GL_FRAMEBUFFER, shadow_fbo_);
-    glViewport(0, 0, shadow_map_size_, shadow_map_size_);
-    glClear(GL_DEPTH_BUFFER_BIT);
+    // Set up shadow view
+    bgfx::setViewFrameBuffer(ViewId::Shadow, shadow_fbo_);
+    bgfx::setViewRect(ViewId::Shadow, 0, 0, uint16_t(shadow_map_size_), uint16_t(shadow_map_size_));
+    bgfx::setViewClear(ViewId::Shadow, BGFX_CLEAR_DEPTH, 0, 1.0f, 0);
     
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_FRONT);  // Reduce shadow acne
+    // Set view transform (identity view, light space as projection)
+    float view[16];
+    float proj[16];
     
-    shadow_depth_shader_->use();
-    shadow_depth_shader_->set_mat4("lightSpaceMatrix", light_space_matrix_);
+    glm::mat4 identity(1.0f);
+    memcpy(view, glm::value_ptr(identity), sizeof(view));
+    memcpy(proj, glm::value_ptr(light_space_matrix_), sizeof(proj));
+    
+    bgfx::setViewTransform(ViewId::Shadow, view, proj);
 }
 
 void ShadowSystem::end_shadow_pass() {
-    if (!enabled_) return;
-    
-    glCullFace(GL_BACK);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // Nothing special needed for bgfx
+    // The framebuffer will be unbound automatically when switching views
 }
 
 // ============================================================================
-// SSAOSystem
+// SSAOSystem Implementation (Disabled for now)
 // ============================================================================
 
-SSAOSystem::SSAOSystem() = default;
+SSAOSystem::SSAOSystem()
+    : enabled_(false)  // Disabled by default in bgfx migration
+    , width_(0)
+    , height_(0)
+{
+}
 
 SSAOSystem::~SSAOSystem() {
     shutdown();
@@ -128,211 +158,32 @@ bool SSAOSystem::init(int width, int height) {
     width_ = width;
     height_ = height;
     
-    std::cout << "Initializing SSAO..." << std::endl;
+    std::cout << "SSAO disabled in bgfx migration (can be added later)" << std::endl;
     
-    // Generate kernel
-    generate_kernel();
+    // Create a dummy 1x1 white texture for SSAO
+    // This allows the main shader to still sample it without issues
+    uint32_t white = 0xFFFFFFFF;
+    ssao_blur_texture_ = bgfx::createTexture2D(
+        1, 1, false, 1,
+        bgfx::TextureFormat::RGBA8,
+        BGFX_TEXTURE_NONE,
+        bgfx::copy(&white, sizeof(white))
+    );
     
-    // Generate noise texture
-    std::vector<glm::vec3> ssao_noise;
-    for (int i = 0; i < 16; ++i) {
-        glm::vec3 noise(
-            static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f,
-            static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f,
-            0.0f
-        );
-        ssao_noise.push_back(noise);
-    }
-    
-    glGenTextures(1, &ssao_noise_texture_);
-    glBindTexture(GL_TEXTURE_2D, ssao_noise_texture_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 4, 4, 0, GL_RGB, GL_FLOAT, ssao_noise.data());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    
-    // Create framebuffers
-    create_framebuffers(width, height);
-    
-    // Create screen quad
-    create_screen_quad();
-    
-    // Create shaders
-    ssao_shader_ = std::make_unique<Shader>();
-    if (!ssao_shader_->load(shaders::ssao_vertex, shaders::ssao_fragment)) {
-        std::cerr << "Failed to load SSAO shader" << std::endl;
-        return false;
-    }
-    
-    ssao_blur_shader_ = std::make_unique<Shader>();
-    if (!ssao_blur_shader_->load(shaders::ssao_vertex, shaders::ssao_blur_fragment)) {
-        std::cerr << "Failed to load SSAO blur shader" << std::endl;
-        return false;
-    }
-    
-    gbuffer_shader_ = std::make_unique<Shader>();
-    if (!gbuffer_shader_->load(shaders::ssao_gbuffer_vertex, shaders::ssao_gbuffer_fragment)) {
-        std::cerr << "Failed to load G-buffer shader" << std::endl;
-        return false;
-    }
-    
-    std::cout << "SSAO initialized" << std::endl;
     return true;
 }
 
 void SSAOSystem::shutdown() {
-    if (gbuffer_fbo_) glDeleteFramebuffers(1, &gbuffer_fbo_);
-    if (ssao_fbo_) glDeleteFramebuffers(1, &ssao_fbo_);
-    if (ssao_blur_fbo_) glDeleteFramebuffers(1, &ssao_blur_fbo_);
-    
-    if (gbuffer_position_) glDeleteTextures(1, &gbuffer_position_);
-    if (gbuffer_normal_) glDeleteTextures(1, &gbuffer_normal_);
-    if (gbuffer_depth_) glDeleteTextures(1, &gbuffer_depth_);
-    if (ssao_color_buffer_) glDeleteTextures(1, &ssao_color_buffer_);
-    if (ssao_blur_buffer_) glDeleteTextures(1, &ssao_blur_buffer_);
-    if (ssao_noise_texture_) glDeleteTextures(1, &ssao_noise_texture_);
-    
-    if (screen_quad_vao_) glDeleteVertexArrays(1, &screen_quad_vao_);
-    if (screen_quad_vbo_) glDeleteBuffers(1, &screen_quad_vbo_);
-    
-    gbuffer_fbo_ = ssao_fbo_ = ssao_blur_fbo_ = 0;
-    gbuffer_position_ = gbuffer_normal_ = gbuffer_depth_ = 0;
-    ssao_color_buffer_ = ssao_blur_buffer_ = ssao_noise_texture_ = 0;
-    screen_quad_vao_ = screen_quad_vbo_ = 0;
-    
-    ssao_shader_.reset();
-    ssao_blur_shader_.reset();
-    gbuffer_shader_.reset();
+    if (bgfx::isValid(ssao_blur_texture_)) {
+        bgfx::destroy(ssao_blur_texture_);
+        ssao_blur_texture_ = BGFX_INVALID_HANDLE;
+    }
 }
 
 void SSAOSystem::resize(int width, int height) {
-    if (width == width_ && height == height_) return;
-    
-    // Delete old textures
-    if (gbuffer_position_) glDeleteTextures(1, &gbuffer_position_);
-    if (gbuffer_normal_) glDeleteTextures(1, &gbuffer_normal_);
-    if (gbuffer_depth_) glDeleteTextures(1, &gbuffer_depth_);
-    if (ssao_color_buffer_) glDeleteTextures(1, &ssao_color_buffer_);
-    if (ssao_blur_buffer_) glDeleteTextures(1, &ssao_blur_buffer_);
-    
-    // Recreate framebuffers
-    create_framebuffers(width, height);
-}
-
-void SSAOSystem::generate_kernel() {
-    ssao_kernel_.clear();
-    for (int i = 0; i < 64; ++i) {
-        glm::vec3 sample(
-            static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f,
-            static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f,
-            static_cast<float>(rand()) / RAND_MAX
-        );
-        sample = glm::normalize(sample);
-        sample *= static_cast<float>(rand()) / RAND_MAX;
-        
-        float scale = static_cast<float>(i) / 64.0f;
-        scale = 0.1f + scale * scale * 0.9f;
-        sample *= scale;
-        
-        ssao_kernel_.push_back(sample);
-    }
-}
-
-void SSAOSystem::create_framebuffers(int width, int height) {
     width_ = width;
     height_ = height;
-    
-    // G-buffer
-    glGenFramebuffers(1, &gbuffer_fbo_);
-    glBindFramebuffer(GL_FRAMEBUFFER, gbuffer_fbo_);
-    
-    // Position buffer
-    glGenTextures(1, &gbuffer_position_);
-    glBindTexture(GL_TEXTURE_2D, gbuffer_position_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gbuffer_position_, 0);
-    
-    // Normal buffer
-    glGenTextures(1, &gbuffer_normal_);
-    glBindTexture(GL_TEXTURE_2D, gbuffer_normal_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, gbuffer_normal_, 0);
-    
-    // Depth buffer
-    glGenTextures(1, &gbuffer_depth_);
-    glBindTexture(GL_TEXTURE_2D, gbuffer_depth_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, gbuffer_depth_, 0);
-    
-    unsigned int attachments[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
-    glDrawBuffers(2, attachments);
-    
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::cerr << "G-buffer framebuffer not complete!" << std::endl;
-    }
-    
-    // SSAO framebuffer
-    glGenFramebuffers(1, &ssao_fbo_);
-    glBindFramebuffer(GL_FRAMEBUFFER, ssao_fbo_);
-    
-    glGenTextures(1, &ssao_color_buffer_);
-    glBindTexture(GL_TEXTURE_2D, ssao_color_buffer_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, width, height, 0, GL_RED, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssao_color_buffer_, 0);
-    
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::cerr << "SSAO framebuffer not complete!" << std::endl;
-    }
-    
-    // SSAO blur framebuffer
-    glGenFramebuffers(1, &ssao_blur_fbo_);
-    glBindFramebuffer(GL_FRAMEBUFFER, ssao_blur_fbo_);
-    
-    glGenTextures(1, &ssao_blur_buffer_);
-    glBindTexture(GL_TEXTURE_2D, ssao_blur_buffer_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, width, height, 0, GL_RED, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssao_blur_buffer_, 0);
-    
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::cerr << "SSAO blur framebuffer not complete!" << std::endl;
-    }
-    
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-void SSAOSystem::create_screen_quad() {
-    float quadVertices[] = {
-        -1.0f,  1.0f,  0.0f, 1.0f,
-        -1.0f, -1.0f,  0.0f, 0.0f,
-         1.0f, -1.0f,  1.0f, 0.0f,
-        -1.0f,  1.0f,  0.0f, 1.0f,
-         1.0f, -1.0f,  1.0f, 0.0f,
-         1.0f,  1.0f,  1.0f, 1.0f
-    };
-    
-    glGenVertexArrays(1, &screen_quad_vao_);
-    glGenBuffers(1, &screen_quad_vbo_);
-    glBindVertexArray(screen_quad_vao_);
-    glBindBuffer(GL_ARRAY_BUFFER, screen_quad_vbo_);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glBindVertexArray(0);
+    // No-op for now since SSAO is disabled
 }
 
 } // namespace mmo

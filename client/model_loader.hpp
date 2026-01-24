@@ -1,12 +1,12 @@
 #pragma once
 
+#include <bgfx/bgfx.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <string>
 #include <vector>
 #include <unordered_map>
 #include <array>
-#include <GL/glew.h>
-#include <glm/glm.hpp>
-#include <glm/gtc/quaternion.hpp>
 #include <cstdint>
 #include <algorithm>
 
@@ -16,14 +16,18 @@ namespace mmo {
 constexpr int MAX_BONES = 64;
 constexpr int MAX_BONE_INFLUENCES = 4;
 
+// Vertex structure for static meshes
 struct Vertex3D {
     float x, y, z;       // Position
     float nx, ny, nz;    // Normal
     float u, v;          // Texture coords
     float r, g, b, a;    // Vertex color
+    
+    static bgfx::VertexLayout layout;
+    static void init_layout();
 };
 
-// Skinned vertex with bone weights
+// Vertex structure for skinned meshes
 struct SkinnedVertex {
     float x, y, z;       // Position
     float nx, ny, nz;    // Normal
@@ -31,6 +35,9 @@ struct SkinnedVertex {
     float r, g, b, a;    // Vertex color
     uint8_t joints[4];   // Bone indices (up to 4 influences)
     float weights[4];    // Bone weights (sum to 1.0)
+    
+    static bgfx::VertexLayout layout;
+    static void init_layout();
 };
 
 // Animation keyframe
@@ -96,10 +103,12 @@ struct Mesh {
     std::vector<Vertex3D> vertices;
     std::vector<SkinnedVertex> skinned_vertices;  // Used if model has skeleton
     std::vector<uint32_t> indices;
-    GLuint vao = 0;
-    GLuint vbo = 0;
-    GLuint ebo = 0;
-    GLuint texture_id = 0;
+    
+    // bgfx handles
+    bgfx::VertexBufferHandle vbh = BGFX_INVALID_HANDLE;
+    bgfx::IndexBufferHandle ibh = BGFX_INVALID_HANDLE;
+    bgfx::TextureHandle texture = BGFX_INVALID_HANDLE;
+    
     bool has_texture = false;
     uint32_t base_color = 0xFFFFFFFF;
     bool uploaded = false;
@@ -142,6 +151,9 @@ public:
     // Animation helpers
     static void update_animation(Model& model, AnimationState& state, float dt);
     static void compute_bone_matrices(Model& model, AnimationState& state);
+    
+    // Initialize vertex layouts (call once at startup)
+    static void init_vertex_layouts();
 };
 
 class ModelManager {

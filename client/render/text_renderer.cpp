@@ -1,7 +1,8 @@
 #include "text_renderer.hpp"
-#include "../shader.hpp"
-#include <iostream>
+#include "bgfx_utils.hpp"
+#include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <iostream>
 
 namespace mmo {
 
@@ -11,8 +12,11 @@ TextRenderer::~TextRenderer() {
     shutdown();
 }
 
-bool TextRenderer::init() {
+bool TextRenderer::init(int screen_width, int screen_height) {
     if (initialized_) return true;
+    
+    screen_width_ = screen_width;
+    screen_height_ = screen_height;
     
     if (!TTF_Init()) {
         std::cerr << "Failed to initialize SDL_ttf: " << SDL_GetError() << std::endl;
@@ -43,6 +47,27 @@ bool TextRenderer::init() {
         // Continue without font - not fatal
     }
     
+    // Set up vertex layout for text (position 2D + texcoord 2D)
+    text_layout_
+        .begin()
+        .add(bgfx::Attrib::Position, 2, bgfx::AttribType::Float)
+        .add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
+        .end();
+    
+    // Load text shader
+    text_program_ = bgfx_utils::load_program("text_vs", "text_fs");
+    if (!bgfx::isValid(text_program_)) {
+        std::cerr << "Failed to load text shader program" << std::endl;
+        return false;
+    }
+    
+    // Create uniforms
+    u_textColor_ = bgfx::createUniform("u_textColor", bgfx::UniformType::Vec4);
+    s_textTexture_ = bgfx::createUniform("s_textTexture", bgfx::UniformType::Sampler);
+    
+    // Set up projection
+    set_screen_size(screen_width, screen_height);
+    
     initialized_ = true;
     return true;
 }
@@ -52,34 +77,41 @@ void TextRenderer::shutdown() {
         TTF_CloseFont(font_);
         font_ = nullptr;
     }
+    
+    if (bgfx::isValid(text_program_)) {
+        bgfx::destroy(text_program_);
+        text_program_ = BGFX_INVALID_HANDLE;
+    }
+    
+    if (bgfx::isValid(u_textColor_)) {
+        bgfx::destroy(u_textColor_);
+        u_textColor_ = BGFX_INVALID_HANDLE;
+    }
+    
+    if (bgfx::isValid(s_textTexture_)) {
+        bgfx::destroy(s_textTexture_);
+        s_textTexture_ = BGFX_INVALID_HANDLE;
+    }
+    
     if (initialized_) {
         TTF_Quit();
         initialized_ = false;
     }
 }
 
-void TextRenderer::set_shader(Shader* shader) {
-    shader_ = shader;
-}
-
-void TextRenderer::set_projection(const glm::mat4& projection) {
-    projection_ = projection;
-}
-
-void TextRenderer::set_vao_vbo(GLuint vao, GLuint vbo) {
-    vao_ = vao;
-    vbo_ = vbo;
+void TextRenderer::set_screen_size(int width, int height) {
+    screen_width_ = width;
+    screen_height_ = height;
+    projection_ = glm::ortho(0.0f, static_cast<float>(width), 
+                              static_cast<float>(height), 0.0f, -1.0f, 1.0f);
 }
 
 void TextRenderer::draw_text(const std::string& text, float x, float y, uint32_t color, float scale) {
-    if (!font_ || text.empty() || !shader_ || vao_ == 0) {
-        if (!font_) std::cerr << "TextRenderer: No font loaded" << std::endl;
-        if (!shader_) std::cerr << "TextRenderer: No shader set" << std::endl;
-        if (vao_ == 0) std::cerr << "TextRenderer: No VAO set" << std::endl;
+    if (!font_ || text.empty() || !bgfx::isValid(text_program_)) {
         return;
     }
     
-    // Extract color components (ABGR format - same as rest of renderer)
+    // Extract color components (ABGR format)
     uint8_t r = color & 0xFF;
     uint8_t g = (color >> 8) & 0xFF;
     uint8_t b = (color >> 16) & 0xFF;
@@ -101,69 +133,83 @@ void TextRenderer::draw_text(const std::string& text, float x, float y, uint32_t
         return;
     }
     
-    // Create OpenGL texture from surface
-    GLuint texture;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
-    
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, converted->w, converted->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, converted->pixels);
+    // Create bgfx texture from surface
+    const bgfx::Memory* mem = bgfx::copy(converted->pixels, converted->w * converted->h * 4);
+    bgfx::TextureHandle texture = bgfx::createTexture2D(
+        uint16_t(converted->w),
+        uint16_t(converted->h),
+        false, 1,
+        bgfx::TextureFormat::RGBA8,
+        BGFX_SAMPLER_MIN_POINT | BGFX_SAMPLER_MAG_POINT,
+        mem
+    );
     
     // Calculate dimensions
     float w = converted->w * scale;
     float h = converted->h * scale;
     
+    SDL_DestroySurface(converted);
+    
+    if (!bgfx::isValid(texture)) {
+        return;
+    }
+    
     // Build quad vertices (pos.x, pos.y, tex.x, tex.y)
-    float vertices[] = {
-        x,     y,     0.0f, 0.0f,
-        x + w, y,     1.0f, 0.0f,
-        x + w, y + h, 1.0f, 1.0f,
-        
-        x,     y,     0.0f, 0.0f,
-        x + w, y + h, 1.0f, 1.0f,
-        x,     y + h, 0.0f, 1.0f
+    if (bgfx::getAvailTransientVertexBuffer(6, text_layout_) < 6) {
+        bgfx::destroy(texture);
+        return;
+    }
+    
+    bgfx::TransientVertexBuffer tvb;
+    bgfx::allocTransientVertexBuffer(&tvb, 6, text_layout_);
+    
+    struct TextVertex {
+        float x, y;
+        float u, v;
     };
     
-    // Enable blending for text
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    TextVertex* vertices = (TextVertex*)tvb.data;
+    vertices[0] = {x,     y,     0.0f, 0.0f};
+    vertices[1] = {x + w, y,     1.0f, 0.0f};
+    vertices[2] = {x + w, y + h, 1.0f, 1.0f};
+    vertices[3] = {x,     y,     0.0f, 0.0f};
+    vertices[4] = {x + w, y + h, 1.0f, 1.0f};
+    vertices[5] = {x,     y + h, 0.0f, 1.0f};
     
-    // Use shader
-    shader_->use();
-    shader_->set_mat4("projection", projection_);
-    shader_->set_vec4("textColor", glm::vec4(r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f));
-    shader_->set_int("textTexture", 0);
+    // Set text color uniform
+    float textColor[4] = {r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f};
+    bgfx::setUniform(u_textColor_, textColor);
     
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    // Set texture
+    bgfx::setTexture(0, s_textTexture_, texture);
     
-    // Upload and draw
-    glBindVertexArray(vao_);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+    bgfx::setVertexBuffer(0, &tvb);
     
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+    // Set state: alpha blending, no depth test
+    uint64_t state = BGFX_STATE_WRITE_RGB | BGFX_STATE_WRITE_A
+                   | BGFX_STATE_BLEND_FUNC(BGFX_STATE_BLEND_SRC_ALPHA, BGFX_STATE_BLEND_INV_SRC_ALPHA);
+    bgfx::setState(state);
     
-    glBindVertexArray(0);
-    glDeleteTextures(1, &texture);
-    SDL_DestroySurface(converted);
+    bgfx::submit(ViewId::UI, text_program_);
+    
+    // Destroy the texture after submission (bgfx queues the destruction)
+    bgfx::destroy(texture);
 }
 
 void TextRenderer::draw_text_centered(const std::string& text, float x, float y, uint32_t color, float scale) {
-    int width = get_text_width(text, scale);
-    draw_text(text, x - width / 2.0f, y, color, scale);
+    int w = get_text_width(text, scale);
+    int h = get_text_height(scale);
+    draw_text(text, x - w / 2.0f, y - h / 2.0f, color, scale);
 }
 
 int TextRenderer::get_text_width(const std::string& text, float scale) {
     if (!font_ || text.empty()) return 0;
     
     int w = 0, h = 0;
-    TTF_GetStringSize(font_, text.c_str(), 0, &w, &h);
-    return static_cast<int>(w * scale);
+    if (TTF_GetStringSize(font_, text.c_str(), text.length(), &w, &h)) {
+        return static_cast<int>(w * scale);
+    }
+    return 0;
 }
 
 int TextRenderer::get_text_height(float scale) {

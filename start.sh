@@ -23,7 +23,7 @@ fi
 
 # Start the server in the background
 echo "Starting server..."
-"$BUILD_DIR/mmo_server" &
+(cd "$BUILD_DIR" && ./mmo_server) &
 SERVER_PID=$!
 
 # Give the server a moment to start
@@ -33,7 +33,8 @@ sleep 1
 CLIENT_PIDS=()
 for i in $(seq 1 $NUM_CLIENTS); do
     echo "Starting client $i..."
-    "$BUILD_DIR/mmo_client" &
+    # Run from build dir so shaders can be found
+    (cd "$BUILD_DIR" && ./mmo_client) &
     CLIENT_PIDS+=($!)
 done
 

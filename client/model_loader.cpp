@@ -78,6 +78,37 @@ bool write_image_data(const std::string* basepath, const std::string* filename,
 
 namespace mmo {
 
+// Static vertex layouts
+bgfx::VertexLayout Vertex3D::layout;
+bgfx::VertexLayout SkinnedVertex::layout;
+
+void Vertex3D::init_layout() {
+    layout
+        .begin()
+        .add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float)
+        .add(bgfx::Attrib::Normal, 3, bgfx::AttribType::Float)
+        .add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
+        .add(bgfx::Attrib::Color0, 4, bgfx::AttribType::Float, true)
+        .end();
+}
+
+void SkinnedVertex::init_layout() {
+    layout
+        .begin()
+        .add(bgfx::Attrib::Position, 3, bgfx::AttribType::Float)
+        .add(bgfx::Attrib::Normal, 3, bgfx::AttribType::Float)
+        .add(bgfx::Attrib::TexCoord0, 2, bgfx::AttribType::Float)
+        .add(bgfx::Attrib::Color0, 4, bgfx::AttribType::Float, true)
+        .add(bgfx::Attrib::Indices, 4, bgfx::AttribType::Uint8, false, true)
+        .add(bgfx::Attrib::Weight, 4, bgfx::AttribType::Float)
+        .end();
+}
+
+void ModelLoader::init_vertex_layouts() {
+    Vertex3D::init_layout();
+    SkinnedVertex::init_layout();
+}
+
 // Helper to interpolate between keyframes
 template<typename T>
 T interpolate_keyframes(const std::vector<float>& times, const std::vector<T>& values, float t) {
@@ -129,7 +160,7 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
     model.min_x = model.min_y = model.min_z = 1e10f;
     model.max_x = model.max_y = model.max_z = -1e10f;
     
-    // Load textures from images
+    // Load textures from images (store in memory, upload later)
     std::vector<std::pair<std::vector<uint8_t>, std::pair<int, int>>> loaded_textures;
     for (const auto& image : gltf.images) {
         if (!image.image.empty()) {
@@ -282,11 +313,6 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
                 }
             }
             
-            // Store texture index temporarily (will become GL texture ID)
-            if (texture_image_idx >= 0 && texture_image_idx < static_cast<int>(loaded_textures.size())) {
-                out_mesh.texture_id = texture_image_idx;
-            }
-            
             // Check for skinning data (JOINTS_0 and WEIGHTS_0)
             auto joints_it = primitive.attributes.find("JOINTS_0");
             auto weights_it = primitive.attributes.find("WEIGHTS_0");
@@ -318,11 +344,18 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
                 }
             }
             
+            // Store texture index temporarily (for loading texture later)
+            // We use a temporary marker since bgfx handle isn't valid yet
+            if (texture_image_idx >= 0) {
+                // Store index + 1 so 0 means no texture
+                out_mesh.texture.idx = static_cast<uint16_t>(texture_image_idx + 1);
+            }
+            
             model.meshes.push_back(std::move(out_mesh));
         }
     }
     
-    // Load skin data (skeleton)
+    // Load skin data (skeleton) - same as before
     if (!gltf.skins.empty()) {
         const auto& skin = gltf.skins[0];
         model.has_skeleton = true;
@@ -411,7 +444,7 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
         std::cout << "  Loaded skeleton with " << model.skeleton.joints.size() << " joints" << std::endl;
     }
     
-    // Load animations
+    // Load animations - same as before
     for (const auto& gltf_anim : gltf.animations) {
         AnimationClip clip;
         clip.name = gltf_anim.name;
@@ -491,33 +524,47 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
         }
     }
     
-    // Upload textures to GPU
-    std::vector<GLuint> texture_ids(loaded_textures.size(), 0);
+    // Create bgfx textures
+    std::vector<bgfx::TextureHandle> texture_handles(loaded_textures.size());
     for (size_t i = 0; i < loaded_textures.size(); i++) {
         auto& [pixels, dims] = loaded_textures[i];
         auto [width, height] = dims;
         
-        GLuint tex_id;
-        glGenTextures(1, &tex_id);
-        glBindTexture(GL_TEXTURE_2D, tex_id);
+        // Ensure we have RGBA data (4 bytes per pixel)
+        size_t expected_size = static_cast<size_t>(width) * static_cast<size_t>(height) * 4;
+        if (pixels.size() != expected_size) {
+            std::cerr << "  Warning: Texture " << i << " size mismatch: expected " 
+                      << expected_size << " bytes, got " << pixels.size() << " bytes" << std::endl;
+            // Skip this texture if size doesn't match
+            texture_handles[i] = BGFX_INVALID_HANDLE;
+            continue;
+        }
         
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        const bgfx::Memory* mem = bgfx::copy(pixels.data(), static_cast<uint32_t>(pixels.size()));
+        texture_handles[i] = bgfx::createTexture2D(
+            static_cast<uint16_t>(width),
+            static_cast<uint16_t>(height),
+            false, 1,
+            bgfx::TextureFormat::RGBA8,
+            BGFX_SAMPLER_U_CLAMP | BGFX_SAMPLER_V_CLAMP,
+            mem
+        );
         
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, 
-                     GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-        glGenerateMipmap(GL_TEXTURE_2D);
-        
-        texture_ids[i] = tex_id;
         std::cout << "  Loaded texture " << i << ": " << width << "x" << height << std::endl;
     }
     
-    // Update mesh texture IDs
+    // Update mesh texture handles
     for (auto& mesh : model.meshes) {
-        if (mesh.has_texture && mesh.texture_id < texture_ids.size()) {
-            mesh.texture_id = texture_ids[mesh.texture_id];
+        if (mesh.has_texture && mesh.texture.idx > 0) {
+            int tex_idx = mesh.texture.idx - 1;  // Undo the +1 offset
+            if (tex_idx < static_cast<int>(texture_handles.size())) {
+                mesh.texture = texture_handles[tex_idx];
+            } else {
+                mesh.texture = BGFX_INVALID_HANDLE;
+                mesh.has_texture = false;
+            }
+        } else {
+            mesh.texture = BGFX_INVALID_HANDLE;
         }
     }
     
@@ -532,101 +579,47 @@ void ModelLoader::upload_to_gpu(Model& model) {
         if (mesh.uploaded) continue;
         if (mesh.vertices.empty() && mesh.skinned_vertices.empty()) continue;
         
-        glGenVertexArrays(1, &mesh.vao);
-        glBindVertexArray(mesh.vao);
-        
-        glGenBuffers(1, &mesh.vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-        
         if (mesh.is_skinned && !mesh.skinned_vertices.empty()) {
             // Upload skinned vertices
-            glBufferData(GL_ARRAY_BUFFER, mesh.skinned_vertices.size() * sizeof(SkinnedVertex), 
-                         mesh.skinned_vertices.data(), GL_STATIC_DRAW);
-            
-            // Position (location 0)
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(SkinnedVertex), 
-                                  (void*)offsetof(SkinnedVertex, x));
-            glEnableVertexAttribArray(0);
-            
-            // Normal (location 1)
-            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(SkinnedVertex), 
-                                  (void*)offsetof(SkinnedVertex, nx));
-            glEnableVertexAttribArray(1);
-            
-            // TexCoord (location 2)
-            glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(SkinnedVertex), 
-                                  (void*)offsetof(SkinnedVertex, u));
-            glEnableVertexAttribArray(2);
-            
-            // Color (location 3)
-            glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(SkinnedVertex), 
-                                  (void*)offsetof(SkinnedVertex, r));
-            glEnableVertexAttribArray(3);
-            
-            // Joint indices (location 4) - as unsigned bytes
-            glVertexAttribIPointer(4, 4, GL_UNSIGNED_BYTE, sizeof(SkinnedVertex), 
-                                   (void*)offsetof(SkinnedVertex, joints));
-            glEnableVertexAttribArray(4);
-            
-            // Weights (location 5)
-            glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(SkinnedVertex), 
-                                  (void*)offsetof(SkinnedVertex, weights));
-            glEnableVertexAttribArray(5);
+            const bgfx::Memory* vb_mem = bgfx::copy(
+                mesh.skinned_vertices.data(),
+                static_cast<uint32_t>(mesh.skinned_vertices.size() * sizeof(SkinnedVertex))
+            );
+            mesh.vbh = bgfx::createVertexBuffer(vb_mem, SkinnedVertex::layout);
         } else {
             // Upload regular vertices
-            glBufferData(GL_ARRAY_BUFFER, mesh.vertices.size() * sizeof(Vertex3D), 
-                         mesh.vertices.data(), GL_STATIC_DRAW);
-            
-            // Position (location 0)
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), 
-                                  (void*)offsetof(Vertex3D, x));
-            glEnableVertexAttribArray(0);
-            
-            // Normal (location 1)
-            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), 
-                                  (void*)offsetof(Vertex3D, nx));
-            glEnableVertexAttribArray(1);
-            
-            // TexCoord (location 2)
-            glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), 
-                                  (void*)offsetof(Vertex3D, u));
-            glEnableVertexAttribArray(2);
-            
-            // Color (location 3)
-            glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), 
-                                  (void*)offsetof(Vertex3D, r));
-            glEnableVertexAttribArray(3);
+            const bgfx::Memory* vb_mem = bgfx::copy(
+                mesh.vertices.data(),
+                static_cast<uint32_t>(mesh.vertices.size() * sizeof(Vertex3D))
+            );
+            mesh.vbh = bgfx::createVertexBuffer(vb_mem, Vertex3D::layout);
         }
         
         if (!mesh.indices.empty()) {
-            glGenBuffers(1, &mesh.ebo);
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.ebo);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh.indices.size() * sizeof(uint32_t),
-                         mesh.indices.data(), GL_STATIC_DRAW);
+            const bgfx::Memory* ib_mem = bgfx::copy(
+                mesh.indices.data(),
+                static_cast<uint32_t>(mesh.indices.size() * sizeof(uint32_t))
+            );
+            mesh.ibh = bgfx::createIndexBuffer(ib_mem, BGFX_BUFFER_INDEX32);
         }
         
-        glBindVertexArray(0);
         mesh.uploaded = true;
     }
 }
 
 void ModelLoader::free_gpu_resources(Model& model) {
     for (auto& mesh : model.meshes) {
-        if (mesh.vao) {
-            glDeleteVertexArrays(1, &mesh.vao);
-            mesh.vao = 0;
+        if (bgfx::isValid(mesh.vbh)) {
+            bgfx::destroy(mesh.vbh);
+            mesh.vbh = BGFX_INVALID_HANDLE;
         }
-        if (mesh.vbo) {
-            glDeleteBuffers(1, &mesh.vbo);
-            mesh.vbo = 0;
+        if (bgfx::isValid(mesh.ibh)) {
+            bgfx::destroy(mesh.ibh);
+            mesh.ibh = BGFX_INVALID_HANDLE;
         }
-        if (mesh.ebo) {
-            glDeleteBuffers(1, &mesh.ebo);
-            mesh.ebo = 0;
-        }
-        if (mesh.texture_id) {
-            glDeleteTextures(1, &mesh.texture_id);
-            mesh.texture_id = 0;
+        if (bgfx::isValid(mesh.texture)) {
+            bgfx::destroy(mesh.texture);
+            mesh.texture = BGFX_INVALID_HANDLE;
         }
         mesh.uploaded = false;
         mesh.has_texture = false;

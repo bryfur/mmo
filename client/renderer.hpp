@@ -3,7 +3,6 @@
 #include "common/protocol.hpp"
 #include "common/ecs/components.hpp"
 #include "model_loader.hpp"
-#include "shader.hpp"
 #include "render/grass_renderer.hpp"
 #include "systems/camera_system.hpp"
 #include "render/render_context.hpp"
@@ -12,6 +11,7 @@
 #include "render/ui_renderer.hpp"
 #include "render/effect_renderer.hpp"
 #include "render/shadow_system.hpp"
+#include <bgfx/bgfx.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <string>
@@ -146,6 +146,8 @@ private:
     void init_billboard_buffers();
     void update_camera();
     Model* get_model_for_entity(const EntityState& entity);
+    void render_model_bgfx(Model* model, const glm::mat4& model_mat, 
+                           const glm::vec4& tint, bool use_fog, bool use_shadows, bool use_ssao);
     
     // ========== SUBSYSTEMS ==========
     RenderContext context_;
@@ -170,14 +172,30 @@ private:
     glm::vec3 sun_direction_ = glm::normalize(glm::vec3(0.5f, 0.8f, 0.3f));
     glm::vec3 light_dir_ = glm::vec3(-0.5f, -0.8f, -0.3f);
     
-    // ========== SHADERS (for entity rendering) ==========
-    std::unique_ptr<Shader> model_shader_;
-    std::unique_ptr<Shader> skinned_model_shader_;
-    std::unique_ptr<Shader> billboard_shader_;
+    // ========== SHADERS (bgfx) ==========
+    bgfx::ProgramHandle model_program_ = BGFX_INVALID_HANDLE;
+    bgfx::ProgramHandle skinned_model_program_ = BGFX_INVALID_HANDLE;
+    bgfx::ProgramHandle billboard_program_ = BGFX_INVALID_HANDLE;
     
-    // ========== BILLBOARD VAO (for 3D health bars) ==========
-    GLuint billboard_vao_ = 0;
-    GLuint billboard_vbo_ = 0;
+    // ========== UNIFORMS ==========
+    bgfx::UniformHandle u_model_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_lightSpaceMatrix_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_lightDir_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_lightColor_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_ambientColor_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_viewPos_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_fogParams_ = BGFX_INVALID_HANDLE;  // fogStart, fogEnd, fogDensity, fogEnabled
+    bgfx::UniformHandle u_fogColor_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_tintColor_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_baseColor_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle u_params_ = BGFX_INVALID_HANDLE;  // hasTexture, shadowsEnabled, ssaoEnabled, ...
+    bgfx::UniformHandle u_boneMatrices_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle s_baseColorTexture_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle s_shadowMap_ = BGFX_INVALID_HANDLE;
+    bgfx::UniformHandle s_ssaoTexture_ = BGFX_INVALID_HANDLE;
+    
+    // ========== BILLBOARD (for 3D health bars) ==========
+    bgfx::VertexLayout billboard_layout_;
     
     // ========== GRASS ==========
     std::unique_ptr<GrassRenderer> grass_renderer_;

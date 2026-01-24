@@ -14,6 +14,12 @@ InputHandler::InputHandler() {
 bool InputHandler::process_events() {
     // Reset per-frame deltas
     camera_zoom_delta_ = 0.0f;
+    menu_toggle_pressed_ = false;
+    menu_up_pressed_ = false;
+    menu_down_pressed_ = false;
+    menu_left_pressed_ = false;
+    menu_right_pressed_ = false;
+    menu_select_pressed_ = false;
     
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
@@ -21,57 +27,98 @@ bool InputHandler::process_events() {
             return false;
         }
         
-        if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
-            return false;
+        // Handle key events for menu
+        if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat) {
+            switch (event.key.key) {
+                case SDLK_ESCAPE:
+                    menu_toggle_pressed_ = true;
+                    break;
+                case SDLK_UP:
+                case SDLK_W:
+                    if (!game_input_enabled_) menu_up_pressed_ = true;
+                    break;
+                case SDLK_DOWN:
+                case SDLK_S:
+                    if (!game_input_enabled_) menu_down_pressed_ = true;
+                    break;
+                case SDLK_LEFT:
+                case SDLK_A:
+                    if (!game_input_enabled_) menu_left_pressed_ = true;
+                    break;
+                case SDLK_RIGHT:
+                case SDLK_D:
+                    if (!game_input_enabled_) menu_right_pressed_ = true;
+                    break;
+                case SDLK_RETURN:
+                case SDLK_SPACE:
+                    if (!game_input_enabled_) menu_select_pressed_ = true;
+                    break;
+            }
         }
         
-        // Track mouse button state for camera orbit
-        if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-            if (event.button.button == SDL_BUTTON_RIGHT) {
-                right_mouse_down_ = true;
-                // Capture mouse for smooth orbiting
-                SDL_SetWindowRelativeMouseMode(SDL_GetWindowFromEvent(&event), true);
+        // Only process game input if enabled
+        if (game_input_enabled_) {
+            // Track mouse button state for camera orbit
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+                if (event.button.button == SDL_BUTTON_RIGHT) {
+                    right_mouse_down_ = true;
+                    // Capture mouse for smooth orbiting
+                    SDL_SetWindowRelativeMouseMode(SDL_GetWindowFromEvent(&event), true);
+                }
+                if (event.button.button == SDL_BUTTON_LEFT) {
+                    attacking_ = true;
+                }
             }
-            if (event.button.button == SDL_BUTTON_LEFT) {
-                attacking_ = true;
+            if (event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
+                if (event.button.button == SDL_BUTTON_RIGHT) {
+                    right_mouse_down_ = false;
+                    SDL_SetWindowRelativeMouseMode(SDL_GetWindowFromEvent(&event), false);
+                }
             }
-        }
-        if (event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
-            if (event.button.button == SDL_BUTTON_RIGHT) {
-                right_mouse_down_ = false;
-                SDL_SetWindowRelativeMouseMode(SDL_GetWindowFromEvent(&event), false);
-            }
-        }
-        
-        // Mouse wheel for zoom
-        if (event.type == SDL_EVENT_MOUSE_WHEEL) {
-            camera_zoom_delta_ -= event.wheel.y * 50.0f;
-        }
-        
-        // Mouse motion for camera orbit (only when right button held)
-        if (event.type == SDL_EVENT_MOUSE_MOTION && right_mouse_down_) {
-            camera_yaw_ += event.motion.xrel * MOUSE_SENSITIVITY;
-            camera_pitch_ -= event.motion.yrel * MOUSE_SENSITIVITY;
             
-            // Clamp pitch for over-the-shoulder action cam
-            // Allow looking up high into sky (-70°) and down toward ground (70°)
-            // Terrain collision in renderer prevents ground clipping
-            camera_pitch_ = std::clamp(camera_pitch_, -70.0f, 70.0f);
+            // Mouse wheel for zoom
+            if (event.type == SDL_EVENT_MOUSE_WHEEL) {
+                camera_zoom_delta_ -= event.wheel.y * 50.0f;
+            }
             
-            // Normalize yaw
-            while (camera_yaw_ < 0.0f) camera_yaw_ += 360.0f;
-            while (camera_yaw_ >= 360.0f) camera_yaw_ -= 360.0f;
+            // Mouse motion for camera orbit (only when right button held)
+            if (event.type == SDL_EVENT_MOUSE_MOTION && right_mouse_down_) {
+                camera_yaw_ += event.motion.xrel * MOUSE_SENSITIVITY;
+                camera_pitch_ -= event.motion.yrel * MOUSE_SENSITIVITY;
+                
+                // Clamp pitch for over-the-shoulder action cam
+                // Allow looking up high into sky (-70°) and down toward ground (70°)
+                // Terrain collision in renderer prevents ground clipping
+                camera_pitch_ = std::clamp(camera_pitch_, -70.0f, 70.0f);
+                
+                // Normalize yaw
+                while (camera_yaw_ < 0.0f) camera_yaw_ += 360.0f;
+                while (camera_yaw_ >= 360.0f) camera_yaw_ -= 360.0f;
+            }
         }
     }
     
     // Save previous input for change detection
     last_input_ = current_input_;
     
-    // Update keyboard state
-    update_input_from_keyboard();
-    
-    // Update camera-relative movement direction
-    update_camera_from_mouse();
+    // Only update game input if enabled
+    if (game_input_enabled_) {
+        // Update keyboard state
+        update_input_from_keyboard();
+        
+        // Update camera-relative movement direction
+        update_camera_from_mouse();
+    } else {
+        // Clear movement when in menu
+        move_forward_ = false;
+        move_backward_ = false;
+        move_left_ = false;
+        move_right_ = false;
+        attacking_ = false;
+        current_input_.move_dir_x = 0.0f;
+        current_input_.move_dir_y = 0.0f;
+        current_input_.attacking = false;
+    }
     
     // Check if input changed
     input_changed_ = (current_input_.move_up != last_input_.move_up ||

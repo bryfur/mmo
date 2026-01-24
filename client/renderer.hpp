@@ -122,6 +122,25 @@ public:
     // Terrain height access (for external systems)
     float get_terrain_height(float x, float z) const { return terrain_.get_height(x, z); }
     
+    // Graphics settings toggles
+    void set_shadows_enabled(bool enabled);
+    void set_ssao_enabled(bool enabled);
+    void set_fog_enabled(bool enabled);
+    void set_grass_enabled(bool enabled);
+    void set_skybox_enabled(bool enabled) { skybox_enabled_ = enabled; }
+    void set_mountains_enabled(bool enabled) { mountains_enabled_ = enabled; }
+    void set_trees_enabled(bool enabled) { trees_enabled_ = enabled; }
+    void set_rocks_enabled(bool enabled) { rocks_enabled_ = enabled; }
+    
+    bool get_shadows_enabled() const;
+    bool get_ssao_enabled() const;
+    bool get_fog_enabled() const { return fog_enabled_; }
+    bool get_grass_enabled() const { return grass_enabled_; }
+    bool get_skybox_enabled() const { return skybox_enabled_; }
+    bool get_mountains_enabled() const { return mountains_enabled_; }
+    bool get_trees_enabled() const { return trees_enabled_; }
+    bool get_rocks_enabled() const { return rocks_enabled_; }
+    
 private:
     void init_shaders();
     void init_billboard_buffers();
@@ -163,6 +182,14 @@ private:
     // ========== GRASS ==========
     std::unique_ptr<GrassRenderer> grass_renderer_;
     float skybox_time_ = 0.0f;
+    
+    // ========== GRAPHICS SETTINGS ==========
+    bool fog_enabled_ = true;
+    bool grass_enabled_ = true;
+    bool skybox_enabled_ = true;
+    bool mountains_enabled_ = true;
+    bool trees_enabled_ = true;
+    bool rocks_enabled_ = true;
     
     // ========== MODELS ==========
     std::unique_ptr<ModelManager> model_manager_;

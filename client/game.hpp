@@ -11,6 +11,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <functional>
 
 namespace mmo {
 
@@ -18,6 +19,40 @@ enum class GameState {
     ClassSelect,
     Connecting,
     Playing
+};
+
+// Graphics settings that can be toggled at runtime
+struct GraphicsSettings {
+    bool shadows_enabled = true;
+    bool ssao_enabled = true;
+    bool fog_enabled = true;
+    bool grass_enabled = true;
+    bool skybox_enabled = true;
+    bool mountains_enabled = true;
+    bool trees_enabled = true;
+    bool rocks_enabled = true;
+    
+    // Quality settings
+    int shadow_quality = 2;  // 0=off, 1=low, 2=high
+    int grass_density = 2;   // 0=off, 1=low, 2=high
+};
+
+// Menu item types
+enum class MenuItemType {
+    Toggle,
+    Slider,
+    Button
+};
+
+// Menu item definition
+struct MenuItem {
+    std::string label;
+    MenuItemType type;
+    bool* toggle_value = nullptr;
+    int* slider_value = nullptr;
+    int slider_min = 0;
+    int slider_max = 2;
+    std::function<void()> action = nullptr;
 };
 
 class Game {
@@ -41,6 +76,12 @@ private:
     void render_connecting();
     void update_playing(float dt);
     void render_playing();
+    
+    // Menu system
+    void update_menu(float dt);
+    void render_menu();
+    void init_menu_items();
+    void apply_graphics_settings();
     
     void on_connection_accepted(const std::vector<uint8_t>& payload);
     void on_world_state(const std::vector<uint8_t>& payload);
@@ -68,6 +109,12 @@ private:
     
     // Track previous attack state to detect attack start
     std::unordered_map<uint32_t, bool> prev_attacking_;
+    
+    // Menu system
+    bool menu_open_ = false;
+    int menu_selected_index_ = 0;
+    std::vector<MenuItem> menu_items_;
+    GraphicsSettings graphics_settings_;
     
     uint32_t local_player_id_ = 0;
     PlayerClass local_player_class_ = PlayerClass::Warrior;

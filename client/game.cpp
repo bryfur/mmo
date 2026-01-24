@@ -65,6 +65,9 @@ bool Game::init(const std::string& host, uint16_t port) {
     last_frame_time_ = SDL_GetTicks();
     fps_timer_ = last_frame_time_;
     
+    // Initialize menu
+    init_menu_items();
+    
     return true;
 }
 
@@ -104,6 +107,11 @@ void Game::shutdown() {
 }
 
 void Game::update(float dt) {
+    // Handle menu first (available in any game state)
+    if (game_state_ == GameState::Playing || game_state_ == GameState::ClassSelect) {
+        update_menu(dt);
+    }
+    
     switch (game_state_) {
         case GameState::ClassSelect:
             update_class_select(dt);
@@ -129,6 +137,7 @@ void Game::render() {
             render_playing();
             break;
     }
+    // Menu overlay is now rendered inside each state's render function before end_frame()
 }
 
 void Game::update_class_select(float dt) {
@@ -177,8 +186,14 @@ void Game::render_class_select() {
     float center_x = renderer_.width() / 2.0f;
     float center_y = renderer_.height() / 2.0f;
     
-    // Draw title area
-    renderer_.draw_filled_rect(0, 0, renderer_.width(), 100, 0xFF332211);
+    // Draw title area background
+    renderer_.draw_filled_rect(0, 0, static_cast<float>(renderer_.width()), 100, 0xFF332211);
+    
+    // Title text
+    renderer_.draw_ui_text("SELECT YOUR CLASS", center_x - 150.0f, 30.0f, 2.0f, 0xFFFFFFFF);
+    
+    // Subtitle
+    renderer_.draw_ui_text("Use A/D to select, SPACE to confirm", center_x - 160.0f, 70.0f, 1.0f, 0xFFCCCCCC);
     
     // Class selection boxes
     float box_size = 120.0f;
@@ -189,10 +204,10 @@ void Game::render_class_select() {
     PlayerClass classes[] = {PlayerClass::Warrior, PlayerClass::Mage, PlayerClass::Paladin, PlayerClass::Archer};
     const char* class_names[] = {"WARRIOR", "MAGE", "PALADIN", "ARCHER"};
     const char* class_desc[] = {
-        "High HP, Close Range\nSword Arc Attack",
-        "Low HP, Long Range\nBeam Attack", 
-        "Medium HP, AOE\nGround Consecration",
-        "Low HP, Long Range\nPrecision Shots"
+        "High HP, Melee",
+        "Low HP, Ranged", 
+        "Medium HP, AOE",
+        "Low HP, Precision"
     };
     uint32_t class_colors[] = {0xFF5050C8, 0xFFC85050, 0xFF50B4C8, 0xFF50C850};
     
@@ -204,25 +219,54 @@ void Game::render_class_select() {
         if (selected) {
             renderer_.draw_filled_rect(x - box_size/2 - 10, box_y - box_size/2 - 10, 
                                        box_size + 20, box_size + 20, 0x40FFFFFF);
+            renderer_.draw_rect_outline(x - box_size/2 - 10, box_y - box_size/2 - 10, 
+                                        box_size + 20, box_size + 20, 0xFFFFFFFF, 3.0f);
         }
+        
+        // Class preview background
+        renderer_.draw_filled_rect(x - box_size/2, box_y - box_size/2, box_size, box_size, class_colors[i]);
         
         // Class preview
         renderer_.draw_class_preview(classes[i], x, box_y, box_size);
         
         // Class name below
-        // (text rendering is placeholder, so we draw colored boxes as labels)
         uint32_t text_color = selected ? 0xFFFFFFFF : 0xFFAAAAAA;
-        renderer_.draw_filled_rect(x - 50, box_y + box_size/2 + 20, 100, 25, class_colors[i]);
+        float name_x = x - 40.0f;
+        renderer_.draw_ui_text(class_names[i], name_x, box_y + box_size/2 + 15.0f, 1.0f, text_color);
         
-        (void)class_names;
-        (void)class_desc;
-        (void)text_color;
+        // Class description
+        renderer_.draw_ui_text(class_desc[i], x - 55.0f, box_y + box_size/2 + 40.0f, 0.8f, 0xFFAAAAAA);
     }
     
-    // Instructions
-    renderer_.draw_filled_rect(center_x - 200, renderer_.height() - 80, 400, 40, 0x80000000);
+    // Selected class info panel
+    renderer_.draw_filled_rect(center_x - 200, renderer_.height() - 120, 400, 80, 0xCC222222);
+    renderer_.draw_rect_outline(center_x - 200, renderer_.height() - 120, 400, 80, class_colors[selected_class_index_], 2.0f);
+    
+    const char* full_desc_line1[] = {
+        "The WARRIOR excels in close combat with high health",
+        "The MAGE wields devastating beam attacks from range",
+        "The PALADIN calls upon holy power for area attacks",
+        "The ARCHER strikes with precision from afar"
+    };
+    const char* full_desc_line2[] = {
+        "and powerful sword attacks.",
+        "but has lower health.",
+        "with moderate health.",
+        "but must stay nimble to survive."
+    };
+    renderer_.draw_ui_text(full_desc_line1[selected_class_index_], center_x - 180.0f, renderer_.height() - 105.0f, 0.9f, 0xFFFFFFFF);
+    renderer_.draw_ui_text(full_desc_line2[selected_class_index_], center_x - 180.0f, renderer_.height() - 80.0f, 0.9f, 0xFFFFFFFF);
+    
+    // Controls hint
+    renderer_.draw_ui_text("Press ESC anytime to open Settings Menu", center_x - 150.0f, renderer_.height() - 25.0f, 0.8f, 0xFF888888);
     
     renderer_.end_ui();
+    
+    // Draw menu overlay if open (must be before end_frame)
+    if (menu_open_) {
+        render_menu();
+    }
+    
     renderer_.end_frame();
 }
 
@@ -258,6 +302,13 @@ void Game::render_connecting() {
     float center_x = renderer_.width() / 2.0f;
     float center_y = renderer_.height() / 2.0f;
     
+    // Background panel
+    renderer_.draw_filled_rect(center_x - 200, center_y - 100, 400, 200, 0xCC222222);
+    renderer_.draw_rect_outline(center_x - 200, center_y - 100, 400, 200, 0xFFFFFFFF, 2.0f);
+    
+    // Title
+    renderer_.draw_ui_text("CONNECTING", center_x - 80.0f, center_y - 80.0f, 1.5f, 0xFFFFFFFF);
+    
     // Loading indicator - spinning dots
     int num_dots = 8;
     float radius = 40.0f;
@@ -274,6 +325,11 @@ void Game::render_connecting() {
                                    0x00FFFFFF | (alpha << 24));
     }
     
+    // Connection info
+    std::string connect_msg = "Connecting to " + host_ + ":" + std::to_string(port_);
+    renderer_.draw_ui_text(connect_msg, center_x - 120.0f, center_y + 60.0f, 0.8f, 0xFFAAAAAA);
+    
+    renderer_.end_ui();
     renderer_.end_frame();
 }
 
@@ -488,6 +544,11 @@ void Game::render_playing() {
     }
     
     renderer_.end_ui();
+    
+    // Draw menu overlay if open (must be before end_frame)
+    if (menu_open_) {
+        render_menu();
+    }
     
     renderer_.end_frame();
 }
@@ -719,6 +780,140 @@ void Game::update_attack_effects(float dt) {
             ++it;
         }
     }
+}
+
+// ============================================================================
+// MENU SYSTEM
+// ============================================================================
+
+void Game::init_menu_items() {
+    menu_items_.clear();
+    
+    // Graphics settings toggles
+    menu_items_.push_back({"Shadows", MenuItemType::Toggle, &graphics_settings_.shadows_enabled, nullptr, 0, 0, nullptr});
+    menu_items_.push_back({"SSAO (Ambient Occlusion)", MenuItemType::Toggle, &graphics_settings_.ssao_enabled, nullptr, 0, 0, nullptr});
+    menu_items_.push_back({"Fog", MenuItemType::Toggle, &graphics_settings_.fog_enabled, nullptr, 0, 0, nullptr});
+    menu_items_.push_back({"Grass", MenuItemType::Toggle, &graphics_settings_.grass_enabled, nullptr, 0, 0, nullptr});
+    menu_items_.push_back({"Skybox", MenuItemType::Toggle, &graphics_settings_.skybox_enabled, nullptr, 0, 0, nullptr});
+    menu_items_.push_back({"Mountains", MenuItemType::Toggle, &graphics_settings_.mountains_enabled, nullptr, 0, 0, nullptr});
+    menu_items_.push_back({"Trees", MenuItemType::Toggle, &graphics_settings_.trees_enabled, nullptr, 0, 0, nullptr});
+    menu_items_.push_back({"Rocks", MenuItemType::Toggle, &graphics_settings_.rocks_enabled, nullptr, 0, 0, nullptr});
+    
+    // Resume button
+    menu_items_.push_back({"Resume Game", MenuItemType::Button, nullptr, nullptr, 0, 0, [this]() { 
+        menu_open_ = false;
+        input_.set_game_input_enabled(true);
+    }});
+    
+    // Quit button
+    menu_items_.push_back({"Quit to Desktop", MenuItemType::Button, nullptr, nullptr, 0, 0, [this]() { 
+        running_ = false;
+    }});
+}
+
+void Game::update_menu(float dt) {
+    (void)dt;
+    
+    // Handle menu toggle
+    if (input_.menu_toggle_pressed()) {
+        menu_open_ = !menu_open_;
+        input_.set_game_input_enabled(!menu_open_);
+        input_.clear_menu_inputs();
+        return;
+    }
+    
+    if (!menu_open_) return;
+    
+    // Navigation
+    if (input_.menu_up_pressed()) {
+        menu_selected_index_ = (menu_selected_index_ - 1 + static_cast<int>(menu_items_.size())) % static_cast<int>(menu_items_.size());
+    }
+    if (input_.menu_down_pressed()) {
+        menu_selected_index_ = (menu_selected_index_ + 1) % static_cast<int>(menu_items_.size());
+    }
+    
+    // Selection/toggle
+    MenuItem& item = menu_items_[menu_selected_index_];
+    if (item.type == MenuItemType::Toggle) {
+        if (input_.menu_select_pressed() || input_.menu_left_pressed() || input_.menu_right_pressed()) {
+            if (item.toggle_value) {
+                *item.toggle_value = !*item.toggle_value;
+                apply_graphics_settings();
+            }
+        }
+    } else if (item.type == MenuItemType::Button) {
+        if (input_.menu_select_pressed()) {
+            if (item.action) {
+                item.action();
+            }
+        }
+    }
+    
+    input_.clear_menu_inputs();
+}
+
+void Game::render_menu() {
+    if (!menu_open_) return;
+    
+    renderer_.begin_ui();
+    
+    float screen_w = static_cast<float>(renderer_.width());
+    float screen_h = static_cast<float>(renderer_.height());
+    
+    // Menu panel
+    float panel_w = 500.0f;
+    float panel_h = 50.0f + menu_items_.size() * 50.0f + 50.0f;
+    float panel_x = (screen_w - panel_w) / 2.0f;
+    float panel_y = (screen_h - panel_h) / 2.0f;
+    
+    // Panel background
+    renderer_.draw_filled_rect(panel_x, panel_y, panel_w, panel_h, 0xE0222222);
+    renderer_.draw_rect_outline(panel_x, panel_y, panel_w, panel_h, 0xFFFFFFFF, 2.0f);
+    
+    // Title
+    renderer_.draw_ui_text("SETTINGS", panel_x + panel_w / 2.0f - 60.0f, panel_y + 15.0f, 1.5f, 0xFFFFFFFF);
+    
+    // Menu items
+    float item_y = panel_y + 60.0f;
+    for (size_t i = 0; i < menu_items_.size(); ++i) {
+        const MenuItem& item = menu_items_[i];
+        bool selected = (static_cast<int>(i) == menu_selected_index_);
+        
+        // Selection highlight
+        if (selected) {
+            renderer_.draw_filled_rect(panel_x + 10.0f, item_y, panel_w - 20.0f, 40.0f, 0x40FFFFFF);
+        }
+        
+        // Item label
+        uint32_t text_color = selected ? 0xFFFFFFFF : 0xFFAAAAAA;
+        renderer_.draw_ui_text(item.label, panel_x + 30.0f, item_y + 10.0f, 1.0f, text_color);
+        
+        // Value display
+        if (item.type == MenuItemType::Toggle && item.toggle_value) {
+            std::string value_str = *item.toggle_value ? "ON" : "OFF";
+            uint32_t value_color = *item.toggle_value ? 0xFF00FF00 : 0xFFFF6666;
+            renderer_.draw_ui_text(value_str, panel_x + panel_w - 80.0f, item_y + 10.0f, 1.0f, value_color);
+        }
+        
+        item_y += 50.0f;
+    }
+    
+    // Controls hint
+    renderer_.draw_ui_text("W/S: Navigate  |  SPACE/ENTER: Select  |  ESC: Close", 
+                          panel_x + 20.0f, panel_y + panel_h - 30.0f, 0.8f, 0xFF888888);
+    
+    renderer_.end_ui();
+}
+
+void Game::apply_graphics_settings() {
+    renderer_.set_shadows_enabled(graphics_settings_.shadows_enabled);
+    renderer_.set_ssao_enabled(graphics_settings_.ssao_enabled);
+    renderer_.set_fog_enabled(graphics_settings_.fog_enabled);
+    renderer_.set_grass_enabled(graphics_settings_.grass_enabled);
+    renderer_.set_skybox_enabled(graphics_settings_.skybox_enabled);
+    renderer_.set_mountains_enabled(graphics_settings_.mountains_enabled);
+    renderer_.set_trees_enabled(graphics_settings_.trees_enabled);
+    renderer_.set_rocks_enabled(graphics_settings_.rocks_enabled);
 }
 
 } // namespace mmo

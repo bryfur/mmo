@@ -48,6 +48,26 @@ public:
     // Set actual camera forward direction (accounting for shoulder offset)
     void set_camera_forward(float x, float z) { camera_forward_x_ = x; camera_forward_z_ = z; }
     
+    // Menu controls
+    bool menu_toggle_pressed() const { return menu_toggle_pressed_; }
+    bool menu_up_pressed() const { return menu_up_pressed_; }
+    bool menu_down_pressed() const { return menu_down_pressed_; }
+    bool menu_left_pressed() const { return menu_left_pressed_; }
+    bool menu_right_pressed() const { return menu_right_pressed_; }
+    bool menu_select_pressed() const { return menu_select_pressed_; }
+    void clear_menu_inputs() { 
+        menu_toggle_pressed_ = false; 
+        menu_up_pressed_ = false; 
+        menu_down_pressed_ = false;
+        menu_left_pressed_ = false;
+        menu_right_pressed_ = false;
+        menu_select_pressed_ = false;
+    }
+    
+    // Enable/disable game input (for menu mode)
+    void set_game_input_enabled(bool enabled) { game_input_enabled_ = enabled; }
+    bool is_game_input_enabled() const { return game_input_enabled_; }
+    
 private:
     void update_input_from_keyboard();
     void update_camera_from_mouse();
@@ -80,6 +100,15 @@ private:
     // Actual camera forward direction (set by renderer, accounts for shoulder offset)
     float camera_forward_x_ = 0.0f;
     float camera_forward_z_ = -1.0f;
+    
+    // Menu input state
+    bool menu_toggle_pressed_ = false;
+    bool menu_up_pressed_ = false;
+    bool menu_down_pressed_ = false;
+    bool menu_left_pressed_ = false;
+    bool menu_right_pressed_ = false;
+    bool menu_select_pressed_ = false;
+    bool game_input_enabled_ = true;
     
     // Sensitivity - slightly higher for responsive action feel
     static constexpr float MOUSE_SENSITIVITY = 0.35f;

@@ -118,6 +118,10 @@ void UIRenderer::begin() {
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
     
+    // Enable blending for UI and text transparency
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    
     ui_shader_->use();
     ui_shader_->set_mat4("projection", projection_);
     
@@ -127,6 +131,7 @@ void UIRenderer::begin() {
 }
 
 void UIRenderer::end() {
+    glDisable(GL_BLEND);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
 }

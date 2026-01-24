@@ -427,20 +427,51 @@ void Renderer::set_sprinting(bool sprinting) {
 }
 
 // ============================================================================
+// GRAPHICS SETTINGS
+// ============================================================================
+
+void Renderer::set_shadows_enabled(bool enabled) {
+    shadows_.set_enabled(enabled);
+}
+
+void Renderer::set_ssao_enabled(bool enabled) {
+    ssao_.set_enabled(enabled);
+}
+
+void Renderer::set_fog_enabled(bool enabled) {
+    fog_enabled_ = enabled;
+}
+
+void Renderer::set_grass_enabled(bool enabled) {
+    grass_enabled_ = enabled;
+}
+
+bool Renderer::get_shadows_enabled() const {
+    return shadows_.is_enabled();
+}
+
+bool Renderer::get_ssao_enabled() const {
+    return ssao_.is_enabled();
+}
+
+// ============================================================================
 // WORLD RENDERING (delegates to subsystems)
 // ============================================================================
 
 void Renderer::draw_skybox() {
+    if (!skybox_enabled_) return;
     skybox_time_ += 0.016f;
     world_.update(0.016f);
     world_.render_skybox(view_, projection_);
 }
 
 void Renderer::draw_distant_mountains() {
+    if (!mountains_enabled_) return;
     world_.render_mountains(view_, projection_, actual_camera_pos_, light_dir_);
 }
 
 void Renderer::draw_rocks() {
+    if (!rocks_enabled_) return;
     world_.render_rocks(view_, projection_, actual_camera_pos_,
                         shadows_.light_space_matrix(), shadows_.shadow_depth_texture(),
                         shadows_.is_enabled(), ssao_.ssao_texture(), ssao_.is_enabled(),
@@ -448,6 +479,7 @@ void Renderer::draw_rocks() {
 }
 
 void Renderer::draw_trees() {
+    if (!trees_enabled_) return;
     world_.render_trees(view_, projection_, actual_camera_pos_,
                         shadows_.light_space_matrix(), shadows_.shadow_depth_texture(),
                         shadows_.is_enabled(), ssao_.ssao_texture(), ssao_.is_enabled(),
@@ -462,7 +494,7 @@ void Renderer::draw_ground() {
 }
 
 void Renderer::draw_grass() {
-    if (!grass_renderer_) return;
+    if (!grass_renderer_ || !grass_enabled_) return;
     
     grass_renderer_->update(0.016f, skybox_time_);
     grass_renderer_->render(view_, projection_, actual_camera_pos_,

@@ -49,6 +49,25 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(asio)
 
+# Fetch SDL_shadercross for runtime HLSL compilation
+# Uses VENDORED mode to build SPIRV-Cross from SDL_shadercross's external/ submodules
+# NOTE: Pinned to specific commit for reproducible builds
+FetchContent_Declare(
+    SDL_shadercross
+    GIT_REPOSITORY https://github.com/libsdl-org/SDL_shadercross.git
+    GIT_TAG 7b7365a86611b2a7b6462e521cf1c43a037d0970
+    GIT_SUBMODULES_RECURSE TRUE
+)
+set(SDLSHADERCROSS_CLI OFF CACHE BOOL "" FORCE)
+set(SDLSHADERCROSS_SHARED OFF CACHE BOOL "" FORCE)
+set(SDLSHADERCROSS_STATIC ON CACHE BOOL "" FORCE)
+set(SDLSHADERCROSS_INSTALL OFF CACHE BOOL "" FORCE)
+set(SDLSHADERCROSS_VENDORED ON CACHE BOOL "" FORCE)
+set(SDLSHADERCROSS_SPIRVCROSS_SHARED ON CACHE BOOL "" FORCE)
+set(SDLSHADERCROSS_DXC OFF CACHE BOOL "" FORCE)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(SDL_shadercross)
+
 # Find required packages
 find_package(SDL3 REQUIRED)
 find_package(SDL3_ttf REQUIRED)
@@ -110,12 +129,19 @@ add_executable(mmo_client
     client/render/shadow_system.cpp
     client/render/grass_renderer.cpp
     client/render/text_renderer.cpp
+    # GPU abstraction layer (SDL3 GPU API)
+    client/gpu/gpu_device.cpp
+    client/gpu/gpu_buffer.cpp
+    client/gpu/gpu_texture.cpp
+    client/gpu/gpu_pipeline.cpp
+    client/gpu/gpu_shader.cpp
 )
 target_link_libraries(mmo_client PRIVATE 
     mmo_common 
     SDL3::SDL3
     SDL3_ttf::SDL3_ttf
     SDL3_image::SDL3_image
+    SDL3_shadercross::SDL3_shadercross-static
     OpenGL::GL
     GLEW::GLEW
     glm::glm
@@ -123,3 +149,4 @@ target_link_libraries(mmo_client PRIVATE
 )
 target_include_directories(mmo_client PRIVATE ${tinygltf_SOURCE_DIR})
 target_include_directories(mmo_client PRIVATE ${asio_SOURCE_DIR}/asio/include)
+target_include_directories(mmo_client PRIVATE ${SDL_shadercross_SOURCE_DIR}/include)

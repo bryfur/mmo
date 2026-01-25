@@ -31,6 +31,13 @@ jobs:
             libglm-dev \
             libgl1-mesa-dev
 
+      - name: Cache SDL3
+        id: cache-sdl
+        uses: actions/cache@v4
+        with:
+          path: /tmp/setup-sdl
+          key: sdl3-ubuntu-24.04-${{ hashFiles('.github/workflows/ci.yml') }}
+
       - name: Setup SDL3
         id: sdl
         uses: libsdl-org/setup-sdl@main
@@ -39,6 +46,15 @@ jobs:
           version: 3-latest
           version-sdl-image: 3-latest
           version-sdl-ttf: 3-latest
+
+      - name: Cache CMake build dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/_deps
+          key: cmake-deps-ubuntu-24.04-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: |
+            cmake-deps-ubuntu-24.04-
 
       - name: Configure CMake
         run: cmake -B build -G Ninja -DCMAKE_PREFIX_PATH=${{ steps.sdl.outputs.prefix }}

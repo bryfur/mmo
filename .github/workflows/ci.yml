@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - '**'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  build-ubuntu:
+    runs-on: ubuntu-24.04
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            ninja-build \
+            libsdl3-dev \
+            libsdl3-ttf-dev \
+            libsdl3-image-dev \
+            libglew-dev \
+            libglm-dev \
+            libgl1-mesa-dev
+
+      - name: Configure CMake
+        run: cmake -B build -G Ninja
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Verify build artifacts
+        run: |
+          ls -la build/
+          test -f build/mmo_server
+          test -f build/mmo_client

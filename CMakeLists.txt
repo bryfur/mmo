@@ -97,6 +97,10 @@ add_executable(mmo_client
     # Systems
     client/systems/interpolation_system.cpp
     client/systems/camera_system.cpp
+    client/systems/render_system.cpp
+    # Scene
+    client/scene/render_scene.cpp
+    client/scene/ui_scene.cpp
     # Render subsystems
     client/render/render_context.cpp
     client/render/terrain_renderer.cpp

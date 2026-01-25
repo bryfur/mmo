@@ -179,95 +179,23 @@ void Game::render_class_select() {
     renderer_.set_camera_orbit(0.0f, 30.0f);
     renderer_.update_camera_smooth(0.016f);  // Use smooth with small dt for initialization
     
-    renderer_.begin_frame();
+    // Clear and populate scenes
+    render_scene_.clear();
+    ui_scene_.clear();
     
-    // Dark background
-    renderer_.begin_ui();
+    // Build UI for class selection
+    build_class_select_ui(ui_scene_);
     
-    float center_x = renderer_.width() / 2.0f;
-    float center_y = renderer_.height() / 2.0f;
-    
-    // Draw title area background
-    renderer_.draw_filled_rect(0, 0, static_cast<float>(renderer_.width()), 100, 0xFF332211);
-    
-    // Title text
-    renderer_.draw_ui_text("SELECT YOUR CLASS", center_x - 150.0f, 30.0f, 2.0f, 0xFFFFFFFF);
-    
-    // Subtitle
-    renderer_.draw_ui_text("Use A/D to select, SPACE to confirm", center_x - 160.0f, 70.0f, 1.0f, 0xFFCCCCCC);
-    
-    // Class selection boxes
-    float box_size = 120.0f;
-    float spacing = 150.0f;
-    float start_x = center_x - spacing * 1.5f;
-    float box_y = center_y - 50.0f;
-    
-    PlayerClass classes[] = {PlayerClass::Warrior, PlayerClass::Mage, PlayerClass::Paladin, PlayerClass::Archer};
-    const char* class_names[] = {"WARRIOR", "MAGE", "PALADIN", "ARCHER"};
-    const char* class_desc[] = {
-        "High HP, Melee",
-        "Low HP, Ranged", 
-        "Medium HP, AOE",
-        "Low HP, Precision"
-    };
-    uint32_t class_colors[] = {0xFF5050C8, 0xFFC85050, 0xFF50B4C8, 0xFF50C850};
-    
-    for (int i = 0; i < 4; ++i) {
-        float x = start_x + i * spacing;
-        bool selected = (i == selected_class_index_);
-        
-        // Selection highlight
-        if (selected) {
-            renderer_.draw_filled_rect(x - box_size/2 - 10, box_y - box_size/2 - 10, 
-                                       box_size + 20, box_size + 20, 0x40FFFFFF);
-            renderer_.draw_rect_outline(x - box_size/2 - 10, box_y - box_size/2 - 10, 
-                                        box_size + 20, box_size + 20, 0xFFFFFFFF, 3.0f);
-        }
-        
-        // Class preview background
-        renderer_.draw_filled_rect(x - box_size/2, box_y - box_size/2, box_size, box_size, class_colors[i]);
-        
-        // Class preview
-        renderer_.draw_class_preview(classes[i], x, box_y, box_size);
-        
-        // Class name below
-        uint32_t text_color = selected ? 0xFFFFFFFF : 0xFFAAAAAA;
-        float name_x = x - 40.0f;
-        renderer_.draw_ui_text(class_names[i], name_x, box_y + box_size/2 + 15.0f, 1.0f, text_color);
-        
-        // Class description
-        renderer_.draw_ui_text(class_desc[i], x - 55.0f, box_y + box_size/2 + 40.0f, 0.8f, 0xFFAAAAAA);
-    }
-    
-    // Selected class info panel
-    renderer_.draw_filled_rect(center_x - 200, renderer_.height() - 120, 400, 80, 0xCC222222);
-    renderer_.draw_rect_outline(center_x - 200, renderer_.height() - 120, 400, 80, class_colors[selected_class_index_], 2.0f);
-    
-    const char* full_desc_line1[] = {
-        "The WARRIOR excels in close combat with high health",
-        "The MAGE wields devastating beam attacks from range",
-        "The PALADIN calls upon holy power for area attacks",
-        "The ARCHER strikes with precision from afar"
-    };
-    const char* full_desc_line2[] = {
-        "and powerful sword attacks.",
-        "but has lower health.",
-        "with moderate health.",
-        "but must stay nimble to survive."
-    };
-    renderer_.draw_ui_text(full_desc_line1[selected_class_index_], center_x - 180.0f, renderer_.height() - 105.0f, 0.9f, 0xFFFFFFFF);
-    renderer_.draw_ui_text(full_desc_line2[selected_class_index_], center_x - 180.0f, renderer_.height() - 80.0f, 0.9f, 0xFFFFFFFF);
-    
-    // Controls hint
-    renderer_.draw_ui_text("Press ESC anytime to open Settings Menu", center_x - 150.0f, renderer_.height() - 25.0f, 0.8f, 0xFF888888);
-    
-    renderer_.end_ui();
-    
-    // Draw menu overlay if open (must be before end_frame)
+    // Add menu overlay if open
     if (menu_open_) {
-        render_menu();
+        build_menu_ui(ui_scene_);
     }
     
+    // Render using scene-based API
+    renderer_.begin_frame();
+    renderer_.begin_ui();
+    renderer_.render_ui(ui_scene_);
+    renderer_.end_ui();
     renderer_.end_frame();
 }
 
@@ -297,39 +225,17 @@ void Game::render_connecting() {
     renderer_.set_camera_orbit(0.0f, 30.0f);
     renderer_.update_camera_smooth(0.016f);
     
+    // Clear and populate scenes
+    render_scene_.clear();
+    ui_scene_.clear();
+    
+    // Build UI for connecting screen
+    build_connecting_ui(ui_scene_);
+    
+    // Render using scene-based API
     renderer_.begin_frame();
     renderer_.begin_ui();
-    
-    float center_x = renderer_.width() / 2.0f;
-    float center_y = renderer_.height() / 2.0f;
-    
-    // Background panel
-    renderer_.draw_filled_rect(center_x - 200, center_y - 100, 400, 200, 0xCC222222);
-    renderer_.draw_rect_outline(center_x - 200, center_y - 100, 400, 200, 0xFFFFFFFF, 2.0f);
-    
-    // Title
-    renderer_.draw_ui_text("CONNECTING", center_x - 80.0f, center_y - 80.0f, 1.5f, 0xFFFFFFFF);
-    
-    // Loading indicator - spinning dots
-    int num_dots = 8;
-    float radius = 40.0f;
-    float dot_radius = 8.0f;
-    float angle_offset = connecting_timer_ * 3.0f;
-    
-    for (int i = 0; i < num_dots; ++i) {
-        float angle = angle_offset + (i / static_cast<float>(num_dots)) * 2.0f * 3.14159f;
-        float x = center_x + std::cos(angle) * radius;
-        float y = center_y + std::sin(angle) * radius;
-        uint8_t alpha = static_cast<uint8_t>(255 * (i + 1) / static_cast<float>(num_dots));
-        renderer_.draw_filled_rect(x - dot_radius, y - dot_radius, 
-                                   dot_radius * 2, dot_radius * 2, 
-                                   0x00FFFFFF | (alpha << 24));
-    }
-    
-    // Connection info
-    std::string connect_msg = "Connecting to " + host_ + ":" + std::to_string(port_);
-    renderer_.draw_ui_text(connect_msg, center_x - 120.0f, center_y + 60.0f, 0.8f, 0xFFAAAAAA);
-    
+    renderer_.render_ui(ui_scene_);
     renderer_.end_ui();
     renderer_.end_frame();
 }
@@ -411,170 +317,41 @@ void Game::update_playing(float dt) {
 }
 
 void Game::render_playing() {
-    // === Shadow Pass ===
-    // Render depth from light's perspective first
-    renderer_.begin_shadow_pass();
+    // Clear and populate scenes
+    render_scene_.clear();
+    ui_scene_.clear();
     
-    // Render mountain shadows (large distant mountains can cast shadows into playable area)
-    renderer_.draw_mountain_shadows();
+    // Configure world rendering flags based on graphics settings
+    render_scene_.set_draw_skybox(graphics_settings_.skybox_enabled);
+    render_scene_.set_draw_mountains(graphics_settings_.mountains_enabled);
+    render_scene_.set_draw_rocks(graphics_settings_.rocks_enabled);
+    render_scene_.set_draw_trees(graphics_settings_.trees_enabled);
+    render_scene_.set_draw_ground(true);  // Always draw ground
+    render_scene_.set_draw_grass(graphics_settings_.grass_enabled);
+    render_scene_.set_draw_mountain_shadows(graphics_settings_.mountains_enabled && graphics_settings_.shadows_enabled);
+    render_scene_.set_draw_tree_shadows(graphics_settings_.trees_enabled && graphics_settings_.shadows_enabled);
     
-    // Render tree shadows
-    renderer_.draw_tree_shadows();
+    // Collect entity shadows using RenderSystem
+    render_system_.collect_entity_shadows(registry_, render_scene_);
     
-    // Render all shadow-casting entities to shadow map
-    auto shadow_view = registry_.view<ecs::NetworkId, ecs::Transform, ecs::Health, ecs::EntityInfo, ecs::Name>();
-    for (auto entity : shadow_view) {
-        auto& net_id = shadow_view.get<ecs::NetworkId>(entity);
-        auto& transform = shadow_view.get<ecs::Transform>(entity);
-        auto& health = shadow_view.get<ecs::Health>(entity);
-        auto& info = shadow_view.get<ecs::EntityInfo>(entity);
-        auto& name = shadow_view.get<ecs::Name>(entity);
-        
-        EntityState state;
-        state.id = net_id.id;
-        state.x = transform.x;
-        state.y = transform.y;
-        state.z = transform.z;  // Server-provided terrain height
-        state.health = health.current;
-        state.max_health = health.max;
-        state.type = info.type;
-        state.player_class = info.player_class;
-        state.color = info.color;
-        state.npc_type = info.npc_type;
-        state.building_type = info.building_type;
-        state.environment_type = info.environment_type;
-        std::strncpy(state.name, name.value.c_str(), sizeof(state.name) - 1);
-        
-        if (auto* vel = registry_.try_get<ecs::Velocity>(entity)) {
-            state.vx = vel->x;
-            state.vy = vel->y;
-        }
-        if (auto* attack_dir = registry_.try_get<ecs::AttackDirection>(entity)) {
-            state.attack_dir_x = attack_dir->x;
-            state.attack_dir_y = attack_dir->y;
-        }
-
-        // Include rotation and scale for accurate environment/building shadows
-        state.rotation = transform.rotation;
-        if (auto* scale = registry_.try_get<ecs::Scale>(entity)) {
-            state.scale = scale->value;
-        }
-        
-        renderer_.draw_entity_shadow(state);
-    }
-    
-    renderer_.end_shadow_pass();
-    
-    // === Main Render Pass ===
-    renderer_.begin_frame();
-    
-    // Draw skybox backdrop first (behind everything)
-    renderer_.draw_skybox();
-    
-    // Draw 3D distant mountains with fog
-    renderer_.draw_distant_mountains();
-    
-    // Draw scattered rocks between player and mountains
-    renderer_.draw_rocks();
-    
-    // Draw trees and forests
-    renderer_.draw_trees();
-    
-    // Draw ground plane
-    renderer_.draw_ground();
-    // renderer_.draw_grid();  // Debug grid disabled - we have proper terrain now
-    
-    // Draw grass on top of ground
-    renderer_.draw_grass();
-    
-    // Draw attack effects (behind entities)
+    // Add attack effects to scene
     for (const auto& effect : attack_effects_) {
-        renderer_.draw_attack_effect(effect);
+        render_scene_.add_effect(effect);
     }
     
-    // Draw all entities from ECS registry
-    auto view = registry_.view<ecs::NetworkId, ecs::Transform, ecs::Health, ecs::EntityInfo, ecs::Name>();
-    for (auto entity : view) {
-        auto& net_id = view.get<ecs::NetworkId>(entity);
-        auto& transform = view.get<ecs::Transform>(entity);
-        auto& health = view.get<ecs::Health>(entity);
-        auto& info = view.get<ecs::EntityInfo>(entity);
-        auto& name = view.get<ecs::Name>(entity);
-        
-        // Build EntityState for renderer
-        EntityState state;
-        state.id = net_id.id;
-        state.x = transform.x;
-        state.y = transform.y;
-        state.z = transform.z;  // Server-provided terrain height
-        state.health = health.current;
-        state.max_health = health.max;
-        state.type = info.type;
-        state.player_class = info.player_class;
-        state.color = info.color;
-        std::strncpy(state.name, name.value.c_str(), sizeof(state.name) - 1);
-        
-        if (auto* vel = registry_.try_get<ecs::Velocity>(entity)) {
-            state.vx = vel->x;
-            state.vy = vel->y;
-        }
-        
-        if (auto* combat = registry_.try_get<ecs::Combat>(entity)) {
-            state.is_attacking = combat->is_attacking;
-            state.attack_cooldown = combat->current_cooldown;
-        }
-        
-        if (auto* attack_dir = registry_.try_get<ecs::AttackDirection>(entity)) {
-            state.attack_dir_x = attack_dir->x;
-            state.attack_dir_y = attack_dir->y;
-        }
-        
-        // Include npc_type, building_type, and environment_type for proper model selection
-        state.npc_type = info.npc_type;
-        state.building_type = info.building_type;
-        state.environment_type = info.environment_type;
-        state.rotation = transform.rotation;
-        
-        // Include scale for environment objects
-        if (auto* scale = registry_.try_get<ecs::Scale>(entity)) {
-            state.scale = scale->value;
-        }
-        
-        bool is_local = (net_id.id == local_player_id_);
-        renderer_.draw_entity(state, is_local);
-    }
+    // Collect entities using RenderSystem
+    render_system_.collect_entities(registry_, render_scene_, local_player_id_);
     
-    // Draw UI elements (after 3D world)
-    renderer_.begin_ui();
+    // Build UI for playing state
+    build_playing_ui(ui_scene_);
     
-    // Draw target reticle for ranged classes (Archer and Mage)
-    auto it = network_to_entity_.find(local_player_id_);
-    if (local_player_class_ == PlayerClass::Archer || local_player_class_ == PlayerClass::Mage) {
-        renderer_.draw_target_reticle();
-    }
-    
-    // Draw player health bar in UI
-    if (it != network_to_entity_.end() && registry_.valid(it->second)) {
-        auto& health = registry_.get<ecs::Health>(it->second);
-        float health_ratio = health.current / health.max;
-        renderer_.draw_player_health_ui(health_ratio, health.max);
-    }
-    
-    // Draw FPS counter if enabled
-    if (graphics_settings_.show_fps) {
-        char fps_text[32];
-        snprintf(fps_text, sizeof(fps_text), "FPS: %.0f", fps_);
-        renderer_.draw_ui_text(fps_text, 10.0f, 10.0f, 1.0f, 0xFF00FF00);
-    }
-    
-    renderer_.end_ui();
-    
-    // Draw menu overlay if open (must be before end_frame)
+    // Add menu overlay if open
     if (menu_open_) {
-        render_menu();
+        build_menu_ui(ui_scene_);
     }
     
-    renderer_.end_frame();
+    // Render using scene-based API
+    renderer_.render(render_scene_, ui_scene_);
 }
 
 void Game::handle_network_message(MessageType type, const std::vector<uint8_t>& payload) {
@@ -1111,98 +888,8 @@ void Game::update_menu(float dt) {
 }
 
 void Game::render_menu() {
-    if (!menu_open_) return;
-    
-    renderer_.begin_ui();
-    
-    float screen_w = static_cast<float>(renderer_.width());
-    float screen_h = static_cast<float>(renderer_.height());
-    
-    // Menu panel
-    float panel_w = 550.0f;
-    float panel_h = 70.0f + menu_items_.size() * 50.0f + 50.0f;
-    float panel_x = (screen_w - panel_w) / 2.0f;
-    float panel_y = (screen_h - panel_h) / 2.0f;
-    
-    // Panel background
-    renderer_.draw_filled_rect(panel_x, panel_y, panel_w, panel_h, 0xE0222222);
-    renderer_.draw_rect_outline(panel_x, panel_y, panel_w, panel_h, 0xFFFFFFFF, 2.0f);
-    
-    // Title based on current page
-    const char* title = "SETTINGS";
-    switch (current_menu_page_) {
-        case MenuPage::Main: title = "SETTINGS"; break;
-        case MenuPage::Controls: title = "CONTROLS"; break;
-        case MenuPage::Graphics: title = "GRAPHICS"; break;
-    }
-    renderer_.draw_ui_text(title, panel_x + panel_w / 2.0f - 60.0f, panel_y + 15.0f, 1.5f, 0xFFFFFFFF);
-    
-    // Menu items
-    float item_y = panel_y + 70.0f;
-    for (size_t i = 0; i < menu_items_.size(); ++i) {
-        const MenuItem& item = menu_items_[i];
-        bool selected = (static_cast<int>(i) == menu_selected_index_);
-        
-        // Selection highlight
-        if (selected) {
-            renderer_.draw_filled_rect(panel_x + 10.0f, item_y, panel_w - 20.0f, 40.0f, 0x40FFFFFF);
-        }
-        
-        // Item label
-        uint32_t text_color = selected ? 0xFFFFFFFF : 0xFFAAAAAA;
-        renderer_.draw_ui_text(item.label, panel_x + 30.0f, item_y + 10.0f, 1.0f, text_color);
-        
-        // Value display based on type
-        if (item.type == MenuItemType::Toggle && item.toggle_value) {
-            std::string value_str = *item.toggle_value ? "ON" : "OFF";
-            uint32_t value_color = *item.toggle_value ? 0xFF00FF00 : 0xFFFF6666;
-            renderer_.draw_ui_text(value_str, panel_x + panel_w - 80.0f, item_y + 10.0f, 1.0f, value_color);
-        } else if (item.type == MenuItemType::Slider && item.slider_value) {
-            // Display with < > arrows and label
-            std::string value_str;
-            int idx = *item.slider_value - item.slider_min;
-            if (!item.slider_labels.empty() && idx >= 0 && idx < static_cast<int>(item.slider_labels.size())) {
-                value_str = item.slider_labels[idx];
-            } else {
-                char buf[16];
-                snprintf(buf, sizeof(buf), "%d", *item.slider_value);
-                value_str = buf;
-            }
-            
-            // Draw arrows if adjustable
-            std::string display = "< " + value_str + " >";
-            renderer_.draw_ui_text(display, panel_x + panel_w - 120.0f, item_y + 10.0f, 1.0f, 0xFF00AAFF);
-        } else if (item.type == MenuItemType::FloatSlider && item.float_value) {
-            // Draw slider bar
-            float slider_x = panel_x + panel_w - 200.0f;
-            float slider_w = 120.0f;
-            float slider_h = 8.0f;
-            float slider_y_center = item_y + 18.0f;
-            
-            // Background bar
-            renderer_.draw_filled_rect(slider_x, slider_y_center - slider_h/2, slider_w, slider_h, 0xFF444444);
-            
-            // Filled portion
-            float fill_pct = (*item.float_value - item.float_min) / (item.float_max - item.float_min);
-            renderer_.draw_filled_rect(slider_x, slider_y_center - slider_h/2, slider_w * fill_pct, slider_h, 0xFF00AAFF);
-            
-            // Value text
-            char value_buf[32];
-            snprintf(value_buf, sizeof(value_buf), "%.2f", *item.float_value);
-            renderer_.draw_ui_text(value_buf, panel_x + panel_w - 65.0f, item_y + 10.0f, 0.9f, 0xFFFFFFFF);
-        } else if (item.type == MenuItemType::Submenu) {
-            // Draw arrow indicator
-            renderer_.draw_ui_text(">", panel_x + panel_w - 40.0f, item_y + 10.0f, 1.0f, text_color);
-        }
-        
-        item_y += 50.0f;
-    }
-    
-    // Controls hint
-    const char* hint = "W/S: Navigate  |  A/D: Adjust  |  SPACE: Select  |  ESC: Back";
-    renderer_.draw_ui_text(hint, panel_x + 20.0f, panel_y + panel_h - 30.0f, 0.75f, 0xFF888888);
-    
-    renderer_.end_ui();
+    // This function is now obsolete - menu UI is built via build_menu_ui()
+    // and rendered through the scene system. Keeping for compatibility but empty.
 }
 
 void Game::apply_graphics_settings() {
@@ -1223,6 +910,244 @@ void Game::apply_controls_settings() {
     input_.set_controller_sensitivity(controls_settings_.controller_sensitivity);
     input_.set_camera_x_inverted(controls_settings_.invert_camera_x);
     input_.set_camera_y_inverted(controls_settings_.invert_camera_y);
+}
+
+// ============================================================================
+// Scene Building Helpers - Populate UI scenes without direct renderer calls
+// ============================================================================
+
+void Game::build_class_select_ui(UIScene& ui) {
+    float center_x = renderer_.width() / 2.0f;
+    float center_y = renderer_.height() / 2.0f;
+    
+    // Draw title area background
+    ui.add_filled_rect(0, 0, static_cast<float>(renderer_.width()), 100, 0xFF332211);
+    
+    // Title text
+    ui.add_text("SELECT YOUR CLASS", center_x - 150.0f, 30.0f, 2.0f, 0xFFFFFFFF);
+    
+    // Subtitle
+    ui.add_text("Use A/D to select, SPACE to confirm", center_x - 160.0f, 70.0f, 1.0f, 0xFFCCCCCC);
+    
+    // Class selection boxes
+    float box_size = 120.0f;
+    float spacing = 150.0f;
+    float start_x = center_x - spacing * 1.5f;
+    float box_y = center_y - 50.0f;
+    
+    PlayerClass classes[] = {PlayerClass::Warrior, PlayerClass::Mage, PlayerClass::Paladin, PlayerClass::Archer};
+    const char* class_names[] = {"WARRIOR", "MAGE", "PALADIN", "ARCHER"};
+    const char* class_desc[] = {
+        "High HP, Melee",
+        "Low HP, Ranged", 
+        "Medium HP, AOE",
+        "Low HP, Precision"
+    };
+    uint32_t class_colors[] = {0xFF5050C8, 0xFFC85050, 0xFF50B4C8, 0xFF50C850};
+    
+    for (int i = 0; i < 4; ++i) {
+        float x = start_x + i * spacing;
+        bool selected = (i == selected_class_index_);
+        
+        // Selection highlight
+        if (selected) {
+            ui.add_filled_rect(x - box_size/2 - 10, box_y - box_size/2 - 10, 
+                              box_size + 20, box_size + 20, 0x40FFFFFF);
+            ui.add_rect_outline(x - box_size/2 - 10, box_y - box_size/2 - 10, 
+                               box_size + 20, box_size + 20, 0xFFFFFFFF, 3.0f);
+        }
+        
+        // Class preview background
+        ui.add_filled_rect(x - box_size/2, box_y - box_size/2, box_size, box_size, class_colors[i]);
+        
+        // Class preview (simple colored box with outline)
+        float half = box_size / 2.0f;
+        uint32_t preview_color;
+        switch (classes[i]) {
+            case PlayerClass::Warrior: preview_color = 0xFFC85050; break;
+            case PlayerClass::Mage:    preview_color = 0xFF5050C8; break;
+            case PlayerClass::Paladin: preview_color = 0xFFC8B450; break;
+            case PlayerClass::Archer:  preview_color = 0xFF50C850; break;
+            default:                   preview_color = 0xFFFFFFFF; break;
+        }
+        ui.add_filled_rect(x - half, box_y - half, box_size, box_size, preview_color);
+        ui.add_rect_outline(x - half, box_y - half, box_size, box_size, 0xFFFFFFFF, 2.0f);
+        
+        // Class name below
+        uint32_t text_color = selected ? 0xFFFFFFFF : 0xFFAAAAAA;
+        float name_x = x - 40.0f;
+        ui.add_text(class_names[i], name_x, box_y + box_size/2 + 15.0f, 1.0f, text_color);
+        
+        // Class description
+        ui.add_text(class_desc[i], x - 55.0f, box_y + box_size/2 + 40.0f, 0.8f, 0xFFAAAAAA);
+    }
+    
+    // Selected class info panel
+    ui.add_filled_rect(center_x - 200, renderer_.height() - 120, 400, 80, 0xCC222222);
+    ui.add_rect_outline(center_x - 200, renderer_.height() - 120, 400, 80, class_colors[selected_class_index_], 2.0f);
+    
+    const char* full_desc_line1[] = {
+        "The WARRIOR excels in close combat with high health",
+        "The MAGE wields devastating beam attacks from range",
+        "The PALADIN calls upon holy power for area attacks",
+        "The ARCHER strikes with precision from afar"
+    };
+    const char* full_desc_line2[] = {
+        "and powerful sword attacks.",
+        "but has lower health.",
+        "with moderate health.",
+        "but must stay nimble to survive."
+    };
+    ui.add_text(full_desc_line1[selected_class_index_], center_x - 180.0f, renderer_.height() - 105.0f, 0.9f, 0xFFFFFFFF);
+    ui.add_text(full_desc_line2[selected_class_index_], center_x - 180.0f, renderer_.height() - 80.0f, 0.9f, 0xFFFFFFFF);
+    
+    // Controls hint
+    ui.add_text("Press ESC anytime to open Settings Menu", center_x - 150.0f, renderer_.height() - 25.0f, 0.8f, 0xFF888888);
+}
+
+void Game::build_connecting_ui(UIScene& ui) {
+    float center_x = renderer_.width() / 2.0f;
+    float center_y = renderer_.height() / 2.0f;
+    
+    // Background panel
+    ui.add_filled_rect(center_x - 200, center_y - 100, 400, 200, 0xCC222222);
+    ui.add_rect_outline(center_x - 200, center_y - 100, 400, 200, 0xFFFFFFFF, 2.0f);
+    
+    // Title
+    ui.add_text("CONNECTING", center_x - 80.0f, center_y - 80.0f, 1.5f, 0xFFFFFFFF);
+    
+    // Loading indicator - spinning dots
+    int num_dots = 8;
+    float radius = 40.0f;
+    float dot_radius = 8.0f;
+    float angle_offset = connecting_timer_ * 3.0f;
+    
+    for (int i = 0; i < num_dots; ++i) {
+        float angle = angle_offset + (i / static_cast<float>(num_dots)) * 2.0f * 3.14159f;
+        float x = center_x + std::cos(angle) * radius;
+        float y = center_y + std::sin(angle) * radius;
+        uint8_t alpha = static_cast<uint8_t>(255 * (i + 1) / static_cast<float>(num_dots));
+        ui.add_filled_rect(x - dot_radius, y - dot_radius, 
+                          dot_radius * 2, dot_radius * 2, 
+                          0x00FFFFFF | (alpha << 24));
+    }
+    
+    // Connection info
+    std::string connect_msg = "Connecting to " + host_ + ":" + std::to_string(port_);
+    ui.add_text(connect_msg, center_x - 120.0f, center_y + 60.0f, 0.8f, 0xFFAAAAAA);
+}
+
+void Game::build_playing_ui(UIScene& ui) {
+    // Draw target reticle for ranged classes (Archer and Mage)
+    if (local_player_class_ == PlayerClass::Archer || local_player_class_ == PlayerClass::Mage) {
+        ui.add_target_reticle();
+    }
+    
+    // Draw player health bar in UI
+    auto it = network_to_entity_.find(local_player_id_);
+    if (it != network_to_entity_.end() && registry_.valid(it->second)) {
+        auto& health = registry_.get<ecs::Health>(it->second);
+        float health_ratio = health.current / health.max;
+        ui.add_player_health_bar(health_ratio, health.max);
+    }
+    
+    // Draw FPS counter if enabled
+    if (graphics_settings_.show_fps) {
+        char fps_text[32];
+        snprintf(fps_text, sizeof(fps_text), "FPS: %.0f", fps_);
+        ui.add_text(fps_text, 10.0f, 10.0f, 1.0f, 0xFF00FF00);
+    }
+}
+
+void Game::build_menu_ui(UIScene& ui) {
+    if (!menu_open_) return;
+    
+    float screen_w = static_cast<float>(renderer_.width());
+    float screen_h = static_cast<float>(renderer_.height());
+    
+    // Menu panel
+    float panel_w = 550.0f;
+    float panel_h = 70.0f + menu_items_.size() * 50.0f + 50.0f;
+    float panel_x = (screen_w - panel_w) / 2.0f;
+    float panel_y = (screen_h - panel_h) / 2.0f;
+    
+    // Panel background
+    ui.add_filled_rect(panel_x, panel_y, panel_w, panel_h, 0xE0222222);
+    ui.add_rect_outline(panel_x, panel_y, panel_w, panel_h, 0xFFFFFFFF, 2.0f);
+    
+    // Title based on current page
+    const char* title = "SETTINGS";
+    switch (current_menu_page_) {
+        case MenuPage::Main: title = "SETTINGS"; break;
+        case MenuPage::Controls: title = "CONTROLS"; break;
+        case MenuPage::Graphics: title = "GRAPHICS"; break;
+    }
+    ui.add_text(title, panel_x + panel_w / 2.0f - 60.0f, panel_y + 15.0f, 1.5f, 0xFFFFFFFF);
+    
+    // Menu items
+    float item_y = panel_y + 70.0f;
+    for (size_t i = 0; i < menu_items_.size(); ++i) {
+        const MenuItem& item = menu_items_[i];
+        bool selected = (static_cast<int>(i) == menu_selected_index_);
+        
+        // Selection highlight
+        if (selected) {
+            ui.add_filled_rect(panel_x + 10.0f, item_y, panel_w - 20.0f, 40.0f, 0x40FFFFFF);
+        }
+        
+        // Item label
+        uint32_t text_color = selected ? 0xFFFFFFFF : 0xFFAAAAAA;
+        ui.add_text(item.label, panel_x + 30.0f, item_y + 10.0f, 1.0f, text_color);
+        
+        // Value display based on type
+        if (item.type == MenuItemType::Toggle && item.toggle_value) {
+            std::string value_str = *item.toggle_value ? "ON" : "OFF";
+            uint32_t value_color = *item.toggle_value ? 0xFF00FF00 : 0xFFFF6666;
+            ui.add_text(value_str, panel_x + panel_w - 80.0f, item_y + 10.0f, 1.0f, value_color);
+        } else if (item.type == MenuItemType::Slider && item.slider_value) {
+            // Display with < > arrows and label
+            std::string value_str;
+            int idx = *item.slider_value - item.slider_min;
+            if (!item.slider_labels.empty() && idx >= 0 && idx < static_cast<int>(item.slider_labels.size())) {
+                value_str = item.slider_labels[idx];
+            } else {
+                char buf[16];
+                snprintf(buf, sizeof(buf), "%d", *item.slider_value);
+                value_str = buf;
+            }
+            
+            // Draw arrows if adjustable
+            std::string display = "< " + value_str + " >";
+            ui.add_text(display, panel_x + panel_w - 120.0f, item_y + 10.0f, 1.0f, 0xFF00AAFF);
+        } else if (item.type == MenuItemType::FloatSlider && item.float_value) {
+            // Draw slider bar
+            float slider_x = panel_x + panel_w - 200.0f;
+            float slider_w = 120.0f;
+            float slider_h = 8.0f;
+            float slider_y_center = item_y + 18.0f;
+            
+            // Background bar
+            ui.add_filled_rect(slider_x, slider_y_center - slider_h/2, slider_w, slider_h, 0xFF444444);
+            
+            // Filled portion
+            float fill_pct = (*item.float_value - item.float_min) / (item.float_max - item.float_min);
+            ui.add_filled_rect(slider_x, slider_y_center - slider_h/2, slider_w * fill_pct, slider_h, 0xFF00AAFF);
+            
+            // Value text
+            char value_buf[32];
+            snprintf(value_buf, sizeof(value_buf), "%.2f", *item.float_value);
+            ui.add_text(value_buf, panel_x + panel_w - 65.0f, item_y + 10.0f, 0.9f, 0xFFFFFFFF);
+        } else if (item.type == MenuItemType::Submenu) {
+            // Draw arrow indicator
+            ui.add_text(">", panel_x + panel_w - 40.0f, item_y + 10.0f, 1.0f, text_color);
+        }
+        
+        item_y += 50.0f;
+    }
+    
+    // Controls hint
+    const char* hint = "W/S: Navigate  |  A/D: Adjust  |  SPACE: Select  |  ESC: Back";
+    ui.add_text(hint, panel_x + 20.0f, panel_y + panel_h - 30.0f, 0.75f, 0xFF888888);
 }
 
 } // namespace mmo

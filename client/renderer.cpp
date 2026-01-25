@@ -3,6 +3,7 @@
 #include "common/entity_config.hpp"
 #include <iostream>
 #include <cmath>
+#include <type_traits>
 
 namespace mmo {
 
@@ -1028,6 +1029,115 @@ void Renderer::draw_class_preview(PlayerClass player_class, float x, float y, fl
     
     ui_.draw_filled_rect(x - half, y - half, size, size, color);
     ui_.draw_rect_outline(x - half, y - half, size, size, 0xFFFFFFFF, 2.0f);
+}
+
+// ============================================================================
+// SCENE-BASED RENDERING API
+// ============================================================================
+
+void Renderer::render(const RenderScene& scene, const UIScene& ui_scene) {
+    // Shadow pass first
+    render_shadow_pass(scene);
+    
+    // Main render pass
+    begin_frame();
+    
+    // Draw world elements based on scene flags
+    if (scene.should_draw_skybox()) {
+        draw_skybox();
+    }
+    if (scene.should_draw_mountains()) {
+        draw_distant_mountains();
+    }
+    if (scene.should_draw_rocks()) {
+        draw_rocks();
+    }
+    if (scene.should_draw_trees()) {
+        draw_trees();
+    }
+    if (scene.should_draw_ground()) {
+        draw_ground();
+    }
+    if (scene.should_draw_grass()) {
+        draw_grass();
+    }
+    
+    // Draw attack effects from scene
+    for (const auto& cmd : scene.effects()) {
+        draw_attack_effect(cmd.effect);
+    }
+    
+    // Draw entities from scene
+    for (const auto& cmd : scene.entities()) {
+        draw_entity(cmd.state, cmd.is_local);
+    }
+    
+    // Draw UI from scene
+    begin_ui();
+    render_ui(ui_scene);
+    end_ui();
+    
+    end_frame();
+}
+
+void Renderer::render_shadow_pass(const RenderScene& scene) {
+    begin_shadow_pass();
+    
+    // Draw world shadows based on scene flags
+    if (scene.should_draw_mountain_shadows()) {
+        draw_mountain_shadows();
+    }
+    if (scene.should_draw_tree_shadows()) {
+        draw_tree_shadows();
+    }
+    
+    // Draw entity shadows from scene
+    for (const auto& cmd : scene.entity_shadows()) {
+        draw_entity_shadow(cmd.state);
+    }
+    
+    end_shadow_pass();
+}
+
+void Renderer::render_ui(const UIScene& ui_scene) {
+    for (const auto& cmd : ui_scene.commands()) {
+        std::visit([this](const auto& data) {
+            using T = std::decay_t<decltype(data)>;
+            
+            if constexpr (std::is_same_v<T, FilledRectCommand>) {
+                draw_filled_rect(data.x, data.y, data.w, data.h, data.color);
+            }
+            else if constexpr (std::is_same_v<T, RectOutlineCommand>) {
+                draw_rect_outline(data.x, data.y, data.w, data.h, data.color, data.line_width);
+            }
+            else if constexpr (std::is_same_v<T, CircleCommand>) {
+                draw_circle(data.x, data.y, data.radius, data.color, data.segments);
+            }
+            else if constexpr (std::is_same_v<T, CircleOutlineCommand>) {
+                draw_circle_outline(data.x, data.y, data.radius, data.color, 
+                                   data.line_width, data.segments);
+            }
+            else if constexpr (std::is_same_v<T, LineCommand>) {
+                draw_line(data.x1, data.y1, data.x2, data.y2, data.color, data.line_width);
+            }
+            else if constexpr (std::is_same_v<T, TextCommand>) {
+                draw_ui_text(data.text, data.x, data.y, data.scale, data.color);
+            }
+            else if constexpr (std::is_same_v<T, ButtonCommand>) {
+                draw_button(data.x, data.y, data.w, data.h, data.label, data.color, data.selected);
+            }
+            else if constexpr (std::is_same_v<T, TargetReticleCommand>) {
+                draw_target_reticle();
+            }
+            else if constexpr (std::is_same_v<T, PlayerHealthBarCommand>) {
+                draw_player_health_ui(data.health_ratio, data.max_health);
+            }
+            else if constexpr (std::is_same_v<T, EnemyHealthBar3DCommand>) {
+                draw_enemy_health_bar_3d(data.world_x, data.world_y, data.world_z,
+                                        data.width, data.health_ratio);
+            }
+        }, cmd.data);
+    }
 }
 
 } // namespace mmo

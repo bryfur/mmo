@@ -196,4 +196,32 @@ struct CollisionEvent {
     float penetration_depth = 0.0f;
 };
 
+// ============================================================================
+// Renderable Components (for scene-based rendering)
+// ============================================================================
+
+// Marks an entity as renderable with a 3D model
+struct ModelRenderable {
+    std::string model_name;  // Key in ModelManager
+    float tint_r = 1.0f;
+    float tint_g = 1.0f;
+    float tint_b = 1.0f;
+    float tint_a = 1.0f;
+    float scale = 1.0f;
+};
+
+// For 2D sprites/billboards
+struct SpriteRenderable {
+    std::string texture_name;
+    float width = 1.0f;
+    float height = 1.0f;
+};
+
+// Health bar display component
+struct HealthBarRenderable {
+    float width = 1.0f;
+    float y_offset = 2.0f;  // Height above entity
+    bool show_always = false;
+};
+
 } // namespace mmo::ecs

@@ -10,9 +10,6 @@
 
 namespace mmo {
 
-// Forward declarations
-struct EntityState;
-
 /**
  * Model render command data
  */

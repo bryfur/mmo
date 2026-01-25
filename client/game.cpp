@@ -560,6 +560,13 @@ void Game::render_playing() {
         renderer_.draw_player_health_ui(health_ratio, health.max);
     }
     
+    // Draw FPS counter if enabled
+    if (graphics_settings_.show_fps) {
+        char fps_text[32];
+        snprintf(fps_text, sizeof(fps_text), "FPS: %.0f", fps_);
+        renderer_.draw_ui_text(fps_text, 10.0f, 10.0f, 1.0f, 0xFF00FF00);
+    }
+    
     renderer_.end_ui();
     
     // Draw menu overlay if open (must be before end_frame)
@@ -809,6 +816,9 @@ void Game::spawn_attack_effect(uint32_t attacker_id, PlayerClass attacker_class,
             effect.target_x = x + dir_x * PALADIN_ATTACK_RANGE * 0.5f;
             effect.target_y = y + dir_y * PALADIN_ATTACK_RANGE * 0.5f;
             break;
+        case PlayerClass::Archer:
+            effect.duration = 0.5f;
+            break;
     }
     
     effect.timer = effect.duration;
@@ -988,6 +998,23 @@ void Game::init_graphics_menu() {
     aniso.slider_max = 4;
     aniso.slider_labels = {"Off", "2x", "4x", "8x", "16x"};
     menu_items_.push_back(aniso);
+    
+    // VSync mode
+    MenuItem vsync;
+    vsync.label = "VSync";
+    vsync.type = MenuItemType::Slider;
+    vsync.slider_value = &graphics_settings_.vsync_mode;
+    vsync.slider_min = 0;
+    vsync.slider_max = 2;
+    vsync.slider_labels = {"Off", "Double Buffer", "Triple Buffer"};
+    menu_items_.push_back(vsync);
+    
+    // FPS counter
+    MenuItem fps_counter;
+    fps_counter.label = "Show FPS";
+    fps_counter.type = MenuItemType::Toggle;
+    fps_counter.toggle_value = &graphics_settings_.show_fps;
+    menu_items_.push_back(fps_counter);
     
     // Back button
     MenuItem back_item;
@@ -1187,8 +1214,8 @@ void Game::apply_graphics_settings() {
     renderer_.set_mountains_enabled(graphics_settings_.mountains_enabled);
     renderer_.set_trees_enabled(graphics_settings_.trees_enabled);
     renderer_.set_rocks_enabled(graphics_settings_.rocks_enabled);
-    renderer_.set_contact_shadows_enabled(graphics_settings_.contact_shadows_enabled);
     renderer_.set_anisotropic_filter(graphics_settings_.anisotropic_filter);
+    renderer_.set_vsync_mode(graphics_settings_.vsync_mode);
 }
 
 void Game::apply_controls_settings() {

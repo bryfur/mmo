@@ -55,6 +55,11 @@ public:
     float aspect_ratio() const { return static_cast<float>(width_) / height_; }
     
     /**
+     * Set VSync mode: 0=off, 1=double buffer (vsync), 2=triple buffer
+     */
+    void set_vsync_mode(int mode);
+    
+    /**
      * Enable/disable common GL states.
      */
     void set_depth_test(bool enabled);

@@ -41,14 +41,15 @@ set(TINYGLTF_INSTALL OFF CACHE BOOL "" FORCE)
 set(TINYGLTF_BUILD_LOADER_EXAMPLE OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(tinygltf)
 
+# Fetch ASIO
+FetchContent_Declare(
+    asio
+    GIT_REPOSITORY https://github.com/chriskohlhoff/asio.git
+    GIT_TAG asio-1-30-2
+)
+FetchContent_MakeAvailable(asio)
+
 # Find required packages
-find_package(asio CONFIG QUIET)
-if(NOT asio_FOUND)
-    find_path(ASIO_INCLUDE_DIR asio.hpp PATHS /usr/include /usr/local/include)
-    if(NOT ASIO_INCLUDE_DIR)
-        message(FATAL_ERROR "Could not find standalone asio. Install with: sudo apt install libasio-dev")
-    endif()
-endif()
 find_package(SDL3 REQUIRED)
 find_package(SDL3_ttf REQUIRED)
 find_package(SDL3_image REQUIRED)
@@ -82,9 +83,7 @@ target_link_libraries(mmo_server PRIVATE
     mmo_common 
     pthread
 )
-if(ASIO_INCLUDE_DIR)
-    target_include_directories(mmo_server PRIVATE ${ASIO_INCLUDE_DIR})
-endif()
+target_include_directories(mmo_server PRIVATE ${asio_SOURCE_DIR}/asio/include)
 
 # Client executable
 add_executable(mmo_client
@@ -119,6 +118,4 @@ target_link_libraries(mmo_client PRIVATE
     pthread
 )
 target_include_directories(mmo_client PRIVATE ${tinygltf_SOURCE_DIR})
-if(ASIO_INCLUDE_DIR)
-    target_include_directories(mmo_client PRIVATE ${ASIO_INCLUDE_DIR})
-endif()
+target_include_directories(mmo_client PRIVATE ${asio_SOURCE_DIR}/asio/include)

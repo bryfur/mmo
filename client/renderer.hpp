@@ -136,6 +136,7 @@ public:
     void set_trees_enabled(bool enabled) { trees_enabled_ = enabled; }
     void set_rocks_enabled(bool enabled) { rocks_enabled_ = enabled; }
     void set_anisotropic_filter(int level);  // 0=off, 1=2x, 2=4x, 3=8x, 4=16x
+    void set_vsync_mode(int mode) { context_.set_vsync_mode(mode); }  // 0=off, 1=vsync, 2=triple buffer
     
     bool get_shadows_enabled() const;
     bool get_ssao_enabled() const;

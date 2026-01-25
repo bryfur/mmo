@@ -715,25 +715,6 @@ bool ShaderManager::reload(const std::string& path) {
 
     std::vector<std::string> keys_to_remove;
 
-    // Match keys that start with the exact path, optionally followed by a delimiter.
-    auto matches_path = [](const std::string& key, const std::string& path) {
-        if (key.size() < path.size()) {
-            return false;
-        }
-
-        if (key.compare(0, path.size(), path) != 0) {
-            return false;
-        }
-
-        if (key.size() == path.size()) {
-            return true;
-        }
-
-        const char next = key[path.size()];
-        // Allow known delimiters used to append variant or metadata info to the path.
-        return next == '|' || next == ':' || next == '#';
-    };
-
     for (const auto& [key, shader] : memory_cache_) {
         if (matches_path(key, path)) {
             keys_to_remove.push_back(key);

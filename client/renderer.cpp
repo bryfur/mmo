@@ -1030,4 +1030,133 @@ void Renderer::draw_class_preview(PlayerClass player_class, float x, float y, fl
     ui_.draw_rect_outline(x - half, y - half, size, size, 0xFFFFFFFF, 2.0f);
 }
 
+// ============================================================================
+// SCENE-BASED RENDERING API
+// ============================================================================
+
+void Renderer::render(const RenderScene& scene, const UIScene& ui_scene) {
+    // Shadow pass first
+    render_shadow_pass(scene);
+    
+    // Main render pass
+    begin_frame();
+    
+    // Draw world elements based on scene flags
+    if (scene.should_draw_skybox()) {
+        draw_skybox();
+    }
+    if (scene.should_draw_mountains()) {
+        draw_distant_mountains();
+    }
+    if (scene.should_draw_rocks()) {
+        draw_rocks();
+    }
+    if (scene.should_draw_trees()) {
+        draw_trees();
+    }
+    if (scene.should_draw_ground()) {
+        draw_ground();
+    }
+    if (scene.should_draw_grass()) {
+        draw_grass();
+    }
+    
+    // Draw attack effects from scene
+    for (const auto& cmd : scene.effects()) {
+        draw_attack_effect(cmd.effect);
+    }
+    
+    // Draw entities from scene
+    for (const auto& cmd : scene.entities()) {
+        draw_entity(cmd.state, cmd.is_local);
+    }
+    
+    // Draw UI from scene
+    begin_ui();
+    render_ui(ui_scene);
+    end_ui();
+    
+    end_frame();
+}
+
+void Renderer::render_shadow_pass(const RenderScene& scene) {
+    begin_shadow_pass();
+    
+    // Draw world shadows based on scene flags
+    if (scene.should_draw_mountain_shadows()) {
+        draw_mountain_shadows();
+    }
+    if (scene.should_draw_tree_shadows()) {
+        draw_tree_shadows();
+    }
+    
+    // Draw entity shadows from scene
+    for (const auto& cmd : scene.entity_shadows()) {
+        draw_entity_shadow(cmd.state);
+    }
+    
+    end_shadow_pass();
+}
+
+void Renderer::render_ui(const UIScene& ui_scene) {
+    for (const auto& cmd : ui_scene.commands()) {
+        switch (cmd.type) {
+            case UICommandType::FilledRect:
+                draw_filled_rect(cmd.filled_rect.x, cmd.filled_rect.y, 
+                                cmd.filled_rect.w, cmd.filled_rect.h, 
+                                cmd.filled_rect.color);
+                break;
+                
+            case UICommandType::RectOutline:
+                draw_rect_outline(cmd.rect_outline.x, cmd.rect_outline.y,
+                                 cmd.rect_outline.w, cmd.rect_outline.h,
+                                 cmd.rect_outline.color, cmd.rect_outline.line_width);
+                break;
+                
+            case UICommandType::Circle:
+                draw_circle(cmd.circle.x, cmd.circle.y, cmd.circle.radius,
+                           cmd.circle.color, cmd.circle.segments);
+                break;
+                
+            case UICommandType::CircleOutline:
+                draw_circle_outline(cmd.circle_outline.x, cmd.circle_outline.y,
+                                   cmd.circle_outline.radius, cmd.circle_outline.color,
+                                   cmd.circle_outline.line_width, cmd.circle_outline.segments);
+                break;
+                
+            case UICommandType::Line:
+                draw_line(cmd.line.x1, cmd.line.y1, cmd.line.x2, cmd.line.y2,
+                         cmd.line.color, cmd.line.line_width);
+                break;
+                
+            case UICommandType::Text:
+                draw_ui_text(cmd.text.text, cmd.text.x, cmd.text.y,
+                            cmd.text.scale, cmd.text.color);
+                break;
+                
+            case UICommandType::Button:
+                draw_button(cmd.button.x, cmd.button.y, cmd.button.w, cmd.button.h,
+                           cmd.button.label, cmd.button.color, cmd.button.selected);
+                break;
+                
+            case UICommandType::TargetReticle:
+                draw_target_reticle();
+                break;
+                
+            case UICommandType::PlayerHealthBar:
+                draw_player_health_ui(cmd.player_health.health_ratio, 
+                                      cmd.player_health.max_health);
+                break;
+                
+            case UICommandType::EnemyHealthBar3D:
+                draw_enemy_health_bar_3d(cmd.enemy_health_3d.world_x,
+                                        cmd.enemy_health_3d.world_y,
+                                        cmd.enemy_health_3d.world_z,
+                                        cmd.enemy_health_3d.width,
+                                        cmd.enemy_health_3d.health_ratio);
+                break;
+        }
+    }
+}
+
 } // namespace mmo

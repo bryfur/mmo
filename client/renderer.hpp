@@ -13,6 +13,8 @@
 #include "render/ui_renderer.hpp"
 #include "render/effect_renderer.hpp"
 #include "render/shadow_system.hpp"
+#include "scene/render_scene.hpp"
+#include "scene/ui_scene.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <string>
@@ -37,6 +39,29 @@ public:
     
     void begin_frame();
     void end_frame();
+    
+    // ========== Scene-Based Rendering API ==========
+    // This is the preferred API for rendering - populate scenes then call render()
+    
+    /**
+     * Render a complete frame from RenderScene and UIScene.
+     * This is the primary scene-based rendering method that replaces direct draw calls.
+     */
+    void render(const RenderScene& scene, const UIScene& ui_scene);
+    
+    /**
+     * Render the shadow pass from RenderScene.
+     */
+    void render_shadow_pass(const RenderScene& scene);
+    
+    /**
+     * Render the UI from UIScene (call between begin_ui/end_ui).
+     */
+    void render_ui(const UIScene& ui_scene);
+    
+    // ========== Legacy Direct Rendering API ==========
+    // These methods are still available for compatibility but should be
+    // replaced with scene-based rendering over time.
     
     // Shadow pass - call these before begin_frame() to populate shadow map
     void begin_shadow_pass();

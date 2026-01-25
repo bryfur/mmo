@@ -8,6 +8,9 @@
 #include "render/text_renderer.hpp"
 #include "input_handler.hpp"
 #include "systems/interpolation_system.hpp"
+#include "systems/render_system.hpp"
+#include "scene/render_scene.hpp"
+#include "scene/ui_scene.hpp"
 #include <entt/entt.hpp>
 #include <string>
 #include <unordered_map>
@@ -128,11 +131,22 @@ private:
     void spawn_attack_effect(uint32_t attacker_id, PlayerClass attacker_class, float x, float y, float dir_x, float dir_y);
     void update_attack_effects(float dt);
     
+    // Scene building helpers (populate scenes without direct renderer calls)
+    void build_class_select_ui(UIScene& ui);
+    void build_connecting_ui(UIScene& ui);
+    void build_playing_ui(UIScene& ui);
+    void build_menu_ui(UIScene& ui);
+    
     Renderer renderer_;
     TextRenderer text_renderer_;
     InputHandler input_;
     NetworkClient network_;
     InterpolationSystem interpolation_system_;
+    RenderSystem render_system_;
+    
+    // Scene objects for decoupled rendering
+    RenderScene render_scene_;
+    UIScene ui_scene_;
     
     GameState game_state_ = GameState::ClassSelect;
     entt::registry registry_;

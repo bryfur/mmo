@@ -51,10 +51,11 @@ FetchContent_MakeAvailable(asio)
 
 # Fetch SDL_shadercross for runtime HLSL compilation
 # Uses VENDORED mode to build SPIRV-Cross from SDL_shadercross's external/ submodules
+# NOTE: Pinned to specific commit for reproducible builds
 FetchContent_Declare(
     SDL_shadercross
     GIT_REPOSITORY https://github.com/libsdl-org/SDL_shadercross.git
-    GIT_TAG main
+    GIT_TAG 7b7365a86611b2a7b6462e521cf1c43a037d0970
     GIT_SUBMODULES_RECURSE TRUE
 )
 set(SDLSHADERCROSS_CLI OFF CACHE BOOL "" FORCE)

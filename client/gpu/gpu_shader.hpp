@@ -20,6 +20,11 @@ enum class ShaderStage {
 
 /**
  * @brief Shader resource requirements for pipeline creation
+ * 
+ * NOTE: These counts are not validated against hardware limits. The caller is
+ * responsible for ensuring values don't exceed device capabilities. Exceeding
+ * limits may cause silent failures or crashes on some hardware. Consider
+ * querying SDL_GetGPUDeviceProperties() for device limits in production code.
  */
 struct ShaderResources {
     uint32_t num_samplers = 0;
@@ -302,14 +307,14 @@ public:
      * @brief Load or get a cached vertex shader from HLSL file
      */
     GPUShader* get_vertex(const std::string& path, 
-                          const std::string& entry_point = "VSMain",
+                          const std::string& entry_point = "main",
                           const ShaderResources& resources = {});
 
     /**
      * @brief Load or get a cached fragment shader from HLSL file
      */
     GPUShader* get_fragment(const std::string& path,
-                            const std::string& entry_point = "PSMain", 
+                            const std::string& entry_point = "main", 
                             const ShaderResources& resources = {});
 
     /**
@@ -350,6 +355,10 @@ public:
 private:
     GPUDevice& device_;
     std::unique_ptr<ShaderDiskCache> disk_cache_;
+    
+    // NOTE: These caches are NOT thread-safe. If multi-threaded shader loading
+    // is needed, add mutex protection around cache operations, or ensure all
+    // shader loading happens on a single thread (e.g., the main/render thread).
     std::unordered_map<std::string, std::unique_ptr<GPUShader>> memory_cache_;
     std::unordered_map<std::string, std::string> path_to_source_; // For reload
 

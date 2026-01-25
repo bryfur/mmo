@@ -62,8 +62,9 @@ SDL_GPUBufferUsageFlags GPUBuffer::get_usage_flags(Type type) {
         case Type::Index:
             return SDL_GPU_BUFFERUSAGE_INDEX;
         case Type::Uniform:
-            // Uniform buffers are bound via push constants in SDL3 GPU
-            // If we need actual uniform buffers, use storage with graphics bit
+            // SDL3 GPU uses push constants for small uniform data.
+            // For larger uniform data, we use read-only storage buffers which
+            // provide similar functionality with more flexibility.
             return SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;
         case Type::Storage:
             return SDL_GPU_BUFFERUSAGE_GRAPHICS_STORAGE_READ;

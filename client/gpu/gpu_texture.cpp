@@ -180,8 +180,12 @@ std::unique_ptr<GPUTexture> GPUTexture::create_2d(GPUDevice& device,
         SDL_UploadToGPUTexture(copy_pass, &src, &dst, false);
         SDL_EndGPUCopyPass(copy_pass);
 
-        // TODO: Generate mipmaps if requested
-        // SDL3 GPU API may require manual mipmap generation via blit passes
+        // NOTE: Mipmap generation is not yet implemented.
+        // When generate_mipmaps is true, we calculate mip_levels but don't actually
+        // generate the mipmap chain. This would require additional blit passes.
+        // For now, textures with generate_mipmaps=true will have mip_levels > 1
+        // but only the base level will contain valid data.
+        // TODO: Implement mipmap generation via SDL_BlitGPUTexture blit passes
 
         SDL_SubmitGPUCommandBuffer(cmd);
         device.release_transfer_buffer(transfer);
@@ -259,7 +263,7 @@ std::unique_ptr<GPUTexture> GPUTexture::create_depth_stencil(GPUDevice& device,
     SDL_GPUTextureCreateInfo tex_info = {};
     tex_info.type = SDL_GPU_TEXTURETYPE_2D;
     tex_info.format = texture->format_;
-    tex_info.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
+    tex_info.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
     tex_info.width = static_cast<Uint32>(width);
     tex_info.height = static_cast<Uint32>(height);
     tex_info.layer_count_or_depth = 1;
@@ -326,8 +330,13 @@ void GPUTexture::upload(SDL_GPUCommandBuffer* cmd, const void* pixels, int width
     SDL_UploadToGPUTexture(copy_pass, &src, &dst, false);
     SDL_EndGPUCopyPass(copy_pass);
 
-    // Note: Transfer buffer needs to stay alive until command buffer completes
-    // For simplicity, we release it here which works for synchronized submissions
+    // IMPORTANT: Transfer buffer lifetime management
+    // The transfer buffer must remain valid until the GPU finishes reading from it.
+    // Currently, we release it immediately which only works when:
+    //   1. The command buffer is submitted synchronously, OR
+    //   2. SDL internally waits for the copy to complete before returning
+    // For asynchronous submissions, consider deferring release until after
+    // SDL_SubmitGPUCommandBuffer() or using a per-frame staging buffer pool.
     device_->release_transfer_buffer(transfer);
 }
 

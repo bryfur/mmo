@@ -451,8 +451,20 @@ void ShaderDiskCache::clear() {
     if (cache_dir_.empty()) return;
     
     std::error_code ec;
-    for (auto& entry : std::filesystem::directory_iterator(cache_dir_, ec)) {
+    std::filesystem::directory_iterator it(cache_dir_, ec);
+    if (ec) {
+        SDL_Log("ShaderDiskCache: Failed to iterate cache directory '%s': %s",
+                cache_dir_.string().c_str(), ec.message().c_str());
+        return;
+    }
+
+    for (const auto& entry : it) {
         std::filesystem::remove(entry.path(), ec);
+        if (ec) {
+            SDL_Log("ShaderDiskCache: Failed to remove cache file '%s': %s",
+                    entry.path().string().c_str(), ec.message().c_str());
+            ec.clear();
+        }
     }
     SDL_Log("ShaderDiskCache: Cleared cache directory");
 }
@@ -460,8 +472,12 @@ void ShaderDiskCache::clear() {
 std::string ShaderDiskCache::compute_hash(const std::string& source,
                                            ShaderStage stage,
                                            const std::string& entry_point) {
-    // Simple hash combining source, stage, and entry point
-    // Uses FNV-1a hash algorithm
+    // Hash combining source, stage, and entry point using FNV-1a algorithm.
+    // NOTE: FNV-1a is fast but not cryptographically secure. For production
+    // systems where cache integrity is critical, consider using SHA-256.
+    // However, FNV-1a is sufficient for shader caching since:
+    //   1. Collisions are rare for typical shader code
+    //   2. A collision only causes unnecessary recompilation, not corruption
     uint64_t hash = 14695981039346656037ULL; // FNV offset basis
     const uint64_t prime = 1099511628211ULL;
 
@@ -570,8 +586,12 @@ ShaderManager::~ShaderManager() {
 std::string ShaderManager::make_cache_key(const std::string& path,
                                            ShaderStage stage,
                                            const std::string& entry_point) const {
+    // Use length-prefixed fields to avoid collisions when delimiters appear in values.
+    // e.g., path "a|b.hlsl" won't collide with path "a" + entry "b.hlsl"
     std::ostringstream oss;
-    oss << path << "|" << static_cast<int>(stage) << "|" << entry_point;
+    oss << path.size() << ':' << path
+        << '|' << static_cast<int>(stage) << '|'
+        << entry_point.size() << ':' << entry_point;
     return oss.str();
 }
 
@@ -680,7 +700,19 @@ void ShaderManager::set_disk_cache_enabled(bool enabled) {
 }
 
 bool ShaderManager::reload(const std::string& path) {
-    // Find all cache entries for this path
+    // Match keys that start with the exact path, followed by a delimiter.
+    // This prevents "shaders/model.hlsl" from matching "shaders/model_skinned.hlsl"
+    auto matches_path = [](const std::string& key, const std::string& target_path) {
+        // Key format is: "<path_len>:<path>|<stage>|<entry_len>:<entry>"
+        // Extract the path portion and compare exactly
+        size_t colon_pos = key.find(':');
+        if (colon_pos == std::string::npos) return false;
+        
+        size_t path_len = std::stoull(key.substr(0, colon_pos));
+        std::string key_path = key.substr(colon_pos + 1, path_len);
+        return key_path == target_path;
+    };
+
     std::vector<std::string> keys_to_remove;
 
     // Match keys that start with the exact path, optionally followed by a delimiter.

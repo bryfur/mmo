@@ -114,8 +114,8 @@ inline SDL_GPUTextureFormat to_sdl_format(TextureFormat format) {
         case TextureFormat::R8:    return SDL_GPU_TEXTUREFORMAT_R8_UNORM;
         case TextureFormat::D32F:  return SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
         case TextureFormat::D24S8: return SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT;
+        default:                   return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
     }
-    return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
 }
 
 // =============================================================================
@@ -165,6 +165,11 @@ inline SDL_GPUColorTargetBlendState get_blend_state(BlendMode mode) {
             state.src_alpha_blendfactor = SDL_GPU_BLENDFACTOR_DST_ALPHA;
             state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ZERO;
             state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
+            break;
+
+        default:
+            // Unknown blend mode - default to no blending (opaque)
+            state.enable_blend = false;
             break;
     }
     

@@ -30,7 +30,11 @@ public:
     GPUDevice() = default;
     ~GPUDevice();
 
-    // Non-copyable, non-movable for simplicity
+    // Non-copyable, non-movable by design:
+    // 1. GPUDevice owns the SDL_GPUDevice which manages global GPU state
+    // 2. Other GPU resources (buffers, textures, etc.) hold raw pointers to GPUDevice
+    // 3. Moving would invalidate those pointers and complicate lifetime management
+    // 4. There should typically be only one GPUDevice per application
     GPUDevice(const GPUDevice&) = delete;
     GPUDevice& operator=(const GPUDevice&) = delete;
     GPUDevice(GPUDevice&&) = delete;

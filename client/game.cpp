@@ -1,4 +1,5 @@
 #include "game.hpp"
+#include "common/heightmap.hpp"
 #include <iostream>
 #include <chrono>
 #include <unordered_set>
@@ -433,6 +434,7 @@ void Game::render_playing() {
         state.id = net_id.id;
         state.x = transform.x;
         state.y = transform.y;
+        state.z = transform.z;  // Server-provided terrain height
         state.health = health.current;
         state.max_health = health.max;
         state.type = info.type;
@@ -440,6 +442,7 @@ void Game::render_playing() {
         state.color = info.color;
         state.npc_type = info.npc_type;
         state.building_type = info.building_type;
+        state.environment_type = info.environment_type;
         std::strncpy(state.name, name.value.c_str(), sizeof(state.name) - 1);
         
         if (auto* vel = registry_.try_get<ecs::Velocity>(entity)) {
@@ -449,6 +452,12 @@ void Game::render_playing() {
         if (auto* attack_dir = registry_.try_get<ecs::AttackDirection>(entity)) {
             state.attack_dir_x = attack_dir->x;
             state.attack_dir_y = attack_dir->y;
+        }
+
+        // Include rotation and scale for accurate environment/building shadows
+        state.rotation = transform.rotation;
+        if (auto* scale = registry_.try_get<ecs::Scale>(entity)) {
+            state.scale = scale->value;
         }
         
         renderer_.draw_entity_shadow(state);
@@ -497,6 +506,7 @@ void Game::render_playing() {
         state.id = net_id.id;
         state.x = transform.x;
         state.y = transform.y;
+        state.z = transform.z;  // Server-provided terrain height
         state.health = health.current;
         state.max_health = health.max;
         state.type = info.type;
@@ -519,9 +529,16 @@ void Game::render_playing() {
             state.attack_dir_y = attack_dir->y;
         }
         
-        // Include npc_type and building_type for proper model selection
+        // Include npc_type, building_type, and environment_type for proper model selection
         state.npc_type = info.npc_type;
         state.building_type = info.building_type;
+        state.environment_type = info.environment_type;
+        state.rotation = transform.rotation;
+        
+        // Include scale for environment objects
+        if (auto* scale = registry_.try_get<ecs::Scale>(entity)) {
+            state.scale = scale->value;
+        }
         
         bool is_local = (net_id.id == local_player_id_);
         renderer_.draw_entity(state, is_local);
@@ -558,6 +575,9 @@ void Game::handle_network_message(MessageType type, const std::vector<uint8_t>& 
         case MessageType::ConnectionAccepted:
             on_connection_accepted(payload);
             break;
+        case MessageType::HeightmapChunk:
+            on_heightmap_chunk(payload);
+            break;
         case MessageType::WorldState:
             on_world_state(payload);
             break;
@@ -576,6 +596,21 @@ void Game::on_connection_accepted(const std::vector<uint8_t>& payload) {
     if (payload.size() >= 4) {
         std::memcpy(&local_player_id_, payload.data(), sizeof(local_player_id_));
         std::cout << "Connection accepted, player ID: " << local_player_id_ << std::endl;
+    }
+}
+
+void Game::on_heightmap_chunk(const std::vector<uint8_t>& payload) {
+    heightmap_ = std::make_unique<HeightmapChunk>();
+    if (heightmap_->deserialize(payload.data(), payload.size())) {
+        heightmap_received_ = true;
+        std::cout << "Received heightmap: " << heightmap_->resolution << "x" << heightmap_->resolution 
+                  << " covering " << heightmap_->world_size << "x" << heightmap_->world_size << " world units" << std::endl;
+        
+        // Pass heightmap to renderer for GPU texture upload
+        renderer_.set_heightmap(*heightmap_);
+    } else {
+        std::cerr << "Failed to deserialize heightmap!" << std::endl;
+        heightmap_.reset();
     }
 }
 
@@ -701,9 +736,14 @@ void Game::update_entity_from_state(entt::entity entity, const NetEntityState& s
     
     interp.prev_x = transform.x;
     interp.prev_y = transform.y;
+    interp.prev_z = transform.z;
     interp.target_x = state.x;
     interp.target_y = state.y;
+    interp.target_z = state.z;  // Server-provided terrain height
     interp.alpha = 0.0f;
+    
+    // Update rotation (used for buildings and environment objects)
+    transform.rotation = state.rotation;
     
     velocity.x = state.vx;
     velocity.y = state.vy;
@@ -715,6 +755,7 @@ void Game::update_entity_from_state(entt::entity entity, const NetEntityState& s
     info.player_class = state.player_class;
     info.npc_type = state.npc_type;
     info.building_type = state.building_type;
+    info.environment_type = state.environment_type;
     info.color = state.color;
     
     name.value = state.name;
@@ -729,6 +770,12 @@ void Game::update_entity_from_state(entt::entity entity, const NetEntityState& s
     auto& attack_dir = registry_.get<ecs::AttackDirection>(entity);
     attack_dir.x = state.attack_dir_x;
     attack_dir.y = state.attack_dir_y;
+    
+    // Store scale (used for environment objects)
+    if (!registry_.all_of<ecs::Scale>(entity)) {
+        registry_.emplace<ecs::Scale>(entity);
+    }
+    registry_.get<ecs::Scale>(entity).value = state.scale;
 }
 
 void Game::remove_entity(uint32_t network_id) {
@@ -926,6 +973,22 @@ void Game::init_graphics_menu() {
     rocks.toggle_value = &graphics_settings_.rocks_enabled;
     menu_items_.push_back(rocks);
     
+    MenuItem contact_shadows;
+    contact_shadows.label = "Contact Shadows";
+    contact_shadows.type = MenuItemType::Toggle;
+    contact_shadows.toggle_value = &graphics_settings_.contact_shadows_enabled;
+    menu_items_.push_back(contact_shadows);
+    
+    // Anisotropic filtering
+    MenuItem aniso;
+    aniso.label = "Anisotropic Filter";
+    aniso.type = MenuItemType::Slider;
+    aniso.slider_value = &graphics_settings_.anisotropic_filter;
+    aniso.slider_min = 0;
+    aniso.slider_max = 4;
+    aniso.slider_labels = {"Off", "2x", "4x", "8x", "16x"};
+    menu_items_.push_back(aniso);
+    
     // Back button
     MenuItem back_item;
     back_item.label = "< Back";
@@ -970,6 +1033,17 @@ void Game::update_menu(float dt) {
                 *item.toggle_value = !*item.toggle_value;
                 apply_graphics_settings();
                 apply_controls_settings();
+            }
+        }
+    } else if (item.type == MenuItemType::Slider) {
+        if (item.slider_value) {
+            if (input_.menu_left_pressed()) {
+                *item.slider_value = std::max(item.slider_min, *item.slider_value - 1);
+                apply_graphics_settings();
+            }
+            if (input_.menu_right_pressed()) {
+                *item.slider_value = std::min(item.slider_max, *item.slider_value + 1);
+                apply_graphics_settings();
             }
         }
     } else if (item.type == MenuItemType::FloatSlider) {
@@ -1056,6 +1130,21 @@ void Game::render_menu() {
             std::string value_str = *item.toggle_value ? "ON" : "OFF";
             uint32_t value_color = *item.toggle_value ? 0xFF00FF00 : 0xFFFF6666;
             renderer_.draw_ui_text(value_str, panel_x + panel_w - 80.0f, item_y + 10.0f, 1.0f, value_color);
+        } else if (item.type == MenuItemType::Slider && item.slider_value) {
+            // Display with < > arrows and label
+            std::string value_str;
+            int idx = *item.slider_value - item.slider_min;
+            if (!item.slider_labels.empty() && idx >= 0 && idx < static_cast<int>(item.slider_labels.size())) {
+                value_str = item.slider_labels[idx];
+            } else {
+                char buf[16];
+                snprintf(buf, sizeof(buf), "%d", *item.slider_value);
+                value_str = buf;
+            }
+            
+            // Draw arrows if adjustable
+            std::string display = "< " + value_str + " >";
+            renderer_.draw_ui_text(display, panel_x + panel_w - 120.0f, item_y + 10.0f, 1.0f, 0xFF00AAFF);
         } else if (item.type == MenuItemType::FloatSlider && item.float_value) {
             // Draw slider bar
             float slider_x = panel_x + panel_w - 200.0f;
@@ -1098,6 +1187,8 @@ void Game::apply_graphics_settings() {
     renderer_.set_mountains_enabled(graphics_settings_.mountains_enabled);
     renderer_.set_trees_enabled(graphics_settings_.trees_enabled);
     renderer_.set_rocks_enabled(graphics_settings_.rocks_enabled);
+    renderer_.set_contact_shadows_enabled(graphics_settings_.contact_shadows_enabled);
+    renderer_.set_anisotropic_filter(graphics_settings_.anisotropic_filter);
 }
 
 void Game::apply_controls_settings() {

@@ -79,14 +79,27 @@ void ShadowSystem::shutdown() {
 void ShadowSystem::update_light_space_matrix(float camera_x, float camera_z, const glm::vec3& light_dir) {
     float shadow_distance = 1500.0f;
     
-    glm::vec3 light_pos = glm::vec3(camera_x, 0, camera_z) - light_dir * 12000.0f;
-    glm::vec3 light_target = glm::vec3(camera_x, 0, camera_z);
-    glm::mat4 light_view = glm::lookAt(light_pos, light_target, glm::vec3(0.0f, 1.0f, 0.0f));
+    // Use known terrain height bounds from heightmap config (-500 to 500)
+    // Plus margin for objects on terrain
+    constexpr float MIN_TERRAIN = -500.0f - 100.0f;   // Below terrain
+    constexpr float MAX_TERRAIN = 500.0f + 600.0f;    // Above for trees/buildings
+    
+    float center_height = (MIN_TERRAIN + MAX_TERRAIN) * 0.5f;
+    float height_range = MAX_TERRAIN - MIN_TERRAIN;
+    
+    // Position light to look at the center of the shadow volume
+    glm::vec3 center = glm::vec3(camera_x, center_height, camera_z);
+    glm::vec3 light_pos = center - light_dir * (shadow_distance + height_range);
+    glm::mat4 light_view = glm::lookAt(light_pos, center, glm::vec3(0.0f, 1.0f, 0.0f));
+    
+    // Orthographic projection covering the full height range
+    float near_plane = 1.0f;
+    float far_plane = 2.0f * (shadow_distance + height_range) + height_range;
     
     glm::mat4 light_projection = glm::ortho(
         -shadow_distance, shadow_distance,
         -shadow_distance, shadow_distance,
-        1.0f, 25000.0f
+        near_plane, far_plane
     );
     
     light_space_matrix_ = light_projection * light_view;

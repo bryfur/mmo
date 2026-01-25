@@ -34,6 +34,7 @@ private:
     void accept();
     void game_loop();
     void broadcast_world_state();
+    void send_heightmap(std::shared_ptr<Session> session);
     
     asio::io_context& io_context_;
     tcp::acceptor acceptor_;

@@ -2,6 +2,7 @@
 
 #include "common/protocol.hpp"
 #include "common/ecs/components.hpp"
+#include "common/heightmap.hpp"
 #include "systems/physics_system.hpp"
 #include <entt/entt.hpp>
 #include <vector>
@@ -34,9 +35,15 @@ public:
     systems::PhysicsSystem& physics() { return physics_; }
     const systems::PhysicsSystem& physics() const { return physics_; }
     
+    // Heightmap access
+    const HeightmapChunk& heightmap() const { return heightmap_; }
+    float get_terrain_height(float x, float z) const { return heightmap_.get_height_world(x, z); }
+    
 private:
+    void generate_heightmap();
     void spawn_town();
     void spawn_npcs();
+    void spawn_environment();
     void setup_collision_callbacks();
     uint32_t generate_color(PlayerClass player_class);
     uint32_t next_network_id();
@@ -44,6 +51,7 @@ private:
     mutable std::mutex mutex_;
     entt::registry registry_;
     systems::PhysicsSystem physics_;
+    HeightmapChunk heightmap_;
     uint32_t next_id_ = 1;
     std::mt19937 rng_;
 };

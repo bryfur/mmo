@@ -3,6 +3,7 @@
 #include <GL/glew.h>
 #include <glm/glm.hpp>
 #include <memory>
+#include <iostream>
 #include "../shader.hpp"
 
 namespace mmo {
@@ -10,6 +11,7 @@ namespace mmo {
 // GPU-based procedural grass renderer
 // Grass is generated entirely in shaders - no CPU grass data
 // Uses a grid of points that follow the camera, with world-space hashing for consistent placement
+// Samples height from server-provided heightmap texture
 class GrassRenderer {
 public:
     GrassRenderer();
@@ -29,6 +31,9 @@ public:
     // Clean up resources
     void shutdown();
     
+    // Set heightmap texture for terrain sampling
+    void set_heightmap_texture(GLuint texture) { heightmap_texture_ = texture; }
+    
     // Wind parameters
     float wind_magnitude = 0.8f;
     float wind_wave_length = 1.2f;
@@ -45,6 +50,7 @@ private:
     GLuint grass_program_ = 0;
     GLuint grass_vao_ = 0;
     GLuint grass_vbo_ = 0;
+    GLuint heightmap_texture_ = 0;  // Server-provided heightmap
     
     int grid_size_ = 0;        // Number of points in grid (grid_size_ x grid_size_)
     int vertex_count_ = 0;

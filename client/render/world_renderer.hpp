@@ -14,9 +14,9 @@ namespace mmo {
  * WorldRenderer handles environmental world rendering:
  * - Skybox
  * - Mountains
- * - Rocks  
- * - Trees
  * - Grid
+ * 
+ * Note: Rocks and trees are now rendered as server-side entities
  */
 class WorldRenderer {
 public:
@@ -61,24 +61,6 @@ public:
                           const glm::vec3& camera_pos, const glm::vec3& light_dir);
     
     /**
-     * Render scattered rocks.
-     */
-    void render_rocks(const glm::mat4& view, const glm::mat4& projection,
-                      const glm::vec3& camera_pos, const glm::mat4& light_space_matrix,
-                      GLuint shadow_map, bool shadows_enabled,
-                      GLuint ssao_texture, bool ssao_enabled,
-                      const glm::vec3& light_dir, const glm::vec2& screen_size);
-    
-    /**
-     * Render trees.
-     */
-    void render_trees(const glm::mat4& view, const glm::mat4& projection,
-                      const glm::vec3& camera_pos, const glm::mat4& light_space_matrix,
-                      GLuint shadow_map, bool shadows_enabled,
-                      GLuint ssao_texture, bool ssao_enabled,
-                      const glm::vec3& light_dir, const glm::vec2& screen_size);
-    
-    /**
      * Render debug grid.
      */
     void render_grid(const glm::mat4& view, const glm::mat4& projection);
@@ -94,25 +76,12 @@ public:
     };
     const std::vector<MountainPosition>& get_mountain_positions() const { return mountain_positions_; }
     
-    /**
-     * Get tree positions for shadow rendering.
-     */
-    struct TreePositionData {
-        float x, y, z;
-        float rotation;
-        float scale;
-        int tree_type;
-    };
-    std::vector<TreePositionData> get_tree_positions_for_shadows() const;
-    
     // Accessors
     const glm::vec3& sun_direction() const { return sun_direction_; }
     const glm::vec3& light_dir() const { return light_dir_; }
     
 private:
     void generate_mountain_positions();
-    void generate_rock_positions();
-    void generate_tree_positions();
     void create_skybox_mesh();
     void create_grid_mesh();
     
@@ -145,22 +114,6 @@ private:
     
     // World object positions
     std::vector<MountainPosition> mountain_positions_;
-    
-    struct RockPosition {
-        float x, y, z;
-        float rotation;
-        float scale;
-        int rock_type;
-    };
-    std::vector<RockPosition> rock_positions_;
-    
-    struct TreePosition {
-        float x, y, z;
-        float rotation;
-        float scale;
-        int tree_type;
-    };
-    std::vector<TreePosition> tree_positions_;
     
     // Fog settings
     glm::vec3 fog_color_ = glm::vec3(0.35f, 0.45f, 0.6f);

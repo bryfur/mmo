@@ -22,7 +22,6 @@
 #include "physics_system.hpp"
 #include <unordered_map>
 #include <iostream>
-#include <cstdarg>
 #include <thread>
 
 // Disable common warnings from Jolt
@@ -46,27 +45,6 @@ static void JoltFree(void* inBlock) {
 static void JoltAlignedFree(void* inBlock) {
     free(inBlock);
 }
-
-// Trace callback for Jolt debug output
-static void TraceImpl(const char* inFMT, ...) {
-    va_list args;
-    va_start(args, inFMT);
-    char buffer[1024];
-    vsnprintf(buffer, sizeof(buffer), inFMT, args);
-    va_end(args);
-    std::cout << "[Jolt] " << buffer << std::endl;
-}
-
-#ifdef JPH_ENABLE_ASSERTS
-// Assert callback for Jolt
-static bool AssertFailedImpl(const char* inExpression, const char* inMessage, 
-                             const char* inFile, uint32_t inLine) {
-    std::cerr << "[Jolt Assert] " << inFile << ":" << inLine 
-              << " (" << inExpression << ") " 
-              << (inMessage ? inMessage : "") << std::endl;
-    return true; // Break into debugger
-}
-#endif
 
 // Broadphase layer interface
 class BPLayerInterfaceImpl final : public JPH::BroadPhaseLayerInterface {
@@ -237,6 +215,9 @@ public:
     float gravity_z = 0.0f;
     
     CollisionCallback collision_callback;
+    
+    // Terrain height callback for ground snapping
+    PhysicsSystem::TerrainHeightCallback terrain_height_callback;
 };
 
 PhysicsSystem::PhysicsSystem() : impl_(std::make_unique<Impl>()) {}
@@ -256,10 +237,6 @@ void PhysicsSystem::initialize(uint32_t max_bodies, uint32_t max_body_pairs,
     // Register Jolt allocation hooks
     JPH::RegisterDefaultAllocator();
     
-    // Install trace and assert callbacks
-    JPH::Trace = TraceImpl;
-    JPH_IF_ENABLE_ASSERTS(JPH::AssertFailed = AssertFailedImpl;)
-
     // Create factory
     JPH::Factory::sInstance = new JPH::Factory();
 
@@ -294,7 +271,6 @@ void PhysicsSystem::initialize(uint32_t max_bodies, uint32_t max_body_pairs,
     impl_->physics_system->SetContactListener(&impl_->contact_listener);
 
     impl_->initialized = true;
-    std::cout << "[Physics] JoltPhysics initialized with " << num_threads << " threads" << std::endl;
 }
 
 void PhysicsSystem::shutdown() {
@@ -325,7 +301,6 @@ void PhysicsSystem::shutdown() {
     JPH::UnregisterTypes();
 
     impl_->initialized = false;
-    std::cout << "[Physics] JoltPhysics shutdown complete" << std::endl;
 }
 
 void PhysicsSystem::create_bodies(entt::registry& registry) {
@@ -392,8 +367,12 @@ void PhysicsSystem::create_bodies(entt::registry& registry) {
             layer = CollisionLayers::TRIGGER;
         }
 
-        // Convert 2D position to 3D (x, 0, y) - treating game Y as world Z
-        JPH::RVec3 position(transform.x, collider.offset_y, transform.y);
+        // Convert to 3D position for Jolt:
+        // - transform.x = world X
+        // - transform.y = world Z (horizontal)  
+        // - transform.z = world Y (height/elevation)
+        // Add collider.offset_y to elevate the collision shape (e.g., for capsules centered at character midpoint)
+        JPH::RVec3 position(transform.x, transform.z + collider.offset_y, transform.y);
         
         // Create body settings
         JPH::BodyCreationSettings settings(
@@ -499,8 +478,8 @@ void PhysicsSystem::update(entt::registry& registry, float dt) {
         
         auto it = impl_->network_to_body.find(network_id.id);
         if (it != impl_->network_to_body.end()) {
-            // Teleport body to new position and reset velocity
-            JPH::RVec3 new_pos(transform.x, 0.0f, transform.y);
+            // Teleport body to new position (x, z->Y height, y->Z) and reset velocity
+            JPH::RVec3 new_pos(transform.x, transform.z, transform.y);
             body_interface.SetPosition(it->second, new_pos, JPH::EActivation::Activate);
             body_interface.SetLinearVelocity(it->second, JPH::Vec3::sZero());
         }
@@ -521,12 +500,13 @@ void PhysicsSystem::update(entt::registry& registry, float dt) {
 
         auto it = impl_->network_to_body.find(network_id.id);
         if (it != impl_->network_to_body.end()) {
-            // Set linear velocity (x, 0, y) - game Y maps to physics Z
-            JPH::Vec3 phys_vel(velocity.x, 0.0f, velocity.y);
+            // Set linear velocity: game (x, y, z) -> Jolt (x, z, y)
+            // velocity.z is vertical (gravity/jumping), maps to Jolt Y
+            JPH::Vec3 phys_vel(velocity.x, velocity.z, velocity.y);
             body_interface.SetLinearVelocity(it->second, phys_vel);
             
             // Activate the body if it has velocity
-            if (velocity.x != 0.0f || velocity.y != 0.0f) {
+            if (velocity.x != 0.0f || velocity.y != 0.0f || velocity.z != 0.0f) {
                 body_interface.ActivateBody(it->second);
             }
         }
@@ -546,8 +526,8 @@ void PhysicsSystem::update(entt::registry& registry, float dt) {
 
         auto it = impl_->network_to_body.find(network_id->id);
         if (it != impl_->network_to_body.end()) {
-            // Move kinematic body to new position
-            JPH::RVec3 new_pos(transform.x, 0.0f, transform.y);
+            // Move kinematic body to new position: game (x, y, z) -> Jolt (x, z, y)
+            JPH::RVec3 new_pos(transform.x, transform.z, transform.y);
             body_interface.MoveKinematic(it->second, new_pos, JPH::Quat::sIdentity(), dt);
         }
     }
@@ -589,7 +569,7 @@ void PhysicsSystem::sync_transforms(entt::registry& registry) {
 
     auto& body_interface = impl_->physics_system->GetBodyInterface();
     
-    auto view = registry.view<ecs::Transform, ecs::PhysicsBody, ecs::RigidBody, ecs::NetworkId>();
+    auto view = registry.view<ecs::Transform, ecs::PhysicsBody, ecs::RigidBody, ecs::NetworkId, ecs::Collider>();
     for (auto entity : view) {
         const auto& rigid_body = view.get<ecs::RigidBody>(entity);
         auto& physics_body = view.get<ecs::PhysicsBody>(entity);
@@ -605,11 +585,40 @@ void PhysicsSystem::sync_transforms(entt::registry& registry) {
             continue;
         }
 
+        const auto& collider = view.get<ecs::Collider>(entity);
         JPH::RVec3 position = body_interface.GetPosition(it->second);
         
         auto& transform = view.get<ecs::Transform>(entity);
-        transform.x = static_cast<float>(position.GetX());
-        transform.y = static_cast<float>(position.GetZ()); // Jolt Z -> Game Y
+        float new_x = static_cast<float>(position.GetX());
+        float new_y = static_cast<float>(position.GetZ()); // Jolt Z -> Game Y (horizontal)
+        // Jolt Y is the collision center height, subtract offset_y to get ground-level transform.z
+        float physics_center_z = static_cast<float>(position.GetY()); // Jolt Y -> collision center
+        float new_z = physics_center_z - collider.offset_y; // Convert to ground level
+        
+        // Apply terrain height snapping if callback is set
+        // This keeps entities locked to terrain height (no jumping/falling)
+        if (impl_->terrain_height_callback) {
+            float terrain_height = impl_->terrain_height_callback(new_x, new_y);
+            
+            // Always snap entity to terrain height (ground-locked movement)
+            // For jumping/falling games, you'd only snap when new_z < terrain_height
+            new_z = terrain_height;
+            
+            // Update physics body position to match (collision center at terrain + offset)
+            float corrected_center_z = new_z + collider.offset_y;
+            JPH::RVec3 corrected_pos(new_x, corrected_center_z, new_y);
+            body_interface.SetPosition(it->second, corrected_pos, JPH::EActivation::DontActivate);
+            
+            // Zero out vertical velocity since we're ground-locked
+            JPH::Vec3 vel = body_interface.GetLinearVelocity(it->second);
+            if (vel.GetY() != 0) {
+                body_interface.SetLinearVelocity(it->second, JPH::Vec3(vel.GetX(), 0.0f, vel.GetZ()));
+            }
+        }
+        
+        transform.x = new_x;
+        transform.y = new_y;
+        transform.z = new_z;
     }
 }
 
@@ -734,6 +743,16 @@ void PhysicsSystem::set_gravity(float x, float y, float z) {
     if (impl_->initialized) {
         impl_->physics_system->SetGravity(JPH::Vec3(x, y, z));
     }
+}
+
+void PhysicsSystem::optimize_broadphase() {
+    if (impl_->initialized) {
+        impl_->physics_system->OptimizeBroadPhase();
+    }
+}
+
+void PhysicsSystem::set_terrain_height_callback(TerrainHeightCallback callback) {
+    impl_->terrain_height_callback = std::move(callback);
 }
 
 // Convenience function

@@ -125,7 +125,28 @@ void NetworkClient::read_header() {
         [this](asio::error_code ec, std::size_t /*length*/) {
             if (!ec) {
                 current_header_.deserialize(header_buffer_.data());
-                if (current_header_.payload_size > 0) {
+                
+                // Special handling for heightmap which uses 4-byte size
+                if (current_header_.type == MessageType::HeightmapChunk) {
+                    // Read additional 2 bytes to complete the 4-byte size
+                    // First 2 bytes are already in payload_size, read remaining 2
+                    heightmap_size_buffer_.resize(2);
+                    asio::async_read(socket_,
+                        asio::buffer(heightmap_size_buffer_),
+                        [this](asio::error_code ec2, std::size_t) {
+                            if (!ec2) {
+                                // Combine into 4-byte size
+                                uint32_t full_size = current_header_.payload_size | 
+                                    (static_cast<uint32_t>(heightmap_size_buffer_[0]) << 16) |
+                                    (static_cast<uint32_t>(heightmap_size_buffer_[1]) << 24);
+                                payload_buffer_.resize(full_size);
+                                read_payload();
+                            } else if (connected_) {
+                                std::cerr << "Heightmap size read error: " << ec2.message() << std::endl;
+                                connected_ = false;
+                            }
+                        });
+                } else if (current_header_.payload_size > 0) {
                     payload_buffer_.resize(current_header_.payload_size);
                     read_payload();
                 } else {

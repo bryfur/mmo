@@ -25,9 +25,54 @@ bool TerrainRenderer::init(float world_width, float world_height) {
     }
     
     load_grass_texture();
+    // Note: terrain mesh will be generated when heightmap is received
+    // For now, generate a flat placeholder
     generate_terrain_mesh();
     
     return true;
+}
+
+void TerrainRenderer::set_heightmap(const HeightmapChunk& heightmap) {
+    // Store CPU-side copy for height queries
+    heightmap_ = std::make_unique<HeightmapChunk>(heightmap);
+    
+    // Upload to GPU texture
+    upload_heightmap_texture();
+    
+    // Regenerate terrain mesh using new heightmap
+    generate_terrain_mesh();
+}
+
+void TerrainRenderer::upload_heightmap_texture() {
+    if (!heightmap_) return;
+    
+    // Delete old texture if exists
+    if (heightmap_texture_) {
+        glDeleteTextures(1, &heightmap_texture_);
+    }
+    
+    // Create R16 texture (16-bit height values)
+    glGenTextures(1, &heightmap_texture_);
+    glBindTexture(GL_TEXTURE_2D, heightmap_texture_);
+    
+    // Upload as R16 (unsigned normalized - values 0-65535 map to 0.0-1.0)
+    // Note: Data layout is height_data[z * res + x], uploaded row by row.
+    // OpenGL's texelFetch(ivec2(x, y), 0) reads from the same layout.
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_R16, 
+                 heightmap_->resolution, heightmap_->resolution, 
+                 0, GL_RED, GL_UNSIGNED_SHORT, 
+                 heightmap_->height_data.data());
+    
+    // Nearest filtering - we do manual bilinear interpolation in shaders for exact CPU match
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    
+    // Clamp to edge to avoid wrapping artifacts
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    
+    glBindTexture(GL_TEXTURE_2D, 0);
+    
 }
 
 void TerrainRenderer::shutdown() {
@@ -47,6 +92,11 @@ void TerrainRenderer::shutdown() {
         glDeleteTextures(1, &grass_texture_);
         grass_texture_ = 0;
     }
+    if (heightmap_texture_) {
+        glDeleteTextures(1, &heightmap_texture_);
+        heightmap_texture_ = 0;
+    }
+    heightmap_.reset();
     terrain_shader_.reset();
 }
 
@@ -77,7 +127,6 @@ void TerrainRenderer::load_grass_texture() {
             glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, std::min(max_aniso, 8.0f));
             
             SDL_DestroySurface(rgba_surface);
-            std::cout << "Loaded grass texture: " << tex_width << "x" << tex_height << std::endl;
         } else {
             std::cerr << "Failed to convert grass texture to RGBA" << std::endl;
         }
@@ -87,64 +136,22 @@ void TerrainRenderer::load_grass_texture() {
 }
 
 float TerrainRenderer::get_height(float x, float z) const {
-    float world_center_x = world_width_ / 2.0f;
-    float world_center_z = world_height_ / 2.0f;
-    
-    float dx = x - world_center_x;
-    float dz = z - world_center_z;
-    float dist = std::sqrt(dx * dx + dz * dz);
-    
-    // Keep playable area relatively flat
-    float playable_radius = 600.0f;
-    float transition_radius = 400.0f;
-    float flatness = 1.0f;
-    
-    if (dist < playable_radius) {
-        flatness = 0.1f;
-    } else if (dist < playable_radius + transition_radius) {
-        float t = (dist - playable_radius) / transition_radius;
-        flatness = 0.1f + t * 0.9f;
+    // Sample from CPU-side heightmap if available
+    if (heightmap_) {
+        return heightmap_->get_height_world(x, z);
     }
-    
-    // Multi-octave noise for natural terrain
-    float height = 0.0f;
-    
-    // Large rolling hills
-    float freq1 = 0.0008f;
-    height += std::sin(x * freq1 * 1.1f) * std::cos(z * freq1 * 0.9f) * 80.0f;
-    height += std::sin(x * freq1 * 0.7f + 1.3f) * std::sin(z * freq1 * 1.2f + 0.7f) * 60.0f;
-    
-    // Medium undulations
-    float freq2 = 0.003f;
-    height += std::sin(x * freq2 * 1.3f + 2.1f) * std::cos(z * freq2 * 0.8f + 1.4f) * 25.0f;
-    height += std::cos(x * freq2 * 0.9f) * std::sin(z * freq2 * 1.1f + 0.5f) * 20.0f;
-    
-    // Small bumps
-    float freq3 = 0.01f;
-    height += std::sin(x * freq3 * 1.7f + 0.3f) * std::cos(z * freq3 * 1.4f + 2.1f) * 8.0f;
-    height += std::cos(x * freq3 * 1.2f + 1.8f) * std::sin(z * freq3 * 0.9f) * 6.0f;
-    
-    height *= flatness;
-    
-    // Terrain rises toward mountains
-    if (dist > 2000.0f) {
-        float rise_factor = (dist - 2000.0f) / 2000.0f;
-        rise_factor = std::min(rise_factor, 1.0f);
-        height += rise_factor * rise_factor * 150.0f;
-    }
-    
-    return height;
+    // Fallback: return 0 (flat) if no heightmap yet
+    return 0.0f;
 }
 
 glm::vec3 TerrainRenderer::get_normal(float x, float z) const {
-    float eps = 5.0f;
-    float hL = get_height(x - eps, z);
-    float hR = get_height(x + eps, z);
-    float hD = get_height(x, z - eps);
-    float hU = get_height(x, z + eps);
-    
-    glm::vec3 normal(hL - hR, 2.0f * eps, hD - hU);
-    return glm::normalize(normal);
+    if (heightmap_) {
+        float nx, ny, nz;
+        heightmap_->get_normal_world(x, z, nx, ny, nz);
+        return glm::vec3(nx, ny, nz);
+    }
+    // Fallback: return up vector
+    return glm::vec3(0.0f, 1.0f, 0.0f);
 }
 
 void TerrainRenderer::generate_terrain_mesh() {
@@ -243,8 +250,6 @@ void TerrainRenderer::generate_terrain_mesh() {
     glEnableVertexAttribArray(2);
     
     glBindVertexArray(0);
-    
-    std::cout << "Generated terrain mesh with " << vertex_count_ << " indices" << std::endl;
 }
 
 void TerrainRenderer::render(const glm::mat4& view, const glm::mat4& projection,
@@ -287,6 +292,14 @@ void TerrainRenderer::render(const glm::mat4& view, const glm::mat4& projection,
     glBindVertexArray(vao_);
     glDrawElements(GL_TRIANGLES, vertex_count_, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
+}
+
+void TerrainRenderer::set_anisotropic_filter(float level) {
+    if (grass_texture_ != 0) {
+        glBindTexture(GL_TEXTURE_2D, grass_texture_);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, level);
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
 }
 
 } // namespace mmo

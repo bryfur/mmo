@@ -153,6 +153,7 @@ public:
     Model* get_model(const std::string& name);
     AnimationState* get_animation_state(const std::string& name);
     void unload_all();
+    void set_anisotropic_filter(float level);
     
 private:
     std::unordered_map<std::string, Model> models_;

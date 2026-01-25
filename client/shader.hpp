@@ -4,15 +4,29 @@
 #include <GL/glew.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <functional>
 
 namespace mmo {
 
+/**
+ * Shader class with OpenGL 4.1 program binary caching support.
+ * 
+ * Binary caching dramatically reduces shader compilation time on subsequent
+ * runs by saving compiled shader programs to disk. The cache is keyed by
+ * a hash of the shader source code.
+ */
 class Shader {
 public:
     Shader() = default;
     ~Shader();
     
+    // Load shader from source (with optional binary caching)
     bool load(const std::string& vertex_src, const std::string& fragment_src);
+    
+    // Load with explicit cache name for faster lookups
+    bool load(const std::string& vertex_src, const std::string& fragment_src, 
+              const std::string& cache_name);
+    
     void use() const;
     
     void set_mat4(const std::string& name, const glm::mat4& mat) const;
@@ -24,17 +38,30 @@ public:
     
     GLuint id() const { return program_; }
     
+    // Static configuration for shader binary caching
+    static void set_cache_directory(const std::string& path);
+    static void enable_binary_cache(bool enabled);
+    static bool is_binary_cache_supported();
+    
 private:
     GLuint program_ = 0;
     
     GLuint compile_shader(GLenum type, const std::string& source);
+    
+    // Binary cache helpers
+    bool load_from_binary_cache(const std::string& cache_key);
+    void save_to_binary_cache(const std::string& cache_key);
+    static std::string compute_cache_key(const std::string& vertex_src, const std::string& fragment_src);
+    
+    static std::string cache_directory_;
+    static bool binary_cache_enabled_;
 };
 
 // Built-in shader sources
 namespace shaders {
 
 const char* const model_vertex = R"(
-#version 330 core
+#version 410 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aNormal;
 layout (location = 2) in vec2 aTexCoord;
@@ -66,7 +93,7 @@ void main() {
 )";
 
 const char* const model_fragment = R"(
-#version 330 core
+#version 410 core
 out vec4 FragColor;
 
 in vec3 FragPos;
@@ -185,7 +212,7 @@ void main() {
 )";
 
 const char* const grid_vertex = R"(
-#version 330 core
+#version 410 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec4 aColor;
 
@@ -201,7 +228,7 @@ void main() {
 )";
 
 const char* const grid_fragment = R"(
-#version 330 core
+#version 410 core
 out vec4 FragColor;
 
 in vec4 VertexColor;
@@ -213,7 +240,7 @@ void main() {
 
 // Terrain shader with seamless texture tiling and shadows
 const char* const terrain_vertex = R"(
-#version 330 core
+#version 410 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec2 aTexCoord;
 layout (location = 2) in vec4 aColor;
@@ -245,7 +272,7 @@ void main() {
 )";
 
 const char* const terrain_fragment = R"(
-#version 330 core
+#version 410 core
 out vec4 FragColor;
 
 in vec2 TexCoord;
@@ -341,7 +368,7 @@ void main() {
 )";
 
 const char* const ui_vertex = R"(
-#version 330 core
+#version 410 core
 layout (location = 0) in vec2 aPos;
 layout (location = 1) in vec4 aColor;
 
@@ -356,7 +383,7 @@ void main() {
 )";
 
 const char* const ui_fragment = R"(
-#version 330 core
+#version 410 core
 out vec4 FragColor;
 
 in vec4 VertexColor;
@@ -368,7 +395,7 @@ void main() {
 
 // 3D Billboard shader for health bars (depth-tested)
 const char* const billboard_vertex = R"(
-#version 330 core
+#version 410 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec4 aColor;
 
@@ -397,7 +424,7 @@ void main() {
 )";
 
 const char* const billboard_fragment = R"(
-#version 330 core
+#version 410 core
 out vec4 FragColor;
 
 in vec4 VertexColor;
@@ -409,7 +436,7 @@ void main() {
 
 // Procedural skybox with mountains
 const char* const skybox_vertex = R"(
-#version 330 core
+#version 410 core
 layout (location = 0) in vec3 aPos;
 
 out vec3 WorldPos;
@@ -427,7 +454,7 @@ void main() {
 )";
 
 const char* const skybox_fragment = R"(
-#version 330 core
+#version 410 core
 out vec4 FragColor;
 
 in vec3 WorldPos;
@@ -590,7 +617,7 @@ void main() {
 
 // 3D Mountains with distance fog
 const char* const mountains_vertex = R"(
-#version 330 core
+#version 410 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aNormal;
 layout (location = 2) in float aHeight;
@@ -616,7 +643,7 @@ void main() {
 )";
 
 const char* const mountains_fragment = R"(
-#version 330 core
+#version 410 core
 out vec4 FragColor;
 
 in vec3 FragPos;
@@ -670,7 +697,7 @@ void main() {
 
 // Skinned model vertex shader with skeletal animation support
 const char* const skinned_model_vertex = R"(
-#version 330 core
+#version 410 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aNormal;
 layout (location = 2) in vec2 aTexCoord;
@@ -724,7 +751,7 @@ void main() {
 
 // Skinned model fragment shader (same as regular model with fog and shadows)
 const char* const skinned_model_fragment = R"(
-#version 330 core
+#version 410 core
 out vec4 FragColor;
 
 in vec3 FragPos;
@@ -829,7 +856,7 @@ void main() {
 
 // Shadow depth pass vertex shader (for rendering shadow map)
 const char* const shadow_depth_vertex = R"(
-#version 330 core
+#version 410 core
 layout (location = 0) in vec3 aPos;
 
 uniform mat4 lightSpaceMatrix;
@@ -842,7 +869,7 @@ void main() {
 
 // Shadow depth pass fragment shader
 const char* const shadow_depth_fragment = R"(
-#version 330 core
+#version 410 core
 
 void main() {
     // Depth is written automatically
@@ -852,7 +879,7 @@ void main() {
 
 // Skinned shadow depth vertex shader (for animated models)
 const char* const skinned_shadow_depth_vertex = R"(
-#version 330 core
+#version 410 core
 layout (location = 0) in vec3 aPos;
 layout (location = 4) in ivec4 aJoints;
 layout (location = 5) in vec4 aWeights;
@@ -883,7 +910,7 @@ void main() {
 
 // SSAO G-buffer vertex shader (outputs position and normal to textures)
 const char* const ssao_gbuffer_vertex = R"(
-#version 330 core
+#version 410 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aNormal;
 
@@ -907,7 +934,7 @@ void main() {
 
 // SSAO G-buffer fragment shader
 const char* const ssao_gbuffer_fragment = R"(
-#version 330 core
+#version 410 core
 layout (location = 0) out vec3 gPosition;
 layout (location = 1) out vec3 gNormal;
 
@@ -922,7 +949,7 @@ void main() {
 
 // SSAO calculation shader (screen-space pass)
 const char* const ssao_vertex = R"(
-#version 330 core
+#version 410 core
 layout (location = 0) in vec2 aPos;
 layout (location = 1) in vec2 aTexCoords;
 
@@ -935,7 +962,7 @@ void main() {
 )";
 
 const char* const ssao_fragment = R"(
-#version 330 core
+#version 410 core
 out float FragColor;
 
 in vec2 TexCoords;
@@ -998,7 +1025,7 @@ void main() {
 
 // SSAO blur shader (removes noise)
 const char* const ssao_blur_fragment = R"(
-#version 330 core
+#version 410 core
 out float FragColor;
 
 in vec2 TexCoords;
@@ -1022,7 +1049,7 @@ void main() {
 
 // Text rendering shader
 const char* const text_vertex = R"(
-#version 330 core
+#version 410 core
 layout (location = 0) in vec2 aPos;
 layout (location = 1) in vec2 aTexCoord;
 
@@ -1037,7 +1064,7 @@ void main() {
 )";
 
 const char* const text_fragment = R"(
-#version 330 core
+#version 410 core
 out vec4 FragColor;
 
 in vec2 TexCoord;

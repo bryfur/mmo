@@ -169,6 +169,19 @@ public:
      * @brief Set gravity
      */
     void set_gravity(float x, float y, float z);
+    
+    /**
+     * @brief Optimize broadphase after adding many static bodies
+     * Call this after spawning all static objects for better collision performance
+     */
+    void optimize_broadphase();
+    
+    /**
+     * @brief Set terrain height callback for ground snapping
+     * @param callback Function that takes (x, z) world coordinates and returns terrain height
+     */
+    using TerrainHeightCallback = std::function<float(float x, float z)>;
+    void set_terrain_height_callback(TerrainHeightCallback callback);
 
 private:
     // Internal implementation

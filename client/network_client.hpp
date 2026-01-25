@@ -49,6 +49,7 @@ private:
     // Read buffer
     std::array<uint8_t, PacketHeader::size()> header_buffer_;
     std::vector<uint8_t> payload_buffer_;
+    std::vector<uint8_t> heightmap_size_buffer_;  // For 4-byte heightmap size
     PacketHeader current_header_;
     
     // Write queue

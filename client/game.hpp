@@ -2,6 +2,7 @@
 
 #include "common/protocol.hpp"
 #include "common/ecs/components.hpp"
+#include "common/heightmap.hpp"
 #include "network_client.hpp"
 #include "renderer.hpp"
 #include "render/text_renderer.hpp"
@@ -12,6 +13,7 @@
 #include <unordered_map>
 #include <vector>
 #include <functional>
+#include <memory>
 
 namespace mmo {
 
@@ -31,10 +33,12 @@ struct GraphicsSettings {
     bool mountains_enabled = true;
     bool trees_enabled = true;
     bool rocks_enabled = true;
+    bool contact_shadows_enabled = true;
     
     // Quality settings
     int shadow_quality = 2;  // 0=off, 1=low, 2=high
     int grass_density = 2;   // 0=off, 1=low, 2=high
+    int anisotropic_filter = 4; // 0=off, 1=2x, 2=4x, 3=8x, 4=16x
 };
 
 // Controls settings
@@ -73,6 +77,7 @@ struct MenuItem {
     float float_step = 0.05f;
     int slider_min = 0;
     int slider_max = 2;
+    std::vector<std::string> slider_labels;  // For named options like "Off", "2x", "4x", etc.
     std::function<void()> action = nullptr;
     MenuPage target_page = MenuPage::Main;
 };
@@ -110,6 +115,7 @@ private:
     void apply_controls_settings();
     
     void on_connection_accepted(const std::vector<uint8_t>& payload);
+    void on_heightmap_chunk(const std::vector<uint8_t>& payload);
     void on_world_state(const std::vector<uint8_t>& payload);
     void on_player_joined(const std::vector<uint8_t>& payload);
     void on_player_left(const std::vector<uint8_t>& payload);
@@ -152,6 +158,10 @@ private:
     uint16_t port_ = 0;
     bool running_ = false;
     float connecting_timer_ = 0.0f;
+    
+    // Server-provided heightmap
+    std::unique_ptr<HeightmapChunk> heightmap_;
+    bool heightmap_received_ = false;
     
     uint64_t last_frame_time_ = 0;
     float fps_ = 0.0f;

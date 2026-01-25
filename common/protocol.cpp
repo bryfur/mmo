@@ -16,14 +16,20 @@ void NetEntityState::serialize(std::vector<uint8_t>& buffer) const {
     offset += sizeof(npc_type);
     std::memcpy(buffer.data() + offset, &building_type, sizeof(building_type));
     offset += sizeof(building_type);
+    std::memcpy(buffer.data() + offset, &environment_type, sizeof(environment_type));
+    offset += sizeof(environment_type);
     std::memcpy(buffer.data() + offset, &x, sizeof(x));
     offset += sizeof(x);
     std::memcpy(buffer.data() + offset, &y, sizeof(y));
     offset += sizeof(y);
+    std::memcpy(buffer.data() + offset, &z, sizeof(z));
+    offset += sizeof(z);
     std::memcpy(buffer.data() + offset, &vx, sizeof(vx));
     offset += sizeof(vx);
     std::memcpy(buffer.data() + offset, &vy, sizeof(vy));
     offset += sizeof(vy);
+    std::memcpy(buffer.data() + offset, &rotation, sizeof(rotation));
+    offset += sizeof(rotation);
     std::memcpy(buffer.data() + offset, &health, sizeof(health));
     offset += sizeof(health);
     std::memcpy(buffer.data() + offset, &max_health, sizeof(max_health));
@@ -38,6 +44,8 @@ void NetEntityState::serialize(std::vector<uint8_t>& buffer) const {
     std::memcpy(buffer.data() + offset, &attack_dir_x, sizeof(attack_dir_x));
     offset += sizeof(attack_dir_x);
     std::memcpy(buffer.data() + offset, &attack_dir_y, sizeof(attack_dir_y));
+    offset += sizeof(attack_dir_y);
+    std::memcpy(buffer.data() + offset, &scale, sizeof(scale));
 }
 
 void NetEntityState::deserialize(const uint8_t* data) {
@@ -52,14 +60,20 @@ void NetEntityState::deserialize(const uint8_t* data) {
     offset += sizeof(npc_type);
     std::memcpy(&building_type, data + offset, sizeof(building_type));
     offset += sizeof(building_type);
+    std::memcpy(&environment_type, data + offset, sizeof(environment_type));
+    offset += sizeof(environment_type);
     std::memcpy(&x, data + offset, sizeof(x));
     offset += sizeof(x);
     std::memcpy(&y, data + offset, sizeof(y));
     offset += sizeof(y);
+    std::memcpy(&z, data + offset, sizeof(z));
+    offset += sizeof(z);
     std::memcpy(&vx, data + offset, sizeof(vx));
     offset += sizeof(vx);
     std::memcpy(&vy, data + offset, sizeof(vy));
     offset += sizeof(vy);
+    std::memcpy(&rotation, data + offset, sizeof(rotation));
+    offset += sizeof(rotation);
     std::memcpy(&health, data + offset, sizeof(health));
     offset += sizeof(health);
     std::memcpy(&max_health, data + offset, sizeof(max_health));
@@ -75,6 +89,8 @@ void NetEntityState::deserialize(const uint8_t* data) {
     std::memcpy(&attack_dir_x, data + offset, sizeof(attack_dir_x));
     offset += sizeof(attack_dir_x);
     std::memcpy(&attack_dir_y, data + offset, sizeof(attack_dir_y));
+    offset += sizeof(attack_dir_y);
+    std::memcpy(&scale, data + offset, sizeof(scale));
 }
 
 void Packet::write_uint8(uint8_t value) {

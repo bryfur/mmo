@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../shader.hpp"
+#include "common/heightmap.hpp"
 #include <GL/glew.h>
 #include <glm/glm.hpp>
 #include <memory>
@@ -9,8 +10,8 @@
 namespace mmo {
 
 /**
- * TerrainRenderer handles procedural terrain generation and rendering.
- * Includes terrain mesh, height sampling, and grass texture rendering.
+ * TerrainRenderer handles terrain rendering using server-provided heightmaps.
+ * Includes terrain mesh, height sampling from GPU texture, and grass texture rendering.
  */
 class TerrainRenderer {
 public:
@@ -29,6 +30,11 @@ public:
     bool init(float world_width, float world_height);
     
     /**
+     * Set heightmap from server data. Uploads to GPU texture.
+     */
+    void set_heightmap(const HeightmapChunk& heightmap);
+    
+    /**
      * Clean up terrain resources.
      */
     void shutdown();
@@ -44,7 +50,7 @@ public:
     
     /**
      * Get terrain height at any world position.
-     * Uses multi-octave noise for natural rolling hills.
+     * Samples from CPU-side heightmap data (for physics, placement, etc.)
      */
     float get_height(float x, float z) const;
     
@@ -56,13 +62,25 @@ public:
     // Accessors
     float world_width() const { return world_width_; }
     float world_height() const { return world_height_; }
+    bool has_heightmap() const { return heightmap_ != nullptr; }
+    GLuint heightmap_texture() const { return heightmap_texture_; }
+    
+    // Settings
+    void set_anisotropic_filter(float level);
     
 private:
     void generate_terrain_mesh();
     void load_grass_texture();
+    void upload_heightmap_texture();
     
     float world_width_ = 0.0f;
     float world_height_ = 0.0f;
+    
+    // Server-provided heightmap (CPU side for sampling)
+    std::unique_ptr<HeightmapChunk> heightmap_;
+    
+    // Heightmap GPU texture (R16F format for shader sampling)
+    GLuint heightmap_texture_ = 0;
     
     // Shader
     std::unique_ptr<Shader> terrain_shader_;

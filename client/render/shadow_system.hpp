@@ -38,7 +38,7 @@ public:
      * Update light space matrix based on camera position.
      */
     void update_light_space_matrix(float camera_x, float camera_z, const glm::vec3& light_dir);
-    
+
     /**
      * Begin shadow pass - bind shadow FBO and set up state.
      */

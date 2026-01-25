@@ -2,6 +2,7 @@
 
 #include "common/protocol.hpp"
 #include "common/ecs/components.hpp"
+#include "common/heightmap.hpp"
 #include "model_loader.hpp"
 #include "shader.hpp"
 #include "render/grass_renderer.hpp"
@@ -122,6 +123,9 @@ public:
     // Terrain height access (for external systems)
     float get_terrain_height(float x, float z) const { return terrain_.get_height(x, z); }
     
+    // Heightmap from server
+    void set_heightmap(const HeightmapChunk& heightmap);
+    
     // Graphics settings toggles
     void set_shadows_enabled(bool enabled);
     void set_ssao_enabled(bool enabled);
@@ -131,6 +135,7 @@ public:
     void set_mountains_enabled(bool enabled) { mountains_enabled_ = enabled; }
     void set_trees_enabled(bool enabled) { trees_enabled_ = enabled; }
     void set_rocks_enabled(bool enabled) { rocks_enabled_ = enabled; }
+    void set_anisotropic_filter(int level);  // 0=off, 1=2x, 2=4x, 3=8x, 4=16x
     
     bool get_shadows_enabled() const;
     bool get_ssao_enabled() const;
@@ -183,6 +188,15 @@ private:
     std::unique_ptr<GrassRenderer> grass_renderer_;
     float skybox_time_ = 0.0f;
     
+    // World-space terrain height texture for grass placement
+    // Contains Y height values indexed by world XZ coordinates
+    GLuint terrain_height_texture_ = 0;
+    int terrain_height_texture_size_ = 1024;  // Resolution of height texture
+    void create_terrain_height_texture();
+    void update_terrain_height_texture();
+    void cleanup_terrain_height_texture();
+    bool terrain_height_dirty_ = true;  // Flag to regenerate when heightmap changes
+    
     // ========== GRAPHICS SETTINGS ==========
     bool fog_enabled_ = true;
     bool grass_enabled_ = true;
@@ -190,6 +204,7 @@ private:
     bool mountains_enabled_ = true;
     bool trees_enabled_ = true;
     bool rocks_enabled_ = true;
+    int anisotropic_level_ = 4;  // 0=off, 1=2x, 2=4x, 3=8x, 4=16x
     
     // ========== MODELS ==========
     std::unique_ptr<ModelManager> model_manager_;

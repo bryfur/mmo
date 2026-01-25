@@ -32,6 +32,21 @@ enum class BuildingType : uint8_t {
     Shop = 3,
     Well = 4,
     House = 5,
+    Inn = 6,
+    WoodenLog = 7,
+    LogTower = 8,
+};
+
+// Environment object types (rocks, trees, etc.)
+enum class EnvironmentType : uint8_t {
+    RockBoulder = 0,
+    RockSlate = 1,
+    RockSpire = 2,
+    RockCluster = 3,
+    RockMossy = 4,
+    TreeOak = 5,
+    TreePine = 6,
+    TreeDead = 7,
 };
 
 enum class EntityType : uint8_t {
@@ -39,6 +54,7 @@ enum class EntityType : uint8_t {
     NPC = 1,          // Hostile NPCs (monsters)
     TownNPC = 2,      // Friendly town NPCs
     Building = 3,     // Static buildings
+    Environment = 4,  // Rocks, trees, etc.
 };
 
 enum class MessageType : uint8_t {
@@ -55,6 +71,10 @@ enum class MessageType : uint8_t {
     PlayerUpdate = 15,
     CombatEvent = 16,
     EntityDeath = 17,
+    
+    // Terrain/heightmap messages (for streaming terrain chunks)
+    HeightmapChunk = 20,      // Server sends chunk data to client
+    HeightmapRequest = 21,    // Client requests a specific chunk (future)
 };
 
 struct PlayerInput {
@@ -123,10 +143,13 @@ struct NetEntityState {
     PlayerClass player_class = PlayerClass::Warrior;
     NPCType npc_type = NPCType::Monster;
     BuildingType building_type = BuildingType::Tavern;
+    EnvironmentType environment_type = EnvironmentType::RockBoulder;
     float x = 0.0f;
     float y = 0.0f;
+    float z = 0.0f;  // Terrain height/elevation (server-authoritative)
     float vx = 0.0f;
     float vy = 0.0f;
+    float rotation = 0.0f;  // Rotation in radians (for buildings)
     float health = 100.0f;
     float max_health = 100.0f;
     uint32_t color = 0xFFFFFFFF;
@@ -136,13 +159,16 @@ struct NetEntityState {
     float attack_dir_x = 0.0f;  // Attack direction for visual effects
     float attack_dir_y = 1.0f;
     
+    // Per-instance scale multiplier (1.0 = default size)
+    float scale = 1.0f;
+    
     static constexpr size_t serialized_size() {
-        // id + type + player_class + npc_type + building_type +
-        // x,y,vx,vy,health,max_health (6 floats) + color + name + is_attacking +
-        // attack_dir_x,attack_dir_y (2 floats) = 8 floats total
+        // id + type + player_class + npc_type + building_type + environment_type +
+        // x,y,z,vx,vy,rotation,health,max_health (8 floats) + color + name + is_attacking +
+        // attack_dir_x,attack_dir_y,scale (3 floats) = 11 floats total
         return sizeof(uint32_t) + sizeof(EntityType) + sizeof(PlayerClass) +
-               sizeof(NPCType) + sizeof(BuildingType) +
-               sizeof(float) * 8 + sizeof(uint32_t) + 32 + sizeof(uint8_t);
+               sizeof(NPCType) + sizeof(BuildingType) + sizeof(EnvironmentType) +
+               sizeof(float) * 11 + sizeof(uint32_t) + 32 + sizeof(uint8_t);
     }
     
     void serialize(std::vector<uint8_t>& buffer) const;

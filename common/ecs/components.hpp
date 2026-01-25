@@ -7,13 +7,16 @@
 namespace mmo::ecs {
 
 struct Transform {
-    float x = 0.0f;
-    float y = 0.0f;
+    float x = 0.0f;      // World X position
+    float y = 0.0f;      // World Z position (horizontal plane)
+    float z = 0.0f;      // World Y position (height/elevation)
+    float rotation = 0.0f;  // Rotation in radians (around vertical axis)
 };
 
 struct Velocity {
-    float x = 0.0f;
-    float y = 0.0f;
+    float x = 0.0f;      // X velocity
+    float y = 0.0f;      // Z velocity (horizontal)
+    float z = 0.0f;      // Y velocity (vertical)
 };
 
 struct Health {
@@ -43,6 +46,7 @@ struct EntityInfo {
     PlayerClass player_class = PlayerClass::Warrior;
     NPCType npc_type = NPCType::Monster;
     BuildingType building_type = BuildingType::Tavern;
+    EnvironmentType environment_type = EnvironmentType::RockBoulder;
     uint32_t color = 0xFFFFFFFF;
 };
 
@@ -96,8 +100,10 @@ struct LocalPlayer {};
 struct Interpolation {
     float prev_x = 0.0f;
     float prev_y = 0.0f;
+    float prev_z = 0.0f;  // Height interpolation
     float target_x = 0.0f;
     float target_y = 0.0f;
+    float target_z = 0.0f;  // Target height from server
     float alpha = 1.0f;
 };
 
@@ -120,6 +126,12 @@ struct AttackEffect {
 struct Facing {
     float x = 0.0f;
     float y = 1.0f;  // Default facing down
+};
+
+// Per-instance scale multiplier
+// 1.0 = normal size, 2.0 = double size, 0.5 = half size
+struct Scale {
+    float value = 1.0f;
 };
 
 // ============================================================================

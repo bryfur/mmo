@@ -1,5 +1,6 @@
 #include "renderer.hpp"
 #include "render/grass_renderer.hpp"
+#include "common/entity_config.hpp"
 #include <iostream>
 #include <cmath>
 
@@ -176,6 +177,9 @@ bool Renderer::load_models(const std::string& assets_path) {
     model_manager_->load_model("building_shop", models_path + "building_shop.glb");
     model_manager_->load_model("building_well", models_path + "building_well.glb");
     model_manager_->load_model("building_house", models_path + "building_house.glb");
+    model_manager_->load_model("building_inn", models_path + "inn.glb");
+    model_manager_->load_model("wooden_log", models_path + "wooden_log.glb");
+    model_manager_->load_model("log_tower", models_path + "log_tower.glb");
     
     // Town NPCs
     model_manager_->load_model("npc_merchant", models_path + "npc_merchant.glb");
@@ -249,11 +253,13 @@ void Renderer::draw_entity_shadow(const EntityState& entity) {
     Model* model = get_model_for_entity(entity);
     if (!model) return;
     
-    float terrain_y = terrain_.get_height(entity.x, entity.y);
-    glm::vec3 position(entity.x, terrain_y, entity.y);
+    // Use server-provided height (entity.z) instead of recalculating terrain height
+    glm::vec3 position(entity.x, entity.z, entity.y);
     
     float rotation = 0.0f;
-    if (entity.attack_dir_x != 0.0f || entity.attack_dir_y != 0.0f) {
+    if (entity.type == EntityType::Building || entity.type == EntityType::Environment) {
+        rotation = entity.rotation;
+    } else if (entity.attack_dir_x != 0.0f || entity.attack_dir_y != 0.0f) {
         rotation = std::atan2(-entity.attack_dir_x, -entity.attack_dir_y);
     } else if (entity.vx != 0.0f || entity.vy != 0.0f) {
         rotation = std::atan2(-entity.vx, -entity.vy);
@@ -262,6 +268,11 @@ void Renderer::draw_entity_shadow(const EntityState& entity) {
     float scale = 50.0f;
     if (entity.type == EntityType::Building) {
         scale = 250.0f;
+    } else if (entity.type == EntityType::Environment) {
+        // Environment objects use their scale directly
+        float model_size = model->max_dimension();
+        scale = (entity.scale * 1.5f) / model_size;
+        scale *= model_size;  // Convert back to final scale for shadow
     }
     
     draw_model_shadow(model, position, rotation, scale);
@@ -323,37 +334,8 @@ void Renderer::draw_mountain_shadows() {
 }
 
 void Renderer::draw_tree_shadows() {
-    if (!shadows_.is_enabled()) return;
-    
-    Model* trees[2] = {
-        model_manager_->get_model("tree_oak"),
-        model_manager_->get_model("tree_pine")
-    };
-    
-    bool any_tree = trees[0] || trees[1];
-    if (!any_tree) return;
-    
-    Shader* shader = shadows_.shadow_shader();
-    if (!shader) return;
-    
-    shader->use();
-    shader->set_mat4("lightSpaceMatrix", shadows_.light_space_matrix());
-    
-    auto tree_positions = world_.get_tree_positions_for_shadows();
-    for (const auto& tp : tree_positions) {
-        // Only render shadows for trees within reasonable distance
-        float dx = tp.x - camera_x_;
-        float dz = tp.z - camera_y_;
-        float dist_sq = dx * dx + dz * dz;
-        if (dist_sq > 3000.0f * 3000.0f) continue;
-        
-        Model* tree = (tp.tree_type < 2 && trees[tp.tree_type]) ? trees[tp.tree_type] : trees[0];
-        if (!tree) continue;
-        
-        float terrain_y = terrain_.get_height(tp.x, tp.z);
-        glm::vec3 pos(tp.x, terrain_y, tp.z);
-        draw_model_shadow(tree, pos, glm::radians(tp.rotation), tp.scale);
-    }
+    // Trees are now rendered as server-side entities with collision
+    // Their shadows are rendered through draw_entity_shadow
 }
 
 // ============================================================================
@@ -446,12 +428,47 @@ void Renderer::set_grass_enabled(bool enabled) {
     grass_enabled_ = enabled;
 }
 
+void Renderer::set_anisotropic_filter(int level) {
+    anisotropic_level_ = level;
+    
+    // Convert level to actual anisotropy value: 0=1 (off), 1=2, 2=4, 3=8, 4=16
+    float aniso_value = 1.0f;
+    if (level > 0) {
+        aniso_value = static_cast<float>(1 << level);  // 2, 4, 8, 16
+    }
+    
+    // Get max supported anisotropy
+    GLfloat max_aniso = 1.0f;
+    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &max_aniso);
+    aniso_value = std::min(aniso_value, max_aniso);
+    
+    // Update all model textures
+    if (model_manager_) {
+        model_manager_->set_anisotropic_filter(aniso_value);
+    }
+    
+    // Update terrain textures
+    terrain_.set_anisotropic_filter(aniso_value);
+}
+
 bool Renderer::get_shadows_enabled() const {
     return shadows_.is_enabled();
 }
 
 bool Renderer::get_ssao_enabled() const {
     return ssao_.is_enabled();
+}
+
+void Renderer::set_heightmap(const HeightmapChunk& heightmap) {
+    // Pass heightmap to terrain renderer for GPU upload
+    terrain_.set_heightmap(heightmap);
+    
+    // Pass heightmap texture to grass renderer for terrain-accurate grass placement
+    if (grass_renderer_) {
+        grass_renderer_->set_heightmap_texture(terrain_.heightmap_texture());
+    }
+    
+    std::cout << "[Renderer] Heightmap set for terrain and grass rendering" << std::endl;
 }
 
 // ============================================================================
@@ -471,19 +488,15 @@ void Renderer::draw_distant_mountains() {
 }
 
 void Renderer::draw_rocks() {
-    if (!rocks_enabled_) return;
-    world_.render_rocks(view_, projection_, actual_camera_pos_,
-                        shadows_.light_space_matrix(), shadows_.shadow_depth_texture(),
-                        shadows_.is_enabled(), ssao_.ssao_texture(), ssao_.is_enabled(),
-                        light_dir_, glm::vec2(context_.width(), context_.height()));
+    // Rocks are now rendered as server-side entities with collision
+    // The old client-side procedural rocks have been replaced
+    // This function is kept for compatibility but does nothing
 }
 
 void Renderer::draw_trees() {
-    if (!trees_enabled_) return;
-    world_.render_trees(view_, projection_, actual_camera_pos_,
-                        shadows_.light_space_matrix(), shadows_.shadow_depth_texture(),
-                        shadows_.is_enabled(), ssao_.ssao_texture(), ssao_.is_enabled(),
-                        light_dir_, glm::vec2(context_.width(), context_.height()));
+    // Trees are now rendered as server-side entities with collision
+    // The old client-side procedural trees have been replaced
+    // This function is kept for compatibility but does nothing
 }
 
 void Renderer::draw_ground() {
@@ -528,13 +541,30 @@ Model* Renderer::get_model_for_entity(const EntityState& entity) {
     
     if (entity.type == EntityType::Building) {
         switch (entity.building_type) {
-            case BuildingType::Tavern:     return model_manager_->get_model("building_tavern");
-            case BuildingType::Blacksmith: return model_manager_->get_model("building_blacksmith");
-            case BuildingType::Tower:      return model_manager_->get_model("building_tower");
-            case BuildingType::Shop:       return model_manager_->get_model("building_shop");
-            case BuildingType::Well:       return model_manager_->get_model("building_well");
-            case BuildingType::House:      return model_manager_->get_model("building_house");
-            default:                       return model_manager_->get_model("building_house");
+            case BuildingType::Tavern:      return model_manager_->get_model("building_tavern");
+            case BuildingType::Blacksmith:  return model_manager_->get_model("building_blacksmith");
+            case BuildingType::Tower:       return model_manager_->get_model("building_tower");
+            case BuildingType::Shop:        return model_manager_->get_model("building_shop");
+            case BuildingType::Well:        return model_manager_->get_model("building_well");
+            case BuildingType::House:       return model_manager_->get_model("building_house");
+            case BuildingType::Inn:         return model_manager_->get_model("building_inn");
+            case BuildingType::WoodenLog:   return model_manager_->get_model("wooden_log");
+            case BuildingType::LogTower:    return model_manager_->get_model("log_tower");
+            default:                        return model_manager_->get_model("building_house");
+        }
+    }
+    
+    if (entity.type == EntityType::Environment) {
+        switch (entity.environment_type) {
+            case EnvironmentType::RockBoulder:  return model_manager_->get_model("rock_boulder");
+            case EnvironmentType::RockSlate:    return model_manager_->get_model("rock_slate");
+            case EnvironmentType::RockSpire:    return model_manager_->get_model("rock_spire");
+            case EnvironmentType::RockCluster:  return model_manager_->get_model("rock_cluster");
+            case EnvironmentType::RockMossy:    return model_manager_->get_model("rock_mossy");
+            case EnvironmentType::TreeOak:      return model_manager_->get_model("tree_oak");
+            case EnvironmentType::TreePine:     return model_manager_->get_model("tree_pine");
+            case EnvironmentType::TreeDead:     return model_manager_->get_model("tree_dead");
+            default:                            return model_manager_->get_model("rock_boulder");
         }
     }
     
@@ -552,9 +582,11 @@ void Renderer::draw_entity(const EntityState& entity, bool is_local) {
     if (!model || !models_loaded_) return;
     
     float rotation = 0.0f;
-    if (entity.type == EntityType::Player) {
+    if (entity.type == EntityType::Building || entity.type == EntityType::Environment) {
+        rotation = entity.rotation;  // Use pre-set rotation for buildings and environment
+    } else if (entity.type == EntityType::Player) {
         rotation = std::atan2(entity.attack_dir_x, entity.attack_dir_y);
-    } else if (entity.type != EntityType::Building && (entity.vx != 0.0f || entity.vy != 0.0f)) {
+    } else if (entity.vx != 0.0f || entity.vy != 0.0f) {
         rotation = std::atan2(entity.vx, entity.vy);
     }
     
@@ -563,34 +595,36 @@ void Renderer::draw_entity(const EntityState& entity, bool is_local) {
     
     switch (entity.type) {
         case EntityType::Building:
-            switch (entity.building_type) {
-                case BuildingType::Tower:      target_size = 160.0f; break;
-                case BuildingType::Tavern:     target_size = 140.0f; break;
-                case BuildingType::Blacksmith: target_size = 120.0f; break;
-                case BuildingType::Shop:       target_size = 100.0f; break;
-                case BuildingType::House:      target_size = 110.0f; break;
-                case BuildingType::Well:       target_size = 60.0f; break;
-                default:                       target_size = 100.0f; break;
-            }
+            target_size = config::get_building_target_size(entity.building_type);
+            show_health_bar = false;
+            break;
+        case EntityType::Environment:
+            // Environment objects use scale directly (already calculated on server)
+            target_size = entity.scale;
             show_health_bar = false;
             break;
         case EntityType::TownNPC:
-            target_size = PLAYER_SIZE * 0.9f;
+            target_size = config::get_character_target_size(EntityType::TownNPC);
             show_health_bar = false;
             break;
         case EntityType::NPC:
-            target_size = NPC_SIZE;
+            target_size = config::get_character_target_size(EntityType::NPC);
             break;
         default:
-            target_size = PLAYER_SIZE;
+            target_size = config::get_character_target_size(EntityType::Player);
             break;
+    }
+    
+    // Apply per-instance scale from server (but not for Environment, already applied)
+    if (entity.type != EntityType::Environment) {
+        target_size *= entity.scale;
     }
     
     float model_size = model->max_dimension();
     float scale = (target_size * 1.5f) / model_size;
     
-    float terrain_y = terrain_.get_height(entity.x, entity.y);
-    glm::vec3 position(entity.x, terrain_y, entity.y);
+    // Use server-provided height (entity.z) for accurate terrain placement
+    glm::vec3 position(entity.x, entity.z, entity.y);
     glm::vec4 tint(1.0f);
     
     float attack_tilt = 0.0f;
@@ -624,7 +658,7 @@ void Renderer::draw_entity(const EntityState& entity, bool is_local) {
     
     if (show_health_bar && !is_local) {
         float health_ratio = entity.health / entity.max_health;
-        float bar_height_offset = terrain_y + target_size * 1.3f;
+        float bar_height_offset = entity.z + target_size * 1.3f;
         draw_enemy_health_bar_3d(entity.x, bar_height_offset, entity.y, target_size * 0.8f, health_ratio);
     }
 }

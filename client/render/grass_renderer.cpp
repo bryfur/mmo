@@ -44,7 +44,18 @@ uniform float windWaveLength;
 uniform float windWavePeriod;
 uniform float grassSpacing;
 uniform float viewDistance;
-uniform vec2 worldBounds;  // world_width, world_height
+
+// World parameters
+uniform float worldWidth;   // Total world width (e.g., 8000)
+uniform float worldHeight;  // Total world height (e.g., 8000)
+
+// Heightmap texture from server
+uniform sampler2D heightmapTexture;
+uniform int hasHeightmap;  // 1 if heightmap is available
+
+// Height range constants (must match heightmap_config in C++)
+const float MIN_HEIGHT = -500.0;
+const float MAX_HEIGHT = 500.0;
 
 // Hash functions for procedural generation
 float hash(vec2 p) {
@@ -55,22 +66,24 @@ vec2 hash2(vec2 p) {
     return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453);
 }
 
-// Terrain height function - must match renderer.cpp
-float getTerrainHeight(float x, float z) {
-    vec2 worldCenter = worldBounds * 0.5;
+// Sample terrain height - use same procedural formula as server heightmap
+float getTerrainHeight(float world_x, float world_z) {
+    float world_center_x = worldWidth / 2.0;
+    float world_center_z = worldHeight / 2.0;
     
-    float dx = x - worldCenter.x;
-    float dz = z - worldCenter.y;
+    float dx = world_x - world_center_x;
+    float dz = world_z - world_center_z;
     float dist = sqrt(dx * dx + dz * dz);
     
     // Keep playable area relatively flat
-    float playableRadius = 600.0;
-    float transitionRadius = 400.0;
+    float playable_radius = 600.0;
+    float transition_radius = 400.0;
     float flatness = 1.0;
-    if (dist < playableRadius) {
+    
+    if (dist < playable_radius) {
         flatness = 0.1;
-    } else if (dist < playableRadius + transitionRadius) {
-        float t = (dist - playableRadius) / transitionRadius;
+    } else if (dist < playable_radius + transition_radius) {
+        float t = (dist - playable_radius) / transition_radius;
         flatness = 0.1 + t * 0.9;
     }
     
@@ -79,26 +92,26 @@ float getTerrainHeight(float x, float z) {
     
     // Large rolling hills
     float freq1 = 0.0008;
-    height += sin(x * freq1 * 1.1) * cos(z * freq1 * 0.9) * 80.0;
-    height += sin(x * freq1 * 0.7 + 1.3) * sin(z * freq1 * 1.2 + 0.7) * 60.0;
+    height += sin(world_x * freq1 * 1.1) * cos(world_z * freq1 * 0.9) * 80.0;
+    height += sin(world_x * freq1 * 0.7 + 1.3) * sin(world_z * freq1 * 1.2 + 0.7) * 60.0;
     
     // Medium undulations
     float freq2 = 0.003;
-    height += sin(x * freq2 * 1.3 + 2.1) * cos(z * freq2 * 0.8 + 1.4) * 25.0;
-    height += cos(x * freq2 * 0.9) * sin(z * freq2 * 1.1 + 0.5) * 20.0;
+    height += sin(world_x * freq2 * 1.3 + 2.1) * cos(world_z * freq2 * 0.8 + 1.4) * 25.0;
+    height += cos(world_x * freq2 * 0.9) * sin(world_z * freq2 * 1.1 + 0.5) * 20.0;
     
     // Small bumps
     float freq3 = 0.01;
-    height += sin(x * freq3 * 1.7 + 0.3) * cos(z * freq3 * 1.4 + 2.1) * 8.0;
-    height += cos(x * freq3 * 1.2 + 1.8) * sin(z * freq3 * 0.9) * 6.0;
+    height += sin(world_x * freq3 * 1.7 + 0.3) * cos(world_z * freq3 * 1.4 + 2.1) * 8.0;
+    height += cos(world_x * freq3 * 1.2 + 1.8) * sin(world_z * freq3 * 0.9) * 6.0;
     
     height *= flatness;
     
-    // Terrain rises toward mountains
+    // Terrain rises toward mountains at edges
     if (dist > 2000.0) {
-        float riseFactor = (dist - 2000.0) / 2000.0;
-        riseFactor = min(riseFactor, 1.0);
-        height += riseFactor * riseFactor * 150.0;
+        float rise_factor = (dist - 2000.0) / 2000.0;
+        rise_factor = min(rise_factor, 1.0);
+        height += rise_factor * rise_factor * 150.0;
     }
     
     return height;
@@ -111,13 +124,13 @@ void main() {
     
     // World bounds check
     float margin = 50.0;
-    if (worldPos2D.x < margin || worldPos2D.x > worldBounds.x - margin ||
-        worldPos2D.y < margin || worldPos2D.y > worldBounds.y - margin) {
+    if (worldPos2D.x < margin || worldPos2D.x > worldWidth - margin ||
+        worldPos2D.y < margin || worldPos2D.y > worldHeight - margin) {
         return;
     }
     
     // Skip town center area
-    vec2 townCenter = worldBounds * 0.5;
+    vec2 townCenter = vec2(worldWidth * 0.5, worldHeight * 0.5);
     if (abs(worldPos2D.x - townCenter.x) < 200.0 && abs(worldPos2D.y - townCenter.y) < 200.0) {
         return;
     }
@@ -443,13 +456,22 @@ void GrassRenderer::render(const glm::mat4& view, const glm::mat4& projection, c
     glUniform1f(glGetUniformLocation(grass_program_, "windWavePeriod"), wind_wave_period);
     glUniform1f(glGetUniformLocation(grass_program_, "grassSpacing"), grass_spacing);
     glUniform1f(glGetUniformLocation(grass_program_, "viewDistance"), grass_view_distance);
-    glUniform2f(glGetUniformLocation(grass_program_, "worldBounds"), world_width_, world_height_);
     
-    // Shadow mapping
+    // World dimensions for height calculation
+    glUniform1f(glGetUniformLocation(grass_program_, "worldWidth"), world_width_);
+    glUniform1f(glGetUniformLocation(grass_program_, "worldHeight"), world_height_);
+    
+    // Shadow mapping (texture unit 0)
     glUniform1i(glGetUniformLocation(grass_program_, "shadowsEnabled"), shadows_enabled ? 1 : 0);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, shadow_map);
     glUniform1i(glGetUniformLocation(grass_program_, "shadowMap"), 0);
+    
+    // Heightmap texture (texture unit 1)
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, heightmap_texture_);
+    glUniform1i(glGetUniformLocation(grass_program_, "heightmapTexture"), 1);
+    glUniform1i(glGetUniformLocation(grass_program_, "hasHeightmap"), heightmap_texture_ != 0 ? 1 : 0);
     
     // Fog
     glUniform3f(glGetUniformLocation(grass_program_, "fogColor"), 0.12f, 0.14f, 0.2f);

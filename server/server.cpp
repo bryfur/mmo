@@ -63,13 +63,19 @@ void Server::on_player_connect(std::shared_ptr<Session> session, const std::stri
         case PlayerClass::Warrior: class_name = "Warrior"; break;
         case PlayerClass::Mage: class_name = "Mage"; break;
         case PlayerClass::Paladin: class_name = "Paladin"; break;
+        case PlayerClass::Archer: class_name = "Archer"; break;
     }
     std::cout << "Player '" << name << "' (" << class_name << ") connected with ID " << player_id << std::endl;
     
+    // Send connection accepted
     Packet accept_packet(MessageType::ConnectionAccepted);
     accept_packet.write_uint32(player_id);
     session->send(accept_packet.build());
     
+    // Send heightmap data (before world state so client can position entities correctly)
+    send_heightmap(session);
+    
+    // Send world state
     auto entities = world_.get_all_entities();
     Packet world_packet(MessageType::WorldState);
     world_packet.write_uint16(static_cast<uint16_t>(entities.size()));
@@ -155,6 +161,30 @@ void Server::broadcast_world_state() {
     }
     
     broadcast(state_packet.build());
+}
+
+void Server::send_heightmap(std::shared_ptr<Session> session) {
+    const auto& heightmap = world_.heightmap();
+    
+    // Heightmap is too large for standard packet (uint16 payload size limit)
+    // Send as raw data with custom header
+    std::vector<uint8_t> data;
+    
+    // Header: message type + 4-byte payload size (for large data)
+    data.push_back(static_cast<uint8_t>(MessageType::HeightmapChunk));
+    uint32_t payload_size = static_cast<uint32_t>(heightmap.serialized_size());
+    data.push_back(static_cast<uint8_t>(payload_size & 0xFF));
+    data.push_back(static_cast<uint8_t>((payload_size >> 8) & 0xFF));
+    data.push_back(static_cast<uint8_t>((payload_size >> 16) & 0xFF));
+    data.push_back(static_cast<uint8_t>((payload_size >> 24) & 0xFF));
+    
+    // Serialize heightmap data
+    heightmap.serialize(data);
+    
+    std::cout << "[Server] Sending heightmap to player " << session->player_id() 
+              << " (" << data.size() / 1024 << " KB)" << std::endl;
+    
+    session->send(data);
 }
 
 } // namespace mmo

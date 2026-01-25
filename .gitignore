@@ -58,3 +58,4 @@ _deps/
 # Temporary files
 *.tmp
 *.temp
+shader_cache/

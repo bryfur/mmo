@@ -28,14 +28,17 @@ void InterpolationSystem::update(entt::registry& registry, float dt) {
         // Lerp between previous position and target
         transform.x = interp.prev_x + (interp.target_x - interp.prev_x) * smooth_t;
         transform.y = interp.prev_y + (interp.target_y - interp.prev_y) * smooth_t;
+        transform.z = interp.prev_z + (interp.target_z - interp.prev_z) * smooth_t;
         
         // If we've fully caught up, snap to target
         // This prevents floating point drift
         if (interp.alpha >= 1.0f) {
             transform.x = interp.target_x;
             transform.y = interp.target_y;
+            transform.z = interp.target_z;
             interp.prev_x = interp.target_x;
             interp.prev_y = interp.target_y;
+            interp.prev_z = interp.target_z;
         }
     }
 }

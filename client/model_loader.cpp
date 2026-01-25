@@ -506,6 +506,11 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         
+        // Enable anisotropic filtering if supported
+        GLfloat max_aniso = 1.0f;
+        glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &max_aniso);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, std::min(max_aniso, 16.0f));
+        
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, 
                      GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
         glGenerateMipmap(GL_TEXTURE_2D);
@@ -777,6 +782,19 @@ void ModelManager::unload_all() {
     }
     models_.clear();
     animation_states_.clear();
+}
+
+void ModelManager::set_anisotropic_filter(float level) {
+    // Update all textures in all models
+    for (auto& [name, model] : models_) {
+        for (auto& mesh : model.meshes) {
+            if (mesh.has_texture && mesh.texture_id != 0) {
+                glBindTexture(GL_TEXTURE_2D, mesh.texture_id);
+                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, level);
+            }
+        }
+    }
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 } // namespace mmo

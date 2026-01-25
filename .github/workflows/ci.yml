@@ -21,15 +21,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            cmake \
-            ninja-build \
-            libglew-dev \
-            libglm-dev \
-            libgl1-mesa-dev
+      - name: Cache apt packages
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: cmake ninja-build libglew-dev libglm-dev libgl1-mesa-dev
+          version: 1.0
 
       - name: Cache SDL3
         id: cache-sdl

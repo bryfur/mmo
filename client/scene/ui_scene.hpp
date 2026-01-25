@@ -3,24 +3,9 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <variant>
 
 namespace mmo {
-
-/**
- * Types of UI render commands
- */
-enum class UICommandType {
-    FilledRect,
-    RectOutline,
-    Circle,
-    CircleOutline,
-    Line,
-    Text,
-    Button,
-    TargetReticle,
-    PlayerHealthBar,
-    EnemyHealthBar3D
-};
 
 /**
  * Filled rectangle command
@@ -88,6 +73,11 @@ struct ButtonCommand {
 };
 
 /**
+ * Target reticle marker command
+ */
+struct TargetReticleCommand {};
+
+/**
  * Player health bar (UI overlay)
  */
 struct PlayerHealthBarCommand {
@@ -105,21 +95,34 @@ struct EnemyHealthBar3DCommand {
 };
 
 /**
- * Generic UI command
+ * Generic UI command using std::variant for type-safe storage
+ * Only stores one command type at a time for memory efficiency
  */
+using UICommandData = std::variant<
+    FilledRectCommand,
+    RectOutlineCommand,
+    CircleCommand,
+    CircleOutlineCommand,
+    LineCommand,
+    TextCommand,
+    ButtonCommand,
+    TargetReticleCommand,
+    PlayerHealthBarCommand,
+    EnemyHealthBar3DCommand
+>;
+
 struct UICommand {
-    UICommandType type;
+    UICommandData data;
     
-    // Command data - use appropriate field based on type
-    FilledRectCommand filled_rect;
-    RectOutlineCommand rect_outline;
-    CircleCommand circle;
-    CircleOutlineCommand circle_outline;
-    LineCommand line;
-    TextCommand text;
-    ButtonCommand button;
-    PlayerHealthBarCommand player_health;
-    EnemyHealthBar3DCommand enemy_health_3d;
+    // Helper methods for type checking
+    template<typename T>
+    bool is() const { return std::holds_alternative<T>(data); }
+    
+    template<typename T>
+    const T& get() const { return std::get<T>(data); }
+    
+    template<typename T>
+    T& get() { return std::get<T>(data); }
 };
 
 /**

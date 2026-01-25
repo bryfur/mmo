@@ -37,6 +37,13 @@ public:
      * @param scene The render scene to populate with shadow commands
      */
     void collect_entity_shadows(entt::registry& registry, RenderScene& scene);
+
+private:
+    /**
+     * Build an EntityState from ECS components.
+     * Shared helper to avoid duplication between collect_entities and collect_entity_shadows.
+     */
+    EntityState build_entity_state(entt::registry& registry, entt::entity entity);
 };
 
 } // namespace mmo

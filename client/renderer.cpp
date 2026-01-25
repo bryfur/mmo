@@ -3,6 +3,7 @@
 #include "common/entity_config.hpp"
 #include <iostream>
 #include <cmath>
+#include <type_traits>
 
 namespace mmo {
 
@@ -1100,62 +1101,42 @@ void Renderer::render_shadow_pass(const RenderScene& scene) {
 
 void Renderer::render_ui(const UIScene& ui_scene) {
     for (const auto& cmd : ui_scene.commands()) {
-        switch (cmd.type) {
-            case UICommandType::FilledRect:
-                draw_filled_rect(cmd.filled_rect.x, cmd.filled_rect.y, 
-                                cmd.filled_rect.w, cmd.filled_rect.h, 
-                                cmd.filled_rect.color);
-                break;
-                
-            case UICommandType::RectOutline:
-                draw_rect_outline(cmd.rect_outline.x, cmd.rect_outline.y,
-                                 cmd.rect_outline.w, cmd.rect_outline.h,
-                                 cmd.rect_outline.color, cmd.rect_outline.line_width);
-                break;
-                
-            case UICommandType::Circle:
-                draw_circle(cmd.circle.x, cmd.circle.y, cmd.circle.radius,
-                           cmd.circle.color, cmd.circle.segments);
-                break;
-                
-            case UICommandType::CircleOutline:
-                draw_circle_outline(cmd.circle_outline.x, cmd.circle_outline.y,
-                                   cmd.circle_outline.radius, cmd.circle_outline.color,
-                                   cmd.circle_outline.line_width, cmd.circle_outline.segments);
-                break;
-                
-            case UICommandType::Line:
-                draw_line(cmd.line.x1, cmd.line.y1, cmd.line.x2, cmd.line.y2,
-                         cmd.line.color, cmd.line.line_width);
-                break;
-                
-            case UICommandType::Text:
-                draw_ui_text(cmd.text.text, cmd.text.x, cmd.text.y,
-                            cmd.text.scale, cmd.text.color);
-                break;
-                
-            case UICommandType::Button:
-                draw_button(cmd.button.x, cmd.button.y, cmd.button.w, cmd.button.h,
-                           cmd.button.label, cmd.button.color, cmd.button.selected);
-                break;
-                
-            case UICommandType::TargetReticle:
+        std::visit([this](const auto& data) {
+            using T = std::decay_t<decltype(data)>;
+            
+            if constexpr (std::is_same_v<T, FilledRectCommand>) {
+                draw_filled_rect(data.x, data.y, data.w, data.h, data.color);
+            }
+            else if constexpr (std::is_same_v<T, RectOutlineCommand>) {
+                draw_rect_outline(data.x, data.y, data.w, data.h, data.color, data.line_width);
+            }
+            else if constexpr (std::is_same_v<T, CircleCommand>) {
+                draw_circle(data.x, data.y, data.radius, data.color, data.segments);
+            }
+            else if constexpr (std::is_same_v<T, CircleOutlineCommand>) {
+                draw_circle_outline(data.x, data.y, data.radius, data.color, 
+                                   data.line_width, data.segments);
+            }
+            else if constexpr (std::is_same_v<T, LineCommand>) {
+                draw_line(data.x1, data.y1, data.x2, data.y2, data.color, data.line_width);
+            }
+            else if constexpr (std::is_same_v<T, TextCommand>) {
+                draw_ui_text(data.text, data.x, data.y, data.scale, data.color);
+            }
+            else if constexpr (std::is_same_v<T, ButtonCommand>) {
+                draw_button(data.x, data.y, data.w, data.h, data.label, data.color, data.selected);
+            }
+            else if constexpr (std::is_same_v<T, TargetReticleCommand>) {
                 draw_target_reticle();
-                break;
-                
-            case UICommandType::PlayerHealthBar:
-                draw_player_health_ui(cmd.player_health.health_ratio, 
-                                      cmd.player_health.max_health);
-                break;
-                
-            case UICommandType::EnemyHealthBar3D:
-                draw_enemy_health_bar_3d(cmd.enemy_health_3d.world_x,
-                                        cmd.enemy_health_3d.world_y,
-                                        cmd.enemy_health_3d.world_z,
-                                        cmd.enemy_health_3d.width,
-                                        cmd.enemy_health_3d.health_ratio);
-                break;
-        }
+            }
+            else if constexpr (std::is_same_v<T, PlayerHealthBarCommand>) {
+                draw_player_health_ui(data.health_ratio, data.max_health);
+            }
+            else if constexpr (std::is_same_v<T, EnemyHealthBar3DCommand>) {
+                draw_enemy_health_bar_3d(data.world_x, data.world_y, data.world_z,
+                                        data.width, data.health_ratio);
+            }
+        }, cmd.data);
     }
 }
 

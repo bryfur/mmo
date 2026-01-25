@@ -6,28 +6,12 @@
 #include <string>
 #include <vector>
 #include <array>
+#include <variant>
 
 namespace mmo {
 
 // Forward declarations
 struct EntityState;
-
-/**
- * Types of render commands that can be queued
- */
-enum class RenderCommandType {
-    Model,          // Static 3D model
-    SkinnedModel,   // Animated skeletal model
-    Effect,         // Attack/spell effects
-    Entity,         // Game entity (player, NPC, etc)
-    EntityShadow,   // Entity shadow pass
-    Terrain,        // Ground/terrain
-    Skybox,         // Sky backdrop
-    Mountains,      // Distant mountains
-    Rocks,          // Rock objects
-    Trees,          // Tree objects
-    Grass           // Grass rendering
-};
 
 /**
  * Model render command data
@@ -73,17 +57,29 @@ struct EffectCommand {
 };
 
 /**
- * Generic render command that can hold any type of render data
+ * Generic render command using std::variant for type-safe storage
+ * Only stores one command type at a time for memory efficiency
  */
+using RenderCommandData = std::variant<
+    ModelCommand,
+    SkinnedModelCommand,
+    EntityCommand,
+    EntityShadowCommand,
+    EffectCommand
+>;
+
 struct RenderCommand {
-    RenderCommandType type;
+    RenderCommandData data;
     
-    // Command data - use appropriate field based on type
-    ModelCommand model;
-    SkinnedModelCommand skinned_model;
-    EntityCommand entity;
-    EntityShadowCommand entity_shadow;
-    EffectCommand effect;
+    // Helper methods for type checking
+    template<typename T>
+    bool is() const { return std::holds_alternative<T>(data); }
+    
+    template<typename T>
+    const T& get() const { return std::get<T>(data); }
+    
+    template<typename T>
+    T& get() { return std::get<T>(data); }
 };
 
 /**

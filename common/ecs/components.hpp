@@ -1,7 +1,6 @@
 #pragma once
 
 #include "common/protocol.hpp"
-#include <glm/glm.hpp>
 #include <string>
 #include <cstdint>
 
@@ -204,7 +203,10 @@ struct CollisionEvent {
 // Marks an entity as renderable with a 3D model
 struct ModelRenderable {
     std::string model_name;  // Key in ModelManager
-    glm::vec4 tint = {1.0f, 1.0f, 1.0f, 1.0f};
+    float tint_r = 1.0f;
+    float tint_g = 1.0f;
+    float tint_b = 1.0f;
+    float tint_a = 1.0f;
     float scale = 1.0f;
 };
 

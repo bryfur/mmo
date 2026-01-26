@@ -194,6 +194,43 @@ std::unique_ptr<GPUTexture> GPUTexture::create_2d(GPUDevice& device,
     return texture;
 }
 
+std::unique_ptr<GPUTexture> GPUTexture::create_2d(GPUDevice& device,
+                                                    int width, int height,
+                                                    SDL_GPUTextureFormat format,
+                                                    SDL_GPUTextureUsageFlags usage) {
+    auto texture = std::unique_ptr<GPUTexture>(new GPUTexture());
+    texture->device_ = &device;
+    texture->width_ = width;
+    texture->height_ = height;
+    texture->format_ = format;
+    texture->mip_levels_ = 1;
+    
+    // Check if this is a depth format
+    texture->is_depth_ = (format == SDL_GPU_TEXTUREFORMAT_D32_FLOAT ||
+                          format == SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT ||
+                          format == SDL_GPU_TEXTUREFORMAT_D16_UNORM);
+    
+    // Check if this is a render target (color or depth-stencil)
+    texture->is_render_target_ = (usage & (SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET)) != 0;
+
+    SDL_GPUTextureCreateInfo tex_info = {};
+    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+    tex_info.format = format;
+    tex_info.usage = usage;
+    tex_info.width = static_cast<Uint32>(width);
+    tex_info.height = static_cast<Uint32>(height);
+    tex_info.layer_count_or_depth = 1;
+    tex_info.num_levels = 1;
+
+    texture->texture_ = device.create_texture(tex_info);
+    if (!texture->texture_) {
+        SDL_Log("GPUTexture::create_2d: Failed to create texture: %s", SDL_GetError());
+        return nullptr;
+    }
+
+    return texture;
+}
+
 std::unique_ptr<GPUTexture> GPUTexture::create_render_target(GPUDevice& device,
                                                                int width, int height,
                                                                TextureFormat format) {

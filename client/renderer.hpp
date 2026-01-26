@@ -187,6 +187,7 @@ private:
     
     // ========== SUBSYSTEMS ==========
     RenderContext context_;
+    gpu::PipelineRegistry pipeline_registry_;
     TerrainRenderer terrain_;
     WorldRenderer world_;
     UIRenderer ui_;
@@ -195,7 +196,6 @@ private:
     SSAOSystem ssao_;
     
     // ========== GPU RESOURCES ==========
-    gpu::PipelineRegistry pipeline_registry_;
     std::unique_ptr<gpu::GPUBuffer> billboard_vertex_buffer_;
     SDL_GPUSampler* default_sampler_ = nullptr;
     

@@ -64,6 +64,24 @@ public:
                                                    bool generate_mipmaps = false);
 
     /**
+     * @brief Create a 2D texture with explicit SDL format and usage flags
+     * 
+     * This overload provides direct access to SDL GPU texture formats and usage flags
+     * for advanced use cases that need more control over texture creation.
+     * 
+     * @param device The GPU device
+     * @param width Texture width
+     * @param height Texture height
+     * @param format SDL GPU texture format
+     * @param usage SDL GPU texture usage flags
+     * @return Unique pointer to the texture, or nullptr on failure
+     */
+    static std::unique_ptr<GPUTexture> create_2d(GPUDevice& device,
+                                                   int width, int height,
+                                                   SDL_GPUTextureFormat format,
+                                                   SDL_GPUTextureUsageFlags usage);
+
+    /**
      * @brief Create a render target texture
      * 
      * @param device The GPU device

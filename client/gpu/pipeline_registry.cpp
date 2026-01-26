@@ -1,6 +1,5 @@
 #include "pipeline_registry.hpp"
 #include <SDL3/SDL_log.h>
-#include <cassert>
 
 namespace mmo::gpu {
 
@@ -940,7 +939,7 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_terrain_pipeline() {
     
     ShaderResources fs_resources;
     fs_resources.num_uniform_buffers = 1;
-    fs_resources.num_samplers = 3;
+    fs_resources.num_samplers = 1;
     
     auto* vs = get_or_create_shader("terrain_vs", ShaderStage::Vertex,
                                      hlsl::terrain_vertex, "VSMain", vs_resources);

@@ -147,7 +147,8 @@ void EffectRenderer::draw_model_effect(SDL_GPURenderPass* pass, SDL_GPUCommandBu
     // Set up fragment uniforms
     EffectFragmentUniforms frag_uniforms;
     frag_uniforms.light_dir = glm::vec3(-0.3f, -1.0f, -0.5f);
-    frag_uniforms.ambient = (ambient_color.r + ambient_color.g + ambient_color.b) / 3.0f;
+    // Use a single channel for ambient intensity to match shader's float ambient
+    frag_uniforms.ambient = ambient_color.r;
     frag_uniforms.light_color = light_color;
     frag_uniforms._padding1 = 0.0f;
     frag_uniforms.tint_color = tint_color;

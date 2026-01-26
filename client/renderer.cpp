@@ -1025,11 +1025,11 @@ void Renderer::draw_enemy_health_bar_3d(float world_x, float world_y, float worl
 // ============================================================================
 
 void Renderer::draw_attack_effect(const ecs::AttackEffect& effect) {
-    // Effect rendering now uses SDL3 GPU API and requires a render pass.
-    // Main renderer integration is pending (see issue #13).
-    SDL_GPUCommandBuffer* cmd = context_.current_command_buffer();
-    SDL_GPURenderPass* pass = nullptr;
-    effects_.draw_attack_effect(pass, cmd, effect, view_, projection_, actual_camera_pos_);
+    // NOTE: This function is currently a no-op stub. Once a valid
+    // SDL_GPURenderPass is available from the render context, this method
+    // should be updated to obtain that pass and forward it to
+    // effects_.draw_attack_effect.
+    (void)effect;
 }
 
 void Renderer::draw_warrior_slash(float x, float y, float dir_x, float dir_y, float progress) {

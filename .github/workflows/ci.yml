@@ -31,7 +31,7 @@ jobs:
         id: cache-sdl
         uses: actions/cache@v4
         with:
-          path: /tmp/setup-sdl
+          path: /tmp/setupsdl
           key: sdl3-ubuntu-24.04-${{ hashFiles('.github/workflows/ci.yml') }}
 
       - name: Setup SDL3

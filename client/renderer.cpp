@@ -63,14 +63,14 @@ bool Renderer::init(int width, int height, const std::string& title) {
         return terrain_.get_height(x, z);
     });
     
-    // Initialize shadow system
-    if (!shadows_.init(4096)) {
+    // Initialize shadow system with SDL3 GPU
+    if (!shadows_.init(context_.device(), pipeline_registry_, 4096)) {
         std::cerr << "Failed to initialize shadow system" << std::endl;
         return false;
     }
     
-    // Initialize SSAO system
-    if (!ssao_.init(width, height)) {
+    // Initialize SSAO system with SDL3 GPU (stub - disabled until deferred rendering is ready)
+    if (!ssao_.init(context_.device(), width, height)) {
         std::cerr << "Failed to initialize SSAO system" << std::endl;
         return false;
     }
@@ -262,107 +262,49 @@ void Renderer::end_frame() {
 // ============================================================================
 // SHADOW PASS
 // ============================================================================
+// NOTE: Shadow rendering is temporarily disabled until the model loader is
+// migrated to SDL3 GPU (issue #14). The shadow system itself has been ported
+// to SDL3 GPU, but models still use GL buffers which cannot be bound to
+// SDL3 GPU render passes.
+//
+// Once issue #14 is complete, shadow rendering will use:
+// 1. shadows_.begin_shadow_pass(cmd) to get a render pass
+// 2. shadows_.render_shadow_caster() to render each model
+// 3. shadows_.end_shadow_pass(pass) to end the pass
 
 void Renderer::begin_shadow_pass() {
     if (!shadows_.is_enabled()) return;
     
     // Update light space matrix based on camera position
     shadows_.update_light_space_matrix(camera_x_, camera_y_, light_dir_);
-    shadows_.begin_shadow_pass();
+    
+    // Shadow pass is disabled until models are migrated to SDL3 GPU (issue #14)
+    // The SDL3 GPU shadow system requires models with GPUBuffer vertex/index buffers
 }
 
 void Renderer::end_shadow_pass() {
-    shadows_.end_shadow_pass();
+    // Shadow pass is disabled until models are migrated to SDL3 GPU (issue #14)
 }
 
 void Renderer::draw_entity_shadow(const EntityState& entity) {
-    if (!shadows_.is_enabled()) return;
-    
-    Model* model = get_model_for_entity(entity);
-    if (!model) return;
-    
-    // Use server-provided height (entity.z) instead of recalculating terrain height
-    glm::vec3 position(entity.x, entity.z, entity.y);
-    
-    float rotation = 0.0f;
-    if (entity.type == EntityType::Building || entity.type == EntityType::Environment) {
-        rotation = entity.rotation;
-    } else if (entity.attack_dir_x != 0.0f || entity.attack_dir_y != 0.0f) {
-        rotation = std::atan2(-entity.attack_dir_x, -entity.attack_dir_y);
-    } else if (entity.vx != 0.0f || entity.vy != 0.0f) {
-        rotation = std::atan2(-entity.vx, -entity.vy);
-    }
-    
-    float scale = 50.0f;
-    if (entity.type == EntityType::Building) {
-        scale = 250.0f;
-    } else if (entity.type == EntityType::Environment) {
-        // Environment objects use their scale directly
-        float model_size = model->max_dimension();
-        scale = (entity.scale * 1.5f) / model_size;
-        scale *= model_size;  // Convert back to final scale for shadow
-    }
-    
-    draw_model_shadow(model, position, rotation, scale);
+    // Shadow rendering disabled until models are migrated to SDL3 GPU (issue #14)
+    // The model's transform and shadow caster registration will be handled by
+    // shadows_.render_shadow_caster() once models use GPUBuffer.
+    (void)shadows_; // Suppress unused warning
 }
 
 void Renderer::draw_model_shadow(Model* model, const glm::vec3& position, float rotation, float scale) {
-    if (!model || !shadows_.is_enabled()) return;
-    
-    Shader* shader = shadows_.shadow_shader();
-    if (!shader) return;
-    
-    shader->use();
-    shader->set_mat4("lightSpaceMatrix", shadows_.light_space_matrix());
-    
-    glm::mat4 model_mat = glm::mat4(1.0f);
-    model_mat = glm::translate(model_mat, position);
-    model_mat = glm::rotate(model_mat, rotation, glm::vec3(0.0f, 1.0f, 0.0f));
-    model_mat = glm::scale(model_mat, glm::vec3(scale));
-    
-    float cx = (model->min_x + model->max_x) / 2.0f;
-    float cy = model->min_y;
-    float cz = (model->min_z + model->max_z) / 2.0f;
-    model_mat = model_mat * glm::translate(glm::mat4(1.0f), glm::vec3(-cx, -cy, -cz));
-    
-    shader->set_mat4("model", model_mat);
-    
-    // Note: Model meshes still use GL buffers until issue #14 is completed
-    // For now, continue using the GL draw path
-    for (const auto& mesh : model->meshes) {
-        if (mesh.vao && !mesh.indices.empty()) {
-            glBindVertexArray(mesh.vao);
-            glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh.indices.size()), GL_UNSIGNED_INT, 0);
-        }
-    }
-    glBindVertexArray(0);
+    // Shadow rendering disabled until models are migrated to SDL3 GPU (issue #14)
+    // This method will use shadows_.render_shadow_caster() with the model's GPUBuffer
+    // once issue #14 is complete.
+    (void)model;
+    (void)position;
+    (void)rotation;
+    (void)scale;
 }
 
 void Renderer::draw_mountain_shadows() {
-    if (!shadows_.is_enabled()) return;
-    
-    Model* mountain_large = model_manager_->get_model("mountain_large");
-    if (!mountain_large) return;
-    
-    Shader* shader = shadows_.shadow_shader();
-    if (!shader) return;
-    
-    shader->use();
-    shader->set_mat4("lightSpaceMatrix", shadows_.light_space_matrix());
-    
-    for (const auto& mp : world_.get_mountain_positions()) {
-        if (mp.size_type != 2) continue;  // Only large mountains
-        
-        float dx = mp.x - camera_x_;
-        float dz = mp.z - camera_y_;
-        float dist = std::sqrt(dx * dx + dz * dz);
-        float light_dot = (dx * (-light_dir_.x) + dz * (-light_dir_.z));
-        
-        if (light_dot > 0 && dist < 15000.0f) {
-            glm::vec3 pos(mp.x, mp.y, mp.z);
-            draw_model_shadow(mountain_large, pos, glm::radians(mp.rotation), mp.scale);
-        }
-    }
+    // Shadow rendering disabled until models are migrated to SDL3 GPU (issue #14)
 }
 
 void Renderer::draw_tree_shadows() {
@@ -569,9 +511,14 @@ void Renderer::draw_grass() {
     if (!grass_renderer_ || !grass_enabled_) return;
     
     grass_renderer_->update(0.016f, skybox_time_);
+    
+    // NOTE: Shadow mapping for grass is temporarily disabled until the grass renderer
+    // is migrated to SDL3 GPU (issue #15). The shadow system now uses SDL3 GPU textures
+    // which are not compatible with the GL-based grass renderer.
+    // Pass 0 for shadow_map and false for shadows_enabled as a temporary workaround.
     grass_renderer_->render(view_, projection_, actual_camera_pos_,
-                           shadows_.light_space_matrix(), shadows_.shadow_depth_texture(),
-                           shadows_.is_enabled(), light_dir_);
+                           shadows_.light_space_matrix(), 0 /* shadow_map disabled */,
+                           false /* shadows disabled for grass */, light_dir_);
 }
 
 void Renderer::draw_grid() {
@@ -783,15 +730,15 @@ void Renderer::draw_model(Model* model, const glm::vec3& position, float rotatio
     shader->set_vec4("tintColor", tint);
     
     shader->set_mat4("lightSpaceMatrix", shadows_.light_space_matrix());
-    shader->set_int("shadowsEnabled", shadows_.is_enabled() ? 1 : 0);
+    shader->set_int("shadowsEnabled", 0);
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, shadows_.shadow_depth_texture());
+    glBindTexture(GL_TEXTURE_2D, 0);
     shader->set_int("shadowMap", 2);
     
-    shader->set_int("ssaoEnabled", ssao_.is_enabled() ? 1 : 0);
+    shader->set_int("ssaoEnabled", 0);
     shader->set_vec2("screenSize", glm::vec2(context_.width(), context_.height()));
     glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, ssao_.ssao_texture());
+    glBindTexture(GL_TEXTURE_2D, 0);
     shader->set_int("ssaoTexture", 3);
     
     if (model->has_skeleton) {

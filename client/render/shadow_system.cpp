@@ -1,12 +1,13 @@
 #include "shadow_system.hpp"
+#include "../gpu/gpu_pipeline.hpp"
+#include <SDL3/SDL_log.h>
 #include <glm/gtc/matrix_transform.hpp>
-#include <iostream>
 #include <cstdlib>
 
 namespace mmo {
 
 // ============================================================================
-// ShadowSystem
+// ShadowSystem - SDL3 GPU Implementation
 // ============================================================================
 
 ShadowSystem::ShadowSystem() = default;
@@ -15,70 +16,69 @@ ShadowSystem::~ShadowSystem() {
     shutdown();
 }
 
-bool ShadowSystem::init(int shadow_map_size) {
+bool ShadowSystem::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry, 
+                        int shadow_map_size) {
+    device_ = &device;
+    pipeline_registry_ = &pipeline_registry;
     shadow_map_size_ = shadow_map_size;
     
-    std::cout << "Initializing shadow mapping..." << std::endl;
+    SDL_Log("ShadowSystem: Initializing shadow mapping with %dx%d shadow map...", 
+            shadow_map_size_, shadow_map_size_);
     
-    // Create shadow depth texture
-    glGenTextures(1, &shadow_depth_texture_);
-    glBindTexture(GL_TEXTURE_2D, shadow_depth_texture_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, shadow_map_size_, shadow_map_size_,
-                 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
-    float borderColor[] = {1.0f, 1.0f, 1.0f, 1.0f};
-    glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor);
-    
-    // Create shadow framebuffer
-    glGenFramebuffers(1, &shadow_fbo_);
-    glBindFramebuffer(GL_FRAMEBUFFER, shadow_fbo_);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, shadow_depth_texture_, 0);
-    glDrawBuffer(GL_NONE);
-    glReadBuffer(GL_NONE);
-    
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::cerr << "Shadow framebuffer not complete!" << std::endl;
+    // Create shadow depth texture as a render target
+    shadow_map_ = gpu::GPUTexture::create_depth(*device_, shadow_map_size_, shadow_map_size_);
+    if (!shadow_map_) {
+        SDL_Log("ShadowSystem: Failed to create shadow depth texture");
         return false;
     }
     
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // Create shadow comparison sampler for PCF filtering
+    SDL_GPUSamplerCreateInfo sampler_info = {};
+    sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
+    sampler_info.mag_filter = SDL_GPU_FILTER_LINEAR;
+    sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+    sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
+    sampler_info.enable_compare = true;
     
-    // Create shadow depth shaders
-    shadow_depth_shader_ = std::make_unique<Shader>();
-    if (!shadow_depth_shader_->load(shaders::shadow_depth_vertex, shaders::shadow_depth_fragment)) {
-        std::cerr << "Failed to load shadow depth shader" << std::endl;
+    shadow_sampler_ = device_->create_sampler(sampler_info);
+    if (!shadow_sampler_) {
+        SDL_Log("ShadowSystem: Failed to create shadow sampler");
         return false;
     }
     
-    skinned_shadow_depth_shader_ = std::make_unique<Shader>();
-    if (!skinned_shadow_depth_shader_->load(shaders::skinned_shadow_depth_vertex, shaders::shadow_depth_fragment)) {
-        std::cerr << "Failed to load skinned shadow depth shader" << std::endl;
-        return false;
+    // Get shadow pipelines from registry (created lazily)
+    shadow_pipeline_ = pipeline_registry_->get_shadow_pipeline();
+    skinned_shadow_pipeline_ = pipeline_registry_->get_skinned_shadow_pipeline();
+    
+    if (!shadow_pipeline_) {
+        SDL_Log("ShadowSystem: Warning - Shadow pipeline not available");
+    }
+    if (!skinned_shadow_pipeline_) {
+        SDL_Log("ShadowSystem: Warning - Skinned shadow pipeline not available");
     }
     
-    std::cout << "Shadow mapping initialized with " << shadow_map_size_ << "x" << shadow_map_size_ << " shadow map" << std::endl;
+    SDL_Log("ShadowSystem: Shadow mapping initialized successfully");
     return true;
 }
 
 void ShadowSystem::shutdown() {
-    if (shadow_fbo_) {
-        glDeleteFramebuffers(1, &shadow_fbo_);
-        shadow_fbo_ = 0;
+    shadow_pipeline_ = nullptr;
+    skinned_shadow_pipeline_ = nullptr;
+    
+    if (shadow_sampler_ && device_) {
+        device_->release_sampler(shadow_sampler_);
+        shadow_sampler_ = nullptr;
     }
-    if (shadow_depth_texture_) {
-        glDeleteTextures(1, &shadow_depth_texture_);
-        shadow_depth_texture_ = 0;
-    }
-    shadow_depth_shader_.reset();
-    skinned_shadow_depth_shader_.reset();
+    
+    shadow_map_.reset();
+    pipeline_registry_ = nullptr;
+    device_ = nullptr;
 }
 
 void ShadowSystem::update_light_space_matrix(float camera_x, float camera_z, const glm::vec3& light_dir) {
-    float shadow_distance = 1500.0f;
-    
     // Use known terrain height bounds from heightmap config (-500 to 500)
     // Plus margin for objects on terrain
     constexpr float MIN_TERRAIN = -500.0f - 100.0f;   // Below terrain
@@ -89,46 +89,161 @@ void ShadowSystem::update_light_space_matrix(float camera_x, float camera_z, con
     
     // Position light to look at the center of the shadow volume
     glm::vec3 center = glm::vec3(camera_x, center_height, camera_z);
-    glm::vec3 light_pos = center - light_dir * (shadow_distance + height_range);
+    glm::vec3 light_pos = center - light_dir * (shadow_distance_ + height_range);
     glm::mat4 light_view = glm::lookAt(light_pos, center, glm::vec3(0.0f, 1.0f, 0.0f));
     
     // Orthographic projection covering the full height range
     float near_plane = 1.0f;
-    float far_plane = 2.0f * (shadow_distance + height_range) + height_range;
+    float far_plane = 2.0f * (shadow_distance_ + height_range) + height_range;
     
     glm::mat4 light_projection = glm::ortho(
-        -shadow_distance, shadow_distance,
-        -shadow_distance, shadow_distance,
+        -shadow_distance_, shadow_distance_,
+        -shadow_distance_, shadow_distance_,
         near_plane, far_plane
     );
     
     light_space_matrix_ = light_projection * light_view;
 }
 
-void ShadowSystem::begin_shadow_pass() {
-    if (!enabled_ || !shadow_depth_shader_) return;
+SDL_GPURenderPass* ShadowSystem::begin_shadow_pass(SDL_GPUCommandBuffer* cmd) {
+    if (!enabled_ || !shadow_map_ || !cmd) {
+        return nullptr;
+    }
     
-    glBindFramebuffer(GL_FRAMEBUFFER, shadow_fbo_);
-    glViewport(0, 0, shadow_map_size_, shadow_map_size_);
-    glClear(GL_DEPTH_BUFFER_BIT);
+    // Create depth-only render pass targeting the shadow map
+    SDL_GPUDepthStencilTargetInfo depth_target = {};
+    depth_target.texture = shadow_map_->handle();
+    depth_target.load_op = SDL_GPU_LOADOP_CLEAR;
+    depth_target.store_op = SDL_GPU_STOREOP_STORE;
+    depth_target.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
+    depth_target.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+    depth_target.clear_depth = 1.0f;
+    depth_target.cycle = true;
     
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_FRONT);  // Reduce shadow acne
+    // No color targets for shadow pass
+    SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, nullptr, 0, &depth_target);
+    if (!pass) {
+        SDL_Log("ShadowSystem: Failed to begin shadow render pass: %s", SDL_GetError());
+        return nullptr;
+    }
     
-    shadow_depth_shader_->use();
-    shadow_depth_shader_->set_mat4("lightSpaceMatrix", light_space_matrix_);
+    // Set viewport to shadow map size
+    SDL_GPUViewport viewport = {};
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.w = static_cast<float>(shadow_map_size_);
+    viewport.h = static_cast<float>(shadow_map_size_);
+    viewport.min_depth = 0.0f;
+    viewport.max_depth = 1.0f;
+    SDL_SetGPUViewport(pass, &viewport);
+    
+    // Set scissor rect
+    SDL_Rect scissor = {};
+    scissor.x = 0;
+    scissor.y = 0;
+    scissor.w = shadow_map_size_;
+    scissor.h = shadow_map_size_;
+    SDL_SetGPUScissor(pass, &scissor);
+    
+    return pass;
 }
 
-void ShadowSystem::end_shadow_pass() {
-    if (!enabled_) return;
+void ShadowSystem::end_shadow_pass(SDL_GPURenderPass* pass) {
+    if (pass) {
+        SDL_EndGPURenderPass(pass);
+    }
+}
+
+void ShadowSystem::render_shadow_caster(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                         const glm::mat4& model_matrix,
+                                         gpu::GPUBuffer* vertex_buffer,
+                                         gpu::GPUBuffer* index_buffer,
+                                         uint32_t index_count) {
+    if (!pass || !shadow_pipeline_ || !vertex_buffer) {
+        return;
+    }
     
-    glCullFace(GL_BACK);
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // Bind shadow pipeline
+    shadow_pipeline_->bind(pass);
+    
+    // Push uniforms
+    ShadowUniforms uniforms;
+    uniforms.light_space_matrix = light_space_matrix_;
+    uniforms.model = model_matrix;
+    SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(ShadowUniforms));
+    
+    // Bind vertex buffer
+    SDL_GPUBufferBinding vb_binding = {};
+    vb_binding.buffer = vertex_buffer->handle();
+    vb_binding.offset = 0;
+    SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
+    
+    // Draw with or without index buffer
+    if (index_buffer) {
+        SDL_GPUBufferBinding ib_binding = {};
+        ib_binding.buffer = index_buffer->handle();
+        ib_binding.offset = 0;
+        SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+        SDL_DrawGPUIndexedPrimitives(pass, index_count, 1, 0, 0, 0);
+    } else {
+        SDL_DrawGPUPrimitives(pass, index_count, 1, 0, 0);
+    }
+}
+
+void ShadowSystem::render_skinned_shadow_caster(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                                 const glm::mat4& model_matrix,
+                                                 const glm::mat4* bone_matrices, uint32_t bone_count,
+                                                 gpu::GPUBuffer* vertex_buffer,
+                                                 gpu::GPUBuffer* index_buffer,
+                                                 uint32_t index_count) {
+    if (!pass || !skinned_shadow_pipeline_ || !vertex_buffer || !bone_matrices) {
+        return;
+    }
+    
+    // Bind skinned shadow pipeline
+    skinned_shadow_pipeline_->bind(pass);
+    
+    // Push transform uniforms
+    ShadowUniforms uniforms;
+    uniforms.light_space_matrix = light_space_matrix_;
+    uniforms.model = model_matrix;
+    SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(ShadowUniforms));
+    
+    // Push bone matrices
+    BoneUniforms bone_uniforms;
+    uint32_t copy_count = (bone_count < MAX_BONES) ? bone_count : MAX_BONES;
+    for (uint32_t i = 0; i < copy_count; ++i) {
+        bone_uniforms.bones[i] = bone_matrices[i];
+    }
+    // Initialize remaining bones to identity
+    for (uint32_t i = copy_count; i < MAX_BONES; ++i) {
+        bone_uniforms.bones[i] = glm::mat4(1.0f);
+    }
+    SDL_PushGPUVertexUniformData(cmd, 1, &bone_uniforms, sizeof(BoneUniforms));
+    
+    // Bind vertex buffer
+    SDL_GPUBufferBinding vb_binding = {};
+    vb_binding.buffer = vertex_buffer->handle();
+    vb_binding.offset = 0;
+    SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
+    
+    // Draw with index buffer
+    if (index_buffer) {
+        SDL_GPUBufferBinding ib_binding = {};
+        ib_binding.buffer = index_buffer->handle();
+        ib_binding.offset = 0;
+        SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+        SDL_DrawGPUIndexedPrimitives(pass, index_count, 1, 0, 0, 0);
+    } else {
+        SDL_DrawGPUPrimitives(pass, index_count, 1, 0, 0);
+    }
 }
 
 // ============================================================================
-// SSAOSystem
+// SSAOSystem - SDL3 GPU Implementation (Stub)
+// SSAO requires a full deferred rendering pipeline which will be implemented
+// as part of a future task. For now, this is a minimal stub that allows
+// the system to be initialized but remains disabled.
 // ============================================================================
 
 SSAOSystem::SSAOSystem() = default;
@@ -137,104 +252,63 @@ SSAOSystem::~SSAOSystem() {
     shutdown();
 }
 
-bool SSAOSystem::init(int width, int height) {
+bool SSAOSystem::init(gpu::GPUDevice& device, int width, int height) {
+    device_ = &device;
     width_ = width;
     height_ = height;
     
-    std::cout << "Initializing SSAO..." << std::endl;
+    SDL_Log("SSAOSystem: SSAO initialization (stub) - disabled until deferred rendering pipeline is ready");
     
-    // Generate kernel
+    // Generate SSAO kernel for future use
     generate_kernel();
     
-    // Generate noise texture
-    std::vector<glm::vec3> ssao_noise;
-    for (int i = 0; i < 16; ++i) {
-        glm::vec3 noise(
-            static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f,
-            static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f,
-            0.0f
-        );
-        ssao_noise.push_back(noise);
-    }
+    // Create a basic sampler for when SSAO is implemented
+    SDL_GPUSamplerCreateInfo sampler_info = {};
+    sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
+    sampler_info.mag_filter = SDL_GPU_FILTER_LINEAR;
+    sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+    sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     
-    glGenTextures(1, &ssao_noise_texture_);
-    glBindTexture(GL_TEXTURE_2D, ssao_noise_texture_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, 4, 4, 0, GL_RGB, GL_FLOAT, ssao_noise.data());
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    ssao_sampler_ = device_->create_sampler(sampler_info);
     
-    // Create framebuffers
-    create_framebuffers(width, height);
+    // SSAO is disabled by default until full implementation
+    enabled_ = false;
     
-    // Create screen quad
-    create_screen_quad();
-    
-    // Create shaders
-    ssao_shader_ = std::make_unique<Shader>();
-    if (!ssao_shader_->load(shaders::ssao_vertex, shaders::ssao_fragment)) {
-        std::cerr << "Failed to load SSAO shader" << std::endl;
-        return false;
-    }
-    
-    ssao_blur_shader_ = std::make_unique<Shader>();
-    if (!ssao_blur_shader_->load(shaders::ssao_vertex, shaders::ssao_blur_fragment)) {
-        std::cerr << "Failed to load SSAO blur shader" << std::endl;
-        return false;
-    }
-    
-    gbuffer_shader_ = std::make_unique<Shader>();
-    if (!gbuffer_shader_->load(shaders::ssao_gbuffer_vertex, shaders::ssao_gbuffer_fragment)) {
-        std::cerr << "Failed to load G-buffer shader" << std::endl;
-        return false;
-    }
-    
-    std::cout << "SSAO initialized" << std::endl;
     return true;
 }
 
 void SSAOSystem::shutdown() {
-    if (gbuffer_fbo_) glDeleteFramebuffers(1, &gbuffer_fbo_);
-    if (ssao_fbo_) glDeleteFramebuffers(1, &ssao_fbo_);
-    if (ssao_blur_fbo_) glDeleteFramebuffers(1, &ssao_blur_fbo_);
+    if (ssao_sampler_ && device_) {
+        device_->release_sampler(ssao_sampler_);
+        ssao_sampler_ = nullptr;
+    }
     
-    if (gbuffer_position_) glDeleteTextures(1, &gbuffer_position_);
-    if (gbuffer_normal_) glDeleteTextures(1, &gbuffer_normal_);
-    if (gbuffer_depth_) glDeleteTextures(1, &gbuffer_depth_);
-    if (ssao_color_buffer_) glDeleteTextures(1, &ssao_color_buffer_);
-    if (ssao_blur_buffer_) glDeleteTextures(1, &ssao_blur_buffer_);
-    if (ssao_noise_texture_) glDeleteTextures(1, &ssao_noise_texture_);
+    gbuffer_position_.reset();
+    gbuffer_normal_.reset();
+    gbuffer_depth_.reset();
+    ssao_texture_.reset();
+    ssao_blur_texture_.reset();
+    ssao_noise_.reset();
     
-    if (screen_quad_vao_) glDeleteVertexArrays(1, &screen_quad_vao_);
-    if (screen_quad_vbo_) glDeleteBuffers(1, &screen_quad_vbo_);
-    
-    gbuffer_fbo_ = ssao_fbo_ = ssao_blur_fbo_ = 0;
-    gbuffer_position_ = gbuffer_normal_ = gbuffer_depth_ = 0;
-    ssao_color_buffer_ = ssao_blur_buffer_ = ssao_noise_texture_ = 0;
-    screen_quad_vao_ = screen_quad_vbo_ = 0;
-    
-    ssao_shader_.reset();
-    ssao_blur_shader_.reset();
-    gbuffer_shader_.reset();
+    ssao_kernel_.clear();
+    device_ = nullptr;
 }
 
 void SSAOSystem::resize(int width, int height) {
     if (width == width_ && height == height_) return;
     
-    // Delete old textures
-    if (gbuffer_position_) glDeleteTextures(1, &gbuffer_position_);
-    if (gbuffer_normal_) glDeleteTextures(1, &gbuffer_normal_);
-    if (gbuffer_depth_) glDeleteTextures(1, &gbuffer_depth_);
-    if (ssao_color_buffer_) glDeleteTextures(1, &ssao_color_buffer_);
-    if (ssao_blur_buffer_) glDeleteTextures(1, &ssao_blur_buffer_);
+    width_ = width;
+    height_ = height;
     
-    // Recreate framebuffers
-    create_framebuffers(width, height);
+    // When SSAO is fully implemented, recreate G-buffer and SSAO textures here
 }
 
 void SSAOSystem::generate_kernel() {
     ssao_kernel_.clear();
+    ssao_kernel_.reserve(64);
+    
     for (int i = 0; i < 64; ++i) {
         glm::vec3 sample(
             static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f,
@@ -244,108 +318,13 @@ void SSAOSystem::generate_kernel() {
         sample = glm::normalize(sample);
         sample *= static_cast<float>(rand()) / RAND_MAX;
         
+        // Scale samples to be closer to the origin
         float scale = static_cast<float>(i) / 64.0f;
         scale = 0.1f + scale * scale * 0.9f;
         sample *= scale;
         
         ssao_kernel_.push_back(sample);
     }
-}
-
-void SSAOSystem::create_framebuffers(int width, int height) {
-    width_ = width;
-    height_ = height;
-    
-    // G-buffer
-    glGenFramebuffers(1, &gbuffer_fbo_);
-    glBindFramebuffer(GL_FRAMEBUFFER, gbuffer_fbo_);
-    
-    // Position buffer
-    glGenTextures(1, &gbuffer_position_);
-    glBindTexture(GL_TEXTURE_2D, gbuffer_position_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, gbuffer_position_, 0);
-    
-    // Normal buffer
-    glGenTextures(1, &gbuffer_normal_);
-    glBindTexture(GL_TEXTURE_2D, gbuffer_normal_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D, gbuffer_normal_, 0);
-    
-    // Depth buffer
-    glGenTextures(1, &gbuffer_depth_);
-    glBindTexture(GL_TEXTURE_2D, gbuffer_depth_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, gbuffer_depth_, 0);
-    
-    unsigned int attachments[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
-    glDrawBuffers(2, attachments);
-    
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::cerr << "G-buffer framebuffer not complete!" << std::endl;
-    }
-    
-    // SSAO framebuffer
-    glGenFramebuffers(1, &ssao_fbo_);
-    glBindFramebuffer(GL_FRAMEBUFFER, ssao_fbo_);
-    
-    glGenTextures(1, &ssao_color_buffer_);
-    glBindTexture(GL_TEXTURE_2D, ssao_color_buffer_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, width, height, 0, GL_RED, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssao_color_buffer_, 0);
-    
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::cerr << "SSAO framebuffer not complete!" << std::endl;
-    }
-    
-    // SSAO blur framebuffer
-    glGenFramebuffers(1, &ssao_blur_fbo_);
-    glBindFramebuffer(GL_FRAMEBUFFER, ssao_blur_fbo_);
-    
-    glGenTextures(1, &ssao_blur_buffer_);
-    glBindTexture(GL_TEXTURE_2D, ssao_blur_buffer_);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, width, height, 0, GL_RED, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, ssao_blur_buffer_, 0);
-    
-    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-        std::cerr << "SSAO blur framebuffer not complete!" << std::endl;
-    }
-    
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
-
-void SSAOSystem::create_screen_quad() {
-    float quadVertices[] = {
-        -1.0f,  1.0f,  0.0f, 1.0f,
-        -1.0f, -1.0f,  0.0f, 0.0f,
-         1.0f, -1.0f,  1.0f, 0.0f,
-        -1.0f,  1.0f,  0.0f, 1.0f,
-         1.0f, -1.0f,  1.0f, 0.0f,
-         1.0f,  1.0f,  1.0f, 1.0f
-    };
-    
-    glGenVertexArrays(1, &screen_quad_vao_);
-    glGenBuffers(1, &screen_quad_vbo_);
-    glBindVertexArray(screen_quad_vao_);
-    glBindBuffer(GL_ARRAY_BUFFER, screen_quad_vbo_);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    glBindVertexArray(0);
 }
 
 } // namespace mmo

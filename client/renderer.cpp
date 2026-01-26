@@ -54,8 +54,8 @@ bool Renderer::init(int width, int height, const std::string& title) {
         return false;
     }
     
-    // Initialize effect renderer
-    if (!effects_.init(model_manager_.get())) {
+    // Initialize effect renderer with SDL3 GPU resources
+    if (!effects_.init(context_.device(), pipeline_registry_, model_manager_.get())) {
         std::cerr << "Failed to initialize effect renderer" << std::endl;
         return false;
     }
@@ -972,7 +972,11 @@ void Renderer::draw_enemy_health_bar_3d(float world_x, float world_y, float worl
 // ============================================================================
 
 void Renderer::draw_attack_effect(const ecs::AttackEffect& effect) {
-    effects_.draw_attack_effect(effect, view_, projection_);
+    // NOTE: This function is currently a no-op stub. Once a valid
+    // SDL_GPURenderPass is available from the render context, this method
+    // should be updated to obtain that pass and forward it to
+    // effects_.draw_attack_effect.
+    (void)effect;
 }
 
 void Renderer::draw_warrior_slash(float x, float y, float dir_x, float dir_y, float progress) {
@@ -984,7 +988,7 @@ void Renderer::draw_warrior_slash(float x, float y, float dir_x, float dir_y, fl
     effect.direction_y = dir_y;
     effect.duration = 0.3f;
     effect.timer = effect.duration * (1.0f - progress);
-    effects_.draw_attack_effect(effect, view_, projection_);
+    draw_attack_effect(effect);
 }
 
 void Renderer::draw_mage_beam(float x, float y, float dir_x, float dir_y, float progress, float range) {
@@ -997,7 +1001,7 @@ void Renderer::draw_mage_beam(float x, float y, float dir_x, float dir_y, float 
     effect.duration = 0.4f;
     effect.timer = effect.duration * (1.0f - progress);
     (void)range;
-    effects_.draw_attack_effect(effect, view_, projection_);
+    draw_attack_effect(effect);
 }
 
 void Renderer::draw_paladin_aoe(float x, float y, float dir_x, float dir_y, float progress, float range) {
@@ -1010,7 +1014,7 @@ void Renderer::draw_paladin_aoe(float x, float y, float dir_x, float dir_y, floa
     effect.duration = 0.6f;
     effect.timer = effect.duration * (1.0f - progress);
     (void)range;
-    effects_.draw_attack_effect(effect, view_, projection_);
+    draw_attack_effect(effect);
 }
 
 void Renderer::draw_archer_arrow(float x, float y, float dir_x, float dir_y, float progress, float range) {
@@ -1023,7 +1027,7 @@ void Renderer::draw_archer_arrow(float x, float y, float dir_x, float dir_y, flo
     effect.duration = 0.5f;
     effect.timer = effect.duration * (1.0f - progress);
     (void)range;
-    effects_.draw_attack_effect(effect, view_, projection_);
+    draw_attack_effect(effect);
 }
 
 // ============================================================================

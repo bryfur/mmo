@@ -210,8 +210,8 @@ std::unique_ptr<GPUTexture> GPUTexture::create_2d(GPUDevice& device,
                           format == SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT ||
                           format == SDL_GPU_TEXTUREFORMAT_D16_UNORM);
     
-    // Check if this is a render target
-    texture->is_render_target_ = (usage & SDL_GPU_TEXTUREUSAGE_COLOR_TARGET) != 0;
+    // Check if this is a render target (color or depth-stencil)
+    texture->is_render_target_ = (usage & (SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET)) != 0;
 
     SDL_GPUTextureCreateInfo tex_info = {};
     tex_info.type = SDL_GPU_TEXTURETYPE_2D;

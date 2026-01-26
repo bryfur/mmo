@@ -306,7 +306,8 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
             // Store texture data directly in mesh for deferred GPU upload
             if (texture_image_idx >= 0 && texture_image_idx < static_cast<int>(loaded_textures.size())) {
                 const auto& [pixels, dims] = loaded_textures[texture_image_idx];
-                auto [width, height] = dims;
+                const auto width = dims.first;
+                const auto height = dims.second;
                 out_mesh.texture_pixels = pixels;
                 out_mesh.texture_width = width;
                 out_mesh.texture_height = height;

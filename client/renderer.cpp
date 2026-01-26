@@ -79,9 +79,12 @@ bool Renderer::init(int width, int height, const std::string& title) {
     init_pipelines();
     init_billboard_buffers();
     
-    // Initialize grass renderer
+    // Initialize grass renderer (SDL3 GPU API)
     if (grass_renderer_) {
-        grass_renderer_->init(WORLD_WIDTH, WORLD_HEIGHT);
+        grass_renderer_->set_terrain_height_func([this](float x, float z) {
+            return terrain_.get_height(x, z);
+        });
+        grass_renderer_->init(context_.device(), pipeline_registry_, WORLD_WIDTH, WORLD_HEIGHT);
     }
     
     return true;
@@ -456,9 +459,8 @@ void Renderer::set_heightmap(const HeightmapChunk& heightmap) {
     // Pass heightmap to terrain renderer for GPU upload
     terrain_.set_heightmap(heightmap);
     
-    // Note: GrassRenderer still uses OpenGL and cannot use the SDL3 GPU heightmap texture
-    // The grass renderer integration will be updated in a future task
-    // TODO: Update grass_renderer to use SDL3 GPU API (Issue #15)
+    // Note: GrassRenderer now uses SDL3 GPU API but requires the main render pass
+    // integration to render (see issue #13). Height queries are wired for placement.
     
     std::cout << "[Renderer] Heightmap set for terrain rendering" << std::endl;
 }
@@ -509,16 +511,10 @@ void Renderer::draw_ground() {
 
 void Renderer::draw_grass() {
     if (!grass_renderer_ || !grass_enabled_) return;
-    
+
+    // TODO: Integrate grass rendering into SDL3 GPU main render pass (issue #13)
+    // Requires a render pass and command buffer with depth target.
     grass_renderer_->update(0.016f, skybox_time_);
-    
-    // NOTE: Shadow mapping for grass is temporarily disabled until the grass renderer
-    // is migrated to SDL3 GPU (issue #15). The shadow system now uses SDL3 GPU textures
-    // which are not compatible with the GL-based grass renderer.
-    // Pass 0 for shadow_map and false for shadows_enabled as a temporary workaround.
-    grass_renderer_->render(view_, projection_, actual_camera_pos_,
-                           shadows_.light_space_matrix(), 0 /* shadow_map disabled */,
-                           false /* shadows disabled for grass */, light_dir_);
 }
 
 void Renderer::draw_grid() {

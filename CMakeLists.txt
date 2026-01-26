@@ -135,6 +135,7 @@ add_executable(mmo_client
     client/gpu/gpu_texture.cpp
     client/gpu/gpu_pipeline.cpp
     client/gpu/gpu_shader.cpp
+    client/gpu/pipeline_registry.cpp
 )
 target_link_libraries(mmo_client PRIVATE 
     mmo_common 

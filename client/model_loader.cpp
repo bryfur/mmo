@@ -3,6 +3,8 @@
 #include "gpu/gpu_buffer.hpp"
 #include "gpu/gpu_texture.hpp"
 
+#include <SDL3/SDL_gpu.h>
+
 #define TINYGLTF_IMPLEMENTATION
 #define TINYGLTF_NO_STB_IMAGE
 #define TINYGLTF_NO_STB_IMAGE_WRITE
@@ -12,6 +14,22 @@
 #include <iostream>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+
+namespace mmo {
+
+// Implementation of Mesh::bind_buffers
+void Mesh::bind_buffers(SDL_GPURenderPass* pass) const {
+    if (vertex_buffer) {
+        SDL_GPUBufferBinding vbuf = { vertex_buffer->handle(), 0 };
+        SDL_BindGPUVertexBuffers(pass, 0, &vbuf, 1);
+    }
+    if (index_buffer) {
+        SDL_GPUBufferBinding ibuf = { index_buffer->handle(), 0 };
+        SDL_BindGPUIndexBuffer(pass, &ibuf, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+    }
+}
+
+} // namespace mmo
 
 namespace {
 
@@ -285,9 +303,14 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
                 }
             }
             
-            // Store texture index temporarily (will become GL texture ID)
+            // Store texture data directly in mesh for deferred GPU upload
             if (texture_image_idx >= 0 && texture_image_idx < static_cast<int>(loaded_textures.size())) {
-                out_mesh.texture_id = texture_image_idx;
+                const auto& [pixels, dims] = loaded_textures[texture_image_idx];
+                const auto width = dims.first;
+                const auto height = dims.second;
+                out_mesh.texture_pixels = pixels;
+                out_mesh.texture_width = width;
+                out_mesh.texture_height = height;
             }
             
             // Check for skinning data (JOINTS_0 and WEIGHTS_0)
@@ -494,37 +517,6 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
         }
     }
     
-    // Store texture data for later GPU upload
-    // (Don't upload here - upload happens in upload_to_gpu)
-    
-    // Store texture pixel data in meshes for deferred upload
-    std::vector<std::tuple<std::vector<uint8_t>, int, int>> texture_data;
-    for (const auto& [pixels, dims] : loaded_textures) {
-        auto [width, height] = dims;
-        texture_data.push_back({pixels, width, height});
-        std::cout << "  Stored texture data: " << width << "x" << height << std::endl;
-    }
-    
-    // Map texture data to each mesh using the texture_id (image index) stored during loading
-    for (auto& mesh : model.meshes) {
-        if (mesh.has_texture) {
-            // Use the mesh's texture_id as an index into texture_data
-            int tex_idx = mesh.texture_id;
-            if (tex_idx >= 0 && tex_idx < static_cast<int>(texture_data.size())) {
-                auto& [pixels, width, height] = texture_data[tex_idx];
-                mesh.texture_pixels = pixels;
-                mesh.texture_width = width;
-                mesh.texture_height = height;
-            } else if (!texture_data.empty()) {
-                // Fallback to first texture if index is invalid
-                auto& [pixels, width, height] = texture_data[0];
-                mesh.texture_pixels = pixels;
-                mesh.texture_width = width;
-                mesh.texture_height = height;
-            }
-        }
-    }
-    
     model.loaded = true;
     std::cout << "Loaded GLB model: " << path << " (" << model.meshes.size() << " meshes)"
               << " bounds: Y=[" << model.min_y << ", " << model.max_y << "]" << std::endl;
@@ -533,49 +525,49 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
 
 void ModelLoader::upload_to_gpu(gpu::GPUDevice& device, Model& model) {
     for (auto& mesh : model.meshes) {
-        if (mesh.gpu_uploaded) continue;
+        if (mesh.uploaded) continue;
         if (mesh.vertices.empty() && mesh.skinned_vertices.empty()) continue;
         
         // Create vertex buffer
         if (mesh.is_skinned && !mesh.skinned_vertices.empty()) {
-            mesh.gpu_vertex_buffer = gpu::GPUBuffer::create_static(
+            mesh.vertex_buffer = gpu::GPUBuffer::create_static(
                 device, gpu::GPUBuffer::Type::Vertex,
                 mesh.skinned_vertices.data(), 
                 mesh.skinned_vertices.size() * sizeof(SkinnedVertex));
         } else if (!mesh.vertices.empty()) {
-            mesh.gpu_vertex_buffer = gpu::GPUBuffer::create_static(
+            mesh.vertex_buffer = gpu::GPUBuffer::create_static(
                 device, gpu::GPUBuffer::Type::Vertex,
                 mesh.vertices.data(), 
                 mesh.vertices.size() * sizeof(Vertex3D));
         }
         
-        if (!mesh.gpu_vertex_buffer) {
+        if (!mesh.vertex_buffer) {
             std::cerr << "Failed to create vertex buffer for mesh" << std::endl;
             continue;
         }
         
         // Create index buffer
         if (!mesh.indices.empty()) {
-            mesh.gpu_index_buffer = gpu::GPUBuffer::create_static(
+            mesh.index_buffer = gpu::GPUBuffer::create_static(
                 device, gpu::GPUBuffer::Type::Index,
                 mesh.indices.data(),
                 mesh.indices.size() * sizeof(uint32_t));
             
-            if (!mesh.gpu_index_buffer) {
+            if (!mesh.index_buffer) {
                 std::cerr << "Failed to create index buffer for mesh" << std::endl;
             }
         }
         
         // Create texture if available
         if (mesh.has_texture && !mesh.texture_pixels.empty()) {
-            mesh.gpu_texture = gpu::GPUTexture::create_2d(
+            mesh.texture = gpu::GPUTexture::create_2d(
                 device,
                 mesh.texture_width, mesh.texture_height,
                 gpu::TextureFormat::RGBA8,
                 mesh.texture_pixels.data(),
                 true);  // Generate mipmaps
             
-            if (!mesh.gpu_texture) {
+            if (!mesh.texture) {
                 std::cerr << "Failed to create texture for mesh" << std::endl;
                 mesh.has_texture = false;
             } else {
@@ -585,46 +577,32 @@ void ModelLoader::upload_to_gpu(gpu::GPUDevice& device, Model& model) {
             }
         }
         
-        mesh.gpu_uploaded = true;
+        mesh.uploaded = true;
     }
 }
 
 void ModelLoader::free_gpu_resources(Model& model) {
     for (auto& mesh : model.meshes) {
         // Free SDL3 GPU resources
-        mesh.gpu_vertex_buffer.reset();
-        mesh.gpu_index_buffer.reset();
-        mesh.gpu_texture.reset();
-        mesh.gpu_uploaded = false;
-        
-        // Free legacy OpenGL resources
-        // Note: glDeleteVertexArrays etc will be called by the GL code during migration
-        mesh.vao = 0;
-        mesh.vbo = 0;
-        mesh.ebo = 0;
-        mesh.texture_id = 0;
+        mesh.vertex_buffer.reset();
+        mesh.index_buffer.reset();
+        mesh.texture.reset();
         mesh.uploaded = false;
         mesh.has_texture = false;
     }
 }
 
-// Legacy OpenGL upload function - prints warning since we have no device reference
-void ModelLoader::upload_to_gpu(Model& model) {
-    // This is a static method with no device reference available.
-    // Models loaded through ModelManager with set_device() will be uploaded automatically.
-    // Direct calls to this legacy function cannot upload to the new GPU API.
-    static bool warned = false;
-    if (!warned) {
-        std::cerr << "[ModelLoader] Warning: Legacy upload_to_gpu(Model&) called. "
-                  << "Use ModelManager with set_device() for SDL3 GPU uploads." << std::endl;
-        warned = true;
-    }
-    // Mark model as uploaded=false so the caller knows it wasn't uploaded
-    for (auto& mesh : model.meshes) {
-        mesh.uploaded = false;
-        mesh.gpu_uploaded = false;
-    }
+// Legacy no-op function for compatibility with unmigrated renderers
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+void ModelLoader::upload_to_gpu_legacy(Model& model) {
+    // This function is intentionally a no-op.
+    // Models should be loaded via ModelManager with set_device() for SDL3 GPU uploads.
+    // Legacy OpenGL rendering still works because the OpenGL upload code in
+    // renderer.cpp handles its own VAO/VBO creation.
+    (void)model;  // Suppress unused parameter warning
 }
+#pragma GCC diagnostic pop
 
 void ModelLoader::update_animation(Model& model, AnimationState& state, float dt) {
     if (!model.has_skeleton || model.animations.empty() || !state.playing) return;
@@ -775,10 +753,13 @@ void ModelManager::unload_all() {
     animation_states_.clear();
 }
 
-// Legacy function - TODO: Remove after full migration to SDL3 GPU API
+// Legacy no-op for compatibility with unmigrated renderers
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 void ModelManager::set_anisotropic_filter([[maybe_unused]] float level) {
     // No longer needed with SDL3 GPU API - anisotropy is set in sampler creation
     // This is a no-op for compatibility during migration
 }
+#pragma GCC diagnostic pop
 
 } // namespace mmo

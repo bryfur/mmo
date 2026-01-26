@@ -496,11 +496,6 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
     
     // Store texture data for later GPU upload
     // (Don't upload here - upload happens in upload_to_gpu)
-    for (size_t i = 0; i < model.meshes.size(); i++) {
-        auto& mesh = model.meshes[i];
-        // Find which texture this mesh uses by checking the stored index
-        // The texture_pixels will be populated below
-    }
     
     // Store texture pixel data in meshes for deferred upload
     std::vector<std::tuple<std::vector<uint8_t>, int, int>> texture_data;
@@ -510,17 +505,18 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
         std::cout << "  Stored texture data: " << width << "x" << height << std::endl;
     }
     
-    // Map texture indices to mesh texture data
-    // Meshes store their texture index in a temporary way during loading
-    // We need to copy the texture data to each mesh that uses it
+    // Map texture data to each mesh using the texture_id (image index) stored during loading
     for (auto& mesh : model.meshes) {
-        // The texture_pixels were set during mesh loading as an index
-        // Now we copy the actual data
-        // Note: mesh.texture_width was used to store texture index temporarily
         if (mesh.has_texture) {
-            // Find the texture index for this mesh by scanning materials
-            // For now, just use the first texture if available
-            if (!texture_data.empty()) {
+            // Use the mesh's texture_id as an index into texture_data
+            int tex_idx = mesh.texture_id;
+            if (tex_idx >= 0 && tex_idx < static_cast<int>(texture_data.size())) {
+                auto& [pixels, width, height] = texture_data[tex_idx];
+                mesh.texture_pixels = pixels;
+                mesh.texture_width = width;
+                mesh.texture_height = height;
+            } else if (!texture_data.empty()) {
+                // Fallback to first texture if index is invalid
                 auto& [pixels, width, height] = texture_data[0];
                 mesh.texture_pixels = pixels;
                 mesh.texture_width = width;
@@ -612,13 +608,22 @@ void ModelLoader::free_gpu_resources(Model& model) {
     }
 }
 
-// Legacy OpenGL upload function - TODO: Remove after all renderers are migrated
+// Legacy OpenGL upload function - prints warning since we have no device reference
 void ModelLoader::upload_to_gpu(Model& model) {
-    // This is the legacy OpenGL version - it needs GLEW
-    // For now, just mark as needing SDL3 GPU upload
-    std::cerr << "Warning: Legacy upload_to_gpu() called without GPUDevice. "
-              << "Models should be uploaded via ModelManager with set_device()." << std::endl;
-    // Do nothing - the model will need to be uploaded via the new API
+    // This is a static method with no device reference available.
+    // Models loaded through ModelManager with set_device() will be uploaded automatically.
+    // Direct calls to this legacy function cannot upload to the new GPU API.
+    static bool warned = false;
+    if (!warned) {
+        std::cerr << "[ModelLoader] Warning: Legacy upload_to_gpu(Model&) called. "
+                  << "Use ModelManager with set_device() for SDL3 GPU uploads." << std::endl;
+        warned = true;
+    }
+    // Mark model as uploaded=false so the caller knows it wasn't uploaded
+    for (auto& mesh : model.meshes) {
+        mesh.uploaded = false;
+        mesh.gpu_uploaded = false;
+    }
 }
 
 void ModelLoader::update_animation(Model& model, AnimationState& state, float dt) {

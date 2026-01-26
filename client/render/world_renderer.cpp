@@ -7,37 +7,49 @@
 
 namespace mmo {
 
-// Uniform structures for shader data (must match HLSL shaders)
-struct SkyboxUniforms {
+// Uniform structures for shader data (must match HLSL shaders in pipeline_registry.cpp)
+
+// Skybox vertex shader uniforms (b0): only view_projection matrix
+struct alignas(16) SkyboxVertexUniforms {
+    glm::mat4 view_projection;
+};
+
+// Skybox fragment shader uniforms (b0): sky colors
+struct alignas(16) SkyboxFragmentUniforms {
+    glm::vec3 sky_color_top;
+    float _padding1;
+    glm::vec3 sky_color_bottom;
+    float _padding2;
+};
+
+// Grid vertex shader uniforms
+struct alignas(16) GridUniforms {
+    glm::mat4 view_projection;
+};
+
+// Model vertex shader uniforms (b0): matches pipeline_registry model_vertex
+struct alignas(16) ModelVertexUniforms {
+    glm::mat4 model;
     glm::mat4 view;
     glm::mat4 projection;
-    glm::vec3 sun_direction;
-    float time;
-};
-
-struct GridUniforms {
-    glm::mat4 view_projection;
-};
-
-struct ModelUniforms {
-    glm::mat4 view_projection;
-    glm::mat4 model;
-    glm::mat4 light_space_matrix;
     glm::vec3 camera_pos;
-    float fog_start;
+    float _padding0;
+    glm::mat4 light_space_matrix;
+};
+
+// Model fragment shader uniforms (b0): matches pipeline_registry model_fragment
+struct alignas(16) ModelFragmentUniforms {
     glm::vec3 light_dir;
-    float fog_end;
+    float ambient;
     glm::vec3 light_color;
     float _padding1;
-    glm::vec3 ambient_color;
-    float _padding2;
     glm::vec4 tint_color;
     glm::vec3 fog_color;
-    int fog_enabled;
-    int shadows_enabled;
-    int ssao_enabled;
+    float fog_start;
+    float fog_end;
     int has_texture;
-    int _padding3;
+    int shadows_enabled;
+    int fog_enabled;
 };
 
 WorldRenderer::WorldRenderer() = default;
@@ -97,13 +109,19 @@ bool WorldRenderer::init(float world_width, float world_height, ModelManager* mo
     model_manager_ = model_manager;
     
     // Note: Without a GPUDevice, we can't create the GPU buffers.
-    // The legacy callers will need to be updated to use the new API.
     // For now, just generate the mountain positions which don't require GPU.
+    // This allows existing OpenGL code to continue working (render methods will be no-ops)
+    // until call sites in renderer.cpp are migrated to use the new API.
     generate_mountain_positions();
     
-    std::cerr << "Warning: WorldRenderer::init() called without GPUDevice. "
-              << "Skybox, grid, and mountain rendering will not work until "
-              << "init(GPUDevice&, PipelineRegistry&, ...) is called." << std::endl;
+    // Log a one-time warning about the partial initialization
+    static bool warned = false;
+    if (!warned) {
+        std::cerr << "[WorldRenderer] Legacy init() called - GPU rendering disabled. "
+                  << "Call init(GPUDevice&, PipelineRegistry&, ...) to enable SDL3 GPU rendering." 
+                  << std::endl;
+        warned = true;
+    }
     
     return true;
 }
@@ -245,13 +263,27 @@ void WorldRenderer::render_skybox(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer*
     
     pipeline->bind(pass);
     
-    // Push uniforms
-    SkyboxUniforms uniforms = {};
-    uniforms.view = view;
-    uniforms.projection = projection;
-    uniforms.sun_direction = sun_direction_;
-    uniforms.time = skybox_time_;
-    SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
+    // Push vertex uniforms - compute view_projection, removing translation from view
+    // (skybox should stay centered on camera)
+    SkyboxVertexUniforms vs_uniforms = {};
+    glm::mat4 view_no_translation = glm::mat4(glm::mat3(view));
+    vs_uniforms.view_projection = projection * view_no_translation;
+    SDL_PushGPUVertexUniformData(cmd, 0, &vs_uniforms, sizeof(vs_uniforms));
+    
+    // Push fragment uniforms - sky colors based on time of day
+    SkyboxFragmentUniforms fs_uniforms = {};
+    // Use sun_direction to determine sky colors
+    float sun_height = sun_direction_.y;
+    if (sun_height > 0.0f) {
+        // Day sky
+        fs_uniforms.sky_color_top = glm::vec3(0.3f, 0.5f, 0.9f);
+        fs_uniforms.sky_color_bottom = glm::vec3(0.6f, 0.7f, 0.9f);
+    } else {
+        // Night sky
+        fs_uniforms.sky_color_top = glm::vec3(0.02f, 0.02f, 0.1f);
+        fs_uniforms.sky_color_bottom = glm::vec3(0.1f, 0.1f, 0.2f);
+    }
+    SDL_PushGPUFragmentUniformData(cmd, 0, &fs_uniforms, sizeof(fs_uniforms));
     
     // Bind vertex buffer
     SDL_GPUBufferBinding vb_binding = {};
@@ -279,8 +311,6 @@ void WorldRenderer::render_mountains(SDL_GPURenderPass* pass, SDL_GPUCommandBuff
     
     pipeline->bind(pass);
     
-    glm::mat4 view_proj = projection * view;
-    
     for (const auto& mp : mountain_positions_) {
         Model* mountain = nullptr;
         switch (mp.size_type) {
@@ -303,34 +333,35 @@ void WorldRenderer::render_mountains(SDL_GPURenderPass* pass, SDL_GPUCommandBuff
         float cz = (mountain->min_z + mountain->max_z) / 2.0f;
         model_mat = model_mat * glm::translate(glm::mat4(1.0f), glm::vec3(-cx, -cy, -cz));
         
-        // Set up uniforms
-        ModelUniforms uniforms = {};
-        uniforms.view_projection = view_proj;
-        uniforms.model = model_mat;
-        uniforms.light_space_matrix = glm::mat4(1.0f);  // No shadows for mountains
-        uniforms.camera_pos = camera_pos;
-        uniforms.fog_start = 3000.0f;
-        uniforms.light_dir = light_dir;
-        uniforms.fog_end = 12000.0f;
-        uniforms.light_color = glm::vec3(1.0f, 0.95f, 0.9f);
-        uniforms.ambient_color = glm::vec3(0.5f, 0.5f, 0.55f);
-        uniforms.tint_color = glm::vec4(1.0f);
-        uniforms.fog_color = glm::vec3(0.55f, 0.55f, 0.6f);
-        uniforms.fog_enabled = 1;
-        uniforms.shadows_enabled = 0;
-        uniforms.ssao_enabled = 0;
+        // Set up vertex uniforms (matches model_vertex cbuffer b0)
+        ModelVertexUniforms vs_uniforms = {};
+        vs_uniforms.model = model_mat;
+        vs_uniforms.view = view;
+        vs_uniforms.projection = projection;
+        vs_uniforms.camera_pos = camera_pos;
+        vs_uniforms.light_space_matrix = glm::mat4(1.0f);  // No shadows for mountains
+        
+        // Set up fragment uniforms (matches model_fragment cbuffer b0)
+        ModelFragmentUniforms fs_uniforms = {};
+        fs_uniforms.light_dir = light_dir;
+        fs_uniforms.ambient = 0.5f;
+        fs_uniforms.light_color = glm::vec3(1.0f, 0.95f, 0.9f);
+        fs_uniforms.tint_color = glm::vec4(1.0f);
+        fs_uniforms.fog_color = glm::vec3(0.55f, 0.55f, 0.6f);
+        fs_uniforms.fog_start = 3000.0f;
+        fs_uniforms.fog_end = 12000.0f;
+        fs_uniforms.shadows_enabled = 0;
+        fs_uniforms.fog_enabled = 1;
         
         for (auto& mesh : mountain->meshes) {
-            if (!mesh.gpu_uploaded) {
-                // Mesh not uploaded yet - skip for now
-                // The model_loader handles uploads separately
+            // Only draw meshes that have valid GPU buffers and index data
+            if (!mesh.gpu_vertex_buffer || mesh.indices.empty()) {
                 continue;
             }
             
-            if (!mesh.gpu_vertex_buffer || mesh.indices.empty()) continue;
-            
-            uniforms.has_texture = (mesh.has_texture && mesh.gpu_texture) ? 1 : 0;
-            SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
+            fs_uniforms.has_texture = (mesh.has_texture && mesh.gpu_texture) ? 1 : 0;
+            SDL_PushGPUVertexUniformData(cmd, 0, &vs_uniforms, sizeof(vs_uniforms));
+            SDL_PushGPUFragmentUniformData(cmd, 0, &fs_uniforms, sizeof(fs_uniforms));
             
             // Bind texture if available
             if (mesh.has_texture && mesh.gpu_texture && sampler_) {

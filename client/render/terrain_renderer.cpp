@@ -51,19 +51,13 @@ void TerrainRenderer::upload_heightmap_texture() {
     // Release old texture if exists
     heightmap_texture_.reset();
     
-    // Create R8 texture for heightmap
-    // Note: We convert 16-bit heights to 8-bit for now
-    // A more accurate implementation would use R16_UNORM when available
-    std::vector<uint8_t> height_data_8bit(heightmap_->height_data.size());
-    for (size_t i = 0; i < heightmap_->height_data.size(); ++i) {
-        height_data_8bit[i] = static_cast<uint8_t>(heightmap_->height_data[i] >> 8);
-    }
-    
+    // Create R16 texture for heightmap (16-bit unsigned normalized)
+    // This preserves full precision from server-provided height data
     heightmap_texture_ = gpu::GPUTexture::create_2d(
         *device_,
         heightmap_->resolution, heightmap_->resolution,
-        gpu::TextureFormat::R8,
-        height_data_8bit.data(),
+        gpu::TextureFormat::R16,
+        heightmap_->height_data.data(),
         false  // No mipmaps for heightmap
     );
     
@@ -90,7 +84,7 @@ void TerrainRenderer::load_grass_texture() {
     grass_texture_ = gpu::GPUTexture::load_from_file(
         *device_,
         "assets/textures/grass_seamless.png",
-        true  // Generate mipmaps
+        false  // No mipmaps until GPUTexture implements mipmap generation
     );
     
     if (!grass_texture_) {
@@ -221,7 +215,7 @@ void TerrainRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                              SDL_GPUTexture* ssao_texture, SDL_GPUSampler* ssao_sampler,
                              bool ssao_enabled,
                              const glm::vec3& light_dir, const glm::vec2& screen_size) {
-    if (!pipeline_registry_ || !vertex_buffer_ || !index_buffer_) return;
+    if (!pipeline_registry_ || !vertex_buffer_ || !index_buffer_ || !pass || !cmd) return;
     
     // Get terrain pipeline
     auto* pipeline = pipeline_registry_->get_terrain_pipeline();
@@ -302,6 +296,21 @@ void TerrainRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
     
     // Draw indexed primitives
     SDL_DrawGPUIndexedPrimitives(pass, index_count_, 1, 0, 0, 0);
+}
+
+void TerrainRenderer::set_anisotropic_filter(float level) {
+    if (!device_) {
+        return;
+    }
+    
+    // Clamp level to reasonable range (1.0 = no anisotropy, 16.0 = max typical)
+    level = std::max(1.0f, std::min(16.0f, level));
+    
+    // Recreate grass sampler with new anisotropy level
+    grass_sampler_ = gpu::GPUSampler::create(*device_, gpu::SamplerConfig::anisotropic(level));
+    if (!grass_sampler_) {
+        SDL_Log("TerrainRenderer::set_anisotropic_filter: Failed to recreate grass sampler with level %.1f", level);
+    }
 }
 
 } // namespace mmo

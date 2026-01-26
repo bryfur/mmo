@@ -20,6 +20,10 @@ struct TerrainVertex {
     glm::vec4 color;     // COLOR0
 };
 
+// Verify TerrainVertex is tightly packed as expected by pipeline_registry
+static_assert(sizeof(TerrainVertex) == sizeof(float) * 9,
+    "TerrainVertex must be 9 floats (36 bytes) to match pipeline vertex stride");
+
 /**
  * Terrain transform uniforms - matches terrain.vert.hlsl cbuffer
  */
@@ -127,6 +131,12 @@ public:
     // Settings
     void set_fog_color(const glm::vec3& color) { fog_color_ = color; }
     void set_fog_range(float start, float end) { fog_start_ = start; fog_end_ = end; }
+    
+    /**
+     * Set anisotropic filter level for terrain textures.
+     * Recreates the grass sampler with the new anisotropy level.
+     */
+    void set_anisotropic_filter(float level);
     
 private:
     void generate_terrain_mesh();

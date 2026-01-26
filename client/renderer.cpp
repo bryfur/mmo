@@ -455,8 +455,8 @@ void Renderer::set_anisotropic_filter(int level) {
         model_manager_->set_anisotropic_filter(aniso_value);
     }
     
-    // Note: Terrain anisotropic filtering is now handled via sampler configuration
-    // in the SDL3 GPU API and is set during terrain renderer initialization
+    // Update terrain renderer's anisotropic filtering
+    terrain_.set_anisotropic_filter(aniso_value);
 }
 
 bool Renderer::get_shadows_enabled() const {

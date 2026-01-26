@@ -15,6 +15,7 @@
 #include "render/shadow_system.hpp"
 #include "scene/render_scene.hpp"
 #include "scene/ui_scene.hpp"
+#include "gpu/pipeline_registry.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <string>
@@ -180,6 +181,7 @@ private:
     
     // ========== SUBSYSTEMS ==========
     RenderContext context_;
+    gpu::PipelineRegistry pipeline_registry_;
     TerrainRenderer terrain_;
     WorldRenderer world_;
     UIRenderer ui_;

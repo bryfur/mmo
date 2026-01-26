@@ -53,6 +53,11 @@ void RenderContext::update_viewport() {
 }
 
 void RenderContext::begin_frame() {
+    if (current_cmd_ != nullptr) {
+        SDL_Log("RenderContext::begin_frame: Warning - called while a frame is already in progress. "
+                "Submitting previous frame to avoid command buffer leak.");
+        end_frame(current_cmd_);
+    }
     current_cmd_ = begin_frame_cmd();
 }
 

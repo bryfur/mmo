@@ -121,7 +121,7 @@ void EffectRenderer::draw_model_effect(SDL_GPURenderPass* pass, SDL_GPUCommandBu
     if (!model) return;
     
     // Ensure model has GPU buffers uploaded
-    if (!model->meshes.empty() && !model->meshes[0].gpu_uploaded) {
+    if (!model->meshes.empty() && !model->meshes[0].uploaded) {
         ModelLoader::upload_to_gpu(*device_, *model);
     }
     
@@ -161,17 +161,17 @@ void EffectRenderer::draw_model_effect(SDL_GPURenderPass* pass, SDL_GPUCommandBu
     
     // Draw each mesh
     for (auto& mesh : model->meshes) {
-        if (!mesh.gpu_uploaded || !mesh.gpu_vertex_buffer || !mesh.gpu_index_buffer) {
+        if (!mesh.uploaded || !mesh.vertex_buffer || !mesh.index_buffer) {
             continue;
         }
         
         // Update has_texture based on mesh
-        if (mesh.has_texture && mesh.gpu_texture) {
+        if (mesh.has_texture && mesh.texture) {
             frag_uniforms.has_texture = 1;
             
             // Bind texture
             SDL_GPUTextureSamplerBinding tex_binding;
-            tex_binding.texture = mesh.gpu_texture->handle();
+            tex_binding.texture = mesh.texture->handle();
             tex_binding.sampler = sampler_;
             SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
         } else {
@@ -182,13 +182,13 @@ void EffectRenderer::draw_model_effect(SDL_GPURenderPass* pass, SDL_GPUCommandBu
         
         // Bind vertex buffer
         SDL_GPUBufferBinding vb_binding;
-        vb_binding.buffer = mesh.gpu_vertex_buffer->handle();
+        vb_binding.buffer = mesh.vertex_buffer->handle();
         vb_binding.offset = 0;
         SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
         
         // Bind index buffer
         SDL_GPUBufferBinding ib_binding;
-        ib_binding.buffer = mesh.gpu_index_buffer->handle();
+        ib_binding.buffer = mesh.index_buffer->handle();
         ib_binding.offset = 0;
         SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
         

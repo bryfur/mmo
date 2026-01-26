@@ -83,6 +83,9 @@ bool TextRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_
 }
 
 void TextRenderer::shutdown() {
+    // Release any pending GPU resources
+    release_pending_resources();
+    
     if (sampler_ && device_) {
         SDL_ReleaseGPUSampler(device_->handle(), sampler_);
         sampler_ = nullptr;
@@ -105,6 +108,26 @@ void TextRenderer::shutdown() {
 
 void TextRenderer::set_projection(const glm::mat4& projection) {
     projection_ = projection;
+}
+
+void TextRenderer::release_pending_resources() {
+    if (!device_) return;
+    
+    // Release textures from previous frame
+    for (SDL_GPUTexture* texture : pending_textures_) {
+        if (texture) {
+            SDL_ReleaseGPUTexture(device_->handle(), texture);
+        }
+    }
+    pending_textures_.clear();
+    
+    // Release transfer buffers from previous frame
+    for (SDL_GPUTransferBuffer* transfer : pending_transfers_) {
+        if (transfer) {
+            SDL_ReleaseGPUTransferBuffer(device_->handle(), transfer);
+        }
+    }
+    pending_transfers_.clear();
 }
 
 void TextRenderer::draw_text(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* render_pass,
@@ -169,29 +192,41 @@ void TextRenderer::draw_text(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* rende
     
     // Map and copy pixel data
     void* mapped = SDL_MapGPUTransferBuffer(device_->handle(), transfer, false);
-    if (mapped) {
-        memcpy(mapped, converted->pixels, data_size);
-        SDL_UnmapGPUTransferBuffer(device_->handle(), transfer);
+    if (!mapped) {
+        std::cerr << "Failed to map transfer buffer for text: " << SDL_GetError() << std::endl;
+        SDL_ReleaseGPUTransferBuffer(device_->handle(), transfer);
+        SDL_ReleaseGPUTexture(device_->handle(), texture);
+        SDL_DestroySurface(converted);
+        return;
     }
+
+    memcpy(mapped, converted->pixels, data_size);
+    SDL_UnmapGPUTransferBuffer(device_->handle(), transfer);
     
     // Upload to GPU texture
     SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd);
-    if (copy_pass) {
-        SDL_GPUTextureTransferInfo src = {};
-        src.transfer_buffer = transfer;
-        src.offset = 0;
-        src.pixels_per_row = static_cast<Uint32>(converted->w);
-        src.rows_per_layer = static_cast<Uint32>(converted->h);
-        
-        SDL_GPUTextureRegion dst = {};
-        dst.texture = texture;
-        dst.w = converted->w;
-        dst.h = converted->h;
-        dst.d = 1;
-        
-        SDL_UploadToGPUTexture(copy_pass, &src, &dst, false);
-        SDL_EndGPUCopyPass(copy_pass);
+    if (!copy_pass) {
+        std::cerr << "Failed to begin GPU copy pass for text upload: " << SDL_GetError() << std::endl;
+        SDL_ReleaseGPUTransferBuffer(device_->handle(), transfer);
+        SDL_ReleaseGPUTexture(device_->handle(), texture);
+        SDL_DestroySurface(converted);
+        return;
     }
+    
+    SDL_GPUTextureTransferInfo src = {};
+    src.transfer_buffer = transfer;
+    src.offset = 0;
+    src.pixels_per_row = static_cast<Uint32>(converted->w);
+    src.rows_per_layer = static_cast<Uint32>(converted->h);
+    
+    SDL_GPUTextureRegion dst = {};
+    dst.texture = texture;
+    dst.w = converted->w;
+    dst.h = converted->h;
+    dst.d = 1;
+    
+    SDL_UploadToGPUTexture(copy_pass, &src, &dst, false);
+    SDL_EndGPUCopyPass(copy_pass);
     
     // Calculate dimensions
     float w = converted->w * scale;
@@ -239,12 +274,10 @@ void TextRenderer::draw_text(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* rende
     // Draw quad
     SDL_DrawGPUPrimitives(render_pass, 6, 1, 0, 0);
     
-    // Clean up temporary resources
-    // Note: We need to release these after the command buffer is submitted,
-    // but for simplicity we'll release them here. The GPU will handle the
-    // synchronization since the upload happened in the same command buffer.
-    SDL_ReleaseGPUTransferBuffer(device_->handle(), transfer);
-    SDL_ReleaseGPUTexture(device_->handle(), texture);
+    // Defer cleanup of temporary GPU resources until next frame.
+    // This ensures the GPU has finished using them before release.
+    pending_textures_.push_back(texture);
+    pending_transfers_.push_back(transfer);
     SDL_DestroySurface(converted);
 }
 

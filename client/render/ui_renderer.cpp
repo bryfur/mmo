@@ -80,6 +80,11 @@ void UIRenderer::begin(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* render_pass
     current_pass_ = render_pass;
     vertex_batch_.clear();
     
+    // Release pending GPU resources from previous frame
+    if (text_renderer_) {
+        text_renderer_->release_pending_resources();
+    }
+    
     // Bind UI pipeline (handles blend state, no depth test)
     if (pipeline_registry_) {
         auto* ui_pipeline = pipeline_registry_->get_ui_pipeline();
@@ -218,8 +223,71 @@ void UIRenderer::draw_circle(float x, float y, float radius, uint32_t color, int
 
 void UIRenderer::draw_circle_outline(float x, float y, float radius, uint32_t color, 
                                       float line_width, int segments) {
-    // For now, just draw filled circle (outline requires more complex geometry)
-    draw_circle(x, y, radius, color, segments);
+    if (line_width <= 0.0f || radius <= 0.0f || segments <= 0) {
+        return;
+    }
+
+    float outer_radius = radius;
+    float inner_radius = radius - line_width;
+    if (inner_radius <= 0.0f) {
+        // If the line width is too large, fall back to filled circle
+        draw_circle(x, y, outer_radius, color, segments);
+        return;
+    }
+
+    glm::vec4 c = color_from_uint32(color);
+
+    // Each segment of the ring is two triangles (6 vertices)
+    size_t vertices_needed = static_cast<size_t>(segments) * 6;
+    if (vertex_batch_.size() + vertices_needed > MAX_VERTICES) {
+        flush_batch();
+
+        // Re-bind pipeline after flush
+        if (pipeline_registry_ && current_pass_) {
+            auto* ui_pipeline = pipeline_registry_->get_ui_pipeline();
+            if (ui_pipeline) {
+                ui_pipeline->bind(current_pass_);
+            }
+        }
+        if (current_cmd_) {
+            SDL_PushGPUVertexUniformData(current_cmd_, 0, &projection_, sizeof(glm::mat4));
+        }
+    }
+
+    constexpr float PI = 3.14159265359f;
+    for (int i = 0; i < segments; ++i) {
+        float t1 = i / static_cast<float>(segments);
+        float t2 = (i + 1) / static_cast<float>(segments);
+        float a1 = t1 * 2.0f * PI;
+        float a2 = t2 * 2.0f * PI;
+
+        float cos_a1 = std::cos(a1);
+        float sin_a1 = std::sin(a1);
+        float cos_a2 = std::cos(a2);
+        float sin_a2 = std::sin(a2);
+
+        // Outer edge points
+        UIVertex outer1 = {x + cos_a1 * outer_radius, y + sin_a1 * outer_radius,
+                           c.r, c.g, c.b, c.a};
+        UIVertex outer2 = {x + cos_a2 * outer_radius, y + sin_a2 * outer_radius,
+                           c.r, c.g, c.b, c.a};
+
+        // Inner edge points
+        UIVertex inner1 = {x + cos_a1 * inner_radius, y + sin_a1 * inner_radius,
+                           c.r, c.g, c.b, c.a};
+        UIVertex inner2 = {x + cos_a2 * inner_radius, y + sin_a2 * inner_radius,
+                           c.r, c.g, c.b, c.a};
+
+        // First triangle (outer1, outer2, inner1)
+        vertex_batch_.push_back(outer1);
+        vertex_batch_.push_back(outer2);
+        vertex_batch_.push_back(inner1);
+
+        // Second triangle (outer2, inner2, inner1)
+        vertex_batch_.push_back(outer2);
+        vertex_batch_.push_back(inner2);
+        vertex_batch_.push_back(inner1);
+    }
 }
 
 void UIRenderer::draw_line(float x1, float y1, float x2, float y2, uint32_t color, float line_width) {

@@ -6,6 +6,7 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <memory>
+#include <vector>
 
 // Forward declarations
 namespace mmo::gpu {
@@ -63,6 +64,13 @@ public:
     
     bool is_ready() const { return initialized_ && font_ != nullptr; }
     
+    /**
+     * Release GPU resources from previous frames.
+     * Call this at the beginning of each frame to clean up resources
+     * that are no longer in use by the GPU.
+     */
+    void release_pending_resources();
+    
 private:
     TTF_Font* font_ = nullptr;
     int font_size_ = 18;
@@ -77,6 +85,11 @@ private:
     
     // Sampler for text textures
     SDL_GPUSampler* sampler_ = nullptr;
+    
+    // Pending GPU resources to be released after GPU has finished using them
+    // We use double-buffering: resources go to pending_*, then released next frame
+    std::vector<SDL_GPUTexture*> pending_textures_;
+    std::vector<SDL_GPUTransferBuffer*> pending_transfers_;
 };
 
 } // namespace mmo

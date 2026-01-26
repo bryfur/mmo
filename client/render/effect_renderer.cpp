@@ -104,7 +104,7 @@ void EffectRenderer::draw_warrior_slash(float x, float y, float dir_x, float dir
     model_shader_->set_int("ssaoEnabled", 0);
     
     for (auto& mesh : sword->meshes) {
-        if (!mesh.uploaded) ModelLoader::upload_to_gpu(*sword);
+        if (!mesh.uploaded) ModelLoader::upload_to_gpu_legacy(*sword);
         if (mesh.vao && !mesh.indices.empty()) {
             if (mesh.has_texture && mesh.texture_id > 0) {
                 glActiveTexture(GL_TEXTURE0);
@@ -170,7 +170,7 @@ void EffectRenderer::draw_mage_beam(float x, float y, float dir_x, float dir_y, 
     
     glDisable(GL_CULL_FACE);
     for (auto& mesh : fireball->meshes) {
-        if (!mesh.uploaded) ModelLoader::upload_to_gpu(*fireball);
+        if (!mesh.uploaded) ModelLoader::upload_to_gpu_legacy(*fireball);
         if (mesh.vao && !mesh.indices.empty()) {
             if (mesh.has_texture && mesh.texture_id > 0) {
                 glActiveTexture(GL_TEXTURE0);
@@ -238,7 +238,7 @@ void EffectRenderer::draw_paladin_aoe(float x, float y, float dir_x, float dir_y
         model_shader_->set_mat4("projection", projection);
         
         for (auto& mesh : bible->meshes) {
-            if (!mesh.uploaded) ModelLoader::upload_to_gpu(*bible);
+            if (!mesh.uploaded) ModelLoader::upload_to_gpu_legacy(*bible);
             if (mesh.vao && !mesh.indices.empty()) {
                 if (mesh.has_texture && mesh.texture_id > 0) {
                     glActiveTexture(GL_TEXTURE0);
@@ -298,7 +298,7 @@ void EffectRenderer::draw_archer_arrow(float x, float y, float dir_x, float dir_
     if (projectile) {
         glDisable(GL_CULL_FACE);
         for (auto& mesh : projectile->meshes) {
-            if (!mesh.uploaded) ModelLoader::upload_to_gpu(*projectile);
+            if (!mesh.uploaded) ModelLoader::upload_to_gpu_legacy(*projectile);
             if (mesh.vao && !mesh.indices.empty()) {
                 glBindVertexArray(mesh.vao);
                 glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, nullptr);

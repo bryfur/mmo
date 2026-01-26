@@ -355,35 +355,28 @@ void WorldRenderer::render_mountains(SDL_GPURenderPass* pass, SDL_GPUCommandBuff
         
         for (auto& mesh : mountain->meshes) {
             // Only draw meshes that have valid GPU buffers and index data
-            if (!mesh.gpu_vertex_buffer || mesh.indices.empty()) {
+            if (!mesh.vertex_buffer || mesh.indices.empty()) {
                 continue;
             }
             
-            fs_uniforms.has_texture = (mesh.has_texture && mesh.gpu_texture) ? 1 : 0;
+            fs_uniforms.has_texture = (mesh.has_texture && mesh.texture) ? 1 : 0;
             SDL_PushGPUVertexUniformData(cmd, 0, &vs_uniforms, sizeof(vs_uniforms));
             SDL_PushGPUFragmentUniformData(cmd, 0, &fs_uniforms, sizeof(fs_uniforms));
             
             // Bind texture if available
-            if (mesh.has_texture && mesh.gpu_texture && sampler_) {
+            if (mesh.has_texture && mesh.texture && sampler_) {
                 SDL_GPUTextureSamplerBinding tex_binding = {};
-                tex_binding.texture = mesh.gpu_texture->handle();
+                tex_binding.texture = mesh.texture->handle();
                 tex_binding.sampler = sampler_;
                 SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
             }
             
-            // Bind vertex buffer
-            SDL_GPUBufferBinding vb_binding = {};
-            vb_binding.buffer = mesh.gpu_vertex_buffer->handle();
-            vb_binding.offset = 0;
-            SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
+            // Bind vertex and index buffers using the Mesh helper method
+            mesh.bind_buffers(pass);
             
-            // Bind index buffer and draw
-            if (mesh.gpu_index_buffer) {
-                SDL_GPUBufferBinding ib_binding = {};
-                ib_binding.buffer = mesh.gpu_index_buffer->handle();
-                ib_binding.offset = 0;
-                SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-                SDL_DrawGPUIndexedPrimitives(pass, static_cast<uint32_t>(mesh.indices.size()), 1, 0, 0, 0);
+            // Draw
+            if (mesh.index_buffer) {
+                SDL_DrawGPUIndexedPrimitives(pass, mesh.index_count(), 1, 0, 0, 0);
             }
         }
     }

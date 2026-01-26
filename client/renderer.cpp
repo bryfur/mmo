@@ -818,7 +818,8 @@ void Renderer::draw_model(Model* model, const glm::vec3& position, float rotatio
     
     for (auto& mesh : model->meshes) {
         if (!mesh.uploaded) {
-            ModelLoader::upload_to_gpu(*model);
+            // Legacy upload - does nothing, models load via ModelManager with GPU device
+            ModelLoader::upload_to_gpu_legacy(*model);
         }
         
         if (mesh.vao && !mesh.indices.empty()) {
@@ -879,7 +880,8 @@ void Renderer::draw_model_no_fog(Model* model, const glm::vec3& position, float 
     
     for (auto& mesh : model->meshes) {
         if (!mesh.uploaded) {
-            ModelLoader::upload_to_gpu(*model);
+            // Legacy upload - does nothing, models load via ModelManager with GPU device
+            ModelLoader::upload_to_gpu_legacy(*model);
         }
         
         if (mesh.vao && !mesh.indices.empty()) {

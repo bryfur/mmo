@@ -1,6 +1,10 @@
 #include "renderer.hpp"
 #include "render/grass_renderer.hpp"
 #include "common/entity_config.hpp"
+#include "shader.hpp"
+#include <GL/glew.h>
+#include <glm/gtc/type_ptr.hpp>
+#include <SDL3/SDL_log.h>
 #include <iostream>
 #include <cmath>
 #include <type_traits>
@@ -16,10 +20,17 @@ Renderer::~Renderer() {
 }
 
 bool Renderer::init(int width, int height, const std::string& title) {
-    // Initialize render context (SDL window + OpenGL)
+    // Initialize render context (SDL window + SDL3 GPU)
     if (!context_.init(width, height, title)) {
         return false;
     }
+    
+    // Initialize pipeline registry for SDL3 GPU pipelines
+    if (!pipeline_registry_.init(context_.device())) {
+        std::cerr << "Failed to initialize pipeline registry" << std::endl;
+        return false;
+    }
+    pipeline_registry_.set_swapchain_format(context_.swapchain_format());
     
     // Initialize terrain renderer
     if (!terrain_.init(WORLD_WIDTH, WORLD_HEIGHT)) {
@@ -65,8 +76,8 @@ bool Renderer::init(int width, int height, const std::string& title) {
         return false;
     }
     
-    // Initialize entity rendering shaders
-    init_shaders();
+    // Initialize GPU resources for entity rendering
+    init_pipelines();
     init_billboard_buffers();
     
     // Initialize grass renderer
@@ -77,37 +88,34 @@ bool Renderer::init(int width, int height, const std::string& title) {
     return true;
 }
 
-void Renderer::init_shaders() {
-    model_shader_ = std::make_unique<Shader>();
-    if (!model_shader_->load(shaders::model_vertex, shaders::model_fragment)) {
-        std::cerr << "Failed to load model shader" << std::endl;
-    }
+void Renderer::init_pipelines() {
+    // Preload commonly used pipelines to avoid hitching during gameplay
+    pipeline_registry_.get_model_pipeline();
+    pipeline_registry_.get_skinned_model_pipeline();
+    pipeline_registry_.get_billboard_pipeline();
     
-    skinned_model_shader_ = std::make_unique<Shader>();
-    if (!skinned_model_shader_->load(shaders::skinned_model_vertex, shaders::skinned_model_fragment)) {
-        std::cerr << "Failed to load skinned model shader" << std::endl;
-    }
-    
-    billboard_shader_ = std::make_unique<Shader>();
-    if (!billboard_shader_->load(shaders::billboard_vertex, shaders::billboard_fragment)) {
-        std::cerr << "Failed to load billboard shader" << std::endl;
-    }
+    // Create default sampler for model textures
+    SDL_GPUSamplerCreateInfo sampler_info = {};
+    sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
+    sampler_info.mag_filter = SDL_GPU_FILTER_LINEAR;
+    sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
+    sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_REPEAT;
+    sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_REPEAT;
+    sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_REPEAT;
+    sampler_info.max_anisotropy = 16.0f;
+    sampler_info.enable_anisotropy = true;
+    default_sampler_ = context_.device().create_sampler(sampler_info);
 }
 
 void Renderer::init_billboard_buffers() {
-    glGenVertexArrays(1, &billboard_vao_);
-    glGenBuffers(1, &billboard_vbo_);
-    
-    glBindVertexArray(billboard_vao_);
-    glBindBuffer(GL_ARRAY_BUFFER, billboard_vbo_);
-    glBufferData(GL_ARRAY_BUFFER, 6 * 7 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
-    
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    
-    glBindVertexArray(0);
+    // Create a dynamic vertex buffer for billboard rendering (health bars, etc.)
+    // 6 vertices per quad * 7 floats per vertex (pos3 + color4)
+    constexpr size_t BILLBOARD_BUFFER_SIZE = 6 * 7 * sizeof(float);
+    billboard_vertex_buffer_ = gpu::GPUBuffer::create_dynamic(
+        context_.device(), 
+        gpu::GPUBuffer::Type::Vertex, 
+        BILLBOARD_BUFFER_SIZE
+    );
 }
 
 void Renderer::shutdown() {
@@ -119,18 +127,16 @@ void Renderer::shutdown() {
         grass_renderer_->shutdown();
     }
     
-    if (billboard_vao_) {
-        glDeleteVertexArrays(1, &billboard_vao_);
-        billboard_vao_ = 0;
-    }
-    if (billboard_vbo_) {
-        glDeleteBuffers(1, &billboard_vbo_);
-        billboard_vbo_ = 0;
+    // Release GPU resources
+    billboard_vertex_buffer_.reset();
+    
+    if (default_sampler_) {
+        context_.device().release_sampler(default_sampler_);
+        default_sampler_ = nullptr;
     }
     
-    model_shader_.reset();
-    skinned_model_shader_.reset();
-    billboard_shader_.reset();
+    // Shutdown pipeline registry
+    pipeline_registry_.shutdown();
     
     // Shutdown subsystems
     effects_.shutdown();
@@ -300,9 +306,13 @@ void Renderer::draw_model_shadow(Model* model, const glm::vec3& position, float 
     
     shader->set_mat4("model", model_mat);
     
+    // Note: Model meshes still use GL buffers until issue #14 is completed
+    // For now, continue using the GL draw path
     for (const auto& mesh : model->meshes) {
-        glBindVertexArray(mesh.vao);
-        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh.indices.size()), GL_UNSIGNED_INT, 0);
+        if (mesh.vao && !mesh.indices.empty()) {
+            glBindVertexArray(mesh.vao);
+            glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh.indices.size()), GL_UNSIGNED_INT, 0);
+        }
     }
     glBindVertexArray(0);
 }
@@ -438,10 +448,8 @@ void Renderer::set_anisotropic_filter(int level) {
         aniso_value = static_cast<float>(1 << level);  // 2, 4, 8, 16
     }
     
-    // Get max supported anisotropy
-    GLfloat max_aniso = 1.0f;
-    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &max_aniso);
-    aniso_value = std::min(aniso_value, max_aniso);
+    // Cap at 16x (typical hardware max)
+    aniso_value = std::min(aniso_value, 16.0f);
     
     // Update all model textures
     if (model_manager_) {
@@ -450,6 +458,22 @@ void Renderer::set_anisotropic_filter(int level) {
     
     // Update terrain textures
     terrain_.set_anisotropic_filter(aniso_value);
+    
+    // Recreate default sampler with new anisotropy settings
+    if (default_sampler_) {
+        context_.device().release_sampler(default_sampler_);
+        
+        SDL_GPUSamplerCreateInfo sampler_info = {};
+        sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
+        sampler_info.mag_filter = SDL_GPU_FILTER_LINEAR;
+        sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
+        sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_REPEAT;
+        sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_REPEAT;
+        sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_REPEAT;
+        sampler_info.max_anisotropy = aniso_value;
+        sampler_info.enable_anisotropy = (level > 0);
+        default_sampler_ = context_.device().create_sampler(sampler_info);
+    }
 }
 
 bool Renderer::get_shadows_enabled() const {
@@ -672,9 +696,28 @@ void Renderer::draw_model(Model* model, const glm::vec3& position, float rotatio
                           const glm::vec4& tint, float attack_tilt) {
     if (!model) return;
     
-    Shader* shader = (model->has_skeleton && skinned_model_shader_) ? 
-                     skinned_model_shader_.get() : model_shader_.get();
-    shader->use();
+    // Get appropriate pipeline from registry
+    // Note: Until issue #14 (Model Loader migration) is complete, we use legacy GL shaders
+    // This is a temporary compatibility layer during the phased SDL3 GPU migration
+    auto* pipeline = model->has_skeleton ? 
+                     pipeline_registry_.get_skinned_model_pipeline() :
+                     pipeline_registry_.get_model_pipeline();
+    
+    // For now, fall back to the legacy GL shader path since models still use GL buffers
+    // TODO: Once issue #14 is complete, use SDL3 GPU rendering path
+    Shader legacy_model_shader;
+    Shader legacy_skinned_shader;
+    
+    // Use legacy embedded shaders for compatibility
+    if (model->has_skeleton) {
+        legacy_skinned_shader.load(shaders::skinned_model_vertex, shaders::skinned_model_fragment);
+        legacy_skinned_shader.use();
+    } else {
+        legacy_model_shader.load(shaders::model_vertex, shaders::model_fragment);
+        legacy_model_shader.use();
+    }
+    
+    Shader* shader = model->has_skeleton ? &legacy_skinned_shader : &legacy_model_shader;
     
     glm::mat4 model_mat = glm::mat4(1.0f);
     model_mat = glm::translate(model_mat, position);
@@ -696,7 +739,7 @@ void Renderer::draw_model(Model* model, const glm::vec3& position, float rotatio
     shader->set_vec3("fogColor", glm::vec3(0.35f, 0.45f, 0.6f));
     shader->set_float("fogStart", 800.0f);
     shader->set_float("fogEnd", 4000.0f);
-    shader->set_int("fogEnabled", 1);
+    shader->set_int("fogEnabled", fog_enabled_ ? 1 : 0);
     shader->set_vec3("lightDir", light_dir_);
     shader->set_vec3("lightColor", glm::vec3(1.0f, 0.95f, 0.9f));
     shader->set_vec3("ambientColor", glm::vec3(0.4f, 0.4f, 0.5f));
@@ -714,7 +757,7 @@ void Renderer::draw_model(Model* model, const glm::vec3& position, float rotatio
     glBindTexture(GL_TEXTURE_2D, ssao_.ssao_texture());
     shader->set_int("ssaoTexture", 3);
     
-    if (model->has_skeleton && skinned_model_shader_) {
+    if (model->has_skeleton) {
         AnimationState* anim_state = nullptr;
         static const char* animated_models[] = {"warrior", "mage", "paladin"};
         for (const char* name : animated_models) {
@@ -734,8 +777,6 @@ void Renderer::draw_model(Model* model, const glm::vec3& position, float rotatio
         } else {
             shader->set_int("useSkinning", 0);
         }
-    } else if (model->has_skeleton) {
-        shader->set_int("useSkinning", 0);
     }
     
     for (auto& mesh : model->meshes) {
@@ -754,7 +795,7 @@ void Renderer::draw_model(Model* model, const glm::vec3& position, float rotatio
             }
             
             glBindVertexArray(mesh.vao);
-            glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, 0);
+            glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh.indices.size()), GL_UNSIGNED_INT, 0);
             glBindVertexArray(0);
         }
     }
@@ -764,8 +805,10 @@ void Renderer::draw_model_no_fog(Model* model, const glm::vec3& position, float 
                                   float scale, const glm::vec4& tint) {
     if (!model) return;
     
-    Shader* shader = model_shader_.get();
-    shader->use();
+    // Use legacy GL shader path for compatibility
+    Shader legacy_shader;
+    legacy_shader.load(shaders::model_vertex, shaders::model_fragment);
+    legacy_shader.use();
     
     glm::mat4 model_mat = glm::mat4(1.0f);
     model_mat = glm::translate(model_mat, position);
@@ -777,20 +820,20 @@ void Renderer::draw_model_no_fog(Model* model, const glm::vec3& position, float 
     float cz = (model->min_z + model->max_z) / 2.0f;
     model_mat = model_mat * glm::translate(glm::mat4(1.0f), glm::vec3(-cx, -cy, -cz));
     
-    shader->set_mat4("model", model_mat);
-    shader->set_mat4("view", view_);
-    shader->set_mat4("projection", projection_);
-    shader->set_vec3("cameraPos", actual_camera_pos_);
-    shader->set_vec3("fogColor", glm::vec3(0.55f, 0.55f, 0.6f));
-    shader->set_float("fogStart", 3000.0f);
-    shader->set_float("fogEnd", 12000.0f);
-    shader->set_int("fogEnabled", 1);
-    shader->set_vec3("lightDir", light_dir_);
-    shader->set_vec3("lightColor", glm::vec3(1.0f, 0.95f, 0.9f));
-    shader->set_vec3("ambientColor", glm::vec3(0.5f, 0.5f, 0.55f));
-    shader->set_vec4("tintColor", tint);
-    shader->set_int("shadowsEnabled", 0);
-    shader->set_int("ssaoEnabled", 0);
+    legacy_shader.set_mat4("model", model_mat);
+    legacy_shader.set_mat4("view", view_);
+    legacy_shader.set_mat4("projection", projection_);
+    legacy_shader.set_vec3("cameraPos", actual_camera_pos_);
+    legacy_shader.set_vec3("fogColor", glm::vec3(0.55f, 0.55f, 0.6f));
+    legacy_shader.set_float("fogStart", 3000.0f);
+    legacy_shader.set_float("fogEnd", 12000.0f);
+    legacy_shader.set_int("fogEnabled", 1);
+    legacy_shader.set_vec3("lightDir", light_dir_);
+    legacy_shader.set_vec3("lightColor", glm::vec3(1.0f, 0.95f, 0.9f));
+    legacy_shader.set_vec3("ambientColor", glm::vec3(0.5f, 0.5f, 0.55f));
+    legacy_shader.set_vec4("tintColor", tint);
+    legacy_shader.set_int("shadowsEnabled", 0);
+    legacy_shader.set_int("ssaoEnabled", 0);
     
     for (auto& mesh : model->meshes) {
         if (!mesh.uploaded) {
@@ -801,14 +844,14 @@ void Renderer::draw_model_no_fog(Model* model, const glm::vec3& position, float 
             if (mesh.has_texture && mesh.texture_id > 0) {
                 glActiveTexture(GL_TEXTURE0);
                 glBindTexture(GL_TEXTURE_2D, mesh.texture_id);
-                shader->set_int("baseColorTexture", 0);
-                shader->set_int("hasTexture", 1);
+                legacy_shader.set_int("baseColorTexture", 0);
+                legacy_shader.set_int("hasTexture", 1);
             } else {
-                shader->set_int("hasTexture", 0);
+                legacy_shader.set_int("hasTexture", 0);
             }
             
             glBindVertexArray(mesh.vao);
-            glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, 0);
+            glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh.indices.size()), GL_UNSIGNED_INT, 0);
             glBindVertexArray(0);
         }
     }
@@ -857,10 +900,14 @@ void Renderer::draw_enemy_health_bar_3d(float world_x, float world_y, float worl
         return;
     }
     
-    billboard_shader_->use();
-    billboard_shader_->set_mat4("view", view_);
-    billboard_shader_->set_mat4("projection", projection_);
-    billboard_shader_->set_vec3("worldPos", glm::vec3(world_x, world_y, world_z));
+    // Use legacy GL billboard shader for compatibility
+    // TODO: Migrate to SDL3 GPU billboard pipeline once issue #14 completes
+    Shader billboard_shader;
+    billboard_shader.load(shaders::billboard_vertex, shaders::billboard_fragment);
+    billboard_shader.use();
+    billboard_shader.set_mat4("view", view_);
+    billboard_shader.set_mat4("projection", projection_);
+    billboard_shader.set_vec3("worldPos", glm::vec3(world_x, world_y, world_z));
     
     float world_bar_width = bar_width * 0.5f;
     float world_bar_height = bar_width * 0.1f;
@@ -870,12 +917,23 @@ void Renderer::draw_enemy_health_bar_3d(float world_x, float world_y, float worl
     glDisable(GL_CULL_FACE);
     glDepthMask(GL_FALSE);
     
-    glBindVertexArray(billboard_vao_);
-    glBindBuffer(GL_ARRAY_BUFFER, billboard_vbo_);
+    // Create temporary VAO/VBO for billboard rendering
+    GLuint temp_vao, temp_vbo;
+    glGenVertexArrays(1, &temp_vao);
+    glGenBuffers(1, &temp_vbo);
+    
+    glBindVertexArray(temp_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, temp_vbo);
+    glBufferData(GL_ARRAY_BUFFER, 6 * 7 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+    
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
     
     auto draw_billboard_quad = [&](float offset_x, float offset_y, float w, float h, const glm::vec4& color) {
-        billboard_shader_->set_vec2("size", glm::vec2(w, h));
-        billboard_shader_->set_vec2("offset", glm::vec2(offset_x, offset_y));
+        billboard_shader.set_vec2("size", glm::vec2(w, h));
+        billboard_shader.set_vec2("offset", glm::vec2(offset_x, offset_y));
         
         float vertices[] = {
             -0.5f, -0.5f, 0.0f, color.r, color.g, color.b, color.a,
@@ -902,6 +960,11 @@ void Renderer::draw_enemy_health_bar_3d(float world_x, float world_y, float worl
     draw_billboard_quad(fill_offset_x, 0.0f, fill_width, world_bar_height, health_color);
     
     glBindVertexArray(0);
+    
+    // Clean up temporary resources
+    glDeleteVertexArrays(1, &temp_vao);
+    glDeleteBuffers(1, &temp_vbo);
+    
     glDepthMask(GL_TRUE);
     glEnable(GL_CULL_FACE);
 }

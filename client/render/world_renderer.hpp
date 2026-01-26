@@ -1,8 +1,11 @@
 #pragma once
 
-#include "../shader.hpp"
 #include "../model_loader.hpp"
-#include <GL/glew.h>
+#include "../gpu/gpu_device.hpp"
+#include "../gpu/gpu_buffer.hpp"
+#include "../gpu/gpu_pipeline.hpp"
+#include "../gpu/pipeline_registry.hpp"
+#include <SDL3/SDL_gpu.h>
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
@@ -17,6 +20,11 @@ namespace mmo {
  * - Grid
  * 
  * Note: Rocks and trees are now rendered as server-side entities
+ * 
+ * SDL3 GPU Migration: This class now uses SDL3 GPU API instead of OpenGL.
+ * - VAO/VBO replaced with GPUBuffer
+ * - GL shaders replaced with PipelineRegistry
+ * - Draw calls use SDL_DrawGPUPrimitives
  */
 class WorldRenderer {
 public:
@@ -28,7 +36,16 @@ public:
     WorldRenderer& operator=(const WorldRenderer&) = delete;
     
     /**
-     * Initialize world rendering resources.
+     * Initialize world rendering resources (SDL3 GPU API version).
+     * @param device GPU device for resource creation
+     * @param pipeline_registry Pipeline registry for shader pipelines
+     */
+    bool init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry,
+              float world_width, float world_height, ModelManager* model_manager);
+    
+    /**
+     * Legacy initialization (deprecated - for backward compatibility during migration).
+     * TODO: Remove after renderer.cpp is fully migrated to SDL3 GPU API
      */
     bool init(float world_width, float world_height, ModelManager* model_manager);
     
@@ -50,18 +67,46 @@ public:
     void update(float dt);
     
     /**
-     * Render skybox (should be called first with depth write disabled).
+     * Render skybox (SDL3 GPU API version).
+     * @param pass Active render pass
+     * @param cmd Command buffer for uniform uploads
+     */
+    void render_skybox(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                       const glm::mat4& view, const glm::mat4& projection);
+    
+    /**
+     * Legacy render skybox (deprecated - for backward compatibility).
+     * TODO: Remove after renderer.cpp is fully migrated to SDL3 GPU API
      */
     void render_skybox(const glm::mat4& view, const glm::mat4& projection);
     
     /**
-     * Render distant mountains.
+     * Render distant mountains (SDL3 GPU API version).
+     * @param pass Active render pass
+     * @param cmd Command buffer for uniform uploads
+     */
+    void render_mountains(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                          const glm::mat4& view, const glm::mat4& projection,
+                          const glm::vec3& camera_pos, const glm::vec3& light_dir);
+    
+    /**
+     * Legacy render mountains (deprecated - for backward compatibility).
+     * TODO: Remove after renderer.cpp is fully migrated to SDL3 GPU API
      */
     void render_mountains(const glm::mat4& view, const glm::mat4& projection,
                           const glm::vec3& camera_pos, const glm::vec3& light_dir);
     
     /**
-     * Render debug grid.
+     * Render debug grid (SDL3 GPU API version).
+     * @param pass Active render pass
+     * @param cmd Command buffer for uniform uploads
+     */
+    void render_grid(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                     const glm::mat4& view, const glm::mat4& projection);
+    
+    /**
+     * Legacy render grid (deprecated - for backward compatibility).
+     * TODO: Remove after renderer.cpp is fully migrated to SDL3 GPU API
      */
     void render_grid(const glm::mat4& view, const glm::mat4& projection);
     
@@ -90,23 +135,18 @@ private:
     float world_width_ = 0.0f;
     float world_height_ = 0.0f;
     
+    gpu::GPUDevice* device_ = nullptr;
+    gpu::PipelineRegistry* pipeline_registry_ = nullptr;
     ModelManager* model_manager_ = nullptr;
     std::function<float(float, float)> terrain_height_func_;
     
-    // Shaders
-    std::unique_ptr<Shader> skybox_shader_;
-    std::unique_ptr<Shader> grid_shader_;
-    std::unique_ptr<Shader> model_shader_;
-    
     // Skybox
-    GLuint skybox_vao_ = 0;
-    GLuint skybox_vbo_ = 0;
+    std::unique_ptr<gpu::GPUBuffer> skybox_vertex_buffer_;
     float skybox_time_ = 0.0f;
     
     // Grid
-    GLuint grid_vao_ = 0;
-    GLuint grid_vbo_ = 0;
-    GLuint grid_vertex_count_ = 0;
+    std::unique_ptr<gpu::GPUBuffer> grid_vertex_buffer_;
+    uint32_t grid_vertex_count_ = 0;
     
     // Lighting
     glm::vec3 sun_direction_ = glm::normalize(glm::vec3(0.5f, 0.8f, 0.3f));
@@ -119,6 +159,9 @@ private:
     glm::vec3 fog_color_ = glm::vec3(0.35f, 0.45f, 0.6f);
     float fog_start_ = 800.0f;
     float fog_end_ = 4000.0f;
+    
+    // Sampler for textures
+    SDL_GPUSampler* sampler_ = nullptr;
 };
 
 } // namespace mmo

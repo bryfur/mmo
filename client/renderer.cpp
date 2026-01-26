@@ -24,7 +24,7 @@ bool Renderer::init(int width, int height, const std::string& title) {
         return false;
     }
     
-    // Initialize pipeline registry for SDL3 GPU API
+    // Initialize pipeline registry for SDL3 GPU pipelines
     if (!pipeline_registry_.init(context_.device())) {
         std::cerr << "Failed to initialize pipeline registry" << std::endl;
         return false;
@@ -48,8 +48,8 @@ bool Renderer::init(int width, int height, const std::string& title) {
         return terrain_.get_height(x, z);
     });
     
-    // Initialize UI renderer
-    if (!ui_.init(width, height)) {
+    // Initialize UI renderer with SDL3 GPU resources
+    if (!ui_.init(context_.device(), pipeline_registry_, width, height)) {
         std::cerr << "Failed to initialize UI renderer" << std::endl;
         return false;
     }
@@ -155,13 +155,17 @@ void Renderer::shutdown() {
     // Shutdown pipeline registry
     pipeline_registry_.shutdown();
     
-    // Shutdown subsystems
+    // Shutdown subsystems (UI first since it uses pipeline_registry)
     effects_.shutdown();
     ui_.shutdown();
     world_.shutdown();
     terrain_.shutdown();
     ssao_.shutdown();
     shadows_.shutdown();
+    
+    // Shutdown pipeline registry before device
+    pipeline_registry_.shutdown();
+    
     context_.shutdown();
 }
 
@@ -1078,11 +1082,44 @@ void Renderer::draw_archer_arrow(float x, float y, float dir_x, float dir_y, flo
 // ============================================================================
 
 void Renderer::begin_ui() {
-    ui_.begin();
+    // Get command buffer for this frame
+    SDL_GPUCommandBuffer* cmd = context_.current_command_buffer();
+    if (!cmd) {
+        std::cerr << "begin_ui: No active command buffer" << std::endl;
+        return;
+    }
+    
+    // Acquire swapchain texture
+    uint32_t sw_width, sw_height;
+    SDL_GPUTexture* swapchain = context_.acquire_swapchain_texture(cmd, &sw_width, &sw_height);
+    if (!swapchain) {
+        std::cerr << "begin_ui: Failed to acquire swapchain texture" << std::endl;
+        return;
+    }
+    
+    // Begin UI render pass (no depth, load existing content)
+    SDL_GPUColorTargetInfo color_target = {};
+    color_target.texture = swapchain;
+    color_target.load_op = SDL_GPU_LOADOP_LOAD;  // Preserve existing content
+    color_target.store_op = SDL_GPU_STOREOP_STORE;
+    
+    ui_render_pass_ = SDL_BeginGPURenderPass(cmd, &color_target, 1, nullptr);
+    if (!ui_render_pass_) {
+        std::cerr << "begin_ui: Failed to begin render pass" << std::endl;
+        return;
+    }
+    
+    // Initialize UI renderer for this frame
+    ui_.begin(cmd, ui_render_pass_);
 }
 
 void Renderer::end_ui() {
     ui_.end();
+    
+    if (ui_render_pass_) {
+        SDL_EndGPURenderPass(ui_render_pass_);
+        ui_render_pass_ = nullptr;
+    }
 }
 
 void Renderer::draw_filled_rect(float x, float y, float w, float h, uint32_t color) {

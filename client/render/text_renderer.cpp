@@ -1,7 +1,11 @@
 #include "text_renderer.hpp"
-#include "../shader.hpp"
+#include "../gpu/gpu_device.hpp"
+#include "../gpu/gpu_buffer.hpp"
+#include "../gpu/gpu_pipeline.hpp"
+#include "../gpu/pipeline_registry.hpp"
 #include <iostream>
 #include <glm/gtc/type_ptr.hpp>
+#include <cstring>
 
 namespace mmo {
 
@@ -11,8 +15,11 @@ TextRenderer::~TextRenderer() {
     shutdown();
 }
 
-bool TextRenderer::init() {
+bool TextRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry) {
     if (initialized_) return true;
+    
+    device_ = &device;
+    pipeline_registry_ = &pipeline_registry;
     
     if (!TTF_Init()) {
         std::cerr << "Failed to initialize SDL_ttf: " << SDL_GetError() << std::endl;
@@ -43,11 +50,49 @@ bool TextRenderer::init() {
         // Continue without font - not fatal
     }
     
+    // Create dynamic vertex buffer for text quads
+    // Each vertex: x, y, u, v (4 floats), 6 vertices per quad
+    vertex_buffer_ = gpu::GPUBuffer::create_dynamic(
+        device,
+        gpu::GPUBuffer::Type::Vertex,
+        6 * 4 * sizeof(float)
+    );
+    
+    if (!vertex_buffer_) {
+        std::cerr << "Failed to create text vertex buffer" << std::endl;
+        return false;
+    }
+    
+    // Create sampler for text textures
+    SDL_GPUSamplerCreateInfo sampler_info = {};
+    sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
+    sampler_info.mag_filter = SDL_GPU_FILTER_LINEAR;
+    sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+    sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    
+    sampler_ = SDL_CreateGPUSampler(device.handle(), &sampler_info);
+    if (!sampler_) {
+        std::cerr << "Failed to create text sampler: " << SDL_GetError() << std::endl;
+        return false;
+    }
+    
     initialized_ = true;
     return true;
 }
 
 void TextRenderer::shutdown() {
+    // Release any pending GPU resources
+    release_pending_resources();
+    
+    if (sampler_ && device_) {
+        SDL_ReleaseGPUSampler(device_->handle(), sampler_);
+        sampler_ = nullptr;
+    }
+    
+    vertex_buffer_.reset();
+    
     if (font_) {
         TTF_CloseFont(font_);
         font_ = nullptr;
@@ -56,34 +101,47 @@ void TextRenderer::shutdown() {
         TTF_Quit();
         initialized_ = false;
     }
-}
-
-void TextRenderer::set_shader(Shader* shader) {
-    shader_ = shader;
+    
+    device_ = nullptr;
+    pipeline_registry_ = nullptr;
 }
 
 void TextRenderer::set_projection(const glm::mat4& projection) {
     projection_ = projection;
 }
 
-void TextRenderer::set_vao_vbo(GLuint vao, GLuint vbo) {
-    vao_ = vao;
-    vbo_ = vbo;
+void TextRenderer::release_pending_resources() {
+    if (!device_) return;
+    
+    // Release textures from previous frame
+    for (SDL_GPUTexture* texture : pending_textures_) {
+        if (texture) {
+            SDL_ReleaseGPUTexture(device_->handle(), texture);
+        }
+    }
+    pending_textures_.clear();
+    
+    // Release transfer buffers from previous frame
+    for (SDL_GPUTransferBuffer* transfer : pending_transfers_) {
+        if (transfer) {
+            SDL_ReleaseGPUTransferBuffer(device_->handle(), transfer);
+        }
+    }
+    pending_transfers_.clear();
 }
 
-void TextRenderer::draw_text(const std::string& text, float x, float y, uint32_t color, float scale) {
-    if (!font_ || text.empty() || !shader_ || vao_ == 0) {
-        if (!font_) std::cerr << "TextRenderer: No font loaded" << std::endl;
-        if (!shader_) std::cerr << "TextRenderer: No shader set" << std::endl;
-        if (vao_ == 0) std::cerr << "TextRenderer: No VAO set" << std::endl;
+void TextRenderer::draw_text(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* render_pass,
+                             const std::string& text, float x, float y, 
+                             uint32_t color, float scale) {
+    if (!font_ || text.empty() || !device_ || !pipeline_registry_ || !cmd || !render_pass) {
         return;
     }
     
     // Extract color components (ABGR format - same as rest of renderer)
-    uint8_t r = color & 0xFF;
-    uint8_t g = (color >> 8) & 0xFF;
-    uint8_t b = (color >> 16) & 0xFF;
-    uint8_t a = (color >> 24) & 0xFF;
+    float r = (color & 0xFF) / 255.0f;
+    float g = ((color >> 8) & 0xFF) / 255.0f;
+    float b = ((color >> 16) & 0xFF) / 255.0f;
+    float a = ((color >> 24) & 0xFF) / 255.0f;
     
     SDL_Color sdl_color = {255, 255, 255, 255};  // Render white, tint with shader
     
@@ -101,17 +159,74 @@ void TextRenderer::draw_text(const std::string& text, float x, float y, uint32_t
         return;
     }
     
-    // Create OpenGL texture from surface
-    GLuint texture;
-    glGenTextures(1, &texture);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    // Create GPU texture for this text
+    SDL_GPUTextureCreateInfo tex_info = {};
+    tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+    tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    tex_info.width = converted->w;
+    tex_info.height = converted->h;
+    tex_info.layer_count_or_depth = 1;
+    tex_info.num_levels = 1;
+    tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
     
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    SDL_GPUTexture* texture = SDL_CreateGPUTexture(device_->handle(), &tex_info);
+    if (!texture) {
+        std::cerr << "Failed to create text texture: " << SDL_GetError() << std::endl;
+        SDL_DestroySurface(converted);
+        return;
+    }
     
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, converted->w, converted->h, 0, GL_RGBA, GL_UNSIGNED_BYTE, converted->pixels);
+    // Create transfer buffer and upload texture data
+    size_t data_size = static_cast<size_t>(converted->w) * converted->h * 4;
+    SDL_GPUTransferBufferCreateInfo transfer_info = {};
+    transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    transfer_info.size = static_cast<Uint32>(data_size);
+    
+    SDL_GPUTransferBuffer* transfer = SDL_CreateGPUTransferBuffer(device_->handle(), &transfer_info);
+    if (!transfer) {
+        std::cerr << "Failed to create transfer buffer for text: " << SDL_GetError() << std::endl;
+        SDL_ReleaseGPUTexture(device_->handle(), texture);
+        SDL_DestroySurface(converted);
+        return;
+    }
+    
+    // Map and copy pixel data
+    void* mapped = SDL_MapGPUTransferBuffer(device_->handle(), transfer, false);
+    if (!mapped) {
+        std::cerr << "Failed to map transfer buffer for text: " << SDL_GetError() << std::endl;
+        SDL_ReleaseGPUTransferBuffer(device_->handle(), transfer);
+        SDL_ReleaseGPUTexture(device_->handle(), texture);
+        SDL_DestroySurface(converted);
+        return;
+    }
+
+    memcpy(mapped, converted->pixels, data_size);
+    SDL_UnmapGPUTransferBuffer(device_->handle(), transfer);
+    
+    // Upload to GPU texture
+    SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd);
+    if (!copy_pass) {
+        std::cerr << "Failed to begin GPU copy pass for text upload: " << SDL_GetError() << std::endl;
+        SDL_ReleaseGPUTransferBuffer(device_->handle(), transfer);
+        SDL_ReleaseGPUTexture(device_->handle(), texture);
+        SDL_DestroySurface(converted);
+        return;
+    }
+    
+    SDL_GPUTextureTransferInfo src = {};
+    src.transfer_buffer = transfer;
+    src.offset = 0;
+    src.pixels_per_row = static_cast<Uint32>(converted->w);
+    src.rows_per_layer = static_cast<Uint32>(converted->h);
+    
+    SDL_GPUTextureRegion dst = {};
+    dst.texture = texture;
+    dst.w = converted->w;
+    dst.h = converted->h;
+    dst.d = 1;
+    
+    SDL_UploadToGPUTexture(copy_pass, &src, &dst, false);
+    SDL_EndGPUCopyPass(copy_pass);
     
     // Calculate dimensions
     float w = converted->w * scale;
@@ -128,34 +243,49 @@ void TextRenderer::draw_text(const std::string& text, float x, float y, uint32_t
         x,     y + h, 0.0f, 1.0f
     };
     
-    // Enable blending for text
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    // Upload vertex data
+    vertex_buffer_->update(cmd, vertices, sizeof(vertices));
     
-    // Use shader
-    shader_->use();
-    shader_->set_mat4("projection", projection_);
-    shader_->set_vec4("textColor", glm::vec4(r / 255.0f, g / 255.0f, b / 255.0f, a / 255.0f));
-    shader_->set_int("textTexture", 0);
+    // Bind text pipeline
+    auto* text_pipeline = pipeline_registry_->get_text_pipeline();
+    if (text_pipeline) {
+        text_pipeline->bind(render_pass);
+    }
     
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, texture);
+    // Push uniforms - projection matrix to vertex shader
+    SDL_PushGPUVertexUniformData(cmd, 0, &projection_, sizeof(glm::mat4));
     
-    // Upload and draw
-    glBindVertexArray(vao_);
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_);
-    glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+    // Push text color to fragment shader
+    glm::vec4 text_color(r, g, b, a);
+    SDL_PushGPUFragmentUniformData(cmd, 0, &text_color, sizeof(glm::vec4));
     
-    glDrawArrays(GL_TRIANGLES, 0, 6);
+    // Bind texture and sampler
+    SDL_GPUTextureSamplerBinding tex_binding = {};
+    tex_binding.texture = texture;
+    tex_binding.sampler = sampler_;
+    SDL_BindGPUFragmentSamplers(render_pass, 0, &tex_binding, 1);
     
-    glBindVertexArray(0);
-    glDeleteTextures(1, &texture);
+    // Bind vertex buffer
+    SDL_GPUBufferBinding vb_binding = {};
+    vb_binding.buffer = vertex_buffer_->handle();
+    vb_binding.offset = 0;
+    SDL_BindGPUVertexBuffers(render_pass, 0, &vb_binding, 1);
+    
+    // Draw quad
+    SDL_DrawGPUPrimitives(render_pass, 6, 1, 0, 0);
+    
+    // Defer cleanup of temporary GPU resources until next frame.
+    // This ensures the GPU has finished using them before release.
+    pending_textures_.push_back(texture);
+    pending_transfers_.push_back(transfer);
     SDL_DestroySurface(converted);
 }
 
-void TextRenderer::draw_text_centered(const std::string& text, float x, float y, uint32_t color, float scale) {
+void TextRenderer::draw_text_centered(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* render_pass,
+                                      const std::string& text, float x, float y, 
+                                      uint32_t color, float scale) {
     int width = get_text_width(text, scale);
-    draw_text(text, x - width / 2.0f, y, color, scale);
+    draw_text(cmd, render_pass, text, x - width / 2.0f, y, color, scale);
 }
 
 int TextRenderer::get_text_width(const std::string& text, float scale) {

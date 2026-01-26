@@ -1,9 +1,44 @@
 #include "world_renderer.hpp"
+#include "../gpu/gpu_texture.hpp"
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace mmo {
+
+// Uniform structures for shader data (must match HLSL shaders)
+struct SkyboxUniforms {
+    glm::mat4 view;
+    glm::mat4 projection;
+    glm::vec3 sun_direction;
+    float time;
+};
+
+struct GridUniforms {
+    glm::mat4 view_projection;
+};
+
+struct ModelUniforms {
+    glm::mat4 view_projection;
+    glm::mat4 model;
+    glm::mat4 light_space_matrix;
+    glm::vec3 camera_pos;
+    float fog_start;
+    glm::vec3 light_dir;
+    float fog_end;
+    glm::vec3 light_color;
+    float _padding1;
+    glm::vec3 ambient_color;
+    float _padding2;
+    glm::vec4 tint_color;
+    glm::vec3 fog_color;
+    int fog_enabled;
+    int shadows_enabled;
+    int ssao_enabled;
+    int has_texture;
+    int _padding3;
+};
 
 WorldRenderer::WorldRenderer() = default;
 
@@ -11,27 +46,27 @@ WorldRenderer::~WorldRenderer() {
     shutdown();
 }
 
-bool WorldRenderer::init(float world_width, float world_height, ModelManager* model_manager) {
+bool WorldRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry,
+                         float world_width, float world_height, ModelManager* model_manager) {
+    device_ = &device;
+    pipeline_registry_ = &pipeline_registry;
     world_width_ = world_width;
     world_height_ = world_height;
     model_manager_ = model_manager;
     
-    // Create shaders
-    skybox_shader_ = std::make_unique<Shader>();
-    if (!skybox_shader_->load(shaders::skybox_vertex, shaders::skybox_fragment)) {
-        std::cerr << "Failed to load skybox shader" << std::endl;
-        return false;
-    }
-    
-    grid_shader_ = std::make_unique<Shader>();
-    if (!grid_shader_->load(shaders::grid_vertex, shaders::grid_fragment)) {
-        std::cerr << "Failed to load grid shader" << std::endl;
-        return false;
-    }
-    
-    model_shader_ = std::make_unique<Shader>();
-    if (!model_shader_->load(shaders::model_vertex, shaders::model_fragment)) {
-        std::cerr << "Failed to load model shader" << std::endl;
+    // Create sampler for textures
+    SDL_GPUSamplerCreateInfo sampler_info = {};
+    sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
+    sampler_info.mag_filter = SDL_GPU_FILTER_LINEAR;
+    sampler_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_LINEAR;
+    sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_REPEAT;
+    sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_REPEAT;
+    sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_REPEAT;
+    sampler_info.max_anisotropy = 16.0f;
+    sampler_info.enable_anisotropy = true;
+    sampler_ = SDL_CreateGPUSampler(device_->handle(), &sampler_info);
+    if (!sampler_) {
+        std::cerr << "Failed to create sampler: " << SDL_GetError() << std::endl;
         return false;
     }
     
@@ -43,26 +78,34 @@ bool WorldRenderer::init(float world_width, float world_height, ModelManager* mo
 }
 
 void WorldRenderer::shutdown() {
-    if (skybox_vao_) {
-        glDeleteVertexArrays(1, &skybox_vao_);
-        skybox_vao_ = 0;
-    }
-    if (skybox_vbo_) {
-        glDeleteBuffers(1, &skybox_vbo_);
-        skybox_vbo_ = 0;
-    }
-    if (grid_vao_) {
-        glDeleteVertexArrays(1, &grid_vao_);
-        grid_vao_ = 0;
-    }
-    if (grid_vbo_) {
-        glDeleteBuffers(1, &grid_vbo_);
-        grid_vbo_ = 0;
+    skybox_vertex_buffer_.reset();
+    grid_vertex_buffer_.reset();
+    
+    if (sampler_ && device_) {
+        SDL_ReleaseGPUSampler(device_->handle(), sampler_);
+        sampler_ = nullptr;
     }
     
-    skybox_shader_.reset();
-    grid_shader_.reset();
-    model_shader_.reset();
+    device_ = nullptr;
+    pipeline_registry_ = nullptr;
+}
+
+// Legacy init function for backward compatibility during migration
+bool WorldRenderer::init(float world_width, float world_height, ModelManager* model_manager) {
+    world_width_ = world_width;
+    world_height_ = world_height;
+    model_manager_ = model_manager;
+    
+    // Note: Without a GPUDevice, we can't create the GPU buffers.
+    // The legacy callers will need to be updated to use the new API.
+    // For now, just generate the mountain positions which don't require GPU.
+    generate_mountain_positions();
+    
+    std::cerr << "Warning: WorldRenderer::init() called without GPUDevice. "
+              << "Skybox, grid, and mountain rendering will not work until "
+              << "init(GPUDevice&, PipelineRegistry&, ...) is called." << std::endl;
+    
+    return true;
 }
 
 void WorldRenderer::update(float dt) {
@@ -77,6 +120,8 @@ float WorldRenderer::get_terrain_height(float x, float z) const {
 }
 
 void WorldRenderer::create_skybox_mesh() {
+    if (!device_) return;
+    
     float vertices[] = {
         // Back face
         -1.0f, -1.0f, -1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f, -1.0f,
@@ -98,20 +143,17 @@ void WorldRenderer::create_skybox_mesh() {
          1.0f,  1.0f,  1.0f, -1.0f,  1.0f, -1.0f, -1.0f,  1.0f,  1.0f,
     };
     
-    glGenVertexArrays(1, &skybox_vao_);
-    glGenBuffers(1, &skybox_vbo_);
+    skybox_vertex_buffer_ = gpu::GPUBuffer::create_static(
+        *device_, gpu::GPUBuffer::Type::Vertex, vertices, sizeof(vertices));
     
-    glBindVertexArray(skybox_vao_);
-    glBindBuffer(GL_ARRAY_BUFFER, skybox_vbo_);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    
-    glBindVertexArray(0);
+    if (!skybox_vertex_buffer_) {
+        std::cerr << "Failed to create skybox vertex buffer" << std::endl;
+    }
 }
 
 void WorldRenderer::create_grid_mesh() {
+    if (!device_) return;
+    
     std::vector<float> grid_data;
     float grid_step = 100.0f;
     
@@ -135,22 +177,15 @@ void WorldRenderer::create_grid_mesh() {
     grid_data.insert(grid_data.end(), {0.0f, 0.0f, world_height_, 0.4f, 0.4f, 0.5f, 1.0f});
     grid_data.insert(grid_data.end(), {0.0f, 0.0f, 0.0f, 0.4f, 0.4f, 0.5f, 1.0f});
     
-    grid_vertex_count_ = grid_data.size() / 7;
+    grid_vertex_count_ = static_cast<uint32_t>(grid_data.size() / 7);
     
-    glGenVertexArrays(1, &grid_vao_);
-    glGenBuffers(1, &grid_vbo_);
+    grid_vertex_buffer_ = gpu::GPUBuffer::create_static(
+        *device_, gpu::GPUBuffer::Type::Vertex, 
+        grid_data.data(), grid_data.size() * sizeof(float));
     
-    glBindVertexArray(grid_vao_);
-    glBindBuffer(GL_ARRAY_BUFFER, grid_vbo_);
-    glBufferData(GL_ARRAY_BUFFER, grid_data.size() * sizeof(float), 
-                 grid_data.data(), GL_STATIC_DRAW);
-    
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    
-    glBindVertexArray(0);
+    if (!grid_vertex_buffer_) {
+        std::cerr << "Failed to create grid vertex buffer" << std::endl;
+    }
 }
 
 void WorldRenderer::generate_mountain_positions() {
@@ -201,31 +236,37 @@ void WorldRenderer::generate_mountain_positions() {
     }
 }
 
-void WorldRenderer::render_skybox(const glm::mat4& view, const glm::mat4& projection) {
-    if (!skybox_shader_ || !skybox_vao_) return;
+void WorldRenderer::render_skybox(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                   const glm::mat4& view, const glm::mat4& projection) {
+    if (!skybox_vertex_buffer_ || !pipeline_registry_ || !pass || !cmd) return;
     
-    glDepthFunc(GL_LEQUAL);
-    glDepthMask(GL_FALSE);
-    glDisable(GL_CULL_FACE);
+    auto* pipeline = pipeline_registry_->get_skybox_pipeline();
+    if (!pipeline) return;
     
-    skybox_shader_->use();
-    skybox_shader_->set_mat4("view", view);
-    skybox_shader_->set_mat4("projection", projection);
-    skybox_shader_->set_float("time", skybox_time_);
-    skybox_shader_->set_vec3("sunDirection", sun_direction_);
+    pipeline->bind(pass);
     
-    glBindVertexArray(skybox_vao_);
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-    glBindVertexArray(0);
+    // Push uniforms
+    SkyboxUniforms uniforms = {};
+    uniforms.view = view;
+    uniforms.projection = projection;
+    uniforms.sun_direction = sun_direction_;
+    uniforms.time = skybox_time_;
+    SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
     
-    glDepthMask(GL_TRUE);
-    glDepthFunc(GL_LESS);
-    glEnable(GL_CULL_FACE);
+    // Bind vertex buffer
+    SDL_GPUBufferBinding vb_binding = {};
+    vb_binding.buffer = skybox_vertex_buffer_->handle();
+    vb_binding.offset = 0;
+    SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
+    
+    // Draw skybox (36 vertices = 12 triangles = 6 faces)
+    SDL_DrawGPUPrimitives(pass, 36, 1, 0, 0);
 }
 
-void WorldRenderer::render_mountains(const glm::mat4& view, const glm::mat4& projection,
+void WorldRenderer::render_mountains(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                      const glm::mat4& view, const glm::mat4& projection,
                                       const glm::vec3& camera_pos, const glm::vec3& light_dir) {
-    if (!model_manager_ || !model_shader_) return;
+    if (!model_manager_ || !pipeline_registry_ || !pass || !cmd) return;
     
     Model* mountain_small = model_manager_->get_model("mountain_small");
     Model* mountain_medium = model_manager_->get_model("mountain_medium");
@@ -233,20 +274,12 @@ void WorldRenderer::render_mountains(const glm::mat4& view, const glm::mat4& pro
     
     if (!mountain_small && !mountain_medium && !mountain_large) return;
     
-    model_shader_->use();
-    model_shader_->set_mat4("view", view);
-    model_shader_->set_mat4("projection", projection);
-    model_shader_->set_vec3("cameraPos", camera_pos);
-    model_shader_->set_vec3("lightDir", light_dir);
-    model_shader_->set_vec3("lightColor", glm::vec3(1.0f, 0.95f, 0.9f));
-    model_shader_->set_vec3("ambientColor", glm::vec3(0.5f, 0.5f, 0.55f));
-    model_shader_->set_vec4("tintColor", glm::vec4(1.0f));
-    model_shader_->set_int("fogEnabled", 1);
-    model_shader_->set_vec3("fogColor", glm::vec3(0.55f, 0.55f, 0.6f));
-    model_shader_->set_float("fogStart", 3000.0f);
-    model_shader_->set_float("fogEnd", 12000.0f);
-    model_shader_->set_int("shadowsEnabled", 0);
-    model_shader_->set_int("ssaoEnabled", 0);
+    auto* pipeline = pipeline_registry_->get_model_pipeline();
+    if (!pipeline) return;
+    
+    pipeline->bind(pass);
+    
+    glm::mat4 view_proj = projection * view;
     
     for (const auto& mp : mountain_positions_) {
         Model* mountain = nullptr;
@@ -270,37 +303,115 @@ void WorldRenderer::render_mountains(const glm::mat4& view, const glm::mat4& pro
         float cz = (mountain->min_z + mountain->max_z) / 2.0f;
         model_mat = model_mat * glm::translate(glm::mat4(1.0f), glm::vec3(-cx, -cy, -cz));
         
-        model_shader_->set_mat4("model", model_mat);
+        // Set up uniforms
+        ModelUniforms uniforms = {};
+        uniforms.view_projection = view_proj;
+        uniforms.model = model_mat;
+        uniforms.light_space_matrix = glm::mat4(1.0f);  // No shadows for mountains
+        uniforms.camera_pos = camera_pos;
+        uniforms.fog_start = 3000.0f;
+        uniforms.light_dir = light_dir;
+        uniforms.fog_end = 12000.0f;
+        uniforms.light_color = glm::vec3(1.0f, 0.95f, 0.9f);
+        uniforms.ambient_color = glm::vec3(0.5f, 0.5f, 0.55f);
+        uniforms.tint_color = glm::vec4(1.0f);
+        uniforms.fog_color = glm::vec3(0.55f, 0.55f, 0.6f);
+        uniforms.fog_enabled = 1;
+        uniforms.shadows_enabled = 0;
+        uniforms.ssao_enabled = 0;
         
         for (auto& mesh : mountain->meshes) {
-            if (!mesh.uploaded) ModelLoader::upload_to_gpu(*mountain);
-            if (mesh.vao && !mesh.indices.empty()) {
-                if (mesh.has_texture && mesh.texture_id > 0) {
-                    glActiveTexture(GL_TEXTURE0);
-                    glBindTexture(GL_TEXTURE_2D, mesh.texture_id);
-                    model_shader_->set_int("baseColorTexture", 0);
-                    model_shader_->set_int("hasTexture", 1);
-                } else {
-                    model_shader_->set_int("hasTexture", 0);
-                }
-                glBindVertexArray(mesh.vao);
-                glDrawElements(GL_TRIANGLES, mesh.indices.size(), GL_UNSIGNED_INT, 0);
+            if (!mesh.gpu_uploaded) {
+                // Mesh not uploaded yet - skip for now
+                // The model_loader handles uploads separately
+                continue;
+            }
+            
+            if (!mesh.gpu_vertex_buffer || mesh.indices.empty()) continue;
+            
+            uniforms.has_texture = (mesh.has_texture && mesh.gpu_texture) ? 1 : 0;
+            SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
+            
+            // Bind texture if available
+            if (mesh.has_texture && mesh.gpu_texture && sampler_) {
+                SDL_GPUTextureSamplerBinding tex_binding = {};
+                tex_binding.texture = mesh.gpu_texture->handle();
+                tex_binding.sampler = sampler_;
+                SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
+            }
+            
+            // Bind vertex buffer
+            SDL_GPUBufferBinding vb_binding = {};
+            vb_binding.buffer = mesh.gpu_vertex_buffer->handle();
+            vb_binding.offset = 0;
+            SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
+            
+            // Bind index buffer and draw
+            if (mesh.gpu_index_buffer) {
+                SDL_GPUBufferBinding ib_binding = {};
+                ib_binding.buffer = mesh.gpu_index_buffer->handle();
+                ib_binding.offset = 0;
+                SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+                SDL_DrawGPUIndexedPrimitives(pass, static_cast<uint32_t>(mesh.indices.size()), 1, 0, 0, 0);
             }
         }
     }
-    glBindVertexArray(0);
+}
+
+void WorldRenderer::render_grid(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                 const glm::mat4& view, const glm::mat4& projection) {
+    if (!grid_vertex_buffer_ || !pipeline_registry_ || !pass || !cmd) return;
+    
+    auto* pipeline = pipeline_registry_->get_grid_pipeline();
+    if (!pipeline) return;
+    
+    pipeline->bind(pass);
+    
+    // Push uniforms
+    GridUniforms uniforms = {};
+    uniforms.view_projection = projection * view;
+    SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
+    
+    // Bind vertex buffer
+    SDL_GPUBufferBinding vb_binding = {};
+    vb_binding.buffer = grid_vertex_buffer_->handle();
+    vb_binding.offset = 0;
+    SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
+    
+    // Draw grid lines
+    SDL_DrawGPUPrimitives(pass, grid_vertex_count_, 1, 0, 0);
+}
+
+// =============================================================================
+// Legacy OpenGL render functions (deprecated - for backward compatibility)
+// TODO: Remove after renderer.cpp is fully migrated to SDL3 GPU API
+// =============================================================================
+
+void WorldRenderer::render_skybox(const glm::mat4& view, const glm::mat4& projection) {
+    // Legacy version - no-op without GPU device
+    // Callers should be updated to use the SDL3 GPU API version
+    (void)view;
+    (void)projection;
+    // No rendering - needs migration to SDL3 GPU API
+}
+
+void WorldRenderer::render_mountains(const glm::mat4& view, const glm::mat4& projection,
+                                      const glm::vec3& camera_pos, const glm::vec3& light_dir) {
+    // Legacy version - no-op without GPU device
+    // Callers should be updated to use the SDL3 GPU API version
+    (void)view;
+    (void)projection;
+    (void)camera_pos;
+    (void)light_dir;
+    // No rendering - needs migration to SDL3 GPU API
 }
 
 void WorldRenderer::render_grid(const glm::mat4& view, const glm::mat4& projection) {
-    if (!grid_shader_ || !grid_vao_) return;
-    
-    grid_shader_->use();
-    grid_shader_->set_mat4("view", view);
-    grid_shader_->set_mat4("projection", projection);
-    
-    glBindVertexArray(grid_vao_);
-    glDrawArrays(GL_LINES, 0, grid_vertex_count_);
-    glBindVertexArray(0);
+    // Legacy version - no-op without GPU device
+    // Callers should be updated to use the SDL3 GPU API version
+    (void)view;
+    (void)projection;
+    // No rendering - needs migration to SDL3 GPU API
 }
 
 } // namespace mmo

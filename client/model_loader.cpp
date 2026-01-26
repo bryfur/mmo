@@ -1,4 +1,7 @@
 #include "model_loader.hpp"
+#include "gpu/gpu_device.hpp"
+#include "gpu/gpu_buffer.hpp"
+#include "gpu/gpu_texture.hpp"
 
 #define TINYGLTF_IMPLEMENTATION
 #define TINYGLTF_NO_STB_IMAGE
@@ -491,38 +494,34 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
         }
     }
     
-    // Upload textures to GPU
-    std::vector<GLuint> texture_ids(loaded_textures.size(), 0);
-    for (size_t i = 0; i < loaded_textures.size(); i++) {
-        auto& [pixels, dims] = loaded_textures[i];
+    // Store texture data for later GPU upload
+    // (Don't upload here - upload happens in upload_to_gpu)
+    
+    // Store texture pixel data in meshes for deferred upload
+    std::vector<std::tuple<std::vector<uint8_t>, int, int>> texture_data;
+    for (const auto& [pixels, dims] : loaded_textures) {
         auto [width, height] = dims;
-        
-        GLuint tex_id;
-        glGenTextures(1, &tex_id);
-        glBindTexture(GL_TEXTURE_2D, tex_id);
-        
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        
-        // Enable anisotropic filtering if supported
-        GLfloat max_aniso = 1.0f;
-        glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &max_aniso);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, std::min(max_aniso, 16.0f));
-        
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, 
-                     GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-        glGenerateMipmap(GL_TEXTURE_2D);
-        
-        texture_ids[i] = tex_id;
-        std::cout << "  Loaded texture " << i << ": " << width << "x" << height << std::endl;
+        texture_data.push_back({pixels, width, height});
+        std::cout << "  Stored texture data: " << width << "x" << height << std::endl;
     }
     
-    // Update mesh texture IDs
+    // Map texture data to each mesh using the texture_id (image index) stored during loading
     for (auto& mesh : model.meshes) {
-        if (mesh.has_texture && mesh.texture_id < texture_ids.size()) {
-            mesh.texture_id = texture_ids[mesh.texture_id];
+        if (mesh.has_texture) {
+            // Use the mesh's texture_id as an index into texture_data
+            int tex_idx = mesh.texture_id;
+            if (tex_idx >= 0 && tex_idx < static_cast<int>(texture_data.size())) {
+                auto& [pixels, width, height] = texture_data[tex_idx];
+                mesh.texture_pixels = pixels;
+                mesh.texture_width = width;
+                mesh.texture_height = height;
+            } else if (!texture_data.empty()) {
+                // Fallback to first texture if index is invalid
+                auto& [pixels, width, height] = texture_data[0];
+                mesh.texture_pixels = pixels;
+                mesh.texture_width = width;
+                mesh.texture_height = height;
+            }
         }
     }
     
@@ -532,109 +531,98 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
     return true;
 }
 
-void ModelLoader::upload_to_gpu(Model& model) {
+void ModelLoader::upload_to_gpu(gpu::GPUDevice& device, Model& model) {
     for (auto& mesh : model.meshes) {
-        if (mesh.uploaded) continue;
+        if (mesh.gpu_uploaded) continue;
         if (mesh.vertices.empty() && mesh.skinned_vertices.empty()) continue;
         
-        glGenVertexArrays(1, &mesh.vao);
-        glBindVertexArray(mesh.vao);
-        
-        glGenBuffers(1, &mesh.vbo);
-        glBindBuffer(GL_ARRAY_BUFFER, mesh.vbo);
-        
+        // Create vertex buffer
         if (mesh.is_skinned && !mesh.skinned_vertices.empty()) {
-            // Upload skinned vertices
-            glBufferData(GL_ARRAY_BUFFER, mesh.skinned_vertices.size() * sizeof(SkinnedVertex), 
-                         mesh.skinned_vertices.data(), GL_STATIC_DRAW);
-            
-            // Position (location 0)
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(SkinnedVertex), 
-                                  (void*)offsetof(SkinnedVertex, x));
-            glEnableVertexAttribArray(0);
-            
-            // Normal (location 1)
-            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(SkinnedVertex), 
-                                  (void*)offsetof(SkinnedVertex, nx));
-            glEnableVertexAttribArray(1);
-            
-            // TexCoord (location 2)
-            glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(SkinnedVertex), 
-                                  (void*)offsetof(SkinnedVertex, u));
-            glEnableVertexAttribArray(2);
-            
-            // Color (location 3)
-            glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(SkinnedVertex), 
-                                  (void*)offsetof(SkinnedVertex, r));
-            glEnableVertexAttribArray(3);
-            
-            // Joint indices (location 4) - as unsigned bytes
-            glVertexAttribIPointer(4, 4, GL_UNSIGNED_BYTE, sizeof(SkinnedVertex), 
-                                   (void*)offsetof(SkinnedVertex, joints));
-            glEnableVertexAttribArray(4);
-            
-            // Weights (location 5)
-            glVertexAttribPointer(5, 4, GL_FLOAT, GL_FALSE, sizeof(SkinnedVertex), 
-                                  (void*)offsetof(SkinnedVertex, weights));
-            glEnableVertexAttribArray(5);
-        } else {
-            // Upload regular vertices
-            glBufferData(GL_ARRAY_BUFFER, mesh.vertices.size() * sizeof(Vertex3D), 
-                         mesh.vertices.data(), GL_STATIC_DRAW);
-            
-            // Position (location 0)
-            glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), 
-                                  (void*)offsetof(Vertex3D, x));
-            glEnableVertexAttribArray(0);
-            
-            // Normal (location 1)
-            glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), 
-                                  (void*)offsetof(Vertex3D, nx));
-            glEnableVertexAttribArray(1);
-            
-            // TexCoord (location 2)
-            glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), 
-                                  (void*)offsetof(Vertex3D, u));
-            glEnableVertexAttribArray(2);
-            
-            // Color (location 3)
-            glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex3D), 
-                                  (void*)offsetof(Vertex3D, r));
-            glEnableVertexAttribArray(3);
+            mesh.gpu_vertex_buffer = gpu::GPUBuffer::create_static(
+                device, gpu::GPUBuffer::Type::Vertex,
+                mesh.skinned_vertices.data(), 
+                mesh.skinned_vertices.size() * sizeof(SkinnedVertex));
+        } else if (!mesh.vertices.empty()) {
+            mesh.gpu_vertex_buffer = gpu::GPUBuffer::create_static(
+                device, gpu::GPUBuffer::Type::Vertex,
+                mesh.vertices.data(), 
+                mesh.vertices.size() * sizeof(Vertex3D));
         }
         
+        if (!mesh.gpu_vertex_buffer) {
+            std::cerr << "Failed to create vertex buffer for mesh" << std::endl;
+            continue;
+        }
+        
+        // Create index buffer
         if (!mesh.indices.empty()) {
-            glGenBuffers(1, &mesh.ebo);
-            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh.ebo);
-            glBufferData(GL_ELEMENT_ARRAY_BUFFER, mesh.indices.size() * sizeof(uint32_t),
-                         mesh.indices.data(), GL_STATIC_DRAW);
+            mesh.gpu_index_buffer = gpu::GPUBuffer::create_static(
+                device, gpu::GPUBuffer::Type::Index,
+                mesh.indices.data(),
+                mesh.indices.size() * sizeof(uint32_t));
+            
+            if (!mesh.gpu_index_buffer) {
+                std::cerr << "Failed to create index buffer for mesh" << std::endl;
+            }
         }
         
-        glBindVertexArray(0);
-        mesh.uploaded = true;
+        // Create texture if available
+        if (mesh.has_texture && !mesh.texture_pixels.empty()) {
+            mesh.gpu_texture = gpu::GPUTexture::create_2d(
+                device,
+                mesh.texture_width, mesh.texture_height,
+                gpu::TextureFormat::RGBA8,
+                mesh.texture_pixels.data(),
+                true);  // Generate mipmaps
+            
+            if (!mesh.gpu_texture) {
+                std::cerr << "Failed to create texture for mesh" << std::endl;
+                mesh.has_texture = false;
+            } else {
+                // Clear CPU-side texture data to save memory
+                mesh.texture_pixels.clear();
+                mesh.texture_pixels.shrink_to_fit();
+            }
+        }
+        
+        mesh.gpu_uploaded = true;
     }
 }
 
 void ModelLoader::free_gpu_resources(Model& model) {
     for (auto& mesh : model.meshes) {
-        if (mesh.vao) {
-            glDeleteVertexArrays(1, &mesh.vao);
-            mesh.vao = 0;
-        }
-        if (mesh.vbo) {
-            glDeleteBuffers(1, &mesh.vbo);
-            mesh.vbo = 0;
-        }
-        if (mesh.ebo) {
-            glDeleteBuffers(1, &mesh.ebo);
-            mesh.ebo = 0;
-        }
-        if (mesh.texture_id) {
-            glDeleteTextures(1, &mesh.texture_id);
-            mesh.texture_id = 0;
-        }
+        // Free SDL3 GPU resources
+        mesh.gpu_vertex_buffer.reset();
+        mesh.gpu_index_buffer.reset();
+        mesh.gpu_texture.reset();
+        mesh.gpu_uploaded = false;
+        
+        // Free legacy OpenGL resources
+        // Note: glDeleteVertexArrays etc will be called by the GL code during migration
+        mesh.vao = 0;
+        mesh.vbo = 0;
+        mesh.ebo = 0;
+        mesh.texture_id = 0;
         mesh.uploaded = false;
         mesh.has_texture = false;
+    }
+}
+
+// Legacy OpenGL upload function - prints warning since we have no device reference
+void ModelLoader::upload_to_gpu(Model& model) {
+    // This is a static method with no device reference available.
+    // Models loaded through ModelManager with set_device() will be uploaded automatically.
+    // Direct calls to this legacy function cannot upload to the new GPU API.
+    static bool warned = false;
+    if (!warned) {
+        std::cerr << "[ModelLoader] Warning: Legacy upload_to_gpu(Model&) called. "
+                  << "Use ModelManager with set_device() for SDL3 GPU uploads." << std::endl;
+        warned = true;
+    }
+    // Mark model as uploaded=false so the caller knows it wasn't uploaded
+    for (auto& mesh : model.meshes) {
+        mesh.uploaded = false;
+        mesh.gpu_uploaded = false;
     }
 }
 
@@ -749,7 +737,10 @@ ModelManager::~ModelManager() {
 bool ModelManager::load_model(const std::string& name, const std::string& path) {
     Model model;
     if (ModelLoader::load_glb(path, model)) {
-        ModelLoader::upload_to_gpu(model);
+        // Upload to GPU if device is available
+        if (device_) {
+            ModelLoader::upload_to_gpu(*device_, model);
+        }
         
         // Create animation state if model has animations
         if (model.has_skeleton && !model.animations.empty()) {
@@ -784,17 +775,10 @@ void ModelManager::unload_all() {
     animation_states_.clear();
 }
 
-void ModelManager::set_anisotropic_filter(float level) {
-    // Update all textures in all models
-    for (auto& [name, model] : models_) {
-        for (auto& mesh : model.meshes) {
-            if (mesh.has_texture && mesh.texture_id != 0) {
-                glBindTexture(GL_TEXTURE_2D, mesh.texture_id);
-                glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, level);
-            }
-        }
-    }
-    glBindTexture(GL_TEXTURE_2D, 0);
+// Legacy function - TODO: Remove after full migration to SDL3 GPU API
+void ModelManager::set_anisotropic_filter([[maybe_unused]] float level) {
+    // No longer needed with SDL3 GPU API - anisotropy is set in sampler creation
+    // This is a no-op for compatibility during migration
 }
 
 } // namespace mmo

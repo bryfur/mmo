@@ -4,11 +4,19 @@
 #include <vector>
 #include <unordered_map>
 #include <array>
-#include <GL/glew.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <cstdint>
 #include <algorithm>
+#include <memory>
+
+// Include GPU abstraction headers for proper type definitions
+#include "gpu/gpu_buffer.hpp"
+#include "gpu/gpu_texture.hpp"
+
+// Forward declarations for SDL3 GPU types
+struct SDL_GPUDevice;
+struct SDL_GPUCommandBuffer;
 
 namespace mmo {
 
@@ -96,14 +104,29 @@ struct Mesh {
     std::vector<Vertex3D> vertices;
     std::vector<SkinnedVertex> skinned_vertices;  // Used if model has skeleton
     std::vector<uint32_t> indices;
-    GLuint vao = 0;
-    GLuint vbo = 0;
-    GLuint ebo = 0;
-    GLuint texture_id = 0;
+    
+    // SDL3 GPU resources (new API)
+    std::unique_ptr<gpu::GPUBuffer> gpu_vertex_buffer;
+    std::unique_ptr<gpu::GPUBuffer> gpu_index_buffer;
+    std::unique_ptr<gpu::GPUTexture> gpu_texture;
+    bool gpu_uploaded = false;
+    
+    // Legacy OpenGL resources (to be removed after full migration)
+    // TODO: Remove these after all renderers are migrated to SDL3 GPU API
+    unsigned int vao = 0;
+    unsigned int vbo = 0;
+    unsigned int ebo = 0;
+    unsigned int texture_id = 0;
+    bool uploaded = false;  // Legacy GL uploaded flag
+    
     bool has_texture = false;
     uint32_t base_color = 0xFFFFFFFF;
-    bool uploaded = false;
     bool is_skinned = false;  // True if using skinned vertices
+    
+    // Texture data for deferred upload (before GPU upload)
+    std::vector<uint8_t> texture_pixels;
+    int texture_width = 0;
+    int texture_height = 0;
 };
 
 struct Model {
@@ -136,7 +159,24 @@ struct Model {
 class ModelLoader {
 public:
     static bool load_glb(const std::string& path, Model& model);
+    
+    /**
+     * Upload model data to GPU using SDL3 GPU API.
+     * @param device GPU device for resource creation
+     * @param model Model to upload
+     */
+    static void upload_to_gpu(gpu::GPUDevice& device, Model& model);
+    
+    /**
+     * Legacy OpenGL upload (deprecated - use upload_to_gpu with GPUDevice)
+     * TODO: Remove after all renderers are migrated to SDL3 GPU API
+     */
     static void upload_to_gpu(Model& model);
+    
+    /**
+     * Free GPU resources for a model.
+     * @param model Model to free resources from
+     */
     static void free_gpu_resources(Model& model);
     
     // Animation helpers
@@ -149,13 +189,25 @@ public:
     ModelManager() = default;
     ~ModelManager();
     
+    /**
+     * Set the GPU device for resource management.
+     * Must be called before loading models for SDL3 GPU API.
+     */
+    void set_device(gpu::GPUDevice* device) { device_ = device; }
+    
     bool load_model(const std::string& name, const std::string& path);
     Model* get_model(const std::string& name);
     AnimationState* get_animation_state(const std::string& name);
     void unload_all();
+    
+    /**
+     * Legacy OpenGL anisotropic filter setting (deprecated)
+     * TODO: Remove after full migration to SDL3 GPU API
+     */
     void set_anisotropic_filter(float level);
     
 private:
+    gpu::GPUDevice* device_ = nullptr;
     std::unordered_map<std::string, Model> models_;
     std::unordered_map<std::string, AnimationState> animation_states_;
 };

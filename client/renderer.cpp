@@ -290,7 +290,7 @@ void Renderer::draw_entity_shadow(const EntityState& entity) {
     // Shadow rendering disabled until models are migrated to SDL3 GPU (issue #14)
     // The model's transform and shadow caster registration will be handled by
     // shadows_.render_shadow_caster() once models use GPUBuffer.
-    (void)shadows_; // Suppress unused warning
+    (void)entity; // Suppress unused parameter warning
 }
 
 void Renderer::draw_model_shadow(Model* model, const glm::vec3& position, float rotation, float scale) {

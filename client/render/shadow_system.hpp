@@ -90,14 +90,14 @@ public:
      * @param cmd Command buffer
      * @param model_matrix The model's world transform
      * @param vertex_buffer The model's vertex buffer
-     * @param index_buffer The model's index buffer (optional)
-     * @param index_count Number of indices (or vertex count if no index buffer)
+    * @param index_buffer The model's index buffer (optional)
+    * @param draw_count Number of indices (or vertex count if no index buffer)
      */
     void render_shadow_caster(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                               const glm::mat4& model_matrix,
                               gpu::GPUBuffer* vertex_buffer,
                               gpu::GPUBuffer* index_buffer,
-                              uint32_t index_count);
+                        uint32_t draw_count);
     
     /**
      * Render a skinned model to the shadow map.
@@ -107,15 +107,15 @@ public:
      * @param bone_matrices Array of bone transform matrices
      * @param bone_count Number of bones
      * @param vertex_buffer The model's vertex buffer
-     * @param index_buffer The model's index buffer (optional)
-     * @param index_count Number of indices
+    * @param index_buffer The model's index buffer (optional)
+    * @param draw_count Number of indices
      */
     void render_skinned_shadow_caster(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                                        const glm::mat4& model_matrix,
                                        const glm::mat4* bone_matrices, uint32_t bone_count,
                                        gpu::GPUBuffer* vertex_buffer,
                                        gpu::GPUBuffer* index_buffer,
-                                       uint32_t index_count);
+                                uint32_t draw_count);
     
     // Accessors for backward compatibility during migration
     gpu::GPUTexture* shadow_map() const { return shadow_map_.get(); }

@@ -158,8 +158,8 @@ void ShadowSystem::render_shadow_caster(SDL_GPURenderPass* pass, SDL_GPUCommandB
                                          const glm::mat4& model_matrix,
                                          gpu::GPUBuffer* vertex_buffer,
                                          gpu::GPUBuffer* index_buffer,
-                                         uint32_t index_count) {
-    if (!pass || !shadow_pipeline_ || !vertex_buffer) {
+                                         uint32_t draw_count) {
+    if (!pass || !cmd || !shadow_pipeline_ || !vertex_buffer) {
         return;
     }
     
@@ -184,9 +184,9 @@ void ShadowSystem::render_shadow_caster(SDL_GPURenderPass* pass, SDL_GPUCommandB
         ib_binding.buffer = index_buffer->handle();
         ib_binding.offset = 0;
         SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-        SDL_DrawGPUIndexedPrimitives(pass, index_count, 1, 0, 0, 0);
+        SDL_DrawGPUIndexedPrimitives(pass, draw_count, 1, 0, 0, 0);
     } else {
-        SDL_DrawGPUPrimitives(pass, index_count, 1, 0, 0);
+        SDL_DrawGPUPrimitives(pass, draw_count, 1, 0, 0);
     }
 }
 
@@ -195,8 +195,8 @@ void ShadowSystem::render_skinned_shadow_caster(SDL_GPURenderPass* pass, SDL_GPU
                                                  const glm::mat4* bone_matrices, uint32_t bone_count,
                                                  gpu::GPUBuffer* vertex_buffer,
                                                  gpu::GPUBuffer* index_buffer,
-                                                 uint32_t index_count) {
-    if (!pass || !skinned_shadow_pipeline_ || !vertex_buffer || !bone_matrices) {
+                                                 uint32_t draw_count) {
+    if (!pass || !cmd || !skinned_shadow_pipeline_ || !vertex_buffer || !bone_matrices) {
         return;
     }
     
@@ -233,9 +233,9 @@ void ShadowSystem::render_skinned_shadow_caster(SDL_GPURenderPass* pass, SDL_GPU
         ib_binding.buffer = index_buffer->handle();
         ib_binding.offset = 0;
         SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-        SDL_DrawGPUIndexedPrimitives(pass, index_count, 1, 0, 0, 0);
+        SDL_DrawGPUIndexedPrimitives(pass, draw_count, 1, 0, 0, 0);
     } else {
-        SDL_DrawGPUPrimitives(pass, index_count, 1, 0, 0);
+        SDL_DrawGPUPrimitives(pass, draw_count, 1, 0, 0);
     }
 }
 
@@ -272,6 +272,10 @@ bool SSAOSystem::init(gpu::GPUDevice& device, int width, int height) {
     sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     
     ssao_sampler_ = device_->create_sampler(sampler_info);
+    if (!ssao_sampler_) {
+        SDL_Log("SSAOSystem: Failed to create sampler");
+        return false;
+    }
     
     // SSAO is disabled by default until full implementation
     enabled_ = false;

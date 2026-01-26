@@ -181,13 +181,16 @@ private:
     
     // ========== SUBSYSTEMS ==========
     RenderContext context_;
-    gpu::PipelineRegistry pipeline_registry_;
+    gpu::PipelineRegistry pipeline_registry_;  // SDL3 GPU pipeline registry
     TerrainRenderer terrain_;
     WorldRenderer world_;
     UIRenderer ui_;
     EffectRenderer effects_;
     ShadowSystem shadows_;
     SSAOSystem ssao_;
+    
+    // ========== UI RENDER STATE ==========
+    SDL_GPURenderPass* ui_render_pass_ = nullptr;  // Active UI render pass
     
     // ========== CAMERA ==========
     CameraSystem camera_system_;

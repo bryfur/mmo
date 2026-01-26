@@ -28,8 +28,8 @@ bool Renderer::init(int width, int height, const std::string& title) {
     }
     pipeline_registry_.set_swapchain_format(context_.swapchain_format());
     
-    // Initialize terrain renderer
-    if (!terrain_.init(WORLD_WIDTH, WORLD_HEIGHT)) {
+    // Initialize terrain renderer with GPU device and pipeline registry
+    if (!terrain_.init(context_.device(), pipeline_registry_, WORLD_WIDTH, WORLD_HEIGHT)) {
         std::cerr << "Failed to initialize terrain renderer" << std::endl;
         return false;
     }
@@ -459,7 +459,7 @@ void Renderer::set_anisotropic_filter(int level) {
         model_manager_->set_anisotropic_filter(aniso_value);
     }
     
-    // Update terrain textures
+    // Update terrain renderer's anisotropic filtering
     terrain_.set_anisotropic_filter(aniso_value);
 }
 
@@ -475,12 +475,11 @@ void Renderer::set_heightmap(const HeightmapChunk& heightmap) {
     // Pass heightmap to terrain renderer for GPU upload
     terrain_.set_heightmap(heightmap);
     
-    // Pass heightmap texture to grass renderer for terrain-accurate grass placement
-    if (grass_renderer_) {
-        grass_renderer_->set_heightmap_texture(terrain_.heightmap_texture());
-    }
+    // Note: GrassRenderer still uses OpenGL and cannot use the SDL3 GPU heightmap texture
+    // The grass renderer integration will be updated in a future task
+    // TODO: Update grass_renderer to use SDL3 GPU API (Issue #15)
     
-    std::cout << "[Renderer] Heightmap set for terrain and grass rendering" << std::endl;
+    std::cout << "[Renderer] Heightmap set for terrain rendering" << std::endl;
 }
 
 // ============================================================================
@@ -512,10 +511,19 @@ void Renderer::draw_trees() {
 }
 
 void Renderer::draw_ground() {
-    terrain_.render(view_, projection_, actual_camera_pos_,
-                    shadows_.light_space_matrix(), shadows_.shadow_depth_texture(),
-                    shadows_.is_enabled(), ssao_.ssao_texture(), ssao_.is_enabled(),
-                    light_dir_, glm::vec2(context_.width(), context_.height()));
+    // TODO: Terrain rendering using SDL3 GPU API
+    // The terrain renderer has been ported to SDL3 GPU API (using GPUBuffer, GPUTexture, etc.)
+    // However, it requires a render pass and command buffer to be set up by the main renderer.
+    // This will be integrated when the Main Renderer Class (issue #13) is updated.
+    //
+    // For now, terrain rendering is temporarily disabled.
+    // The terrain height queries (get_height, get_normal) still work for physics/placement.
+    //
+    // To re-enable, the render() call should be:
+    // terrain_.render(pass, cmd, view_, projection_, actual_camera_pos_,
+    //                 light_space_matrix, shadow_map, shadow_sampler,
+    //                 shadows_enabled, ssao_texture, ssao_sampler,
+    //                 ssao_enabled, light_dir_, screen_size);
 }
 
 void Renderer::draw_grass() {

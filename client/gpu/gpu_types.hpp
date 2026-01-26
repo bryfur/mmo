@@ -103,6 +103,7 @@ enum class TextureFormat {
     RGBA8,
     BGRA8,
     R8,
+    R16,           // 16-bit unsigned normalized (for heightmaps)
     D32F,          // Depth 32-bit float
     D24S8,         // Depth 24 + Stencil 8
 };
@@ -112,6 +113,7 @@ inline SDL_GPUTextureFormat to_sdl_format(TextureFormat format) {
         case TextureFormat::RGBA8: return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
         case TextureFormat::BGRA8: return SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM;
         case TextureFormat::R8:    return SDL_GPU_TEXTUREFORMAT_R8_UNORM;
+        case TextureFormat::R16:   return SDL_GPU_TEXTUREFORMAT_R16_UNORM;
         case TextureFormat::D32F:  return SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
         case TextureFormat::D24S8: return SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT;
         default:                   return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;

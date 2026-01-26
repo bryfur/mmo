@@ -1,9 +1,8 @@
 #include "terrain_renderer.hpp"
-#include "../shader.hpp"
 #include <cmath>
 #include <vector>
-#include <iostream>
 #include <SDL3_image/SDL_image.h>
+#include <SDL3/SDL_log.h>
 
 namespace mmo {
 
@@ -13,14 +12,17 @@ TerrainRenderer::~TerrainRenderer() {
     shutdown();
 }
 
-bool TerrainRenderer::init(float world_width, float world_height) {
+bool TerrainRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry,
+                           float world_width, float world_height) {
+    device_ = &device;
+    pipeline_registry_ = &pipeline_registry;
     world_width_ = world_width;
     world_height_ = world_height;
     
-    // Create terrain shader
-    terrain_shader_ = std::make_unique<Shader>();
-    if (!terrain_shader_->load(shaders::terrain_vertex, shaders::terrain_fragment)) {
-        std::cerr << "Failed to load terrain shader" << std::endl;
+    // Create grass sampler with linear filtering and repeat addressing
+    grass_sampler_ = gpu::GPUSampler::create(device, gpu::SamplerConfig::anisotropic(8.0f));
+    if (!grass_sampler_) {
+        SDL_Log("TerrainRenderer::init: Failed to create grass sampler");
         return false;
     }
     
@@ -44,94 +46,49 @@ void TerrainRenderer::set_heightmap(const HeightmapChunk& heightmap) {
 }
 
 void TerrainRenderer::upload_heightmap_texture() {
-    if (!heightmap_) return;
+    if (!heightmap_ || !device_) return;
     
-    // Delete old texture if exists
-    if (heightmap_texture_) {
-        glDeleteTextures(1, &heightmap_texture_);
+    // Release old texture if exists
+    heightmap_texture_.reset();
+    
+    // Create R16 texture for heightmap (16-bit unsigned normalized)
+    // This preserves full precision from server-provided height data
+    heightmap_texture_ = gpu::GPUTexture::create_2d(
+        *device_,
+        heightmap_->resolution, heightmap_->resolution,
+        gpu::TextureFormat::R16,
+        heightmap_->height_data.data(),
+        false  // No mipmaps for heightmap
+    );
+    
+    if (!heightmap_texture_) {
+        SDL_Log("TerrainRenderer::upload_heightmap_texture: Failed to create heightmap texture");
     }
-    
-    // Create R16 texture (16-bit height values)
-    glGenTextures(1, &heightmap_texture_);
-    glBindTexture(GL_TEXTURE_2D, heightmap_texture_);
-    
-    // Upload as R16 (unsigned normalized - values 0-65535 map to 0.0-1.0)
-    // Note: Data layout is height_data[z * res + x], uploaded row by row.
-    // OpenGL's texelFetch(ivec2(x, y), 0) reads from the same layout.
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_R16, 
-                 heightmap_->resolution, heightmap_->resolution, 
-                 0, GL_RED, GL_UNSIGNED_SHORT, 
-                 heightmap_->height_data.data());
-    
-    // Nearest filtering - we do manual bilinear interpolation in shaders for exact CPU match
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    
-    // Clamp to edge to avoid wrapping artifacts
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    
-    glBindTexture(GL_TEXTURE_2D, 0);
-    
 }
 
 void TerrainRenderer::shutdown() {
-    if (vao_) {
-        glDeleteVertexArrays(1, &vao_);
-        vao_ = 0;
-    }
-    if (vbo_) {
-        glDeleteBuffers(1, &vbo_);
-        vbo_ = 0;
-    }
-    if (ibo_) {
-        glDeleteBuffers(1, &ibo_);
-        ibo_ = 0;
-    }
-    if (grass_texture_) {
-        glDeleteTextures(1, &grass_texture_);
-        grass_texture_ = 0;
-    }
-    if (heightmap_texture_) {
-        glDeleteTextures(1, &heightmap_texture_);
-        heightmap_texture_ = 0;
-    }
+    vertex_buffer_.reset();
+    index_buffer_.reset();
+    grass_texture_.reset();
+    grass_sampler_.reset();
+    heightmap_texture_.reset();
     heightmap_.reset();
-    terrain_shader_.reset();
+    device_ = nullptr;
+    pipeline_registry_ = nullptr;
+    index_count_ = 0;
 }
 
 void TerrainRenderer::load_grass_texture() {
-    SDL_Surface* surface = IMG_Load("assets/textures/grass_seamless.png");
-    if (surface) {
-        // Convert to RGBA format if needed
-        SDL_Surface* rgba_surface = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
-        SDL_DestroySurface(surface);
-        
-        if (rgba_surface) {
-            int tex_width = rgba_surface->w;
-            int tex_height = rgba_surface->h;
-            
-            glGenTextures(1, &grass_texture_);
-            glBindTexture(GL_TEXTURE_2D, grass_texture_);
-            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, tex_width, tex_height, 0, 
-                         GL_RGBA, GL_UNSIGNED_BYTE, rgba_surface->pixels);
-            glGenerateMipmap(GL_TEXTURE_2D);
-            
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            
-            float max_aniso;
-            glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT, &max_aniso);
-            glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, std::min(max_aniso, 8.0f));
-            
-            SDL_DestroySurface(rgba_surface);
-        } else {
-            std::cerr << "Failed to convert grass texture to RGBA" << std::endl;
-        }
-    } else {
-        std::cerr << "Failed to load grass texture: " << SDL_GetError() << std::endl;
+    if (!device_) return;
+    
+    grass_texture_ = gpu::GPUTexture::load_from_file(
+        *device_,
+        "assets/textures/grass_seamless.png",
+        false  // No mipmaps until GPUTexture implements mipmap generation
+    );
+    
+    if (!grass_texture_) {
+        SDL_Log("TerrainRenderer::load_grass_texture: Failed to load grass texture");
     }
 }
 
@@ -155,6 +112,8 @@ glm::vec3 TerrainRenderer::get_normal(float x, float z) const {
 }
 
 void TerrainRenderer::generate_terrain_mesh() {
+    if (!device_) return;
+    
     float margin = 5000.0f;
     float start_x = -margin;
     float start_z = -margin;
@@ -167,21 +126,19 @@ void TerrainRenderer::generate_terrain_mesh() {
     
     float tex_scale = 0.01f;
     
-    std::vector<float> vertices;
+    std::vector<TerrainVertex> vertices;
     std::vector<uint32_t> indices;
     
-    // Generate vertices: x, y, z, u, v, r, g, b, a
+    // Generate vertices
     for (int iz = 0; iz <= cells_z; ++iz) {
         for (int ix = 0; ix <= cells_x; ++ix) {
             float x = start_x + ix * cell_size;
             float z = start_z + iz * cell_size;
             float y = get_height(x, z);
             
-            vertices.push_back(x);
-            vertices.push_back(y);
-            vertices.push_back(z);
-            vertices.push_back(x * tex_scale);
-            vertices.push_back(z * tex_scale);
+            TerrainVertex vertex;
+            vertex.position = glm::vec3(x, y, z);
+            vertex.texCoord = glm::vec2(x * tex_scale, z * tex_scale);
             
             // Color tint based on position
             float world_center_x = world_width_ / 2.0f;
@@ -197,10 +154,9 @@ void TerrainRenderer::generate_terrain_mesh() {
             float g = 1.0f - dist_factor * 0.05f - height_factor * 0.05f;
             float b = 0.9f + dist_factor * 0.05f;
             
-            vertices.push_back(r);
-            vertices.push_back(g);
-            vertices.push_back(b);
-            vertices.push_back(1.0f);
+            vertex.color = glm::vec4(r, g, b, 1.0f);
+            
+            vertices.push_back(vertex);
         }
     }
     
@@ -221,84 +177,139 @@ void TerrainRenderer::generate_terrain_mesh() {
         }
     }
     
-    vertex_count_ = static_cast<GLuint>(indices.size());
+    index_count_ = static_cast<uint32_t>(indices.size());
     
-    glGenVertexArrays(1, &vao_);
-    glGenBuffers(1, &vbo_);
-    glGenBuffers(1, &ibo_);
+    // Create vertex buffer
+    vertex_buffer_ = gpu::GPUBuffer::create_static(
+        *device_,
+        gpu::GPUBuffer::Type::Vertex,
+        vertices.data(),
+        vertices.size() * sizeof(TerrainVertex)
+    );
     
-    glBindVertexArray(vao_);
+    if (!vertex_buffer_) {
+        SDL_Log("TerrainRenderer::generate_terrain_mesh: Failed to create vertex buffer");
+        return;
+    }
     
-    glBindBuffer(GL_ARRAY_BUFFER, vbo_);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), 
-                 vertices.data(), GL_STATIC_DRAW);
+    // Create index buffer
+    index_buffer_ = gpu::GPUBuffer::create_static(
+        *device_,
+        gpu::GPUBuffer::Type::Index,
+        indices.data(),
+        indices.size() * sizeof(uint32_t)
+    );
     
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ibo_);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(uint32_t), 
-                 indices.data(), GL_STATIC_DRAW);
-    
-    // Position (3 floats)
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    
-    // UV (2 floats)
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-    
-    // Color (4 floats)
-    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, 9 * sizeof(float), (void*)(5 * sizeof(float)));
-    glEnableVertexAttribArray(2);
-    
-    glBindVertexArray(0);
+    if (!index_buffer_) {
+        SDL_Log("TerrainRenderer::generate_terrain_mesh: Failed to create index buffer");
+        vertex_buffer_.reset();
+        return;
+    }
 }
 
-void TerrainRenderer::render(const glm::mat4& view, const glm::mat4& projection,
+void TerrainRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                             const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& camera_pos, const glm::mat4& light_space_matrix,
-                             GLuint shadow_map, bool shadows_enabled,
-                             GLuint ssao_texture, bool ssao_enabled,
+                             SDL_GPUTexture* shadow_map, SDL_GPUSampler* shadow_sampler,
+                             bool shadows_enabled,
+                             SDL_GPUTexture* ssao_texture, SDL_GPUSampler* ssao_sampler,
+                             bool ssao_enabled,
                              const glm::vec3& light_dir, const glm::vec2& screen_size) {
-    if (!terrain_shader_ || !vao_) return;
+    if (!pipeline_registry_ || !vertex_buffer_ || !index_buffer_ || !pass || !cmd) return;
     
-    terrain_shader_->use();
-    terrain_shader_->set_mat4("view", view);
-    terrain_shader_->set_mat4("projection", projection);
-    terrain_shader_->set_vec3("cameraPos", camera_pos);
+    // Get terrain pipeline
+    auto* pipeline = pipeline_registry_->get_terrain_pipeline();
+    if (!pipeline) {
+        SDL_Log("TerrainRenderer::render: Failed to get terrain pipeline");
+        return;
+    }
     
-    // Fog settings
-    terrain_shader_->set_vec3("fogColor", fog_color_);
-    terrain_shader_->set_float("fogStart", fog_start_);
-    terrain_shader_->set_float("fogEnd", fog_end_);
+    // Bind pipeline
+    pipeline->bind(pass);
     
-    // Shadow mapping
-    terrain_shader_->set_mat4("lightSpaceMatrix", light_space_matrix);
-    terrain_shader_->set_int("shadowsEnabled", shadows_enabled ? 1 : 0);
-    terrain_shader_->set_vec3("lightDir", light_dir);
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, shadow_map);
-    terrain_shader_->set_int("shadowMap", 1);
+    // Push vertex uniforms (transform data)
+    TerrainTransformUniforms transform_uniforms;
+    transform_uniforms.view = view;
+    transform_uniforms.projection = projection;
+    transform_uniforms.cameraPos = camera_pos;
+    transform_uniforms._padding0 = 0.0f;
+    transform_uniforms.lightSpaceMatrix = light_space_matrix;
     
-    // SSAO
-    terrain_shader_->set_int("ssaoEnabled", ssao_enabled ? 1 : 0);
-    terrain_shader_->set_vec2("screenSize", screen_size);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, ssao_texture);
-    terrain_shader_->set_int("ssaoTexture", 2);
+    SDL_PushGPUVertexUniformData(cmd, 0, &transform_uniforms, sizeof(transform_uniforms));
     
-    // Grass texture
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, grass_texture_);
-    terrain_shader_->set_int("grassTexture", 0);
+    // Push fragment uniforms (lighting data)
+    TerrainLightingUniforms lighting_uniforms;
+    lighting_uniforms.fogColor = fog_color_;
+    lighting_uniforms.fogStart = fog_start_;
+    lighting_uniforms.fogEnd = fog_end_;
+    lighting_uniforms.shadowsEnabled = shadows_enabled ? 1 : 0;
+    lighting_uniforms.ssaoEnabled = ssao_enabled ? 1 : 0;
+    lighting_uniforms._padding0 = 0.0f;
+    lighting_uniforms.lightDir = light_dir;
+    lighting_uniforms._padding1 = 0.0f;
+    lighting_uniforms.screenSize = screen_size;
+    lighting_uniforms._padding2 = glm::vec2(0.0f);
     
-    glBindVertexArray(vao_);
-    glDrawElements(GL_TRIANGLES, vertex_count_, GL_UNSIGNED_INT, 0);
-    glBindVertexArray(0);
+    SDL_PushGPUFragmentUniformData(cmd, 0, &lighting_uniforms, sizeof(lighting_uniforms));
+    
+    // Bind textures and samplers
+    // Slot 0: grass texture
+    if (grass_texture_ && grass_sampler_) {
+        SDL_GPUTextureSamplerBinding grass_binding = {
+            grass_texture_->handle(),
+            grass_sampler_->handle()
+        };
+        SDL_BindGPUFragmentSamplers(pass, 0, &grass_binding, 1);
+    }
+    
+    // Slot 1: shadow map
+    if (shadow_map && shadow_sampler) {
+        SDL_GPUTextureSamplerBinding shadow_binding = {
+            shadow_map,
+            shadow_sampler
+        };
+        SDL_BindGPUFragmentSamplers(pass, 1, &shadow_binding, 1);
+    }
+    
+    // Slot 2: SSAO texture
+    if (ssao_texture && ssao_sampler) {
+        SDL_GPUTextureSamplerBinding ssao_binding = {
+            ssao_texture,
+            ssao_sampler
+        };
+        SDL_BindGPUFragmentSamplers(pass, 2, &ssao_binding, 1);
+    }
+    
+    // Bind vertex buffer
+    SDL_GPUBufferBinding vb_binding = {
+        vertex_buffer_->handle(),
+        0
+    };
+    SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
+    
+    // Bind index buffer
+    SDL_GPUBufferBinding ib_binding = {
+        index_buffer_->handle(),
+        0
+    };
+    SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+    
+    // Draw indexed primitives
+    SDL_DrawGPUIndexedPrimitives(pass, index_count_, 1, 0, 0, 0);
 }
 
 void TerrainRenderer::set_anisotropic_filter(float level) {
-    if (grass_texture_ != 0) {
-        glBindTexture(GL_TEXTURE_2D, grass_texture_);
-        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAX_ANISOTROPY_EXT, level);
-        glBindTexture(GL_TEXTURE_2D, 0);
+    if (!device_) {
+        return;
+    }
+    
+    // Clamp level to reasonable range (1.0 = no anisotropy, 16.0 = max typical)
+    level = std::max(1.0f, std::min(16.0f, level));
+    
+    // Recreate grass sampler with new anisotropy level
+    grass_sampler_ = gpu::GPUSampler::create(*device_, gpu::SamplerConfig::anisotropic(level));
+    if (!grass_sampler_) {
+        SDL_Log("TerrainRenderer::set_anisotropic_filter: Failed to recreate grass sampler with level %.1f", level);
     }
 }
 

@@ -4,7 +4,6 @@
 #include "shader.hpp"
 #include <GL/glew.h>
 #include <glm/gtc/type_ptr.hpp>
-#include <SDL3/SDL_log.h>
 #include <iostream>
 #include <cmath>
 #include <type_traits>
@@ -90,11 +89,19 @@ bool Renderer::init(int width, int height, const std::string& title) {
 
 void Renderer::init_pipelines() {
     // Preload commonly used pipelines to avoid hitching during gameplay
-    pipeline_registry_.get_model_pipeline();
-    pipeline_registry_.get_skinned_model_pipeline();
-    pipeline_registry_.get_billboard_pipeline();
+    // Note: Pipeline creation can return nullptr on failure, but we continue
+    // as the pipelines will be created on-demand when first needed
+    auto* model_pipeline = pipeline_registry_.get_model_pipeline();
+    auto* skinned_pipeline = pipeline_registry_.get_skinned_model_pipeline();
+    auto* billboard_pipeline = pipeline_registry_.get_billboard_pipeline();
+    
+    if (!model_pipeline || !skinned_pipeline || !billboard_pipeline) {
+        std::cerr << "Warning: Some pipelines failed to preload" << std::endl;
+    }
     
     // Create default sampler for model textures
+    // Note: This sampler is prepared for future use when model rendering
+    // transitions from GL to SDL3 GPU API (issue #14)
     SDL_GPUSamplerCreateInfo sampler_info = {};
     sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
     sampler_info.mag_filter = SDL_GPU_FILTER_LINEAR;
@@ -105,17 +112,27 @@ void Renderer::init_pipelines() {
     sampler_info.max_anisotropy = 16.0f;
     sampler_info.enable_anisotropy = true;
     default_sampler_ = context_.device().create_sampler(sampler_info);
+    
+    if (!default_sampler_) {
+        std::cerr << "Warning: Failed to create default GPU sampler" << std::endl;
+    }
 }
 
 void Renderer::init_billboard_buffers() {
-    // Create a dynamic vertex buffer for billboard rendering (health bars, etc.)
-    // 6 vertices per quad * 7 floats per vertex (pos3 + color4)
+    // NOTE: Billboard rendering currently uses temporary GL VAO/VBO objects
+    // for compatibility with the legacy shader path. This GPU buffer allocation
+    // is prepared for future use when billboard rendering is migrated to SDL3 GPU.
+    // TODO: Use this buffer once billboard rendering uses SDL3 GPU API
     constexpr size_t BILLBOARD_BUFFER_SIZE = 6 * 7 * sizeof(float);
     billboard_vertex_buffer_ = gpu::GPUBuffer::create_dynamic(
         context_.device(), 
         gpu::GPUBuffer::Type::Vertex, 
         BILLBOARD_BUFFER_SIZE
     );
+    
+    if (!billboard_vertex_buffer_) {
+        std::cerr << "Warning: Failed to create billboard vertex buffer" << std::endl;
+    }
 }
 
 void Renderer::shutdown() {
@@ -473,6 +490,11 @@ void Renderer::set_anisotropic_filter(int level) {
         sampler_info.max_anisotropy = aniso_value;
         sampler_info.enable_anisotropy = (level > 0);
         default_sampler_ = context_.device().create_sampler(sampler_info);
+        
+        if (!default_sampler_) {
+            std::cerr << "Warning: Failed to recreate default GPU sampler (anisotropic level: " 
+                      << level << ")" << std::endl;
+        }
     }
 }
 
@@ -704,28 +726,31 @@ void Renderer::draw_model(Model* model, const glm::vec3& position, float rotatio
                           const glm::vec4& tint, float attack_tilt) {
     if (!model) return;
     
-    // Get appropriate pipeline from registry
-    // Note: Until issue #14 (Model Loader migration) is complete, we use legacy GL shaders
-    // This is a temporary compatibility layer during the phased SDL3 GPU migration
-    auto* pipeline = model->has_skeleton ? 
-                     pipeline_registry_.get_skinned_model_pipeline() :
-                     pipeline_registry_.get_model_pipeline();
+    // Use static shaders to avoid recreating on every draw call
+    // These are cached once and reused for all subsequent calls
+    static Shader legacy_model_shader;
+    static Shader legacy_skinned_shader;
+    static bool model_shader_initialized = false;
+    static bool skinned_shader_initialized = false;
     
     // For now, fall back to the legacy GL shader path since models still use GL buffers
-    // TODO: Once issue #14 is complete, use SDL3 GPU rendering path
-    Shader legacy_model_shader;
-    Shader legacy_skinned_shader;
-    
-    // Use legacy embedded shaders for compatibility
+    // TODO: Once issue #14 (Model Loader migration) is complete, use SDL3 GPU rendering path
+    Shader* shader = nullptr;
     if (model->has_skeleton) {
-        legacy_skinned_shader.load(shaders::skinned_model_vertex, shaders::skinned_model_fragment);
+        if (!skinned_shader_initialized) {
+            legacy_skinned_shader.load(shaders::skinned_model_vertex, shaders::skinned_model_fragment);
+            skinned_shader_initialized = true;
+        }
         legacy_skinned_shader.use();
+        shader = &legacy_skinned_shader;
     } else {
-        legacy_model_shader.load(shaders::model_vertex, shaders::model_fragment);
+        if (!model_shader_initialized) {
+            legacy_model_shader.load(shaders::model_vertex, shaders::model_fragment);
+            model_shader_initialized = true;
+        }
         legacy_model_shader.use();
+        shader = &legacy_model_shader;
     }
-    
-    Shader* shader = model->has_skeleton ? &legacy_skinned_shader : &legacy_model_shader;
     
     glm::mat4 model_mat = glm::mat4(1.0f);
     model_mat = glm::translate(model_mat, position);
@@ -813,9 +838,14 @@ void Renderer::draw_model_no_fog(Model* model, const glm::vec3& position, float 
                                   float scale, const glm::vec4& tint) {
     if (!model) return;
     
-    // Use legacy GL shader path for compatibility
-    Shader legacy_shader;
-    legacy_shader.load(shaders::model_vertex, shaders::model_fragment);
+    // Use static shader to avoid recreating on every draw call
+    static Shader legacy_shader;
+    static bool shader_initialized = false;
+    
+    if (!shader_initialized) {
+        legacy_shader.load(shaders::model_vertex, shaders::model_fragment);
+        shader_initialized = true;
+    }
     legacy_shader.use();
     
     glm::mat4 model_mat = glm::mat4(1.0f);
@@ -908,10 +938,32 @@ void Renderer::draw_enemy_health_bar_3d(float world_x, float world_y, float worl
         return;
     }
     
-    // Use legacy GL billboard shader for compatibility
+    // Use static shader and VAO/VBO to avoid recreating on every draw call
     // TODO: Migrate to SDL3 GPU billboard pipeline once issue #14 completes
-    Shader billboard_shader;
-    billboard_shader.load(shaders::billboard_vertex, shaders::billboard_fragment);
+    static Shader billboard_shader;
+    static GLuint billboard_vao = 0;
+    static GLuint billboard_vbo = 0;
+    static bool billboard_initialized = false;
+    
+    if (!billboard_initialized) {
+        billboard_shader.load(shaders::billboard_vertex, shaders::billboard_fragment);
+        
+        glGenVertexArrays(1, &billboard_vao);
+        glGenBuffers(1, &billboard_vbo);
+        
+        glBindVertexArray(billboard_vao);
+        glBindBuffer(GL_ARRAY_BUFFER, billboard_vbo);
+        glBufferData(GL_ARRAY_BUFFER, 6 * 7 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+        
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(3 * sizeof(float)));
+        glEnableVertexAttribArray(1);
+        
+        glBindVertexArray(0);
+        billboard_initialized = true;
+    }
+    
     billboard_shader.use();
     billboard_shader.set_mat4("view", view_);
     billboard_shader.set_mat4("projection", projection_);
@@ -925,19 +977,8 @@ void Renderer::draw_enemy_health_bar_3d(float world_x, float world_y, float worl
     glDisable(GL_CULL_FACE);
     glDepthMask(GL_FALSE);
     
-    // Create temporary VAO/VBO for billboard rendering
-    GLuint temp_vao, temp_vbo;
-    glGenVertexArrays(1, &temp_vao);
-    glGenBuffers(1, &temp_vbo);
-    
-    glBindVertexArray(temp_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, temp_vbo);
-    glBufferData(GL_ARRAY_BUFFER, 6 * 7 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
-    
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)0);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
+    glBindVertexArray(billboard_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, billboard_vbo);
     
     auto draw_billboard_quad = [&](float offset_x, float offset_y, float w, float h, const glm::vec4& color) {
         billboard_shader.set_vec2("size", glm::vec2(w, h));
@@ -968,10 +1009,6 @@ void Renderer::draw_enemy_health_bar_3d(float world_x, float world_y, float worl
     draw_billboard_quad(fill_offset_x, 0.0f, fill_width, world_bar_height, health_color);
     
     glBindVertexArray(0);
-    
-    // Clean up temporary resources
-    glDeleteVertexArrays(1, &temp_vao);
-    glDeleteBuffers(1, &temp_vbo);
     
     glDepthMask(GL_TRUE);
     glEnable(GL_CULL_FACE);

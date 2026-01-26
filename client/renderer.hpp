@@ -16,7 +16,6 @@
 #include "scene/ui_scene.hpp"
 #include "gpu/gpu_device.hpp"
 #include "gpu/gpu_buffer.hpp"
-#include "gpu/gpu_texture.hpp"
 #include "gpu/pipeline_registry.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -30,9 +29,12 @@ namespace mmo {
  * Renderer is the main facade that orchestrates all rendering subsystems.
  * It maintains the public API while delegating to focused subsystems.
  * 
- * SDL3 GPU Migration: This class now uses SDL3 GPU API instead of OpenGL.
- * All GL calls have been replaced with SDL3 GPU equivalents.
- * State management is now done through pipelines, not global state.
+ * SDL3 GPU Migration: This class is being migrated from the legacy OpenGL
+ * renderer to the SDL3 GPU API. Most new rendering paths use SDL3 GPU
+ * pipelines, but some OpenGL-based compatibility layers (e.g. for models,
+ * shadows, and billboards) remain until those subsystems are fully ported.
+ * State management for SDL3 GPU-backed paths is handled through explicit
+ * pipelines rather than global OpenGL state.
  */
 class Renderer {
 public:

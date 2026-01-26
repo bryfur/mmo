@@ -4,7 +4,6 @@
 #include "common/ecs/components.hpp"
 #include "common/heightmap.hpp"
 #include "model_loader.hpp"
-#include "shader.hpp"
 #include "render/grass_renderer.hpp"
 #include "systems/camera_system.hpp"
 #include "render/render_context.hpp"
@@ -15,6 +14,8 @@
 #include "render/shadow_system.hpp"
 #include "scene/render_scene.hpp"
 #include "scene/ui_scene.hpp"
+#include "gpu/gpu_device.hpp"
+#include "gpu/gpu_buffer.hpp"
 #include "gpu/pipeline_registry.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -27,6 +28,13 @@ namespace mmo {
 /**
  * Renderer is the main facade that orchestrates all rendering subsystems.
  * It maintains the public API while delegating to focused subsystems.
+ * 
+ * SDL3 GPU Migration: This class is being migrated from the legacy OpenGL
+ * renderer to the SDL3 GPU API. Most new rendering paths use SDL3 GPU
+ * pipelines, but some OpenGL-based compatibility layers (e.g. for models,
+ * shadows, and billboards) remain until those subsystems are fully ported.
+ * State management for SDL3 GPU-backed paths is handled through explicit
+ * pipelines rather than global OpenGL state.
  */
 class Renderer {
 public:
@@ -174,7 +182,7 @@ public:
     bool get_rocks_enabled() const { return rocks_enabled_; }
     
 private:
-    void init_shaders();
+    void init_pipelines();
     void init_billboard_buffers();
     void update_camera();
     Model* get_model_for_entity(const EntityState& entity);
@@ -188,6 +196,10 @@ private:
     EffectRenderer effects_;
     ShadowSystem shadows_;
     SSAOSystem ssao_;
+    
+    // ========== GPU RESOURCES ==========
+    std::unique_ptr<gpu::GPUBuffer> billboard_vertex_buffer_;
+    SDL_GPUSampler* default_sampler_ = nullptr;
     
     // ========== UI RENDER STATE ==========
     SDL_GPURenderPass* ui_render_pass_ = nullptr;  // Active UI render pass
@@ -206,27 +218,9 @@ private:
     glm::vec3 sun_direction_ = glm::normalize(glm::vec3(0.5f, 0.8f, 0.3f));
     glm::vec3 light_dir_ = glm::vec3(-0.5f, -0.8f, -0.3f);
     
-    // ========== SHADERS (for entity rendering) ==========
-    std::unique_ptr<Shader> model_shader_;
-    std::unique_ptr<Shader> skinned_model_shader_;
-    std::unique_ptr<Shader> billboard_shader_;
-    
-    // ========== BILLBOARD VAO (for 3D health bars) ==========
-    GLuint billboard_vao_ = 0;
-    GLuint billboard_vbo_ = 0;
-    
     // ========== GRASS ==========
     std::unique_ptr<GrassRenderer> grass_renderer_;
     float skybox_time_ = 0.0f;
-    
-    // World-space terrain height texture for grass placement
-    // Contains Y height values indexed by world XZ coordinates
-    GLuint terrain_height_texture_ = 0;
-    int terrain_height_texture_size_ = 1024;  // Resolution of height texture
-    void create_terrain_height_texture();
-    void update_terrain_height_texture();
-    void cleanup_terrain_height_texture();
-    bool terrain_height_dirty_ = true;  // Flag to regenerate when heightmap changes
     
     // ========== GRAPHICS SETTINGS ==========
     bool fog_enabled_ = true;

@@ -2,16 +2,17 @@
  * Effect/Particle Vertex Shader - SDL3 GPU API
  * 
  * Billboard particles for effects (fire, magic, etc).
+ * Uses a single input struct with per-vertex and per-instance attributes
+ * separated by slot indices in the pipeline configuration.
  */
 
-// Vertex input (quad corners)
+// Combined vertex input with per-vertex and per-instance attributes
+// Per-vertex data comes from slot 0, per-instance from slot 1
 struct VSInput {
+    // Per-vertex attributes (slot 0)
     float2 position : POSITION;   // -1 to 1 quad coordinates
     float2 texCoord : TEXCOORD0;
-};
-
-// Per-instance particle data
-struct ParticleInput {
+    // Per-instance attributes (slot 1, input rate = instance)
     float3 worldPos : TEXCOORD1;
     float size : TEXCOORD2;
     float4 color : TEXCOORD3;
@@ -36,28 +37,31 @@ cbuffer EffectUniforms : register(b0) {
     float _padding1;
 };
 
-// 2D rotation matrix
+// 2D rotation matrix - using explicit assignment for HLSL compatibility
 float2x2 rotate2D(float angle) {
     float s = sin(angle);
     float c = cos(angle);
-    return float2x2(c, -s, s, c);
+    float2x2 rotation;
+    rotation[0] = float2(c, -s);
+    rotation[1] = float2(s, c);
+    return rotation;
 }
 
-VSOutput VSMain(VSInput input, ParticleInput particle) {
+VSOutput VSMain(VSInput input) {
     VSOutput output;
     
     // Apply rotation to quad position
-    float2 rotatedPos = mul(rotate2D(particle.rotation), input.position);
+    float2 rotatedPos = mul(rotate2D(input.rotation), input.position);
     
     // Billboard position: expand quad in camera space
-    float3 worldPos = particle.worldPos 
-                    + cameraRight * rotatedPos.x * particle.size
-                    + cameraUp * rotatedPos.y * particle.size;
+    float3 worldPos = input.worldPos 
+                    + cameraRight * rotatedPos.x * input.size
+                    + cameraUp * rotatedPos.y * input.size;
     
     output.position = mul(viewProjection, float4(worldPos, 1.0));
     output.texCoord = input.texCoord;
-    output.color = particle.color;
-    output.life = particle.life;
+    output.color = input.color;
+    output.life = input.life;
     
     return output;
 }

@@ -48,7 +48,8 @@ float calculateShadow(float4 fragPosLightSpace) {
     
     if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || 
         projCoords.y < 0.0 || projCoords.y > 1.0) {
-        return 0.0;
+        // Treat out-of-bounds fragments as fully shadowed to avoid bright artifacts
+        return 1.0;
     }
     
     float currentDepth = projCoords.z;
@@ -102,8 +103,10 @@ float4 PSMain(PSInput input) : SV_Target {
     float diffuse = diff * 0.6 * (1.0 - shadow * 0.6);
     float light = ambient + diffuse;
     
-    // Also add height-based variation for subtle detail
-    light *= 0.9 + 0.1 * sin(input.fragPos.x * 0.01) * cos(input.fragPos.z * 0.01);
+    // Add height-based variation for subtle detail using a cheap, trig-free pattern
+    float heightPattern = frac(input.fragPos.x * 0.001 + input.fragPos.z * 0.0017);
+    float heightVariation = lerp(-1.0, 1.0, heightPattern);
+    light *= 0.9 + 0.1 * heightVariation;
     
     color *= light;
     

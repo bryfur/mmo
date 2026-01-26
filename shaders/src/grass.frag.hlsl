@@ -10,6 +10,7 @@ struct PSInput {
     float3 normal : TEXCOORD0;
     float2 texCoord : TEXCOORD1;
     float3 worldPos : TEXCOORD2;
+    float colorVariation : TEXCOORD3;
 };
 
 // Uniform buffer slot 0 - Lighting
@@ -41,7 +42,9 @@ float4 PSMain(PSInput input) : SV_Target {
     float diff = max(dot(norm, lightDirection), 0.0);
     
     float3 lighting = ambientColor + diff * lightColor;
-    float3 color = texColor.rgb * lighting;
+    
+    // Apply per-instance color variation
+    float3 color = texColor.rgb * lighting * (1.0 + input.colorVariation * 0.2);
     
     return float4(color, texColor.a);
 }

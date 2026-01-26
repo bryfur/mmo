@@ -36,6 +36,7 @@ cbuffer TransformUniforms : register(b0) {
     float3 cameraPos;
     float _padding0;
     float4x4 lightSpaceMatrix;
+    float4x4 normalMatrix;  // Pre-computed inverse-transpose of model matrix (CPU-side)
     int useSkinning;
     float3 _padding1;
 };
@@ -66,9 +67,9 @@ VSOutput VSMain(VSInput input) {
     float4 worldPos = mul(model, localPos);
     output.fragPos = worldPos.xyz;
     
-    // Transform normal to world space
-    float3x3 normalMatrix = (float3x3)transpose(model);
-    output.normal = normalize(mul(normalMatrix, localNormal.xyz));
+    // Transform normal to world space using pre-computed normal matrix
+    float3x3 normalMat3x3 = (float3x3)normalMatrix;
+    output.normal = normalize(mul(normalMat3x3, localNormal.xyz));
     
     output.texCoord = input.texCoord;
     output.vertexColor = input.color;

@@ -18,7 +18,7 @@ cbuffer SSAOUniforms : register(b0) {
     float2 screenSize;
     float radius;
     float bias;
-    float3 samples[64];  // Pre-computed hemisphere samples
+    float3 samples[KERNEL_SIZE];  // Pre-computed hemisphere samples (matches KERNEL_SIZE)
 };
 
 // Texture and sampler bindings

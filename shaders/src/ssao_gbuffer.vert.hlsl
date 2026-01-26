@@ -22,6 +22,7 @@ cbuffer GBufferUniforms : register(b0) {
     float4x4 model;
     float4x4 view;
     float4x4 projection;
+    float4x4 normalMatrix;  // Pre-computed inverse-transpose of model-view matrix (CPU-side)
 };
 
 VSOutput VSMain(VSInput input) {
@@ -30,9 +31,10 @@ VSOutput VSMain(VSInput input) {
     float4 viewPos = mul(view, mul(model, float4(input.position, 1.0)));
     output.fragPos = viewPos.xyz;
     
-    // Transform normal to view space
-    float3x3 normalMatrix = (float3x3)transpose(mul(view, model));
-    output.normal = mul(normalMatrix, input.normal);
+    // Transform normal to view space using pre-computed normal matrix
+    // normalMatrix should be inverse-transpose of model-view, computed on CPU
+    float3x3 normalMat3x3 = (float3x3)normalMatrix;
+    output.normal = normalize(mul(normalMat3x3, input.normal));
     
     output.position = mul(projection, viewPos);
     

@@ -32,6 +32,7 @@ cbuffer TransformUniforms : register(b0) {
     float3 cameraPos;
     float _padding0;
     float4x4 lightSpaceMatrix;
+    float4x4 normalMatrix;  // Pre-computed inverse-transpose of model matrix (CPU-side)
 };
 
 VSOutput VSMain(VSInput input) {
@@ -40,11 +41,10 @@ VSOutput VSMain(VSInput input) {
     float4 worldPos = mul(model, float4(input.position, 1.0));
     output.fragPos = worldPos.xyz;
     
-    // Transform normal to world space
-    float3x3 normalMatrix = (float3x3)transpose(model);
-    // Note: For non-uniform scaling, should use inverse transpose
-    // This simplified version works for uniform scaling
-    output.normal = normalize(mul(normalMatrix, input.normal));
+    // Transform normal to world space using pre-computed normal matrix
+    // normalMatrix should be inverse-transpose of model, computed on CPU
+    float3x3 normalMat3x3 = (float3x3)normalMatrix;
+    output.normal = normalize(mul(normalMat3x3, input.normal));
     
     output.texCoord = input.texCoord;
     output.vertexColor = input.color;

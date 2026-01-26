@@ -59,7 +59,8 @@ float calculateShadow(float4 fragPosLightSpace, float3 normal, float3 lightDirec
     // Check if outside shadow map
     if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || 
         projCoords.y < 0.0 || projCoords.y > 1.0) {
-        return 0.0;
+        // Treat areas outside the shadow map as fully shadowed to avoid incorrect lighting
+        return 1.0;
     }
     
     float currentDepth = projCoords.z;

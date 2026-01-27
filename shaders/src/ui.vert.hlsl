@@ -38,10 +38,14 @@ cbuffer UIUniforms {
 VSOutput VSMain(VSInput input) {
     VSOutput output;
 
-    // Convert screen coords to NDC with Y flip for Vulkan
+    // Convert screen coords to NDC for Vulkan/SDL3 GPU
+    // Screen coords: (0,0) at top-left, Y increases downward
+    // Vulkan clip space: Y=+1 at top, Y=-1 at bottom (after viewport transform)
+    // So: y=0 (screen top) -> ndc.y=+1 (clip top)
+    //     y=height (screen bottom) -> ndc.y=-1 (clip bottom)
     float2 ndc;
     ndc.x = input.position.x / (screen_size.x * 0.5) - 1.0;
-    ndc.y = -(input.position.y / (screen_size.y * 0.5) - 1.0);
+    ndc.y = 1.0 - input.position.y / (screen_size.y * 0.5);
     output.position = float4(ndc, 0.0, 1.0);
     output.texcoord = input.texcoord;
     output.color = input.color;

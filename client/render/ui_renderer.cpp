@@ -150,12 +150,12 @@ void UIRenderer::set_screen_size(int width, int height) {
     width_ = width;
     height_ = height;
     // Orthographic projection for SDL3 GPU (Vulkan-style coordinates):
-    // Vulkan NDC: Y=-1 at top, Y=+1 at bottom (opposite of OpenGL).
     // Screen coordinates: (0,0) at top-left, Y increases downward.
-    // Since both Vulkan NDC and screen coords have Y pointing down, we do NOT flip Y.
-    // Use glm::ortho(left, right, bottom, top) with bottom=0, top=height (standard order).
+    // Vulkan clip space: Y=+1 at top, Y=-1 at bottom (maps to framebuffer top/bottom).
+    // To map screen Y=0 to clip Y=+1 (top), use glm::ortho with bottom=height, top=0.
+    // This flips the Y axis so screen coords map correctly to Vulkan clip space.
     projection_ = glm::ortho(0.0f, static_cast<float>(width),
-                              0.0f, static_cast<float>(height), -1.0f, 1.0f);
+                              static_cast<float>(height), 0.0f, -1.0f, 1.0f);
 }
 
 void UIRenderer::begin(SDL_GPUCommandBuffer* cmd) {

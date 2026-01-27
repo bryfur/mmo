@@ -64,7 +64,7 @@ set(SDLSHADERCROSS_STATIC ON CACHE BOOL "" FORCE)
 set(SDLSHADERCROSS_INSTALL OFF CACHE BOOL "" FORCE)
 set(SDLSHADERCROSS_VENDORED ON CACHE BOOL "" FORCE)
 set(SDLSHADERCROSS_SPIRVCROSS_SHARED ON CACHE BOOL "" FORCE)
-set(SDLSHADERCROSS_DXC OFF CACHE BOOL "" FORCE)
+set(SDLSHADERCROSS_DXC ON CACHE BOOL "" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(SDL_shadercross)
 
@@ -72,8 +72,6 @@ FetchContent_MakeAvailable(SDL_shadercross)
 find_package(SDL3 REQUIRED)
 find_package(SDL3_ttf REQUIRED)
 find_package(SDL3_image REQUIRED)
-find_package(OpenGL REQUIRED)
-find_package(GLEW REQUIRED)
 find_package(glm REQUIRED)
 
 # Common library (shared between server and client)
@@ -110,7 +108,6 @@ add_executable(mmo_client
     client/game.cpp
     client/network_client.cpp
     client/renderer.cpp
-    client/shader.cpp
     client/input_handler.cpp
     client/model_loader.cpp
     # Systems
@@ -137,14 +134,12 @@ add_executable(mmo_client
     client/gpu/gpu_shader.cpp
     client/gpu/pipeline_registry.cpp
 )
-target_link_libraries(mmo_client PRIVATE 
-    mmo_common 
+target_link_libraries(mmo_client PRIVATE
+    mmo_common
     SDL3::SDL3
     SDL3_ttf::SDL3_ttf
     SDL3_image::SDL3_image
     SDL3_shadercross::SDL3_shadercross-static
-    OpenGL::GL
-    GLEW::GLEW
     glm::glm
     pthread
 )

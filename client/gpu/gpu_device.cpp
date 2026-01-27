@@ -83,6 +83,7 @@ SDL_GPUTexture* GPUDevice::acquire_swapchain_texture(SDL_GPUCommandBuffer* cmd,
                                                        uint32_t* out_width,
                                                        uint32_t* out_height) {
     if (!cmd || !window_) {
+        SDL_Log("GPUDevice::acquire_swapchain_texture: cmd=%p window=%p", (void*)cmd, (void*)window_);
         return nullptr;
     }
 
@@ -90,7 +91,17 @@ SDL_GPUTexture* GPUDevice::acquire_swapchain_texture(SDL_GPUCommandBuffer* cmd,
     uint32_t w = 0, h = 0;
 
     if (!SDL_AcquireGPUSwapchainTexture(cmd, window_, &swapchain_texture, &w, &h)) {
-        SDL_Log("GPUDevice::acquire_swapchain_texture: Failed: %s", SDL_GetError());
+        SDL_Log("GPUDevice::acquire_swapchain_texture: SDL call failed: %s", SDL_GetError());
+        return nullptr;
+    }
+
+    // NULL texture with success means window is minimized or not ready
+    if (!swapchain_texture) {
+        static int null_count = 0;
+        if (++null_count <= 3) {
+            SDL_Log("GPUDevice::acquire_swapchain_texture: SDL returned success but NULL texture (attempt %d, w=%u h=%u)",
+                    null_count, w, h);
+        }
         return nullptr;
     }
 

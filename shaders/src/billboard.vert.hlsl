@@ -16,8 +16,9 @@ struct VSOutput {
     float4 vertexColor : TEXCOORD0;
 };
 
-// Uniform buffer slot 0 - Transform data
-cbuffer BillboardUniforms : register(b0) {
+// Uniform buffer - SDL3 GPU SPIR-V requires vertex uniforms in set 1
+[[vk::binding(0, 1)]]
+cbuffer BillboardUniforms {
     float4x4 view;
     float4x4 projection;
     float3 worldPos;      // World position of billboard center

@@ -592,18 +592,6 @@ void ModelLoader::free_gpu_resources(Model& model) {
     }
 }
 
-// Legacy no-op function for compatibility with unmigrated renderers
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-void ModelLoader::upload_to_gpu_legacy(Model& model) {
-    // This function is intentionally a no-op.
-    // Models should be loaded via ModelManager with set_device() for SDL3 GPU uploads.
-    // Legacy OpenGL rendering still works because the OpenGL upload code in
-    // renderer.cpp handles its own VAO/VBO creation.
-    (void)model;  // Suppress unused parameter warning
-}
-#pragma GCC diagnostic pop
-
 void ModelLoader::update_animation(Model& model, AnimationState& state, float dt) {
     if (!model.has_skeleton || model.animations.empty() || !state.playing) return;
     
@@ -752,14 +740,5 @@ void ModelManager::unload_all() {
     models_.clear();
     animation_states_.clear();
 }
-
-// Legacy no-op for compatibility with unmigrated renderers
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-void ModelManager::set_anisotropic_filter([[maybe_unused]] float level) {
-    // No longer needed with SDL3 GPU API - anisotropy is set in sampler creation
-    // This is a no-op for compatibility during migration
-}
-#pragma GCC diagnostic pop
 
 } // namespace mmo

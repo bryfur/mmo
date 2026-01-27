@@ -8,6 +8,11 @@
 #include <unordered_map>
 
 namespace mmo::gpu {
+// Forward declaration
+class ShaderManager;
+}
+
+namespace mmo::gpu {
 
 /**
  * @brief Pipeline type enumeration for all supported rendering pipelines
@@ -188,22 +193,18 @@ private:
     std::unique_ptr<GPUPipeline> create_shadow_pipeline();
     std::unique_ptr<GPUPipeline> create_skinned_shadow_pipeline();
 
-    // Shader management
-    GPUShader* get_or_create_shader(const std::string& name, 
-                                     ShaderStage stage,
-                                     const std::string& hlsl_source,
-                                     const std::string& entry_point,
-                                     const ShaderResources& resources);
-
     GPUDevice* device_ = nullptr;
     SDL_GPUTextureFormat swapchain_format_ = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
     SDL_GPUTextureFormat depth_format_ = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
 
     // Pipeline cache
     std::unordered_map<PipelineType, std::unique_ptr<GPUPipeline>> pipelines_;
-    
-    // Shader cache
-    std::unordered_map<std::string, std::unique_ptr<GPUShader>> shaders_;
+
+    // Shader manager for loading shaders from files
+    std::unique_ptr<ShaderManager> shader_manager_;
+
+    // Base path for shader files
+    std::string shader_path_ = "shaders/src/";
 };
 
 } // namespace mmo::gpu

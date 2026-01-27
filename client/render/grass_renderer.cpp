@@ -249,13 +249,16 @@ void GrassRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                            const glm::mat4& view, const glm::mat4& projection,
                            const glm::vec3& camera_pos, const glm::vec3& light_dir) {
     if (!initialized_ || !pipeline_registry_ || !pass || !cmd) return;
-    
+
+    // Skip rendering if grass texture/sampler aren't available
+    if (!grass_texture_ || !grass_sampler_) return;
+
     // Regenerate grass geometry if camera has moved significantly
     // or if this is the first frame
     if (!vertex_buffer_ || !index_buffer_ || index_count_ == 0) {
         generate_grass_geometry(camera_pos);
     }
-    
+
     if (!vertex_buffer_ || !index_buffer_ || index_count_ == 0) return;
     
     // Get grass pipeline
@@ -289,14 +292,12 @@ void GrassRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
     
     SDL_PushGPUFragmentUniformData(cmd, 0, &lighting_uniforms, sizeof(lighting_uniforms));
     
-    // Bind grass texture and sampler
-    if (grass_texture_ && grass_sampler_) {
-        SDL_GPUTextureSamplerBinding grass_binding = {
-            grass_texture_->handle(),
-            grass_sampler_->handle()
-        };
-        SDL_BindGPUFragmentSamplers(pass, 0, &grass_binding, 1);
-    }
+    // Bind grass texture and sampler (already validated at function start)
+    SDL_GPUTextureSamplerBinding grass_binding = {
+        grass_texture_->handle(),
+        grass_sampler_->handle()
+    };
+    SDL_BindGPUFragmentSamplers(pass, 0, &grass_binding, 1);
     
     // Bind vertex buffer
     SDL_GPUBufferBinding vb_binding = {

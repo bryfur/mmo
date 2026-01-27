@@ -16,6 +16,7 @@
 #include "scene/ui_scene.hpp"
 #include "gpu/gpu_device.hpp"
 #include "gpu/gpu_buffer.hpp"
+#include "gpu/gpu_texture.hpp"
 #include "gpu/pipeline_registry.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -48,6 +49,10 @@ public:
     
     void begin_frame();
     void end_frame();
+
+    // Main 3D render pass management (for SDL3 GPU rendering)
+    void begin_main_pass();
+    void end_main_pass();
     
     // ========== Scene-Based Rendering API ==========
     // This is the preferred API for rendering - populate scenes then call render()
@@ -199,10 +204,14 @@ private:
     
     // ========== GPU RESOURCES ==========
     std::unique_ptr<gpu::GPUBuffer> billboard_vertex_buffer_;
+    std::unique_ptr<gpu::GPUTexture> depth_texture_;  // Depth buffer for main 3D pass
     SDL_GPUSampler* default_sampler_ = nullptr;
-    
-    // ========== UI RENDER STATE ==========
-    SDL_GPURenderPass* ui_render_pass_ = nullptr;  // Active UI render pass
+
+    // ========== RENDER STATE ==========
+    SDL_GPURenderPass* main_render_pass_ = nullptr;  // Active main 3D render pass
+    SDL_GPURenderPass* ui_render_pass_ = nullptr;    // Active UI render pass
+    SDL_GPUTexture* current_swapchain_ = nullptr;    // Current frame's swapchain texture
+    bool had_main_pass_this_frame_ = false;          // True if begin_main_pass() was called
     
     // ========== CAMERA ==========
     CameraSystem camera_system_;

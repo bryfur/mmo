@@ -24,8 +24,9 @@ struct VSOutput {
     float4 fragPosLightSpace : TEXCOORD5;
 };
 
-// Uniform buffer slot 0 - Camera and transform data
-cbuffer TransformUniforms : register(b0) {
+// Uniform buffer - SDL3 GPU SPIR-V requires vertex uniforms in set 1
+[[vk::binding(0, 1)]]
+cbuffer TransformUniforms {
     float4x4 model;
     float4x4 view;
     float4x4 projection;

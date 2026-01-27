@@ -110,16 +110,7 @@ struct Mesh {
     std::unique_ptr<gpu::GPUBuffer> index_buffer;
     std::unique_ptr<gpu::GPUTexture> texture;
     bool uploaded = false;
-    
-    // Legacy OpenGL resources - DEPRECATED
-    // These are retained temporarily for renderers not yet migrated to SDL3 GPU API.
-    // Will be removed once all renderers (effect_renderer, main renderer shadows) are migrated.
-    // See issues: #13 (main renderer), #17 (effect renderer)
-    unsigned int vao = 0;
-    unsigned int vbo = 0;
-    unsigned int ebo = 0;
-    unsigned int texture_id = 0;
-    
+
     bool has_texture = false;
     uint32_t base_color = 0xFFFFFFFF;
     bool is_skinned = false;  // True if using skinned vertices
@@ -177,16 +168,7 @@ public:
      * @param model Model to upload
      */
     static void upload_to_gpu(gpu::GPUDevice& device, Model& model);
-    
-    /**
-     * Legacy upload for OpenGL (deprecated).
-     * This is a no-op - models should be loaded through ModelManager with set_device().
-     * Retained temporarily for renderer files not yet migrated to SDL3 GPU API.
-     * @deprecated Use upload_to_gpu(GPUDevice&, Model&) instead.
-     */
-    [[deprecated("Use upload_to_gpu(GPUDevice&, Model&) with ModelManager::set_device()")]]
-    static void upload_to_gpu_legacy(Model& model);
-    
+
     /**
      * Free GPU resources for a model.
      * @param model Model to free resources from
@@ -213,14 +195,6 @@ public:
     Model* get_model(const std::string& name);
     AnimationState* get_animation_state(const std::string& name);
     void unload_all();
-    
-    /**
-     * Legacy anisotropic filter setting (no-op).
-     * Retained for compatibility with renderers not yet migrated.
-     * @deprecated Anisotropy is now handled by SDL3 GPU sampler creation.
-     */
-    [[deprecated("Anisotropy is now set in SDL3 GPU sampler creation")]]
-    void set_anisotropic_filter(float level);
     
 private:
     gpu::GPUDevice* device_ = nullptr;

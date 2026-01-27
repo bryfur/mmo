@@ -150,7 +150,7 @@ std::unique_ptr<GPUPipeline> GPUPipeline::create(GPUDevice& device, const Pipeli
     // Multisample state
     SDL_GPUMultisampleState multisample = {};
     multisample.sample_count = config.sample_count;
-    multisample.sample_mask = 0xFFFFFFFF;
+    multisample.sample_mask = 0;  // Must be 0 for SDL3 GPU API
     pipeline_info.multisample_state = multisample;
 
     // Depth/stencil state
@@ -161,12 +161,18 @@ std::unique_ptr<GPUPipeline> GPUPipeline::create(GPUDevice& device, const Pipeli
     depth_stencil.enable_stencil_test = config.stencil_test_enable;
     pipeline_info.depth_stencil_state = depth_stencil;
 
-    // Color target (single target for now)
+    // Color target (single target for most pipelines, 0 for depth-only)
     SDL_GPUColorTargetDescription color_target = {};
-    color_target.format = config.color_format;
-    color_target.blend_state = get_blend_state(config.blend_mode);
-    pipeline_info.target_info.color_target_descriptions = &color_target;
-    pipeline_info.target_info.num_color_targets = 1;
+    if (config.color_format != SDL_GPU_TEXTUREFORMAT_INVALID) {
+        color_target.format = config.color_format;
+        color_target.blend_state = get_blend_state(config.blend_mode);
+        pipeline_info.target_info.color_target_descriptions = &color_target;
+        pipeline_info.target_info.num_color_targets = 1;
+    } else {
+        // Depth-only pipeline (e.g., shadow maps)
+        pipeline_info.target_info.color_target_descriptions = nullptr;
+        pipeline_info.target_info.num_color_targets = 0;
+    }
 
     // Depth target
     if (config.has_depth_target) {

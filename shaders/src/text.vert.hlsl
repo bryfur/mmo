@@ -16,8 +16,9 @@ struct VSOutput {
     float2 texCoord : TEXCOORD0;
 };
 
-// Uniform buffer slot 0 - Projection
-cbuffer TextUniforms : register(b0) {
+// Uniform buffer - SDL3 GPU SPIR-V requires vertex uniforms in set 1
+[[vk::binding(0, 1)]]
+cbuffer TextUniforms {
     float4x4 projection;
 };
 

@@ -29,8 +29,9 @@ struct VSOutput {
     float colorVariation : TEXCOORD3;
 };
 
-// Uniform buffer slot 0 - Transform and wind data
-cbuffer GrassUniforms : register(b0) {
+// Uniform buffer - SDL3 GPU SPIR-V requires vertex uniforms in set 1
+[[vk::binding(0, 1)]]
+cbuffer GrassUniforms {
     float4x4 viewProjection;
     float time;
     float windStrength;

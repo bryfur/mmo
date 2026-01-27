@@ -215,7 +215,12 @@ void TerrainRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                              SDL_GPUTexture* ssao_texture, SDL_GPUSampler* ssao_sampler,
                              bool ssao_enabled,
                              const glm::vec3& light_dir, const glm::vec2& screen_size) {
+    // Skip rendering if required resources aren't available
     if (!pipeline_registry_ || !vertex_buffer_ || !index_buffer_ || !pass || !cmd) return;
+    if (!grass_texture_ || !grass_sampler_) {
+        SDL_Log("TerrainRenderer::render: Grass texture/sampler not ready, skipping");
+        return;
+    }
     
     // Get terrain pipeline
     auto* pipeline = pipeline_registry_->get_terrain_pipeline();
@@ -252,33 +257,17 @@ void TerrainRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
     
     SDL_PushGPUFragmentUniformData(cmd, 0, &lighting_uniforms, sizeof(lighting_uniforms));
     
-    // Bind textures and samplers
-    // Slot 0: grass texture
-    if (grass_texture_ && grass_sampler_) {
-        SDL_GPUTextureSamplerBinding grass_binding = {
-            grass_texture_->handle(),
-            grass_sampler_->handle()
-        };
-        SDL_BindGPUFragmentSamplers(pass, 0, &grass_binding, 1);
-    }
-    
-    // Slot 1: shadow map
-    if (shadow_map && shadow_sampler) {
-        SDL_GPUTextureSamplerBinding shadow_binding = {
-            shadow_map,
-            shadow_sampler
-        };
-        SDL_BindGPUFragmentSamplers(pass, 1, &shadow_binding, 1);
-    }
-    
-    // Slot 2: SSAO texture
-    if (ssao_texture && ssao_sampler) {
-        SDL_GPUTextureSamplerBinding ssao_binding = {
-            ssao_texture,
-            ssao_sampler
-        };
-        SDL_BindGPUFragmentSamplers(pass, 2, &ssao_binding, 1);
-    }
+    // Bind grass texture and sampler (slot 0)
+    // Note: Shadow map and SSAO are passed but not used by current terrain shader.
+    // They're kept in the API for future shader improvements.
+    (void)shadow_map; (void)shadow_sampler; (void)shadows_enabled;
+    (void)ssao_texture; (void)ssao_sampler; (void)ssao_enabled;
+
+    SDL_GPUTextureSamplerBinding grass_binding = {
+        grass_texture_->handle(),
+        grass_sampler_->handle()
+    };
+    SDL_BindGPUFragmentSamplers(pass, 0, &grass_binding, 1);
     
     // Bind vertex buffer
     SDL_GPUBufferBinding vb_binding = {

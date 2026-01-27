@@ -21,16 +21,18 @@ struct VSOutput {
     float4 position : SV_Position;
 };
 
-// Uniform buffer slot 0 - Light space transform
-cbuffer ShadowUniforms : register(b0) {
+// Uniform buffer - SDL3 GPU SPIR-V requires vertex uniforms in set 1
+[[vk::binding(0, 1)]]
+cbuffer ShadowUniforms {
     float4x4 lightSpaceMatrix;
     float4x4 model;
     int useSkinning;
     float3 _padding0;
 };
 
-// Uniform buffer slot 1 - Bone matrices
-cbuffer BoneUniforms : register(b1) {
+// Uniform buffer slot 1 - Bone matrices (binding 1 in set 1)
+[[vk::binding(1, 1)]]
+cbuffer BoneUniforms {
     float4x4 boneMatrices[MAX_BONES];
 };
 

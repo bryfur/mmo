@@ -15,8 +15,9 @@ struct PSInput {
     float3 normal : TEXCOORD5;
 };
 
-// Uniform buffer slot 0 - Lighting and fog parameters
-cbuffer LightingUniforms : register(b0) {
+// Uniform buffer - SDL3 GPU SPIR-V requires fragment uniforms in set 3
+[[vk::binding(0, 3)]]
+cbuffer LightingUniforms {
     float3 fogColor;
     float fogStart;
     float fogEnd;
@@ -29,15 +30,21 @@ cbuffer LightingUniforms : register(b0) {
     float2 _padding2;
 };
 
-// Texture and sampler bindings
-Texture2D grassTexture : register(t0);
-SamplerState grassSampler : register(s0);
+// Texture and sampler bindings - SDL3 GPU SPIR-V requires fragment textures in set 2
+[[vk::combinedImageSampler]][[vk::binding(0, 2)]]
+Texture2D grassTexture;
+[[vk::combinedImageSampler]][[vk::binding(0, 2)]]
+SamplerState grassSampler;
 
-Texture2D shadowMap : register(t1);
-SamplerState shadowSampler : register(s1);
+[[vk::combinedImageSampler]][[vk::binding(1, 2)]]
+Texture2D shadowMap;
+[[vk::combinedImageSampler]][[vk::binding(1, 2)]]
+SamplerState shadowSampler;
 
-Texture2D ssaoTexture : register(t2);
-SamplerState ssaoSampler : register(s2);
+[[vk::combinedImageSampler]][[vk::binding(2, 2)]]
+Texture2D ssaoTexture;
+[[vk::combinedImageSampler]][[vk::binding(2, 2)]]
+SamplerState ssaoSampler;
 
 // Calculate shadow with PCF soft shadows
 float calculateShadow(float4 fragPosLightSpace) {

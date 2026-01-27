@@ -10,8 +10,9 @@ struct PSInput {
     float3 worldPos : TEXCOORD0;
 };
 
-// Uniform buffer slot 0 - Sky parameters
-cbuffer SkyUniforms : register(b0) {
+// Uniform buffer - SDL3 GPU SPIR-V requires fragment uniforms in set 3
+[[vk::binding(0, 3)]]
+cbuffer SkyUniforms {
     float time;
     float3 sunDirection;  // Direction TO sun (normalized)
 };

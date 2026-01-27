@@ -1,8 +1,7 @@
 #include "renderer.hpp"
 #include "render/grass_renderer.hpp"
+#include "render/text_renderer.hpp"
 #include "common/entity_config.hpp"
-#include "shader.hpp"
-#include <GL/glew.h>
 #include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 #include <cmath>
@@ -38,7 +37,7 @@ bool Renderer::init(int width, int height, const std::string& title) {
     }
     
     // Initialize world renderer (skybox, mountains, rocks, trees, grid)
-    if (!world_.init(WORLD_WIDTH, WORLD_HEIGHT, model_manager_.get())) {
+    if (!world_.init(context_.device(), pipeline_registry_, WORLD_WIDTH, WORLD_HEIGHT, model_manager_.get())) {
         std::cerr << "Failed to initialize world renderer" << std::endl;
         return false;
     }
@@ -75,6 +74,13 @@ bool Renderer::init(int width, int height, const std::string& title) {
         return false;
     }
     
+    // Create depth texture for main 3D render pass
+    depth_texture_ = gpu::GPUTexture::create_depth(context_.device(), width, height);
+    if (!depth_texture_) {
+        std::cerr << "Failed to create depth texture" << std::endl;
+        return false;
+    }
+
     // Initialize GPU resources for entity rendering
     init_pipelines();
     init_billboard_buffers();
@@ -149,23 +155,21 @@ void Renderer::shutdown() {
     
     // Release GPU resources
     billboard_vertex_buffer_.reset();
-    
+    depth_texture_.reset();
+
     if (default_sampler_) {
         context_.device().release_sampler(default_sampler_);
         default_sampler_ = nullptr;
     }
     
-    // Shutdown pipeline registry
-    pipeline_registry_.shutdown();
-    
-    // Shutdown subsystems (UI first since it uses pipeline_registry)
+    // Shutdown subsystems first (they use pipeline_registry)
     effects_.shutdown();
     ui_.shutdown();
     world_.shutdown();
     terrain_.shutdown();
     ssao_.shutdown();
     shadows_.shutdown();
-    
+
     // Shutdown pipeline registry before device
     pipeline_registry_.shutdown();
     
@@ -252,14 +256,80 @@ bool Renderer::load_models(const std::string& assets_path) {
 
 void Renderer::begin_frame() {
     context_.begin_frame();
-    
+
+    // Reset per-frame state
+    had_main_pass_this_frame_ = false;
+
     // Update camera system screen size
     camera_system_.set_screen_size(context_.width(), context_.height());
     ui_.set_screen_size(context_.width(), context_.height());
 }
 
 void Renderer::end_frame() {
+    // Text texture creation is now handled in UIRenderer::execute()
+    // Clear per-frame state
+    current_swapchain_ = nullptr;
     context_.end_frame();
+}
+
+void Renderer::begin_main_pass() {
+    SDL_GPUCommandBuffer* cmd = context_.current_command_buffer();
+    if (!cmd) {
+        std::cerr << "begin_main_pass: No active command buffer" << std::endl;
+        return;
+    }
+
+    // Acquire swapchain texture for color target (stored for reuse in UI pass)
+    uint32_t sw_width, sw_height;
+    current_swapchain_ = context_.acquire_swapchain_texture(cmd, &sw_width, &sw_height);
+    if (!current_swapchain_) {
+        std::cerr << "begin_main_pass: Failed to acquire swapchain texture" << std::endl;
+        return;
+    }
+
+    // Check if depth texture needs resize (window resize)
+    if (depth_texture_ && (depth_texture_->width() != static_cast<int>(sw_width) ||
+                           depth_texture_->height() != static_cast<int>(sw_height))) {
+        depth_texture_ = gpu::GPUTexture::create_depth(context_.device(), sw_width, sw_height);
+        if (!depth_texture_) {
+            std::cerr << "begin_main_pass: Failed to resize depth texture" << std::endl;
+            return;
+        }
+    }
+
+    // Configure color target (clear to sky/fog color)
+    SDL_GPUColorTargetInfo color_target = {};
+    color_target.texture = current_swapchain_;
+    color_target.load_op = SDL_GPU_LOADOP_CLEAR;
+    color_target.store_op = SDL_GPU_STOREOP_STORE;
+    color_target.clear_color = { 0.35f, 0.45f, 0.6f, 1.0f };  // Fog/sky color
+
+    // Configure depth target
+    SDL_GPUDepthStencilTargetInfo depth_target = {};
+    depth_target.texture = depth_texture_ ? depth_texture_->handle() : nullptr;
+    depth_target.load_op = SDL_GPU_LOADOP_CLEAR;
+    depth_target.store_op = SDL_GPU_STOREOP_STORE;
+    depth_target.clear_depth = 1.0f;
+    depth_target.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
+    depth_target.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+
+    // Begin main 3D render pass
+    main_render_pass_ = SDL_BeginGPURenderPass(cmd, &color_target, 1,
+                                                depth_texture_ ? &depth_target : nullptr);
+    if (!main_render_pass_) {
+        std::cerr << "begin_main_pass: Failed to begin render pass" << std::endl;
+        return;
+    }
+
+    // Mark that we had a main pass this frame (for UI to know whether to clear)
+    had_main_pass_this_frame_ = true;
+}
+
+void Renderer::end_main_pass() {
+    if (main_render_pass_) {
+        SDL_EndGPURenderPass(main_render_pass_);
+        main_render_pass_ = nullptr;
+    }
 }
 
 // ============================================================================
@@ -416,12 +486,7 @@ void Renderer::set_anisotropic_filter(int level) {
     
     // Cap at 16x (typical hardware max)
     aniso_value = std::min(aniso_value, 16.0f);
-    
-    // Update all model textures
-    if (model_manager_) {
-        model_manager_->set_anisotropic_filter(aniso_value);
-    }
-    
+
     // Update terrain renderer's anisotropic filtering
     terrain_.set_anisotropic_filter(aniso_value);
     
@@ -473,6 +538,16 @@ void Renderer::draw_skybox() {
     if (!skybox_enabled_) return;
     skybox_time_ += 0.016f;
     world_.update(0.016f);
+
+    // Use main render pass if available (SDL3 GPU path)
+    if (main_render_pass_) {
+        SDL_GPUCommandBuffer* cmd = context_.current_command_buffer();
+        if (cmd) {
+            world_.render_skybox(main_render_pass_, cmd, view_, projection_);
+            return;
+        }
+    }
+    // Fall back to legacy GL path
     world_.render_skybox(view_, projection_);
 }
 
@@ -494,27 +569,39 @@ void Renderer::draw_trees() {
 }
 
 void Renderer::draw_ground() {
-    // TODO: Terrain rendering using SDL3 GPU API
-    // The terrain renderer has been ported to SDL3 GPU API (using GPUBuffer, GPUTexture, etc.)
-    // However, it requires a render pass and command buffer to be set up by the main renderer.
-    // This will be integrated when the Main Renderer Class (issue #13) is updated.
-    //
-    // For now, terrain rendering is temporarily disabled.
-    // The terrain height queries (get_height, get_normal) still work for physics/placement.
-    //
-    // To re-enable, the render() call should be:
-    // terrain_.render(pass, cmd, view_, projection_, actual_camera_pos_,
-    //                 light_space_matrix, shadow_map, shadow_sampler,
-    //                 shadows_enabled, ssao_texture, ssao_sampler,
-    //                 ssao_enabled, light_dir_, screen_size);
+    // Use main render pass if available (SDL3 GPU path)
+    if (main_render_pass_) {
+        SDL_GPUCommandBuffer* cmd = context_.current_command_buffer();
+        if (cmd) {
+            terrain_.render(main_render_pass_, cmd, view_, projection_, actual_camera_pos_,
+                           shadows_.light_space_matrix(),
+                           shadows_.shadow_map() ? shadows_.shadow_map()->handle() : nullptr,
+                           shadows_.shadow_sampler(),
+                           shadows_.is_enabled(),
+                           ssao_.ssao_texture() ? ssao_.ssao_texture()->handle() : nullptr,
+                           ssao_.ssao_sampler(),
+                           ssao_.is_enabled(),
+                           light_dir_,
+                           glm::vec2(context_.width(), context_.height()));
+        }
+    }
+    // Legacy GL path removed - terrain now uses SDL3 GPU API exclusively
 }
 
 void Renderer::draw_grass() {
     if (!grass_renderer_ || !grass_enabled_) return;
 
-    // TODO: Integrate grass rendering into SDL3 GPU main render pass (issue #13)
-    // Requires a render pass and command buffer with depth target.
     grass_renderer_->update(0.016f, skybox_time_);
+
+    // Use main render pass if available (SDL3 GPU path)
+    if (main_render_pass_) {
+        SDL_GPUCommandBuffer* cmd = context_.current_command_buffer();
+        if (cmd) {
+            grass_renderer_->render(main_render_pass_, cmd, view_, projection_,
+                                    actual_camera_pos_, light_dir_);
+        }
+    }
+    // Legacy GL path removed - grass now uses SDL3 GPU API exclusively
 }
 
 void Renderer::draw_grid() {
@@ -669,36 +756,21 @@ void Renderer::draw_player(const PlayerState& player, bool is_local) {
     draw_entity(player, is_local);
 }
 
-void Renderer::draw_model(Model* model, const glm::vec3& position, float rotation, float scale, 
+void Renderer::draw_model(Model* model, const glm::vec3& position, float rotation, float scale,
                           const glm::vec4& tint, float attack_tilt) {
-    if (!model) return;
-    
-    // Use static shaders to avoid recreating on every draw call
-    // These are cached once and reused for all subsequent calls
-    static Shader legacy_model_shader;
-    static Shader legacy_skinned_shader;
-    static bool model_shader_initialized = false;
-    static bool skinned_shader_initialized = false;
-    
-    // For now, fall back to the legacy GL shader path since models still use GL buffers
-    // TODO: Once issue #14 (Model Loader migration) is complete, use SDL3 GPU rendering path
-    Shader* shader = nullptr;
-    if (model->has_skeleton) {
-        if (!skinned_shader_initialized) {
-            legacy_skinned_shader.load(shaders::skinned_model_vertex, shaders::skinned_model_fragment);
-            skinned_shader_initialized = true;
-        }
-        legacy_skinned_shader.use();
-        shader = &legacy_skinned_shader;
-    } else {
-        if (!model_shader_initialized) {
-            legacy_model_shader.load(shaders::model_vertex, shaders::model_fragment);
-            model_shader_initialized = true;
-        }
-        legacy_model_shader.use();
-        shader = &legacy_model_shader;
-    }
-    
+    if (!model || !main_render_pass_) return;
+
+    SDL_GPUCommandBuffer* cmd = context_.current_command_buffer();
+    if (!cmd) return;
+
+    // Get appropriate pipeline based on whether model has skeleton
+    gpu::GPUPipeline* pipeline = model->has_skeleton
+        ? pipeline_registry_.get_skinned_model_pipeline()
+        : pipeline_registry_.get_model_pipeline();
+
+    if (!pipeline) return;
+
+    // Build model matrix
     glm::mat4 model_mat = glm::mat4(1.0f);
     model_mat = glm::translate(model_mat, position);
     model_mat = glm::rotate(model_mat, rotation, glm::vec3(0.0f, 1.0f, 0.0f));
@@ -706,141 +778,268 @@ void Renderer::draw_model(Model* model, const glm::vec3& position, float rotatio
         model_mat = glm::rotate(model_mat, attack_tilt, glm::vec3(1.0f, 0.0f, 0.0f));
     }
     model_mat = glm::scale(model_mat, glm::vec3(scale));
-    
+
+    // Center model on its base
     float cx = (model->min_x + model->max_x) / 2.0f;
     float cy = model->min_y;
     float cz = (model->min_z + model->max_z) / 2.0f;
     model_mat = model_mat * glm::translate(glm::mat4(1.0f), glm::vec3(-cx, -cy, -cz));
-    
-    shader->set_mat4("model", model_mat);
-    shader->set_mat4("view", view_);
-    shader->set_mat4("projection", projection_);
-    shader->set_vec3("cameraPos", actual_camera_pos_);
-    shader->set_vec3("fogColor", glm::vec3(0.35f, 0.45f, 0.6f));
-    shader->set_float("fogStart", 800.0f);
-    shader->set_float("fogEnd", 4000.0f);
-    shader->set_int("fogEnabled", fog_enabled_ ? 1 : 0);
-    shader->set_vec3("lightDir", light_dir_);
-    shader->set_vec3("lightColor", glm::vec3(1.0f, 0.95f, 0.9f));
-    shader->set_vec3("ambientColor", glm::vec3(0.4f, 0.4f, 0.5f));
-    shader->set_vec4("tintColor", tint);
-    
-    shader->set_mat4("lightSpaceMatrix", shadows_.light_space_matrix());
-    shader->set_int("shadowsEnabled", 0);
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    shader->set_int("shadowMap", 2);
-    
-    shader->set_int("ssaoEnabled", 0);
-    shader->set_vec2("screenSize", glm::vec2(context_.width(), context_.height()));
-    glActiveTexture(GL_TEXTURE3);
-    glBindTexture(GL_TEXTURE_2D, 0);
-    shader->set_int("ssaoTexture", 3);
-    
+
+    // Compute normal matrix (inverse transpose of model matrix for correct normal transforms)
+    glm::mat4 normal_mat = glm::transpose(glm::inverse(model_mat));
+
+    // Vertex uniforms - matches model.vert.hlsl TransformUniforms
+    struct alignas(16) TransformUniforms {
+        glm::mat4 model;
+        glm::mat4 view;
+        glm::mat4 projection;
+        glm::vec3 cameraPos;
+        float _padding0;
+        glm::mat4 lightSpaceMatrix;
+        glm::mat4 normalMatrix;
+    } transform_uniforms;
+
+    transform_uniforms.model = model_mat;
+    transform_uniforms.view = view_;
+    transform_uniforms.projection = projection_;
+    transform_uniforms.cameraPos = actual_camera_pos_;
+    transform_uniforms._padding0 = 0.0f;
+    transform_uniforms.lightSpaceMatrix = shadows_.light_space_matrix();
+    transform_uniforms.normalMatrix = normal_mat;
+
+    // Fragment uniforms - matches model.frag.hlsl LightingUniforms
+    struct alignas(16) LightingUniforms {
+        glm::vec3 lightDir;
+        float _padding0;
+        glm::vec3 lightColor;
+        float _padding1;
+        glm::vec3 ambientColor;
+        float _padding2;
+        glm::vec4 tintColor;
+        glm::vec3 fogColor;
+        float fogStart;
+        float fogEnd;
+        int hasTexture;
+        int shadowsEnabled;
+        int ssaoEnabled;
+        int fogEnabled;
+        float _padding3;
+        glm::vec2 screenSize;
+        glm::vec2 _padding4;
+    } lighting_uniforms;
+
+    lighting_uniforms.lightDir = light_dir_;
+    lighting_uniforms._padding0 = 0.0f;
+    lighting_uniforms.lightColor = glm::vec3(1.0f, 0.95f, 0.9f);
+    lighting_uniforms._padding1 = 0.0f;
+    lighting_uniforms.ambientColor = glm::vec3(0.4f, 0.4f, 0.5f);
+    lighting_uniforms._padding2 = 0.0f;
+    lighting_uniforms.tintColor = tint;
+    lighting_uniforms.fogColor = glm::vec3(0.35f, 0.45f, 0.6f);
+    lighting_uniforms.fogStart = 800.0f;
+    lighting_uniforms.fogEnd = 4000.0f;
+    lighting_uniforms.hasTexture = 0;  // Updated per mesh
+    lighting_uniforms.shadowsEnabled = shadows_.is_enabled() ? 1 : 0;
+    lighting_uniforms.ssaoEnabled = ssao_.is_enabled() ? 1 : 0;
+    lighting_uniforms.fogEnabled = fog_enabled_ ? 1 : 0;
+    lighting_uniforms._padding3 = 0.0f;
+    lighting_uniforms.screenSize = glm::vec2(context_.width(), context_.height());
+    lighting_uniforms._padding4 = glm::vec2(0.0f);
+
+    // Bind pipeline
+    pipeline->bind(main_render_pass_);
+
+    // Push vertex uniforms
+    SDL_PushGPUVertexUniformData(cmd, 0, &transform_uniforms, sizeof(transform_uniforms));
+
+    // For skinned models, push bone matrices
     if (model->has_skeleton) {
         AnimationState* anim_state = nullptr;
-        static const char* animated_models[] = {"warrior", "mage", "paladin"};
+        static const char* animated_models[] = {"warrior", "mage", "paladin", "archer"};
         for (const char* name : animated_models) {
             if (model_manager_->get_model(name) == model) {
                 anim_state = model_manager_->get_animation_state(name);
                 break;
             }
         }
-        
+
         if (anim_state) {
-            shader->set_int("useSkinning", 1);
-            GLint loc = glGetUniformLocation(shader->id(), "boneMatrices");
-            if (loc >= 0) {
-                glUniformMatrix4fv(loc, MAX_BONES, GL_FALSE, 
-                                   glm::value_ptr(anim_state->bone_matrices[0]));
-            }
-        } else {
-            shader->set_int("useSkinning", 0);
+            // Push bone matrices as second vertex uniform buffer
+            SDL_PushGPUVertexUniformData(cmd, 1, anim_state->bone_matrices.data(),
+                                          MAX_BONES * sizeof(glm::mat4));
         }
     }
-    
+
+    // Draw each mesh
     for (auto& mesh : model->meshes) {
+        // Ensure mesh is uploaded to GPU
         if (!mesh.uploaded) {
-            // Legacy upload - does nothing, models load via ModelManager with GPU device
-            ModelLoader::upload_to_gpu_legacy(*model);
+            ModelLoader::upload_to_gpu(context_.device(), *model);
         }
-        
-        if (mesh.vao && !mesh.indices.empty()) {
-            if (mesh.has_texture && mesh.texture_id > 0) {
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, mesh.texture_id);
-                shader->set_int("baseColorTexture", 0);
-                shader->set_int("hasTexture", 1);
-            } else {
-                shader->set_int("hasTexture", 0);
-            }
-            
-            glBindVertexArray(mesh.vao);
-            glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh.indices.size()), GL_UNSIGNED_INT, 0);
-            glBindVertexArray(0);
+
+        if (!mesh.vertex_buffer || !mesh.index_buffer) continue;
+        if (mesh.indices.empty()) continue;
+
+        // Update hasTexture in lighting uniforms
+        lighting_uniforms.hasTexture = (mesh.has_texture && mesh.texture) ? 1 : 0;
+        SDL_PushGPUFragmentUniformData(cmd, 0, &lighting_uniforms, sizeof(lighting_uniforms));
+
+        // Bind all 3 texture/sampler slots required by model shader:
+        // slot 0: baseColorTexture, slot 1: shadowMap, slot 2: ssaoTexture
+        SDL_GPUTextureSamplerBinding tex_bindings[3] = {};
+
+        // Slot 0: Base color texture (or shadow map as placeholder if no texture)
+        SDL_GPUTexture* base_tex = (mesh.has_texture && mesh.texture)
+            ? mesh.texture->handle()
+            : (shadows_.shadow_map() ? shadows_.shadow_map()->handle() : nullptr);
+        tex_bindings[0] = { base_tex, default_sampler_ };
+
+        // Slot 1: Shadow map
+        tex_bindings[1] = {
+            shadows_.shadow_map() ? shadows_.shadow_map()->handle() : base_tex,
+            shadows_.shadow_sampler() ? shadows_.shadow_sampler() : default_sampler_
+        };
+
+        // Slot 2: SSAO texture
+        tex_bindings[2] = {
+            ssao_.ssao_texture() ? ssao_.ssao_texture()->handle() : base_tex,
+            ssao_.ssao_sampler() ? ssao_.ssao_sampler() : default_sampler_
+        };
+
+        if (tex_bindings[0].texture && default_sampler_) {
+            SDL_BindGPUFragmentSamplers(main_render_pass_, 0, tex_bindings, 3);
         }
+
+        // Bind vertex and index buffers
+        mesh.bind_buffers(main_render_pass_);
+
+        // Draw indexed
+        SDL_DrawGPUIndexedPrimitives(main_render_pass_,
+                                      static_cast<uint32_t>(mesh.indices.size()),
+                                      1, 0, 0, 0);
     }
 }
 
-void Renderer::draw_model_no_fog(Model* model, const glm::vec3& position, float rotation, 
+void Renderer::draw_model_no_fog(Model* model, const glm::vec3& position, float rotation,
                                   float scale, const glm::vec4& tint) {
-    if (!model) return;
-    
-    // Use static shader to avoid recreating on every draw call
-    static Shader legacy_shader;
-    static bool shader_initialized = false;
-    
-    if (!shader_initialized) {
-        legacy_shader.load(shaders::model_vertex, shaders::model_fragment);
-        shader_initialized = true;
-    }
-    legacy_shader.use();
-    
+    if (!model || !main_render_pass_) return;
+
+    SDL_GPUCommandBuffer* cmd = context_.current_command_buffer();
+    if (!cmd) return;
+
+    // Get model pipeline (no fog version still uses model pipeline, just with fog disabled)
+    gpu::GPUPipeline* pipeline = pipeline_registry_.get_model_pipeline();
+    if (!pipeline) return;
+
+    // Build model matrix
     glm::mat4 model_mat = glm::mat4(1.0f);
     model_mat = glm::translate(model_mat, position);
     model_mat = glm::rotate(model_mat, rotation, glm::vec3(0.0f, 1.0f, 0.0f));
     model_mat = glm::scale(model_mat, glm::vec3(scale));
-    
+
+    // Center model on its base
     float cx = (model->min_x + model->max_x) / 2.0f;
     float cy = model->min_y;
     float cz = (model->min_z + model->max_z) / 2.0f;
     model_mat = model_mat * glm::translate(glm::mat4(1.0f), glm::vec3(-cx, -cy, -cz));
-    
-    legacy_shader.set_mat4("model", model_mat);
-    legacy_shader.set_mat4("view", view_);
-    legacy_shader.set_mat4("projection", projection_);
-    legacy_shader.set_vec3("cameraPos", actual_camera_pos_);
-    legacy_shader.set_vec3("fogColor", glm::vec3(0.55f, 0.55f, 0.6f));
-    legacy_shader.set_float("fogStart", 3000.0f);
-    legacy_shader.set_float("fogEnd", 12000.0f);
-    legacy_shader.set_int("fogEnabled", 1);
-    legacy_shader.set_vec3("lightDir", light_dir_);
-    legacy_shader.set_vec3("lightColor", glm::vec3(1.0f, 0.95f, 0.9f));
-    legacy_shader.set_vec3("ambientColor", glm::vec3(0.5f, 0.5f, 0.55f));
-    legacy_shader.set_vec4("tintColor", tint);
-    legacy_shader.set_int("shadowsEnabled", 0);
-    legacy_shader.set_int("ssaoEnabled", 0);
-    
+
+    glm::mat4 normal_mat = glm::transpose(glm::inverse(model_mat));
+
+    // Vertex uniforms
+    struct alignas(16) TransformUniforms {
+        glm::mat4 model;
+        glm::mat4 view;
+        glm::mat4 projection;
+        glm::vec3 cameraPos;
+        float _padding0;
+        glm::mat4 lightSpaceMatrix;
+        glm::mat4 normalMatrix;
+    } transform_uniforms;
+
+    transform_uniforms.model = model_mat;
+    transform_uniforms.view = view_;
+    transform_uniforms.projection = projection_;
+    transform_uniforms.cameraPos = actual_camera_pos_;
+    transform_uniforms._padding0 = 0.0f;
+    transform_uniforms.lightSpaceMatrix = shadows_.light_space_matrix();
+    transform_uniforms.normalMatrix = normal_mat;
+
+    // Fragment uniforms with fog disabled
+    struct alignas(16) LightingUniforms {
+        glm::vec3 lightDir;
+        float _padding0;
+        glm::vec3 lightColor;
+        float _padding1;
+        glm::vec3 ambientColor;
+        float _padding2;
+        glm::vec4 tintColor;
+        glm::vec3 fogColor;
+        float fogStart;
+        float fogEnd;
+        int hasTexture;
+        int shadowsEnabled;
+        int ssaoEnabled;
+        int fogEnabled;
+        float _padding3;
+        glm::vec2 screenSize;
+        glm::vec2 _padding4;
+    } lighting_uniforms;
+
+    lighting_uniforms.lightDir = light_dir_;
+    lighting_uniforms._padding0 = 0.0f;
+    lighting_uniforms.lightColor = glm::vec3(1.0f, 0.95f, 0.9f);
+    lighting_uniforms._padding1 = 0.0f;
+    lighting_uniforms.ambientColor = glm::vec3(0.5f, 0.5f, 0.55f);
+    lighting_uniforms._padding2 = 0.0f;
+    lighting_uniforms.tintColor = tint;
+    lighting_uniforms.fogColor = glm::vec3(0.55f, 0.55f, 0.6f);
+    lighting_uniforms.fogStart = 3000.0f;
+    lighting_uniforms.fogEnd = 12000.0f;
+    lighting_uniforms.hasTexture = 0;
+    lighting_uniforms.shadowsEnabled = 0;
+    lighting_uniforms.ssaoEnabled = 0;
+    lighting_uniforms.fogEnabled = 0;  // Fog disabled
+    lighting_uniforms._padding3 = 0.0f;
+    lighting_uniforms.screenSize = glm::vec2(context_.width(), context_.height());
+    lighting_uniforms._padding4 = glm::vec2(0.0f);
+
+    pipeline->bind(main_render_pass_);
+    SDL_PushGPUVertexUniformData(cmd, 0, &transform_uniforms, sizeof(transform_uniforms));
+
     for (auto& mesh : model->meshes) {
         if (!mesh.uploaded) {
-            // Legacy upload - does nothing, models load via ModelManager with GPU device
-            ModelLoader::upload_to_gpu_legacy(*model);
+            ModelLoader::upload_to_gpu(context_.device(), *model);
         }
-        
-        if (mesh.vao && !mesh.indices.empty()) {
-            if (mesh.has_texture && mesh.texture_id > 0) {
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, mesh.texture_id);
-                legacy_shader.set_int("baseColorTexture", 0);
-                legacy_shader.set_int("hasTexture", 1);
-            } else {
-                legacy_shader.set_int("hasTexture", 0);
-            }
-            
-            glBindVertexArray(mesh.vao);
-            glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(mesh.indices.size()), GL_UNSIGNED_INT, 0);
-            glBindVertexArray(0);
+
+        if (!mesh.vertex_buffer || !mesh.index_buffer) continue;
+        if (mesh.indices.empty()) continue;
+
+        lighting_uniforms.hasTexture = (mesh.has_texture && mesh.texture) ? 1 : 0;
+        SDL_PushGPUFragmentUniformData(cmd, 0, &lighting_uniforms, sizeof(lighting_uniforms));
+
+        // Bind all 3 texture/sampler slots required by model shader
+        SDL_GPUTextureSamplerBinding tex_bindings[3] = {};
+        SDL_GPUTexture* base_tex = (mesh.has_texture && mesh.texture)
+            ? mesh.texture->handle()
+            : (shadows_.shadow_map() ? shadows_.shadow_map()->handle() : nullptr);
+        tex_bindings[0] = { base_tex, default_sampler_ };
+        tex_bindings[1] = {
+            shadows_.shadow_map() ? shadows_.shadow_map()->handle() : base_tex,
+            shadows_.shadow_sampler() ? shadows_.shadow_sampler() : default_sampler_
+        };
+        tex_bindings[2] = {
+            ssao_.ssao_texture() ? ssao_.ssao_texture()->handle() : base_tex,
+            ssao_.ssao_sampler() ? ssao_.ssao_sampler() : default_sampler_
+        };
+
+        if (tex_bindings[0].texture && default_sampler_) {
+            SDL_BindGPUFragmentSamplers(main_render_pass_, 0, tex_bindings, 3);
         }
+
+        mesh.bind_buffers(main_render_pass_);
+        SDL_DrawGPUIndexedPrimitives(main_render_pass_,
+                                      static_cast<uint32_t>(mesh.indices.size()),
+                                      1, 0, 0, 0);
     }
 }
 
@@ -876,91 +1075,42 @@ void Renderer::draw_player_health_ui(float health_ratio, float max_health) {
     ui_.draw_player_health_bar(health_ratio, max_health, context_.width(), context_.height());
 }
 
-void Renderer::draw_enemy_health_bar_3d(float world_x, float world_y, float world_z, 
+void Renderer::draw_enemy_health_bar_3d(float world_x, float world_y, float world_z,
                                          float bar_width, float health_ratio) {
+    // Project world position to screen space and draw as 2D UI element
+    // This avoids GPU buffer updates during the render pass
     glm::vec4 world_pos(world_x, world_y, world_z, 1.0f);
     glm::vec4 clip_pos = projection_ * view_ * world_pos;
     if (clip_pos.w <= 0.01f) return;
-    
+
     glm::vec3 ndc = glm::vec3(clip_pos) / clip_pos.w;
     if (ndc.x < -1.5f || ndc.x > 1.5f || ndc.y < -1.5f || ndc.y > 1.5f || ndc.z < -1.0f || ndc.z > 1.0f) {
         return;
     }
-    
-    // Use static shader and VAO/VBO to avoid recreating on every draw call
-    // TODO: Migrate to SDL3 GPU billboard pipeline once issue #14 completes
-    static Shader billboard_shader;
-    static GLuint billboard_vao = 0;
-    static GLuint billboard_vbo = 0;
-    static bool billboard_initialized = false;
-    
-    if (!billboard_initialized) {
-        billboard_shader.load(shaders::billboard_vertex, shaders::billboard_fragment);
-        
-        glGenVertexArrays(1, &billboard_vao);
-        glGenBuffers(1, &billboard_vbo);
-        
-        glBindVertexArray(billboard_vao);
-        glBindBuffer(GL_ARRAY_BUFFER, billboard_vbo);
-        glBufferData(GL_ARRAY_BUFFER, 6 * 7 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
-        
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)0);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 7 * sizeof(float), (void*)(3 * sizeof(float)));
-        glEnableVertexAttribArray(1);
-        
-        glBindVertexArray(0);
-        billboard_initialized = true;
-    }
-    
-    billboard_shader.use();
-    billboard_shader.set_mat4("view", view_);
-    billboard_shader.set_mat4("projection", projection_);
-    billboard_shader.set_vec3("worldPos", glm::vec3(world_x, world_y, world_z));
-    
-    float world_bar_width = bar_width * 0.5f;
-    float world_bar_height = bar_width * 0.1f;
-    
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDisable(GL_CULL_FACE);
-    glDepthMask(GL_FALSE);
-    
-    glBindVertexArray(billboard_vao);
-    glBindBuffer(GL_ARRAY_BUFFER, billboard_vbo);
-    
-    auto draw_billboard_quad = [&](float offset_x, float offset_y, float w, float h, const glm::vec4& color) {
-        billboard_shader.set_vec2("size", glm::vec2(w, h));
-        billboard_shader.set_vec2("offset", glm::vec2(offset_x, offset_y));
-        
-        float vertices[] = {
-            -0.5f, -0.5f, 0.0f, color.r, color.g, color.b, color.a,
-             0.5f, -0.5f, 0.0f, color.r, color.g, color.b, color.a,
-             0.5f,  0.5f, 0.0f, color.r, color.g, color.b, color.a,
-            -0.5f, -0.5f, 0.0f, color.r, color.g, color.b, color.a,
-             0.5f,  0.5f, 0.0f, color.r, color.g, color.b, color.a,
-            -0.5f,  0.5f, 0.0f, color.r, color.g, color.b, color.a,
-        };
-        
-        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
-        glDrawArrays(GL_TRIANGLES, 0, 6);
-    };
-    
-    glm::vec4 bg_color(0.0f, 0.0f, 0.0f, 0.8f);
-    glm::vec4 empty_color(0.4f, 0.0f, 0.0f, 0.9f);
-    glm::vec4 health_color(0.0f, 0.8f, 0.0f, 1.0f);
-    
-    draw_billboard_quad(0.0f, 0.0f, world_bar_width + 2.0f, world_bar_height + 2.0f, bg_color);
-    draw_billboard_quad(0.0f, 0.0f, world_bar_width, world_bar_height, empty_color);
-    
-    float fill_width = world_bar_width * health_ratio;
-    float fill_offset_x = (fill_width - world_bar_width) * 0.5f;
-    draw_billboard_quad(fill_offset_x, 0.0f, fill_width, world_bar_height, health_color);
-    
-    glBindVertexArray(0);
-    
-    glDepthMask(GL_TRUE);
-    glEnable(GL_CULL_FACE);
+
+    // Convert NDC to screen coordinates
+    float screen_x = (ndc.x * 0.5f + 0.5f) * context_.width();
+    float screen_y = (1.0f - (ndc.y * 0.5f + 0.5f)) * context_.height();  // Flip Y for screen coords
+
+    // Scale bar size based on distance (perspective)
+    float distance_scale = 100.0f / clip_pos.w;  // Smaller when further away
+    distance_scale = glm::clamp(distance_scale, 0.3f, 1.5f);
+
+    float bar_w = bar_width * 2.0f * distance_scale;
+    float bar_h = bar_width * 0.4f * distance_scale;
+
+    // Center the bar
+    float x = screen_x - bar_w * 0.5f;
+    float y = screen_y - bar_h * 0.5f;
+
+    // Queue draws to UI renderer (will be rendered during UI pass)
+    // Background
+    ui_.draw_filled_rect(x - 1, y - 1, bar_w + 2, bar_h + 2, 0xCC000000);
+    // Empty (red)
+    ui_.draw_filled_rect(x, y, bar_w, bar_h, 0xE6000066);
+    // Health (green)
+    float fill_w = bar_w * health_ratio;
+    ui_.draw_filled_rect(x, y, fill_w, bar_h, 0xFF00CC00);
 }
 
 // ============================================================================
@@ -1037,38 +1187,35 @@ void Renderer::begin_ui() {
         std::cerr << "begin_ui: No active command buffer" << std::endl;
         return;
     }
-    
-    // Acquire swapchain texture
-    uint32_t sw_width, sw_height;
-    SDL_GPUTexture* swapchain = context_.acquire_swapchain_texture(cmd, &sw_width, &sw_height);
-    if (!swapchain) {
-        std::cerr << "begin_ui: Failed to acquire swapchain texture" << std::endl;
-        return;
+
+    // Use swapchain texture acquired in begin_main_pass(), or acquire now if not available
+    if (!current_swapchain_) {
+        uint32_t sw_width, sw_height;
+        current_swapchain_ = context_.acquire_swapchain_texture(cmd, &sw_width, &sw_height);
+        if (!current_swapchain_) {
+            // This can happen normally (minimized window, vsync timing) - skip this frame silently
+            return;
+        }
     }
-    
-    // Begin UI render pass (no depth, load existing content)
-    SDL_GPUColorTargetInfo color_target = {};
-    color_target.texture = swapchain;
-    color_target.load_op = SDL_GPU_LOADOP_LOAD;  // Preserve existing content
-    color_target.store_op = SDL_GPU_STOREOP_STORE;
-    
-    ui_render_pass_ = SDL_BeginGPURenderPass(cmd, &color_target, 1, nullptr);
-    if (!ui_render_pass_) {
-        std::cerr << "begin_ui: Failed to begin render pass" << std::endl;
-        return;
-    }
-    
-    // Initialize UI renderer for this frame
-    ui_.begin(cmd, ui_render_pass_);
+
+    // Begin UI recording phase (no render pass yet - that's created in execute())
+    ui_.begin(cmd);
 }
 
 void Renderer::end_ui() {
+    // End UI recording phase
     ui_.end();
-    
-    if (ui_render_pass_) {
-        SDL_EndGPURenderPass(ui_render_pass_);
-        ui_render_pass_ = nullptr;
+
+    // Execute UI rendering: upload data (copy pass) then render (render pass)
+    // If no main 3D pass happened (menu state), clear the background
+    SDL_GPUCommandBuffer* cmd = context_.current_command_buffer();
+    if (cmd && current_swapchain_) {
+        bool clear_background = !had_main_pass_this_frame_;
+        ui_.execute(cmd, current_swapchain_, clear_background);
     }
+
+    // UI render pass is managed by UIRenderer::execute() now
+    ui_render_pass_ = nullptr;
 }
 
 void Renderer::draw_filled_rect(float x, float y, float w, float h, uint32_t color) {
@@ -1132,45 +1279,73 @@ void Renderer::draw_class_preview(PlayerClass player_class, float x, float y, fl
 void Renderer::render(const RenderScene& scene, const UIScene& ui_scene) {
     // Shadow pass first
     render_shadow_pass(scene);
-    
-    // Main render pass
+
+    // Begin frame and acquire command buffer
     begin_frame();
-    
-    // Draw world elements based on scene flags
-    if (scene.should_draw_skybox()) {
-        draw_skybox();
+
+    // Only start main 3D render pass if there's 3D content to draw
+    // For UI-only scenes (menus), skip the main pass entirely
+    if (scene.has_3d_content()) {
+        // Begin main 3D render pass (SDL3 GPU)
+        begin_main_pass();
+
+        SDL_GPUCommandBuffer* cmd = context_.current_command_buffer();
+
+        // Draw world elements using SDL3 GPU renderers
+        if (main_render_pass_ && cmd) {
+            // Skybox (SDL3 GPU path)
+            if (scene.should_draw_skybox() && skybox_enabled_) {
+                skybox_time_ += 0.016f;
+                world_.update(0.016f);
+                world_.render_skybox(main_render_pass_, cmd, view_, projection_);
+            }
+
+            // Terrain (SDL3 GPU path)
+            if (scene.should_draw_ground()) {
+                terrain_.render(main_render_pass_, cmd, view_, projection_, actual_camera_pos_,
+                               shadows_.light_space_matrix(),
+                               shadows_.shadow_map() ? shadows_.shadow_map()->handle() : nullptr,
+                               shadows_.shadow_sampler(),
+                               shadows_.is_enabled(),
+                               ssao_.ssao_texture() ? ssao_.ssao_texture()->handle() : nullptr,
+                               ssao_.ssao_sampler(),
+                               ssao_.is_enabled(),
+                               light_dir_,
+                               glm::vec2(context_.width(), context_.height()));
+            }
+
+            // Grass (SDL3 GPU path)
+            if (scene.should_draw_grass() && grass_enabled_ && grass_renderer_) {
+                grass_renderer_->update(0.016f, skybox_time_);
+                grass_renderer_->render(main_render_pass_, cmd, view_, projection_,
+                                        actual_camera_pos_, light_dir_);
+            }
+
+            // Draw entities (SDL3 GPU path - models rendered inside main pass)
+            for (const auto& entity_cmd : scene.entities()) {
+                draw_entity(entity_cmd.state, entity_cmd.is_local);
+            }
+
+            // Draw attack effects (SDL3 GPU path)
+            for (const auto& effect_cmd : scene.effects()) {
+                draw_attack_effect(effect_cmd.effect);
+            }
+
+            // Mountains (draws models which need main_render_pass_)
+            if (scene.should_draw_mountains()) {
+                draw_distant_mountains();
+            }
+        }
+
+        // End main 3D render pass
+        end_main_pass();
     }
-    if (scene.should_draw_mountains()) {
-        draw_distant_mountains();
-    }
-    if (scene.should_draw_rocks()) {
-        draw_rocks();
-    }
-    if (scene.should_draw_trees()) {
-        draw_trees();
-    }
-    if (scene.should_draw_ground()) {
-        draw_ground();
-    }
-    if (scene.should_draw_grass()) {
-        draw_grass();
-    }
-    
-    // Draw attack effects from scene
-    for (const auto& cmd : scene.effects()) {
-        draw_attack_effect(cmd.effect);
-    }
-    
-    // Draw entities from scene
-    for (const auto& cmd : scene.entities()) {
-        draw_entity(cmd.state, cmd.is_local);
-    }
-    
-    // Draw UI from scene
+
+    // Draw UI from scene (SDL3 GPU)
     begin_ui();
     render_ui(ui_scene);
     end_ui();
-    
+
     end_frame();
 }
 

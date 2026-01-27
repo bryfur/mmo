@@ -13,8 +13,9 @@ struct PSInput {
     float colorVariation : TEXCOORD3;
 };
 
-// Uniform buffer slot 0 - Lighting
-cbuffer GrassLightingUniforms : register(b0) {
+// Uniform buffer - SDL3 GPU SPIR-V requires fragment uniforms in set 3
+[[vk::binding(0, 3)]]
+cbuffer GrassLightingUniforms {
     float3 lightDir;
     float _padding0;
     float3 lightColor;
@@ -23,9 +24,11 @@ cbuffer GrassLightingUniforms : register(b0) {
     float alphaThreshold;
 };
 
-// Texture and sampler bindings
-Texture2D grassTexture : register(t0);
-SamplerState grassSampler : register(s0);
+// Texture and sampler - SDL3 GPU SPIR-V requires fragment textures in set 2
+[[vk::combinedImageSampler]][[vk::binding(0, 2)]]
+Texture2D grassTexture;
+[[vk::combinedImageSampler]][[vk::binding(0, 2)]]
+SamplerState grassSampler;
 
 float4 PSMain(PSInput input) : SV_Target {
     // Sample grass texture

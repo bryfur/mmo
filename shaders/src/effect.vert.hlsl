@@ -28,8 +28,9 @@ struct VSOutput {
     float life : TEXCOORD2;
 };
 
-// Uniform buffer slot 0 - Camera data
-cbuffer EffectUniforms : register(b0) {
+// Uniform buffer - SDL3 GPU SPIR-V requires vertex uniforms in set 1
+[[vk::binding(0, 1)]]
+cbuffer EffectUniforms {
     float4x4 viewProjection;
     float3 cameraRight;
     float _padding0;

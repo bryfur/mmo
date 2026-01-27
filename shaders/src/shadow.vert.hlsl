@@ -14,8 +14,9 @@ struct VSOutput {
     float4 position : SV_Position;
 };
 
-// Uniform buffer slot 0 - Light space transform
-cbuffer ShadowUniforms : register(b0) {
+// Uniform buffer - SDL3 GPU SPIR-V requires vertex uniforms in set 1
+[[vk::binding(0, 1)]]
+cbuffer ShadowUniforms {
     float4x4 lightSpaceMatrix;
     float4x4 model;
 };

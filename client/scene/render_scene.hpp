@@ -150,6 +150,15 @@ public:
     bool should_draw_grass() const { return draw_grass_; }
     bool should_draw_mountain_shadows() const { return draw_mountain_shadows_; }
     bool should_draw_tree_shadows() const { return draw_tree_shadows_; }
+
+    /**
+     * Check if any 3D content needs to be rendered.
+     * Returns false for UI-only scenes (e.g., menus).
+     */
+    bool has_3d_content() const {
+        return draw_skybox_ || draw_ground_ || draw_grass_ || draw_mountains_ ||
+               !entities_.empty() || !effects_.empty();
+    }
     
     // ========== Command Access ==========
     
@@ -164,15 +173,15 @@ private:
     std::vector<EntityShadowCommand> entity_shadows_;
     std::vector<EffectCommand> effects_;
     
-    // World element flags
-    bool draw_skybox_ = true;
-    bool draw_mountains_ = true;
-    bool draw_rocks_ = true;
-    bool draw_trees_ = true;
-    bool draw_ground_ = true;
-    bool draw_grass_ = true;
-    bool draw_mountain_shadows_ = true;
-    bool draw_tree_shadows_ = true;
+    // World element flags (default to false - must be explicitly enabled)
+    bool draw_skybox_ = false;
+    bool draw_mountains_ = false;
+    bool draw_rocks_ = false;
+    bool draw_trees_ = false;
+    bool draw_ground_ = false;
+    bool draw_grass_ = false;
+    bool draw_mountain_shadows_ = false;
+    bool draw_tree_shadows_ = false;
 };
 
 } // namespace mmo

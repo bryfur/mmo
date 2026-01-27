@@ -12,9 +12,11 @@ struct PSInput {
     float life : TEXCOORD2;
 };
 
-// Texture and sampler bindings
-Texture2D effectTexture : register(t0);
-SamplerState effectSampler : register(s0);
+// Texture and sampler - SDL3 GPU SPIR-V requires fragment textures in set 2
+[[vk::combinedImageSampler]][[vk::binding(0, 2)]]
+Texture2D effectTexture;
+[[vk::combinedImageSampler]][[vk::binding(0, 2)]]
+SamplerState effectSampler;
 
 float4 PSMain(PSInput input) : SV_Target {
     // Sample effect texture

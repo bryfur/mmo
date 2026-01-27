@@ -26,7 +26,7 @@ bool UIRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_re
     height_ = height;
     
     // Create dynamic vertex buffer for UI quads
-    // Each vertex: x, y, r, g, b, a (6 floats)
+    // Each vertex matches Vertex2D layout: x, y, u, v, r, g, b, a (8 floats)
     vertex_buffer_ = gpu::GPUBuffer::create_dynamic(
         device, 
         gpu::GPUBuffer::Type::Vertex, 
@@ -40,7 +40,75 @@ bool UIRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_re
     
     // Reserve space for vertex batch
     vertex_batch_.reserve(MAX_VERTICES);
-    
+
+    // Create dummy 1x1 white texture for when no texture is needed
+    // (SDL3 GPU requires all sampler bindings to be valid)
+    {
+        SDL_GPUTextureCreateInfo tex_info = {};
+        tex_info.type = SDL_GPU_TEXTURETYPE_2D;
+        tex_info.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        tex_info.width = 1;
+        tex_info.height = 1;
+        tex_info.layer_count_or_depth = 1;
+        tex_info.num_levels = 1;
+        tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+
+        dummy_texture_ = SDL_CreateGPUTexture(device.handle(), &tex_info);
+        if (!dummy_texture_) {
+            std::cerr << "Failed to create UI dummy texture" << std::endl;
+            return false;
+        }
+
+        // Upload white pixel
+        SDL_GPUTransferBufferCreateInfo tb_info = {};
+        tb_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+        tb_info.size = 4;
+        SDL_GPUTransferBuffer* tb = SDL_CreateGPUTransferBuffer(device.handle(), &tb_info);
+        if (tb) {
+            uint8_t* data = static_cast<uint8_t*>(SDL_MapGPUTransferBuffer(device.handle(), tb, false));
+            if (data) {
+                data[0] = 255; data[1] = 255; data[2] = 255; data[3] = 255;
+                SDL_UnmapGPUTransferBuffer(device.handle(), tb);
+
+                SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device.handle());
+                if (cmd) {
+                    SDL_GPUCopyPass* copy = SDL_BeginGPUCopyPass(cmd);
+                    if (copy) {
+                        SDL_GPUTextureTransferInfo src = {};
+                        src.transfer_buffer = tb;
+                        src.offset = 0;
+
+                        SDL_GPUTextureRegion dst = {};
+                        dst.texture = dummy_texture_;
+                        dst.w = 1;
+                        dst.h = 1;
+                        dst.d = 1;
+
+                        SDL_UploadToGPUTexture(copy, &src, &dst, false);
+                        SDL_EndGPUCopyPass(copy);
+                    }
+                    SDL_SubmitGPUCommandBuffer(cmd);
+                }
+            }
+            SDL_ReleaseGPUTransferBuffer(device.handle(), tb);
+        }
+
+        // Create sampler
+        SDL_GPUSamplerCreateInfo samp_info = {};
+        samp_info.min_filter = SDL_GPU_FILTER_NEAREST;
+        samp_info.mag_filter = SDL_GPU_FILTER_NEAREST;
+        samp_info.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+        samp_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+        samp_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+        samp_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+
+        dummy_sampler_ = SDL_CreateGPUSampler(device.handle(), &samp_info);
+        if (!dummy_sampler_) {
+            std::cerr << "Failed to create UI dummy sampler" << std::endl;
+            return false;
+        }
+    }
+
     // Initialize text renderer
     text_renderer_ = std::make_unique<TextRenderer>();
     if (text_renderer_->init(device, pipeline_registry)) {
@@ -48,21 +116,32 @@ bool UIRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_re
     } else {
         std::cerr << "Failed to initialize text renderer" << std::endl;
     }
-    
+
     // Set up projection
     set_screen_size(width, height);
-    
+
     return true;
 }
 
 void UIRenderer::shutdown() {
     vertex_buffer_.reset();
-    
+
+    if (device_) {
+        if (dummy_sampler_) {
+            SDL_ReleaseGPUSampler(device_->handle(), dummy_sampler_);
+            dummy_sampler_ = nullptr;
+        }
+        if (dummy_texture_) {
+            SDL_ReleaseGPUTexture(device_->handle(), dummy_texture_);
+            dummy_texture_ = nullptr;
+        }
+    }
+
     if (text_renderer_) {
         text_renderer_->shutdown();
         text_renderer_.reset();
     }
-    
+
     device_ = nullptr;
     pipeline_registry_ = nullptr;
 }
@@ -70,72 +149,228 @@ void UIRenderer::shutdown() {
 void UIRenderer::set_screen_size(int width, int height) {
     width_ = width;
     height_ = height;
-    // Orthographic projection: origin at top-left, Y increases downward
-    projection_ = glm::ortho(0.0f, static_cast<float>(width), 
-                              static_cast<float>(height), 0.0f, -1.0f, 1.0f);
+    // Orthographic projection for SDL3 GPU (Vulkan-style coordinates):
+    // Vulkan NDC: Y=-1 at top, Y=+1 at bottom (opposite of OpenGL).
+    // Screen coordinates: (0,0) at top-left, Y increases downward.
+    // Since both Vulkan NDC and screen coords have Y pointing down, we do NOT flip Y.
+    // Use glm::ortho(left, right, bottom, top) with bottom=0, top=height (standard order).
+    projection_ = glm::ortho(0.0f, static_cast<float>(width),
+                              0.0f, static_cast<float>(height), -1.0f, 1.0f);
 }
 
-void UIRenderer::begin(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* render_pass) {
+void UIRenderer::begin(SDL_GPUCommandBuffer* cmd) {
     current_cmd_ = cmd;
-    current_pass_ = render_pass;
+    current_pass_ = nullptr;  // No render pass during recording phase
     vertex_batch_.clear();
-    
+    queued_text_draws_.clear();
+
     // Release pending GPU resources from previous frame
     if (text_renderer_) {
         text_renderer_->release_pending_resources();
     }
-    
-    // Bind UI pipeline (handles blend state, no depth test)
-    if (pipeline_registry_) {
-        auto* ui_pipeline = pipeline_registry_->get_ui_pipeline();
-        if (ui_pipeline) {
-            ui_pipeline->bind(render_pass);
-        }
-    }
-    
-    // Push projection matrix as uniform data
-    SDL_PushGPUVertexUniformData(cmd, 0, &projection_, sizeof(glm::mat4));
-    
+
     if (text_renderer_ && text_renderer_->is_ready()) {
         text_renderer_->set_projection(projection_);
     }
 }
 
 void UIRenderer::end() {
-    // Flush any remaining vertices
-    flush_batch();
-    
+    // Recording phase ends - don't flush yet, wait for execute()
+    // current_cmd_ is kept for execute() phase
+}
+
+void UIRenderer::execute(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swapchain, bool clear_background) {
+    static bool first_execute = true;
+    if (!cmd || !swapchain) {
+        if (first_execute) {
+            SDL_Log("UIRenderer::execute: cmd=%p swapchain=%p - EARLY RETURN", (void*)cmd, (void*)swapchain);
+        }
+        return;
+    }
+
+    if (first_execute) {
+        SDL_Log("UIRenderer::execute: FIRST FRAME - vertices=%zu texts=%zu clear=%d screen=%dx%d",
+                vertex_batch_.size(), queued_text_draws_.size(), clear_background, width_, height_);
+    }
+
+    // Phase 1: Queue all text draws for batched rendering
+    if (text_renderer_ && text_renderer_->is_ready()) {
+        for (const auto& td : queued_text_draws_) {
+            text_renderer_->queue_text_draw(td.text, td.x, td.y, td.color, td.scale);
+        }
+    }
+
+    // Phase 2: Upload all data (copy passes - BEFORE render pass)
+    // Upload UI vertex data
+    if (!vertex_batch_.empty() && vertex_buffer_) {
+        if (first_execute) {
+            SDL_Log("UIRenderer::execute: Uploading %zu bytes to vertex buffer",
+                    vertex_batch_.size() * sizeof(UIVertex));
+        }
+        vertex_buffer_->update(cmd, vertex_batch_.data(),
+                               vertex_batch_.size() * sizeof(UIVertex));
+    }
+
+    // Create any pending text textures (copy pass)
+    if (text_renderer_) {
+        text_renderer_->create_pending_textures(cmd);
+    }
+
+    // Upload queued text vertex data (copy pass)
+    if (text_renderer_ && text_renderer_->is_ready()) {
+        text_renderer_->upload_queued_text(cmd);
+    }
+
+    // Phase 3: Start UI render pass
+    SDL_GPUColorTargetInfo color_target = {};
+    color_target.texture = swapchain;
+    // If no 3D pass happened (menu state), clear to dark background
+    // Otherwise preserve existing 3D content
+    color_target.load_op = clear_background ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
+    color_target.store_op = SDL_GPU_STOREOP_STORE;
+    color_target.clear_color = { 0.1f, 0.1f, 0.15f, 1.0f };  // Dark menu background
+
+    SDL_GPURenderPass* render_pass = SDL_BeginGPURenderPass(cmd, &color_target, 1, nullptr);
+    if (!render_pass) {
+        std::cerr << "UIRenderer::execute: Failed to begin render pass" << std::endl;
+        return;
+    }
+
+    // Set viewport and scissor to full screen
+    SDL_GPUViewport viewport = {
+        0.0f, 0.0f,
+        static_cast<float>(width_), static_cast<float>(height_),
+        0.0f, 1.0f
+    };
+    SDL_SetGPUViewport(render_pass, &viewport);
+
+    SDL_Rect scissor = { 0, 0, width_, height_ };
+    SDL_SetGPUScissor(render_pass, &scissor);
+
+    // Bind UI pipeline - MUST succeed before drawing
+    gpu::GPUPipeline* ui_pipeline = nullptr;
+    if (pipeline_registry_) {
+        ui_pipeline = pipeline_registry_->get_ui_pipeline();
+    }
+
+    if (!ui_pipeline) {
+        SDL_Log("UIRenderer::execute: UI pipeline not available, skipping UI draw");
+        SDL_EndGPURenderPass(render_pass);
+        vertex_batch_.clear();
+        queued_text_draws_.clear();
+        current_cmd_ = nullptr;
+        current_pass_ = nullptr;
+        first_execute = false;
+        return;
+    }
+
+    if (first_execute) {
+        SDL_Log("UIRenderer::execute: UI pipeline created successfully, projection=[%f,%f,%f,%f]",
+                projection_[0][0], projection_[1][1], projection_[3][0], projection_[3][1]);
+    }
+
+    ui_pipeline->bind(render_pass);
+
+    // Push vertex uniform (screen size for 2D transformation)
+    struct ScreenUniforms {
+        float width;
+        float height;
+        float _pad[2];
+    } screen_uniforms = { static_cast<float>(width_), static_cast<float>(height_), {0, 0} };
+    SDL_PushGPUVertexUniformData(cmd, 0, &screen_uniforms, sizeof(screen_uniforms));
+
+    // Push fragment uniform (has_texture = 0 for solid colors)
+    struct UIFragmentUniforms {
+        int has_texture;
+        int _padding[3];
+    } frag_uniforms = { 0, {0, 0, 0} };
+    SDL_PushGPUFragmentUniformData(cmd, 0, &frag_uniforms, sizeof(frag_uniforms));
+
+    // Bind dummy texture/sampler for fragment shader (required even when not using textures)
+    if (dummy_texture_ && dummy_sampler_) {
+        SDL_GPUTextureSamplerBinding sampler_binding = {};
+        sampler_binding.texture = dummy_texture_;
+        sampler_binding.sampler = dummy_sampler_;
+        SDL_BindGPUFragmentSamplers(render_pass, 0, &sampler_binding, 1);
+    }
+
+    // Phase 3a: Draw UI primitives (vertices already uploaded)
+    if (!vertex_batch_.empty() && vertex_buffer_) {
+        if (first_execute) {
+            // Debug: Print first vertex info
+            const auto& v = vertex_batch_[0];
+            SDL_Log("UIRenderer::execute: First vertex pos=(%.1f,%.1f) color=(%.2f,%.2f,%.2f,%.2f)",
+                    v.x, v.y, v.r, v.g, v.b, v.a);
+        }
+        SDL_GPUBufferBinding vb_binding = {};
+        vb_binding.buffer = vertex_buffer_->handle();
+        vb_binding.offset = 0;
+        SDL_BindGPUVertexBuffers(render_pass, 0, &vb_binding, 1);
+        SDL_DrawGPUPrimitives(render_pass, static_cast<uint32_t>(vertex_batch_.size()), 1, 0, 0);
+    }
+
+    // Phase 3b: Draw queued text (vertices already uploaded)
+    if (text_renderer_ && text_renderer_->is_ready()) {
+        text_renderer_->draw_queued_text(cmd, render_pass);
+
+        // Re-bind UI pipeline after text (in case more UI drawing needed later)
+        if (pipeline_registry_) {
+            auto* ui_pipeline = pipeline_registry_->get_ui_pipeline();
+            if (ui_pipeline) {
+                ui_pipeline->bind(render_pass);
+            }
+        }
+        // Re-push vertex uniform after re-bind
+        struct ScreenUniforms {
+            float width;
+            float height;
+            float _pad[2];
+        } screen_uniforms = { static_cast<float>(width_), static_cast<float>(height_), {0, 0} };
+        SDL_PushGPUVertexUniformData(cmd, 0, &screen_uniforms, sizeof(screen_uniforms));
+        // Re-push fragment uniform after re-bind
+        struct UIFragmentUniforms {
+            int has_texture;
+            int _padding[3];
+        } frag_uniforms = { 0, {0, 0, 0} };
+        SDL_PushGPUFragmentUniformData(cmd, 0, &frag_uniforms, sizeof(frag_uniforms));
+        // Re-bind dummy sampler after text
+        if (dummy_texture_ && dummy_sampler_) {
+            SDL_GPUTextureSamplerBinding sampler_binding = {};
+            sampler_binding.texture = dummy_texture_;
+            sampler_binding.sampler = dummy_sampler_;
+            SDL_BindGPUFragmentSamplers(render_pass, 0, &sampler_binding, 1);
+        }
+    }
+
+    // End render pass
+    SDL_EndGPURenderPass(render_pass);
+
+    if (first_execute) {
+        SDL_Log("UIRenderer::execute: FIRST FRAME COMPLETE - drew %zu vertices", vertex_batch_.size());
+        first_execute = false;
+    }
+
+    // Clear for next frame
+    vertex_batch_.clear();
+    queued_text_draws_.clear();
     current_cmd_ = nullptr;
     current_pass_ = nullptr;
 }
 
 void UIRenderer::flush_batch() {
-    if (vertex_batch_.empty() || !current_cmd_ || !current_pass_ || !vertex_buffer_) {
-        return;
-    }
-    
-    // Upload vertex data to GPU
-    vertex_buffer_->update(current_cmd_, vertex_batch_.data(), 
-                           vertex_batch_.size() * sizeof(UIVertex));
-    
-    // Bind vertex buffer
-    SDL_GPUBufferBinding vb_binding = {};
-    vb_binding.buffer = vertex_buffer_->handle();
-    vb_binding.offset = 0;
-    SDL_BindGPUVertexBuffers(current_pass_, 0, &vb_binding, 1);
-    
-    // Draw all vertices
-    SDL_DrawGPUPrimitives(current_pass_, static_cast<uint32_t>(vertex_batch_.size()), 1, 0, 0);
-    
-    // Clear batch for next frame
-    vertex_batch_.clear();
+    // No-op during recording phase (current_pass_ is null)
+    // All upload and drawing happens in execute()
+    //
+    // This method is kept for compatibility with code that checks batch capacity,
+    // but the actual flush is now done in execute().
 }
 
 glm::vec4 UIRenderer::color_from_uint32(uint32_t color) const {
-    float r = (color & 0xFF) / 255.0f;
-    float g = ((color >> 8) & 0xFF) / 255.0f;
-    float b = ((color >> 16) & 0xFF) / 255.0f;
+    // Color format is ARGB: 0xAARRGGBB
     float a = ((color >> 24) & 0xFF) / 255.0f;
+    float r = ((color >> 16) & 0xFF) / 255.0f;
+    float g = ((color >> 8) & 0xFF) / 255.0f;
+    float b = (color & 0xFF) / 255.0f;
     return glm::vec4(r, g, b, a);
 }
 
@@ -158,10 +393,10 @@ void UIRenderer::draw_quad(float x, float y, float w, float h, const glm::vec4& 
     }
     
     // Add 6 vertices for two triangles (quad)
-    UIVertex v0 = {x, y, color.r, color.g, color.b, color.a};
-    UIVertex v1 = {x + w, y, color.r, color.g, color.b, color.a};
-    UIVertex v2 = {x + w, y + h, color.r, color.g, color.b, color.a};
-    UIVertex v3 = {x, y + h, color.r, color.g, color.b, color.a};
+    UIVertex v0 = {x, y, 0, 0, color.r, color.g, color.b, color.a};
+    UIVertex v1 = {x + w, y, 0, 0, color.r, color.g, color.b, color.a};
+    UIVertex v2 = {x + w, y + h, 0, 0, color.r, color.g, color.b, color.a};
+    UIVertex v3 = {x, y + h, 0, 0, color.r, color.g, color.b, color.a};
     
     // Triangle 1
     vertex_batch_.push_back(v0);
@@ -211,9 +446,9 @@ void UIRenderer::draw_circle(float x, float y, float radius, uint32_t color, int
         float a1 = (i / static_cast<float>(segments)) * 2.0f * PI;
         float a2 = ((i + 1) / static_cast<float>(segments)) * 2.0f * PI;
         
-        UIVertex center = {x, y, c.r, c.g, c.b, c.a};
-        UIVertex p1 = {x + std::cos(a1) * radius, y + std::sin(a1) * radius, c.r, c.g, c.b, c.a};
-        UIVertex p2 = {x + std::cos(a2) * radius, y + std::sin(a2) * radius, c.r, c.g, c.b, c.a};
+        UIVertex center = {x, y, 0, 0, c.r, c.g, c.b, c.a};
+        UIVertex p1 = {x + std::cos(a1) * radius, y + std::sin(a1) * radius, 0, 0, c.r, c.g, c.b, c.a};
+        UIVertex p2 = {x + std::cos(a2) * radius, y + std::sin(a2) * radius, 0, 0, c.r, c.g, c.b, c.a};
         
         vertex_batch_.push_back(center);
         vertex_batch_.push_back(p1);
@@ -268,15 +503,15 @@ void UIRenderer::draw_circle_outline(float x, float y, float radius, uint32_t co
 
         // Outer edge points
         UIVertex outer1 = {x + cos_a1 * outer_radius, y + sin_a1 * outer_radius,
-                           c.r, c.g, c.b, c.a};
+                           0, 0, c.r, c.g, c.b, c.a};
         UIVertex outer2 = {x + cos_a2 * outer_radius, y + sin_a2 * outer_radius,
-                           c.r, c.g, c.b, c.a};
+                           0, 0, c.r, c.g, c.b, c.a};
 
         // Inner edge points
         UIVertex inner1 = {x + cos_a1 * inner_radius, y + sin_a1 * inner_radius,
-                           c.r, c.g, c.b, c.a};
+                           0, 0, c.r, c.g, c.b, c.a};
         UIVertex inner2 = {x + cos_a2 * inner_radius, y + sin_a2 * inner_radius,
-                           c.r, c.g, c.b, c.a};
+                           0, 0, c.r, c.g, c.b, c.a};
 
         // First triangle (outer1, outer2, inner1)
         vertex_batch_.push_back(outer1);
@@ -318,10 +553,10 @@ void UIRenderer::draw_line(float x1, float y1, float x2, float y2, uint32_t colo
     }
     
     // Create line quad vertices
-    UIVertex v0 = {x1 + nx, y1 + ny, c.r, c.g, c.b, c.a};
-    UIVertex v1 = {x1 - nx, y1 - ny, c.r, c.g, c.b, c.a};
-    UIVertex v2 = {x2 - nx, y2 - ny, c.r, c.g, c.b, c.a};
-    UIVertex v3 = {x2 + nx, y2 + ny, c.r, c.g, c.b, c.a};
+    UIVertex v0 = {x1 + nx, y1 + ny, 0, 0, c.r, c.g, c.b, c.a};
+    UIVertex v1 = {x1 - nx, y1 - ny, 0, 0, c.r, c.g, c.b, c.a};
+    UIVertex v2 = {x2 - nx, y2 - ny, 0, 0, c.r, c.g, c.b, c.a};
+    UIVertex v3 = {x2 + nx, y2 + ny, 0, 0, c.r, c.g, c.b, c.a};
     
     // Triangle 1
     vertex_batch_.push_back(v0);
@@ -335,53 +570,31 @@ void UIRenderer::draw_line(float x1, float y1, float x2, float y2, uint32_t colo
 }
 
 void UIRenderer::draw_text(const std::string& text, float x, float y, uint32_t color, float scale) {
-    if (text_renderer_ && text_renderer_->is_ready()) {
-        // Flush UI batch before drawing text (text uses different pipeline)
-        flush_batch();
-        
-        text_renderer_->set_projection(projection_);
-        text_renderer_->draw_text(current_cmd_, current_pass_, text, x, y, color, scale);
-        
-        // Re-bind UI pipeline after text rendering
-        if (pipeline_registry_ && current_pass_) {
-            auto* ui_pipeline = pipeline_registry_->get_ui_pipeline();
-            if (ui_pipeline) {
-                ui_pipeline->bind(current_pass_);
-            }
-        }
-        if (current_cmd_) {
-            SDL_PushGPUVertexUniformData(current_cmd_, 0, &projection_, sizeof(glm::mat4));
-        }
+    if (!text.empty()) {
+        // Queue text draw for later execution (during execute() phase)
+        QueuedTextDraw td;
+        td.text = text;
+        td.x = x;
+        td.y = y;
+        td.color = color;
+        td.scale = scale;
+        queued_text_draws_.push_back(td);
     }
 }
 
-void UIRenderer::draw_button(float x, float y, float w, float h, const std::string& label, 
+void UIRenderer::draw_button(float x, float y, float w, float h, const std::string& label,
                               uint32_t color, bool selected) {
     draw_filled_rect(x, y, w, h, color);
     uint32_t border_color = selected ? 0xFFFFFFFF : 0xFF888888;
     draw_rect_outline(x, y, w, h, border_color, selected ? 3.0f : 2.0f);
-    
+
     if (text_renderer_ && text_renderer_->is_ready() && !label.empty()) {
-        // Flush before text
-        flush_batch();
-        
-        text_renderer_->set_projection(projection_);
+        // Calculate centered text position and queue for later rendering
         int text_w = text_renderer_->get_text_width(label, 1.0f);
         int text_h = text_renderer_->get_text_height(1.0f);
         float text_x = x + (w - text_w) / 2.0f;
         float text_y = y + (h - text_h) / 2.0f;
-        text_renderer_->draw_text(current_cmd_, current_pass_, label, text_x, text_y, 0xFFFFFFFF, 1.0f);
-        
-        // Re-bind UI pipeline
-        if (pipeline_registry_ && current_pass_) {
-            auto* ui_pipeline = pipeline_registry_->get_ui_pipeline();
-            if (ui_pipeline) {
-                ui_pipeline->bind(current_pass_);
-            }
-        }
-        if (current_cmd_) {
-            SDL_PushGPUVertexUniformData(current_cmd_, 0, &projection_, sizeof(glm::mat4));
-        }
+        draw_text(label, text_x, text_y, 0xFFFFFFFF, 1.0f);
     }
 }
 

@@ -5,8 +5,6 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
-#include <filesystem>
-#include <functional>
 
 namespace mmo::gpu {
 
@@ -20,7 +18,7 @@ enum class ShaderStage {
 
 /**
  * @brief Shader resource requirements for pipeline creation
- * 
+ *
  * NOTE: These counts are not validated against hardware limits. The caller is
  * responsible for ensuring values don't exceed device capabilities. Exceeding
  * limits may cause silent failures or crashes on some hardware. Consider
@@ -34,25 +32,15 @@ struct ShaderResources {
 };
 
 /**
- * @brief GPU Shader wrapper with runtime HLSL compilation and caching
- * 
- * This class handles both pre-compiled shader bytecode and runtime HLSL compilation
- * using SDL_shadercross. It supports disk-based caching to avoid recompilation.
- * 
- * Compilation Flow:
- *   1. Check in-memory cache
- *   2. Check disk cache (if enabled)
- *   3. Compile from HLSL source (if cache miss)
- *   4. Save to disk cache (if enabled)
- * 
- * Usage (Runtime compilation - recommended for development):
- *   auto vs = GPUShader::compile_from_hlsl(device, hlsl_source, ShaderStage::Vertex, "VSMain");
- *   
- * Usage (Load HLSL file with auto-compilation):
- *   auto vs = GPUShader::load_hlsl(device, "shaders/src/model.vert.hlsl", ShaderStage::Vertex, "VSMain");
- *   
- * Usage (Pre-compiled bytecode):
- *   auto vs = GPUShader::load_from_file(device, "shaders/compiled/model.vert.spv", ShaderStage::Vertex);
+ * @brief GPU Shader wrapper for pre-compiled SPIRV shaders
+ *
+ * Shaders are compiled from HLSL to SPIRV at build time by CMake.
+ * At runtime, SDL_shadercross converts SPIRV to the backend format
+ * (Vulkan uses SPIRV directly, Metal/D3D12 get transpiled).
+ *
+ * Usage:
+ *   auto vs = GPUShader::load_spirv(device, "shaders/model.vert.spv",
+ *                                    ShaderStage::Vertex, "VSMain", resources);
  */
 class GPUShader {
 public:
@@ -64,85 +52,27 @@ public:
     GPUShader(GPUShader&& other) noexcept;
     GPUShader& operator=(GPUShader&& other) noexcept;
 
-    // =========================================================================
-    // Runtime HLSL Compilation (Recommended for Development)
-    // =========================================================================
-
     /**
-     * @brief Compile a shader from HLSL source string
-     * 
-     * Uses SDL_shadercross to compile HLSL to the appropriate backend format
-     * (SPIR-V, Metal, DXIL) based on the current GPU device.
-     * 
+     * @brief Load a shader from pre-compiled SPIRV file
+     *
+     * Uses SDL_shadercross to convert SPIRV to backend format at runtime.
+     *
      * @param device The GPU device
-     * @param hlsl_source HLSL shader source code
+     * @param path Path to the compiled .spv file
      * @param stage Shader stage (Vertex or Fragment)
      * @param entry_point Entry point function name (e.g., "VSMain", "PSMain")
      * @param resources Shader resource requirements
      * @return Unique pointer to the shader, or nullptr on failure
      */
-    static std::unique_ptr<GPUShader> compile_from_hlsl(
-        GPUDevice& device,
-        const std::string& hlsl_source,
-        ShaderStage stage,
-        const std::string& entry_point = "main",
-        const ShaderResources& resources = {});
-
-    /**
-     * @brief Load and compile an HLSL shader from file
-     * 
-     * Loads the HLSL source from file and compiles it. Uses disk cache if enabled.
-     * 
-     * @param device The GPU device
-     * @param path Path to the HLSL source file
-     * @param stage Shader stage
-     * @param entry_point Entry point function name
-     * @param resources Shader resource requirements
-     * @return Unique pointer to the shader, or nullptr on failure
-     */
-    static std::unique_ptr<GPUShader> load_hlsl(
+    static std::unique_ptr<GPUShader> load_spirv(
         GPUDevice& device,
         const std::string& path,
         ShaderStage stage,
-        const std::string& entry_point = "main",
-        const ShaderResources& resources = {});
-
-    // =========================================================================
-    // Pre-compiled Bytecode Loading
-    // =========================================================================
-
-    /**
-     * @brief Load a shader from pre-compiled bytecode file
-     * 
-     * @param device The GPU device
-     * @param path Path to the compiled shader file (.spv, .metallib, .dxil)
-     * @param stage Shader stage
-     * @param entry_point Entry point function name
-     * @param resources Shader resource requirements
-     * @return Unique pointer to the shader, or nullptr on failure
-     */
-    static std::unique_ptr<GPUShader> load_from_file(
-        GPUDevice& device,
-        const std::string& path,
-        ShaderStage stage,
-        const std::string& entry_point = "main",
-        const ShaderResources& resources = {});
-
-    /**
-     * @brief Create a shader from bytecode in memory
-     */
-    static std::unique_ptr<GPUShader> create_from_bytecode(
-        GPUDevice& device,
-        const std::vector<uint8_t>& bytecode,
-        ShaderStage stage,
-        SDL_GPUShaderFormat format,
         const std::string& entry_point = "main",
         const ShaderResources& resources = {});
 
     /**
      * @brief Create a shader from SPIRV bytecode in memory
-     * 
-     * This is used by the shader cache to skip the HLSL->SPIRV compilation step.
      */
     static std::unique_ptr<GPUShader> create_from_spirv(
         GPUDevice& device,
@@ -150,21 +80,6 @@ public:
         ShaderStage stage,
         const std::string& entry_point = "main",
         const ShaderResources& resources = {});
-
-    /**
-     * @brief Compile from HLSL and also output the intermediate SPIRV bytecode
-     * 
-     * This allows caching the SPIRV for faster subsequent loads.
-     * 
-     * @param spirv_out If non-null, receives the compiled SPIRV bytecode
-     */
-    static std::unique_ptr<GPUShader> compile_from_hlsl_with_spirv(
-        GPUDevice& device,
-        const std::string& hlsl_source,
-        ShaderStage stage,
-        const std::string& entry_point,
-        const ShaderResources& resources,
-        std::vector<uint8_t>* spirv_out);
 
     // =========================================================================
     // Accessors
@@ -178,13 +93,13 @@ public:
     // =========================================================================
 
     /**
-     * @brief Initialize the shader compilation system
-     * Must be called before any shader compilation.
+     * @brief Initialize the shader cross-compilation system
+     * Must be called before any shader loading.
      */
     static bool init_compiler();
 
     /**
-     * @brief Shutdown the shader compilation system
+     * @brief Shutdown the shader cross-compilation system
      */
     static void shutdown_compiler();
 
@@ -200,103 +115,31 @@ private:
     SDL_GPUShader* shader_ = nullptr;
     ShaderStage stage_ = ShaderStage::Vertex;
 
-    static SDL_GPUShaderFormat detect_format_from_path(const std::string& path);
     static std::vector<uint8_t> read_file(const std::string& path);
-    static std::string read_text_file(const std::string& path);
-    
+
     static bool s_compiler_initialized;
 };
 
 /**
- * @brief Disk-based shader cache for compiled bytecode
- * 
- * Caches compiled shader bytecode to disk to avoid recompilation on subsequent runs.
- * Uses a hash of the source code + entry point + stage to identify cached shaders.
- * 
- * Cache structure:
- *   cache_dir/
- *     {hash}.spv      - SPIR-V bytecode
- *     {hash}.metal    - Metal bytecode  
- *     {hash}.dxil     - DXIL bytecode
- *     {hash}.meta     - Metadata (source hash, timestamp, etc.)
- */
-class ShaderDiskCache {
-public:
-    /**
-     * @brief Create a shader disk cache
-     * @param cache_dir Directory to store cached shaders
-     */
-    explicit ShaderDiskCache(const std::filesystem::path& cache_dir);
-    ~ShaderDiskCache() = default;
-
-    /**
-     * @brief Enable or disable the cache
-     */
-    void set_enabled(bool enabled) { enabled_ = enabled; }
-    bool is_enabled() const { return enabled_; }
-
-    /**
-     * @brief Clear all cached shaders
-     */
-    void clear();
-
-    /**
-     * @brief Get cached bytecode if available and valid
-     * 
-     * @param source_hash Hash of the shader source
-     * @param format Target shader format
-     * @return Cached bytecode, or empty vector if not found/invalid
-     */
-    std::vector<uint8_t> get(const std::string& source_hash, SDL_GPUShaderFormat format);
-
-    /**
-     * @brief Store compiled bytecode in cache
-     * 
-     * @param source_hash Hash of the shader source
-     * @param format Target shader format
-     * @param bytecode Compiled bytecode to cache
-     */
-    void put(const std::string& source_hash, SDL_GPUShaderFormat format,
-             const std::vector<uint8_t>& bytecode);
-
-    /**
-     * @brief Compute a hash for shader source code
-     */
-    static std::string compute_hash(const std::string& source, 
-                                     ShaderStage stage,
-                                     const std::string& entry_point);
-
-private:
-    std::filesystem::path cache_dir_;
-    bool enabled_ = true;
-
-    std::filesystem::path get_cache_path(const std::string& hash, SDL_GPUShaderFormat format) const;
-    static std::string format_extension(SDL_GPUShaderFormat format);
-};
-
-/**
- * @brief High-level shader manager with in-memory and disk caching
- * 
+ * @brief High-level shader manager with in-memory caching
+ *
  * This is the recommended way to load shaders. It provides:
- * - Automatic HLSL compilation
- * - In-memory caching (avoid recompilation within session)
- * - Disk caching (avoid recompilation across sessions)
- * - Hot-reload support (planned)
- * 
+ * - Automatic SPIRV loading with backend conversion
+ * - In-memory caching (avoid reloading within session)
+ *
  * Usage:
- *   ShaderManager shaders(device, "shaders/cache");
- *   
- *   auto* vs = shaders.get_vertex("shaders/src/model.vert.hlsl", "VSMain");
- *   auto* fs = shaders.get_fragment("shaders/src/model.frag.hlsl", "PSMain");
+ *   ShaderManager shaders(device);
+ *
+ *   auto* vs = shaders.get_vertex("shaders/model.vert.spv", "VSMain");
+ *   auto* fs = shaders.get_fragment("shaders/model.frag.spv", "PSMain");
  */
 class ShaderManager {
 public:
     /**
      * @brief Create a shader manager
      * @param device The GPU device
-     * @param cache_dir Directory for disk cache (empty to disable disk caching)
      */
-    ShaderManager(GPUDevice& device, const std::string& cache_dir = "");
+    explicit ShaderManager(GPUDevice& device);
     ~ShaderManager();
 
     // Non-copyable
@@ -304,70 +147,54 @@ public:
     ShaderManager& operator=(const ShaderManager&) = delete;
 
     /**
-     * @brief Load or get a cached vertex shader from HLSL file
+     * @brief Load or get a cached vertex shader
      */
-    GPUShader* get_vertex(const std::string& path, 
+    GPUShader* get_vertex(const std::string& path,
                           const std::string& entry_point = "main",
                           const ShaderResources& resources = {});
 
     /**
-     * @brief Load or get a cached fragment shader from HLSL file
+     * @brief Load or get a cached fragment shader
      */
     GPUShader* get_fragment(const std::string& path,
-                            const std::string& entry_point = "main", 
+                            const std::string& entry_point = "main",
                             const ShaderResources& resources = {});
 
     /**
      * @brief Load or get a shader (generic)
      */
-    GPUShader* get(const std::string& path, 
+    GPUShader* get(const std::string& path,
                    ShaderStage stage,
                    const std::string& entry_point,
                    const ShaderResources& resources = {});
 
     /**
-     * @brief Clear all in-memory cached shaders
+     * @brief Clear all cached shaders
      */
-    void clear_memory_cache();
+    void clear_cache();
 
     /**
-     * @brief Clear the disk cache
-     */
-    void clear_disk_cache();
-
-    /**
-     * @brief Enable or disable disk caching
-     */
-    void set_disk_cache_enabled(bool enabled);
-
-    /**
-     * @brief Reload a shader (recompile from source)
-     * @return true if reload succeeded
+     * @brief Reload a shader (clear from cache, reloads on next get)
+     * @return true if shader was in cache
      */
     bool reload(const std::string& path);
 
     /**
      * @brief Reload all shaders
-     * @return Number of shaders successfully reloaded
+     * @return Number of shaders cleared
      */
     int reload_all();
 
 private:
     GPUDevice& device_;
-    std::unique_ptr<ShaderDiskCache> disk_cache_;
-    
-    // NOTE: These caches are NOT thread-safe. If multi-threaded shader loading
+
+    // NOTE: This cache is NOT thread-safe. If multi-threaded shader loading
     // is needed, add mutex protection around cache operations, or ensure all
     // shader loading happens on a single thread (e.g., the main/render thread).
-    std::unordered_map<std::string, std::unique_ptr<GPUShader>> memory_cache_;
-    std::unordered_map<std::string, std::string> path_to_source_; // For reload
+    std::unordered_map<std::string, std::unique_ptr<GPUShader>> cache_;
 
     std::string make_cache_key(const std::string& path, ShaderStage stage,
                                const std::string& entry_point) const;
-
-    GPUShader* load_with_cache(const std::string& path, ShaderStage stage,
-                               const std::string& entry_point,
-                               const ShaderResources& resources);
 };
 
 /**
@@ -383,24 +210,14 @@ public:
     ShaderProgram& operator=(ShaderProgram&&) = default;
 
     /**
-     * @brief Load shader program from HLSL files
-     */
-    static std::unique_ptr<ShaderProgram> load_hlsl(
-        GPUDevice& device,
-        const std::string& vertex_path,
-        const std::string& fragment_path,
-        const std::string& vertex_entry = "VSMain",
-        const std::string& fragment_entry = "PSMain");
-
-    /**
-     * @brief Load shader program from pre-compiled files
+     * @brief Load shader program from pre-compiled SPIRV files
      */
     static std::unique_ptr<ShaderProgram> load(
         GPUDevice& device,
         const std::string& vertex_path,
         const std::string& fragment_path,
-        const std::string& vertex_entry = "main",
-        const std::string& fragment_entry = "main");
+        const std::string& vertex_entry = "VSMain",
+        const std::string& fragment_entry = "PSMain");
 
     SDL_GPUShader* vertex_shader() const { return vertex_ ? vertex_->handle() : nullptr; }
     SDL_GPUShader* fragment_shader() const { return fragment_ ? fragment_->handle() : nullptr; }

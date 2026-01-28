@@ -1,6 +1,6 @@
 # SDL3 GPU Shader Directory
 
-This directory contains shaders for the SDL3 GPU API migration.
+This directory contains shaders for the SDL3 GPU API.
 
 ## Directory Structure
 
@@ -10,30 +10,34 @@ shaders/
 │   ├── model.vert.hlsl
 │   ├── model.frag.hlsl
 │   └── ...
-├── compiled/         # Compiled shader binaries (auto-generated)
-│   ├── metal/        # Metal shaders (.metallib)
-│   ├── spirv/        # SPIR-V shaders (.spv)
-│   └── dxil/         # DXIL shaders (.dxil)
-└── CMakeLists.txt    # Shader compilation rules
+├── CMakeLists.txt    # Build-time shader compilation
+└── README.md
 ```
 
 ## Shader Compilation
 
-Shaders are written in HLSL and compiled to multiple formats using SDL_shadercross:
+Shaders are written in HLSL and compiled to SPIR-V at build time by CMake using `shadercross`.
 
-- **Metal** (.metallib) - for macOS/iOS
-- **SPIR-V** (.spv) - for Vulkan (Linux, Windows)
-- **DXIL** (.dxil) - for D3D12 (Windows)
+**Build-time:** HLSL → SPIR-V (via shadercross CLI)
+**Runtime:** SPIR-V → Backend (via SDL_shadercross library)
+- Vulkan uses SPIR-V directly
+- Metal/D3D12 get transpiled from SPIR-V at load time
 
-### Manual Compilation
+Compiled `.spv` files are output to `${CMAKE_BINARY_DIR}/shaders/`.
 
-```bash
-# Using the compile script
-python tools/compile_shaders.py
+### Adding a New Shader
 
-# Or using SDL_shadercross directly
-shadercross -s HLSL -d SPIRV -i shaders/src/model.vert.hlsl -o shaders/compiled/spirv/model.vert.spv
-```
+1. Create your HLSL file in `shaders/src/` with the naming convention:
+   - Vertex shaders: `name.vert.hlsl` (entry point: `VSMain`)
+   - Fragment shaders: `name.frag.hlsl` (entry point: `PSMain`)
+
+2. Rebuild the project - CMake will automatically compile the new shader.
+
+3. Load the shader in code:
+   ```cpp
+   auto* vs = shader_manager_->get("shaders/name.vert.spv", ShaderStage::Vertex, "VSMain", resources);
+   auto* fs = shader_manager_->get("shaders/name.frag.spv", ShaderStage::Fragment, "PSMain", resources);
+   ```
 
 ## Shader Conventions
 

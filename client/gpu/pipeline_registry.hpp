@@ -203,8 +203,8 @@ private:
     // Shader manager for loading shaders from files
     std::unique_ptr<ShaderManager> shader_manager_;
 
-    // Base path for shader files
-    std::string shader_path_ = "shaders/src/";
+    // Base path for compiled SPIRV shader files (relative to working directory)
+    std::string shader_path_ = "shaders/";
 };
 
 } // namespace mmo::gpu

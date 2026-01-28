@@ -1,5 +1,6 @@
 #include "pipeline_registry.hpp"
 #include <SDL3/SDL_log.h>
+#include <SDL3/SDL_filesystem.h>
 
 namespace mmo::gpu {
 
@@ -23,11 +24,20 @@ bool PipelineRegistry::init(GPUDevice& device) {
     // Get swapchain format from device
     swapchain_format_ = device_->swapchain_format();
 
-    // Create shader manager with SPIRV disk cache
-    shader_manager_ = std::make_unique<ShaderManager>(device, "shader_cache");
+    // Set shader path relative to executable location
+    const char* base_path = SDL_GetBasePath();
+    if (base_path) {
+        shader_path_ = std::string(base_path) + "shaders/";
+    } else {
+        // Fallback to relative path if SDL_GetBasePath fails
+        shader_path_ = "shaders/";
+        SDL_Log("PipelineRegistry: SDL_GetBasePath failed, using relative path");
+    }
 
-    SDL_Log("PipelineRegistry: Initialized with swapchain format %d",
-            static_cast<int>(swapchain_format_));
+    // Create shader manager (shaders are pre-compiled to SPIRV at build time)
+    shader_manager_ = std::make_unique<ShaderManager>(device);
+
+    SDL_Log("PipelineRegistry: Initialized with shader path: %s", shader_path_.c_str());
 
     return true;
 }
@@ -132,7 +142,7 @@ bool PipelineRegistry::preload_all_pipelines() {
 void PipelineRegistry::invalidate_all() {
     pipelines_.clear();
     if (shader_manager_) {
-        shader_manager_->clear_memory_cache();
+        shader_manager_->clear_cache();
     }
     SDL_Log("PipelineRegistry: All pipelines invalidated");
 }
@@ -156,9 +166,9 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_model_pipeline() {
     fs_resources.num_uniform_buffers = 1;
     fs_resources.num_samplers = 2;
 
-    auto* vs = shader_manager_->get(shader_path_ + "model.vert.hlsl",
+    auto* vs = shader_manager_->get(shader_path_ + "model.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "model.frag.hlsl",
+    auto* fs = shader_manager_->get(shader_path_ + "model.frag.spv",
                                      ShaderStage::Fragment, "PSMain", fs_resources);
 
     if (!vs || !fs) return nullptr;
@@ -181,9 +191,9 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_skinned_model_pipeline() {
     fs_resources.num_uniform_buffers = 1;
     fs_resources.num_samplers = 2;
 
-    auto* vs = shader_manager_->get(shader_path_ + "skinned_model.vert.hlsl",
+    auto* vs = shader_manager_->get(shader_path_ + "skinned_model.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "skinned_model.frag.hlsl",
+    auto* fs = shader_manager_->get(shader_path_ + "skinned_model.frag.spv",
                                      ShaderStage::Fragment, "PSMain", fs_resources);
 
     if (!vs || !fs) return nullptr;
@@ -206,9 +216,9 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_terrain_pipeline() {
     fs_resources.num_uniform_buffers = 1;
     fs_resources.num_samplers = 1;
 
-    auto* vs = shader_manager_->get(shader_path_ + "terrain.vert.hlsl",
+    auto* vs = shader_manager_->get(shader_path_ + "terrain.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "terrain.frag.hlsl",
+    auto* fs = shader_manager_->get(shader_path_ + "terrain.frag.spv",
                                      ShaderStage::Fragment, "PSMain", fs_resources);
 
     if (!vs || !fs) return nullptr;
@@ -245,9 +255,9 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_skybox_pipeline() {
     ShaderResources fs_resources;
     fs_resources.num_uniform_buffers = 1;
 
-    auto* vs = shader_manager_->get(shader_path_ + "skybox.vert.hlsl",
+    auto* vs = shader_manager_->get(shader_path_ + "skybox.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "skybox.frag.hlsl",
+    auto* fs = shader_manager_->get(shader_path_ + "skybox.frag.spv",
                                      ShaderStage::Fragment, "PSMain", fs_resources);
 
     if (!vs || !fs) return nullptr;
@@ -271,9 +281,9 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_grid_pipeline() {
     ShaderResources fs_resources;
     // No resources needed
 
-    auto* vs = shader_manager_->get(shader_path_ + "grid.vert.hlsl",
+    auto* vs = shader_manager_->get(shader_path_ + "grid.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "grid.frag.hlsl",
+    auto* fs = shader_manager_->get(shader_path_ + "grid.frag.spv",
                                      ShaderStage::Fragment, "PSMain", fs_resources);
 
     if (!vs || !fs) return nullptr;
@@ -300,9 +310,9 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_ui_pipeline() {
     SDL_Log("PipelineRegistry: Creating UI shaders with vs_uniforms=%d, fs_uniforms=%d, fs_samplers=%d",
             vs_resources.num_uniform_buffers, fs_resources.num_uniform_buffers, fs_resources.num_samplers);
 
-    auto* vs = shader_manager_->get(shader_path_ + "ui.vert.hlsl",
+    auto* vs = shader_manager_->get(shader_path_ + "ui.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "ui.frag.hlsl",
+    auto* fs = shader_manager_->get(shader_path_ + "ui.frag.spv",
                                      ShaderStage::Fragment, "PSMain", fs_resources);
 
     if (!vs || !fs) return nullptr;
@@ -324,9 +334,9 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_text_pipeline() {
     fs_resources.num_uniform_buffers = 1;  // text color
     fs_resources.num_samplers = 1;         // font texture
 
-    auto* vs = shader_manager_->get(shader_path_ + "text.vert.hlsl",
+    auto* vs = shader_manager_->get(shader_path_ + "text.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "text.frag.hlsl",
+    auto* fs = shader_manager_->get(shader_path_ + "text.frag.spv",
                                      ShaderStage::Fragment, "PSMain", fs_resources);
 
     if (!vs || !fs) return nullptr;
@@ -362,9 +372,9 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_billboard_pipeline() {
     ShaderResources fs_resources;
     fs_resources.num_samplers = 1;
 
-    auto* vs = shader_manager_->get(shader_path_ + "billboard.vert.hlsl",
+    auto* vs = shader_manager_->get(shader_path_ + "billboard.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "billboard.frag.hlsl",
+    auto* fs = shader_manager_->get(shader_path_ + "billboard.frag.spv",
                                      ShaderStage::Fragment, "PSMain", fs_resources);
 
     if (!vs || !fs) return nullptr;
@@ -386,9 +396,9 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_effect_pipeline() {
     ShaderResources fs_resources;
     fs_resources.num_samplers = 1;
 
-    auto* vs = shader_manager_->get(shader_path_ + "effect.vert.hlsl",
+    auto* vs = shader_manager_->get(shader_path_ + "effect.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "effect.frag.hlsl",
+    auto* fs = shader_manager_->get(shader_path_ + "effect.frag.spv",
                                      ShaderStage::Fragment, "PSMain", fs_resources);
 
     if (!vs || !fs) return nullptr;
@@ -412,9 +422,9 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_grass_pipeline() {
     fs_resources.num_uniform_buffers = 1;
     fs_resources.num_samplers = 1;
 
-    auto* vs = shader_manager_->get(shader_path_ + "grass.vert.hlsl",
+    auto* vs = shader_manager_->get(shader_path_ + "grass.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "grass.frag.hlsl",
+    auto* fs = shader_manager_->get(shader_path_ + "grass.frag.spv",
                                      ShaderStage::Fragment, "PSMain", fs_resources);
 
     if (!vs || !fs) return nullptr;
@@ -436,9 +446,9 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_shadow_pipeline() {
     ShaderResources fs_resources;
     // No fragment resources for depth-only
 
-    auto* vs = shader_manager_->get(shader_path_ + "shadow.vert.hlsl",
+    auto* vs = shader_manager_->get(shader_path_ + "shadow.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "shadow.frag.hlsl",
+    auto* fs = shader_manager_->get(shader_path_ + "shadow.frag.spv",
                                      ShaderStage::Fragment, "PSMain", fs_resources);
 
     if (!vs || !fs) return nullptr;
@@ -463,9 +473,9 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_skinned_shadow_pipeline() 
     ShaderResources fs_resources;
     // No fragment resources for depth-only
 
-    auto* vs = shader_manager_->get(shader_path_ + "skinned_shadow.vert.hlsl",
+    auto* vs = shader_manager_->get(shader_path_ + "skinned_shadow.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "shadow.frag.hlsl",
+    auto* fs = shader_manager_->get(shader_path_ + "shadow.frag.spv",
                                      ShaderStage::Fragment, "PSMain", fs_resources);
 
     if (!vs || !fs) return nullptr;

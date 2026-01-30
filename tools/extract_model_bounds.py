@@ -130,20 +130,22 @@ inline const ModelBounds* get_model_bounds(const std::string& model_name) {
 
 
 if __name__ == '__main__':
-    # Get the script directory to find the project root
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(script_dir)
-    
-    models_dir = os.path.join(project_root, 'assets', 'models')
-    output_path = os.path.join(project_root, 'common', 'model_bounds_generated.hpp')
-    
-    if not os.path.isdir(models_dir):
-        print(f"Error: Models directory not found: {models_dir}")
+    import argparse
+
+    parser = argparse.ArgumentParser(description='Extract model bounds from GLB files')
+    parser.add_argument('--models-dir', required=True, help='Path to directory containing GLB files')
+    parser.add_argument('--output', required=True, help='Output header file path')
+    args = parser.parse_args()
+
+    if not os.path.isdir(args.models_dir):
+        print(f"Error: Models directory not found: {args.models_dir}")
         sys.exit(1)
-    
-    count = generate_header(models_dir, output_path)
+
+    os.makedirs(os.path.dirname(args.output), exist_ok=True)
+
+    count = generate_header(args.models_dir, args.output)
     if count == 0:
         print("Warning: No model bounds were extracted!")
         sys.exit(1)
-    
-    print("\nDone! Remember to rebuild the project.")
+
+    print(f"\nDone! Generated {args.output}")

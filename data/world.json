@@ -1,0 +1,29 @@
+{
+    "width": 8000.0,
+    "height": 8000.0,
+    "spawn_zones": {
+        "mountain_rocks": {
+            "count": 40,
+            "scale_min": 0.8,
+            "scale_max": 2.5
+        },
+        "scattered_rocks": {
+            "count": 25,
+            "scale_min": 0.5,
+            "scale_max": 1.5
+        },
+        "pathway_rocks": {
+            "count": 15,
+            "scale_min": 0.3,
+            "scale_max": 0.8
+        },
+        "forests": {
+            "dense_count": 30,
+            "medium_count": 20,
+            "sparse_count": 15,
+            "scattered_count": 25,
+            "scale_min": 0.7,
+            "scale_max": 1.5
+        }
+    }
+}

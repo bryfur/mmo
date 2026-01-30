@@ -1,0 +1,12 @@
+{
+    "size": 36.0,
+    "speed": 100.0,
+    "health": 100.0,
+    "damage": 15.0,
+    "attack_range": 50.0,
+    "attack_cooldown": 1.2,
+    "aggro_range": 300.0,
+    "count": 10,
+    "model": "npc_enemy",
+    "color": "0xFF4444FF"
+}

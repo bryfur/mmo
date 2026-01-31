@@ -29,17 +29,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
-add_executable(mmo_server
-    main.cpp
-    server.cpp
-    game_config.cpp
-    session.cpp
-    world.cpp
-    systems/movement_system.cpp
-    systems/combat_system.cpp
-    systems/ai_system.cpp
-    systems/physics_system.cpp
-)
+file(GLOB_RECURSE SERVER_SOURCES CONFIGURE_DEPENDS "*.cpp")
+add_executable(mmo_server ${SERVER_SOURCES})
 
 target_link_libraries(mmo_server PRIVATE
     mmo_common

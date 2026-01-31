@@ -34,9 +34,9 @@ bool TerrainRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeli
     return true;
 }
 
-void TerrainRenderer::set_heightmap(const HeightmapChunk& heightmap) {
+void TerrainRenderer::set_heightmap(const engine::Heightmap& heightmap) {
     // Store CPU-side copy for height queries
-    heightmap_ = std::make_unique<HeightmapChunk>(heightmap);
+    heightmap_ = std::make_unique<engine::Heightmap>(heightmap);
     
     // Upload to GPU texture
     upload_heightmap_texture();

@@ -4,99 +4,43 @@
 #include "common/ecs/components.hpp"
 #include "common/heightmap.hpp"
 #include "network_client.hpp"
-#include "renderer.hpp"
-#include "render/text_renderer.hpp"
-#include "input_handler.hpp"
-#include "systems/interpolation_system.hpp"
-#include "systems/render_system.hpp"
-#include "scene/render_scene.hpp"
-#include "scene/ui_scene.hpp"
+#include "engine/application.hpp"
+#include "network_smoother.hpp"
+#include "engine/scene/render_scene.hpp"
+#include "engine/scene/ui_scene.hpp"
+#include "engine/scene/scene_renderer.hpp"
+#include "engine/render/render_context.hpp"
+#include "engine/systems/camera_system.hpp"
+#include "game_state.hpp"
+#include "graphics_settings.hpp"
+#include "controls_settings.hpp"
+#include "menu_types.hpp"
+#include <glm/glm.hpp>
 #include <entt/entt.hpp>
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <functional>
 #include <memory>
 
 namespace mmo {
 
-enum class GameState {
-    Connecting,     // Connecting to server, waiting for ClassList
-    ClassSelect,    // Server connected, choosing class
-    Spawning,       // Class selected, waiting for player ID
-    Playing
-};
-
-// Graphics settings that can be toggled at runtime
-struct GraphicsSettings {
-    bool fog_enabled = true;
-    bool grass_enabled = true;
-    bool skybox_enabled = true;
-    bool mountains_enabled = true;
-    bool trees_enabled = true;
-    bool rocks_enabled = true;
-    bool show_fps = false;
-    
-    // Quality settings
-    int anisotropic_filter = 4; // 0=off, 1=2x, 2=4x, 3=8x, 4=16x
-    int vsync_mode = 1;      // 0=off, 1=double buffer (vsync), 2=triple buffer
-};
-
-// Controls settings
-struct ControlsSettings {
-    float mouse_sensitivity = 0.35f;
-    float controller_sensitivity = 2.5f;
-    bool invert_camera_x = false;
-    bool invert_camera_y = false;
-};
-
-// Menu pages
-enum class MenuPage {
-    Main,
-    Controls,
-    Graphics
-};
-
-// Menu item types
-enum class MenuItemType {
-    Toggle,
-    Slider,
-    FloatSlider,
-    Button,
-    Submenu
-};
-
-// Menu item definition
-struct MenuItem {
-    std::string label;
-    MenuItemType type;
-    bool* toggle_value = nullptr;
-    int* slider_value = nullptr;
-    float* float_value = nullptr;
-    float float_min = 0.0f;
-    float float_max = 1.0f;
-    float float_step = 0.05f;
-    int slider_min = 0;
-    int slider_max = 2;
-    std::vector<std::string> slider_labels;  // For named options like "Off", "2x", "4x", etc.
-    std::function<void()> action = nullptr;
-    MenuPage target_page = MenuPage::Main;
-};
-
-class Game {
+class Game : public engine::Application {
 public:
     Game();
     ~Game();
-    
+
     bool init(const std::string& host, uint16_t port);
-    void run();
     void shutdown();
-    
+
+protected:
+    bool on_init() override;
+    void on_shutdown() override;
+    void on_update(float dt) override;
+    void on_render() override;
+
 private:
-    void update(float dt);
-    void render();
     void handle_network_message(MessageType type, const std::vector<uint8_t>& payload);
-    
+
     // State-specific update/render
     void update_connecting(float dt);
     void render_connecting();
@@ -106,7 +50,7 @@ private:
     void render_spawning();
     void update_playing(float dt);
     void render_playing();
-    
+
     // Menu system
     void update_menu(float dt);
     void init_menu_items();
@@ -115,47 +59,55 @@ private:
     void init_graphics_menu();
     void apply_graphics_settings();
     void apply_controls_settings();
-    
+
     void on_connection_accepted(const std::vector<uint8_t>& payload);
     void on_class_list(const std::vector<uint8_t>& payload);
     void on_heightmap_chunk(const std::vector<uint8_t>& payload);
     void on_world_state(const std::vector<uint8_t>& payload);
     void on_player_joined(const std::vector<uint8_t>& payload);
     void on_player_left(const std::vector<uint8_t>& payload);
-    
+
     entt::entity find_or_create_entity(uint32_t network_id);
     void update_entity_from_state(entt::entity entity, const NetEntityState& state);
     void remove_entity(uint32_t network_id);
-    
+
     // Attack effects
     void spawn_attack_effect(const NetEntityState& state, float dir_x, float dir_y);
     void update_attack_effects(float dt);
-    
-    // Scene building helpers (populate scenes without direct renderer calls)
+
+    // Scene building - populates RenderScene/UIScene for SceneRenderer
+    void add_entity_to_scene(entt::entity entity, bool is_local);
     void build_class_select_ui(UIScene& ui);
     void build_connecting_ui(UIScene& ui);
     void build_playing_ui(UIScene& ui);
     void build_menu_ui(UIScene& ui);
-    
-    Renderer renderer_;
-    TextRenderer text_renderer_;
-    InputHandler input_;
+
+    // Asset loading
+    bool load_models(const std::string& assets_path);
+
+    // Camera
+    void update_camera_smooth(float dt);
+    engine::CameraState get_camera_state() const;
+
+    // ========== ENGINE SUBSYSTEMS ==========
+    RenderContext context_;
+    engine::SceneRenderer scene_renderer_;
+    CameraSystem camera_system_;
+
+    // ========== GAME STATE ==========
     NetworkClient network_;
-    InterpolationSystem interpolation_system_;
-    RenderSystem render_system_;
-    
-    // Scene objects for decoupled rendering
+    NetworkSmoother network_smoother_;
+
     RenderScene render_scene_;
     UIScene ui_scene_;
-    
+
     GameState game_state_ = GameState::Connecting;
     entt::registry registry_;
     std::unordered_map<uint32_t, entt::entity> network_to_entity_;
     std::vector<ecs::AttackEffect> attack_effects_;
-    
-    // Track previous attack state to detect attack start
+
     std::unordered_map<uint32_t, bool> prev_attacking_;
-    
+
     // Menu system
     bool menu_open_ = false;
     int menu_selected_index_ = 0;
@@ -164,33 +116,29 @@ private:
     GraphicsSettings graphics_settings_;
     ControlsSettings controls_settings_;
 
-    // Menu animation state
     int prev_menu_selected_ = -1;
     float menu_highlight_progress_ = 1.0f;
     int prev_class_selected_ = -1;
     float class_select_highlight_progress_ = 1.0f;
-    
+
     uint32_t local_player_id_ = 0;
     int selected_class_index_ = 0;
     std::vector<ClassInfo> available_classes_;
     std::string player_name_;
     std::string host_;
     uint16_t port_ = 0;
-    bool running_ = false;
     float connecting_timer_ = 0.0f;
-    
-    // Server-provided world config
+
     NetWorldConfig world_config_;
     bool world_config_received_ = false;
 
-    // Server-provided heightmap
     std::unique_ptr<HeightmapChunk> heightmap_;
     bool heightmap_received_ = false;
-    
-    uint64_t last_frame_time_ = 0;
-    float fps_ = 0.0f;
-    int frame_count_ = 0;
-    uint64_t fps_timer_ = 0;
+
+    // Camera state
+    float player_x_ = 0.0f;
+    float player_z_ = 0.0f;
+
 };
 
 } // namespace mmo

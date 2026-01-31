@@ -6,9 +6,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(EnTT)
 
-add_library(mmo_common STATIC
-    protocol.cpp
-)
+file(GLOB_RECURSE COMMON_SOURCES CONFIGURE_DEPENDS "*.cpp")
+add_library(mmo_common STATIC ${COMMON_SOURCES})
 
 target_include_directories(mmo_common PUBLIC
     ${CMAKE_SOURCE_DIR}/src

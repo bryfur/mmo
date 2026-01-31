@@ -1,0 +1,131 @@
+#pragma once
+
+#include "engine/scene/render_scene.hpp"
+#include "engine/scene/ui_scene.hpp"
+#include "engine/render/render_context.hpp"
+#include "engine/render/terrain_renderer.hpp"
+#include "engine/render/world_renderer.hpp"
+#include "engine/render/ui_renderer.hpp"
+#include "engine/render/effect_renderer.hpp"
+#include "engine/render/grass_renderer.hpp"
+#include "engine/gpu/gpu_buffer.hpp"
+#include "engine/gpu/gpu_texture.hpp"
+#include "engine/gpu/pipeline_registry.hpp"
+#include "engine/model_loader.hpp"
+#include "engine/graphics_settings.hpp"
+#include <glm/glm.hpp>
+#include <memory>
+#include <string>
+
+namespace mmo {
+
+namespace engine {
+
+struct Heightmap;
+
+/**
+ * Camera state passed from game logic to renderer each frame.
+ */
+struct CameraState {
+    glm::mat4 view;
+    glm::mat4 projection;
+    glm::vec3 position;
+};
+
+/**
+ * SceneRenderer consumes RenderScene + UIScene and produces a rendered frame.
+ * Owns all GPU resources, sub-renderers, and rendering state.
+ * Game builds scenes; SceneRenderer draws them.
+ */
+class SceneRenderer {
+public:
+    SceneRenderer();
+    ~SceneRenderer();
+
+    SceneRenderer(const SceneRenderer&) = delete;
+    SceneRenderer& operator=(const SceneRenderer&) = delete;
+
+    /**
+     * Initialize all rendering subsystems.
+     * @param context RenderContext owned by the application (must outlive this)
+     * @param world_width World width for terrain/world renderers
+     * @param world_height World height for terrain/world renderers
+     */
+    bool init(RenderContext& context, float world_width = 8000.0f, float world_height = 8000.0f);
+
+    void shutdown();
+
+    /**
+     * Render a complete frame from scene descriptions.
+     * @param scene 3D world scene commands
+     * @param ui_scene 2D UI commands
+     * @param camera Camera state for the frame
+     * @param dt Delta time for animations/effects
+     */
+    void render_frame(const RenderScene& scene, const UIScene& ui_scene,
+                      const CameraState& camera, float dt);
+
+    // ========== Configuration ==========
+
+    void set_heightmap(const Heightmap& heightmap);
+    void set_anisotropic_filter(int level);
+    void set_graphics_settings(const GraphicsSettings& settings);
+    void set_vsync_mode(int mode);
+    void set_screen_size(int width, int height);
+
+    // ========== Accessors ==========
+
+    TerrainRenderer& terrain() { return terrain_; }
+    ModelManager& models() { return *model_manager_; }
+    GrassRenderer* grass() { return grass_renderer_.get(); }
+    float get_terrain_height(float x, float z) { return terrain_.get_height(x, z); }
+
+private:
+    // Frame lifecycle
+    void begin_frame();
+    void end_frame();
+    void begin_main_pass();
+    void end_main_pass();
+    void begin_ui();
+    void end_ui();
+
+    // Rendering
+    void render_3d_scene(const RenderScene& scene, const CameraState& camera);
+    void render_model_command(const ModelCommand& cmd, const CameraState& camera);
+    void render_skinned_model_command(const SkinnedModelCommand& cmd, const CameraState& camera);
+    void render_ui_commands(const UIScene& ui_scene, const CameraState& camera);
+    void draw_enemy_health_bar_3d(float world_x, float world_y, float world_z,
+                                   float width, float health_ratio, const CameraState& camera);
+
+    // Setup
+    void init_pipelines();
+    void init_billboard_buffers();
+    void update_animations(float dt);
+
+    // ========== Sub-renderers ==========
+    RenderContext* context_ = nullptr;
+    gpu::PipelineRegistry pipeline_registry_;
+    TerrainRenderer terrain_;
+    WorldRenderer world_;
+    UIRenderer ui_;
+    EffectRenderer effects_;
+    std::unique_ptr<ModelManager> model_manager_;
+    std::unique_ptr<GrassRenderer> grass_renderer_;
+
+    // ========== GPU Resources ==========
+    std::unique_ptr<gpu::GPUBuffer> billboard_vertex_buffer_;
+    std::unique_ptr<gpu::GPUTexture> depth_texture_;
+    SDL_GPUSampler* default_sampler_ = nullptr;
+
+    // ========== Render State ==========
+    SDL_GPURenderPass* main_render_pass_ = nullptr;
+    SDL_GPUTexture* current_swapchain_ = nullptr;
+    bool had_main_pass_this_frame_ = false;
+    glm::vec3 light_dir_ = glm::vec3(-0.5f, -0.8f, -0.3f);
+    float skybox_time_ = 0.0f;
+    GraphicsSettings* graphics_ = nullptr;
+    GraphicsSettings default_graphics_;
+};
+
+} // namespace engine
+} // namespace mmo

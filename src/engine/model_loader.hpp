@@ -194,6 +194,7 @@ public:
     bool load_model(const std::string& name, const std::string& path);
     Model* get_model(const std::string& name);
     AnimationState* get_animation_state(const std::string& name);
+    void update_all_animations(float dt);
     void unload_all();
     
 private:

@@ -84,5 +84,6 @@ add_custom_target(compile_shaders ALL DEPENDS ${COMPILED_SHADERS})
 list(LENGTH COMPILED_SHADERS SHADER_COUNT)
 message(STATUS "Configured ${SHADER_COUNT} shaders for compilation")
 
-# Export SDL_shadercross paths to parent scope for runtime library linking
+# Export paths to parent scope for runtime library linking and shader lookup
 set(SDL_shadercross_SOURCE_DIR ${SDL_shadercross_SOURCE_DIR} PARENT_SCOPE)
+set(SHADER_OUTPUT_DIR "${SHADER_OUTPUT_DIR}" PARENT_SCOPE)

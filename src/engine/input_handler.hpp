@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/protocol.hpp"
+#include "engine/input_state.hpp"
 #include <SDL3/SDL.h>
 #include <vector>
 
@@ -15,7 +15,7 @@ public:
     bool process_events();
     
     // Get current input state
-    const PlayerInput& get_input() const { return current_input_; }
+    const engine::InputState& get_input() const { return current_input_; }
     
     // Check if input changed since last frame
     bool input_changed() const { return input_changed_; }
@@ -95,8 +95,8 @@ private:
     void handle_controller_added(SDL_JoystickID id);
     void handle_controller_removed(SDL_JoystickID id);
     
-    PlayerInput current_input_;
-    PlayerInput last_input_;
+    engine::InputState current_input_;
+    engine::InputState last_input_;
     bool input_changed_ = false;
     
     float mouse_x_ = 0.0f;

@@ -58,7 +58,7 @@ float EffectRenderer::get_terrain_height(float x, float z) const {
 }
 
 void EffectRenderer::draw_attack_effect(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                         const ecs::AttackEffect& effect,
+                                         const engine::EffectInstance& effect,
                                          const glm::mat4& view, const glm::mat4& projection,
                                          const glm::vec3& camera_pos) {
     if (!pass || !cmd || !device_ || !pipeline_registry_) return;

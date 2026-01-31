@@ -5,7 +5,7 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <memory>
-#include "client/gpu/gpu_device.hpp"
+#include "engine/gpu/gpu_device.hpp"
 
 namespace mmo {
 

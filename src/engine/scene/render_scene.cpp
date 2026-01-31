@@ -4,9 +4,8 @@ namespace mmo {
 
 void RenderScene::clear() {
     commands_.clear();
-    entities_.clear();
     effects_.clear();
-    
+
     // Reset world element flags to defaults
     draw_skybox_ = true;
     draw_mountains_ = true;
@@ -42,17 +41,8 @@ void RenderScene::add_skinned_model(const std::string& model_name, const glm::ma
     commands_.push_back(std::move(cmd));
 }
 
-void RenderScene::add_entity(const EntityState& state, bool is_local) {
-    EntityCommand cmd;
-    cmd.state = state;
-    cmd.is_local = is_local;
-    entities_.push_back(std::move(cmd));
-}
-
-void RenderScene::add_effect(const ecs::AttackEffect& effect) {
-    EffectCommand cmd;
-    cmd.effect = effect;
-    effects_.push_back(std::move(cmd));
+void RenderScene::add_effect(const engine::EffectInstance& effect) {
+    effects_.push_back(effect);
 }
 
 } // namespace mmo

@@ -1,10 +1,10 @@
 #pragma once
 
-#include "common/heightmap.hpp"
-#include "client/gpu/gpu_device.hpp"
-#include "client/gpu/gpu_buffer.hpp"
-#include "client/gpu/gpu_texture.hpp"
-#include "client/gpu/pipeline_registry.hpp"
+#include "engine/heightmap.hpp"
+#include "engine/gpu/gpu_device.hpp"
+#include "engine/gpu/gpu_buffer.hpp"
+#include "engine/gpu/gpu_texture.hpp"
+#include "engine/gpu/pipeline_registry.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 
@@ -72,7 +72,7 @@ public:
     /**
      * Set heightmap from server data. Uploads to GPU texture.
      */
-    void set_heightmap(const HeightmapChunk& heightmap);
+    void set_heightmap(const engine::Heightmap& heightmap);
     
     /**
      * Clean up terrain resources.
@@ -133,7 +133,7 @@ private:
     float world_height_ = 0.0f;
     
     // Server-provided heightmap (CPU side for sampling)
-    std::unique_ptr<HeightmapChunk> heightmap_;
+    std::unique_ptr<engine::Heightmap> heightmap_;
     
     // GPU resources
     std::unique_ptr<gpu::GPUTexture> heightmap_texture_;

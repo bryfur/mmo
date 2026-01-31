@@ -29,7 +29,6 @@ bool PipelineRegistry::init(GPUDevice& device) {
     if (base_path) {
         shader_path_ = std::string(base_path) + "shaders/";
     } else {
-        // Fallback to relative path if SDL_GetBasePath fails
         shader_path_ = "shaders/";
         SDL_Log("PipelineRegistry: SDL_GetBasePath failed, using relative path");
     }

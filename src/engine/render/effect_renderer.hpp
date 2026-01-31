@@ -5,7 +5,7 @@
 #include "../gpu/gpu_buffer.hpp"
 #include "../gpu/gpu_pipeline.hpp"
 #include "../gpu/pipeline_registry.hpp"
-#include "common/ecs/components.hpp"
+#include "engine/effect_types.hpp"
 #include <SDL3/SDL_gpu.h>
 #include <glm/glm.hpp>
 #include <memory>
@@ -61,7 +61,7 @@ public:
      * @param cmd Command buffer for uniform uploads
      */
     void draw_attack_effect(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                            const ecs::AttackEffect& effect, 
+                            const engine::EffectInstance& effect, 
                             const glm::mat4& view, const glm::mat4& projection,
                             const glm::vec3& camera_pos);
     

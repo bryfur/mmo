@@ -733,6 +733,15 @@ AnimationState* ModelManager::get_animation_state(const std::string& name) {
     return it != animation_states_.end() ? &it->second : nullptr;
 }
 
+void ModelManager::update_all_animations(float dt) {
+    for (auto& [name, state] : animation_states_) {
+        auto it = models_.find(name);
+        if (it != models_.end() && it->second.has_skeleton && state.playing) {
+            ModelLoader::update_animation(it->second, state, dt);
+        }
+    }
+}
+
 void ModelManager::unload_all() {
     for (auto& [name, model] : models_) {
         ModelLoader::free_gpu_resources(model);

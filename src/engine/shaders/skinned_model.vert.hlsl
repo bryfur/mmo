@@ -13,7 +13,7 @@ struct VSInput {
     [[vk::location(1)]] float3 normal : NORMAL;
     [[vk::location(2)]] float2 texCoord : TEXCOORD0;
     [[vk::location(3)]] float4 color : COLOR0;
-    [[vk::location(4)]] int4 joints : BLENDINDICES;
+    [[vk::location(4)]] uint4 joints : BLENDINDICES;  // uint4 matches UBYTE4 vertex format
     [[vk::location(5)]] float4 weights : BLENDWEIGHT;
 };
 

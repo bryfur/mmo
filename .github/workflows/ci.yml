@@ -24,7 +24,7 @@ jobs:
       - name: Cache apt packages
         uses: awalsh128/cache-apt-pkgs-action@latest
         with:
-          packages: cmake ninja-build libglew-dev libglm-dev libgl1-mesa-dev
+          packages: cmake ninja-build ccache libgl1-mesa-dev
           version: 1.0
 
       - name: Cache SDL3
@@ -43,23 +43,22 @@ jobs:
           version-sdl-image: 3-latest
           version-sdl-ttf: 3-latest
 
-      - name: Cache CMake build dependencies
+      - name: Cache ccache
         uses: actions/cache@v4
         with:
-          path: |
-            build/_deps
-          key: cmake-deps-ubuntu-24.04-${{ hashFiles('CMakeLists.txt') }}
+          path: ~/.ccache
+          key: ccache-ubuntu-24.04-${{ github.ref }}-${{ github.sha }}
           restore-keys: |
-            cmake-deps-ubuntu-24.04-
+            ccache-ubuntu-24.04-${{ github.ref }}-
+            ccache-ubuntu-24.04-
 
       - name: Configure CMake
-        run: cmake -B build -G Ninja -DCMAKE_PREFIX_PATH=${{ steps.sdl.outputs.prefix }}
+        run: cmake -B build -G Ninja -DCMAKE_PREFIX_PATH=${{ steps.sdl.outputs.prefix }} -DCMAKE_C_COMPILER_LAUNCHER=ccache -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
         run: cmake --build build --parallel
 
       - name: Verify build artifacts
         run: |
-          ls -la build/
-          test -f build/mmo_server
-          test -f build/mmo_client
+          test -f build/src/server/mmo_server
+          test -f build/src/client/mmo_client

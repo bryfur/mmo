@@ -1,0 +1,33 @@
+{
+    "safe_zone_radius": 400.0,
+    "wall": {
+        "model": "wooden_log",
+        "distance": 500.0,
+        "spacing": 35.0,
+        "gate_width": 80.0,
+        "target_size": 60.0
+    },
+    "corner_towers": {
+        "model": "log_tower",
+        "target_size": 140.0
+    },
+    "buildings": [
+        { "type": "tavern",      "model": "building_tavern",      "x": -180.0, "y": -180.0, "name": "The Golden Flagon",        "rotation": 0.0, "target_size": 140.0 },
+        { "type": "blacksmith",  "model": "building_blacksmith",  "x":  220.0, "y": -160.0, "name": "Iron Forge",               "rotation": 0.0, "target_size": 120.0 },
+        { "type": "tower",       "model": "building_tower",       "x": -260.0, "y":  180.0, "name": "Guard Tower",              "rotation": 0.0, "target_size": 160.0 },
+        { "type": "shop",        "model": "building_shop",        "x":  180.0, "y":  180.0, "name": "General Store",            "rotation": 0.0, "target_size": 100.0 },
+        { "type": "well",        "model": "building_well",        "x":    0.0, "y":    0.0, "name": "Town Well",                "rotation": 0.0, "target_size":  60.0 },
+        { "type": "house",       "model": "building_house",       "x": -100.0, "y":  200.0, "name": "Cottage",                  "rotation": 0.0, "target_size": 110.0 },
+        { "type": "inn",         "model": "inn",                  "x":  260.0, "y":   20.0, "name": "The Weary Traveler Inn",   "rotation": 0.0, "target_size": 150.0 }
+    ],
+    "npcs": [
+        { "type": "innkeeper",  "x": -180.0, "y": -100.0, "name": "Barthos the Innkeeper",  "wanders": false, "model": "npc_innkeeper",  "color": "0xFF88AA55" },
+        { "type": "blacksmith", "x":  200.0, "y":  -40.0, "name": "Grimhammer",             "wanders": false, "model": "npc_blacksmith", "color": "0xFF5555AA" },
+        { "type": "merchant",   "x":  140.0, "y":  100.0, "name": "Elara the Merchant",     "wanders": false, "model": "npc_merchant",   "color": "0xFFAA8855" },
+        { "type": "guard",      "x": -220.0, "y":  120.0, "name": "Guard Captain",          "wanders": false, "model": "npc_guard",      "color": "0xFF5588AA" },
+        { "type": "guard",      "x":  160.0, "y": -160.0, "name": "Town Guard",             "wanders": true,  "model": "npc_guard",      "color": "0xFF5588AA" },
+        { "type": "villager",   "x":  -60.0, "y":  120.0, "name": "Peasant",                "wanders": true,  "model": "npc_villager",   "color": "0xFF888888" },
+        { "type": "villager",   "x":   80.0, "y": -100.0, "name": "Farmer",                 "wanders": true,  "model": "npc_villager",   "color": "0xFF888888" },
+        { "type": "villager",   "x": -200.0, "y":  -60.0, "name": "Wanderer",               "wanders": true,  "model": "npc_villager",   "color": "0xFF888888" }
+    ]
+}

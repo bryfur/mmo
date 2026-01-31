@@ -4,10 +4,11 @@ A multiplayer online game built with C++20 featuring a client-server architectur
 
 ## Features
 
-- 3D OpenGL rendering with shadows, terrain, grass, and effects
+- 3D rendering with SDL3 GPU API (terrain, grass, effects, shadows, SSAO)
 - Entity Component System architecture using EnTT
 - Physics simulation with Jolt Physics
 - glTF model loading for characters, buildings, and environment
+- HLSL shaders compiled to SPIR-V at build time via SDL_shadercross
 - AI and combat systems
 - Client-side interpolation for smooth networked movement
 - Text rendering with SDL3_ttf
@@ -18,22 +19,23 @@ Dependencies are managed via CMake FetchContent (automatically downloaded):
 - EnTT v3.14.0 (ECS)
 - Jolt Physics v5.2.0
 - tinygltf v2.9.7
+- Standalone Asio 1.30.2
+- SDL_shadercross (HLSL to SPIR-V shader compilation)
 
 System dependencies (must be installed):
 - SDL3
 - SDL3_ttf
 - SDL3_image
-- OpenGL
-- GLEW
 - GLM
-- Standalone Asio
+
+Or pass `-DVENDORED_SDL=ON` to build SDL3, SDL3_ttf, and SDL3_image from source.
 
 ## Building
 
 ### Install System Dependencies (Ubuntu/Debian)
 
 ```bash
-sudo apt install libsdl3-dev libsdl3-ttf-dev libsdl3-image-dev libasio-dev libglew-dev libglm-dev libgl1-mesa-dev
+sudo apt install libsdl3-dev libsdl3-ttf-dev libsdl3-image-dev libglm-dev
 ```
 
 ### Build
@@ -76,15 +78,18 @@ Or use the convenience script:
 
 ```
 mmo/
-├── client/           # Client application
-│   ├── render/       # Rendering subsystems (terrain, shadows, effects, UI)
-│   └── systems/      # Client-side ECS systems (camera, interpolation)
-├── server/           # Server application
-│   └── systems/      # Server-side ECS systems (AI, combat, movement, physics)
-├── common/           # Shared code
-│   └── ecs/          # Component definitions
-├── assets/           # Game assets
-│   ├── models/       # glTF models
-│   └── textures/     # Texture files
-└── tools/            # Python utilities
+├── src/
+│   ├── client/           # Client application
+│   │   ├── gpu/          # SDL3 GPU abstraction layer
+│   │   ├── render/       # Rendering subsystems (terrain, effects, UI, shadows)
+│   │   ├── scene/        # Scene management
+│   │   ├── shaders/      # HLSL shader sources
+│   │   └── systems/      # Client-side ECS systems (camera, interpolation)
+│   ├── server/           # Server application
+│   │   └── systems/      # Server-side ECS systems (AI, combat, movement, physics)
+│   └── common/           # Shared code (protocol, ECS components)
+├── assets/               # Game assets
+│   ├── models/           # glTF models
+│   └── textures/         # Texture files
+└── tools/                # Python utilities
 ```

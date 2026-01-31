@@ -6,6 +6,7 @@
 #include "../gpu/pipeline_registry.hpp"
 #include <SDL3/SDL_gpu.h>
 #include <glm/glm.hpp>
+#include "../scene/frustum.hpp"
 #include <memory>
 #include <vector>
 #include <functional>
@@ -76,7 +77,8 @@ public:
      */
     void render_mountains(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                           const glm::mat4& view, const glm::mat4& projection,
-                          const glm::vec3& camera_pos, const glm::vec3& light_dir);
+                          const glm::vec3& camera_pos, const glm::vec3& light_dir,
+                          const scene::Frustum& frustum);
     
     /**
      * Render debug grid.

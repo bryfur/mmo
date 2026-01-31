@@ -382,6 +382,10 @@ void Game::render_playing() {
     }
 
     // Add entities to scene as model commands
+    // Distance cull from player position (camera is 200-350 units behind player)
+    float draw_dist = gfx.get_draw_distance();
+    float ENTITY_DRAW_DISTANCE_SQ = draw_dist * draw_dist;
+
     auto entity_view = registry_.view<ecs::NetworkId, ecs::Transform, ecs::Health, ecs::EntityInfo, ecs::Name>();
     for (auto entity : entity_view) {
         auto& net_id = registry_.get<ecs::NetworkId>(entity);
@@ -393,6 +397,14 @@ void Game::render_playing() {
             bool is_tree = (info.model_name.compare(0, 5, "tree_") == 0);
             if (is_tree && !render_scene_.should_draw_trees()) continue;
             if (!is_tree && !render_scene_.should_draw_rocks()) continue;
+        }
+
+        // Distance culling from player position (always render local player)
+        if (!is_local) {
+            auto& transform = registry_.get<ecs::Transform>(entity);
+            float dx = transform.x - player_x_;
+            float dz = transform.z - player_z_;
+            if (dx * dx + dz * dz > ENTITY_DRAW_DISTANCE_SQ) continue;
         }
 
         add_entity_to_scene(entity, is_local);
@@ -893,6 +905,7 @@ CameraState Game::get_camera_state() const {
     CameraState state;
     state.view = camera().get_view_matrix();
     state.projection = camera().get_projection_matrix();
+    state.view_projection = state.projection * state.view;
     state.position = camera().get_position();
     return state;
 }

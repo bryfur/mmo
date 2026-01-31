@@ -1,4 +1,5 @@
 #include "world_renderer.hpp"
+#include <algorithm>
 #include "../gpu/gpu_texture.hpp"
 #include "../gpu/gpu_uniforms.hpp"
 #include "../render_constants.hpp"
@@ -218,7 +219,8 @@ void WorldRenderer::render_skybox(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer*
 
 void WorldRenderer::render_mountains(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                                       const glm::mat4& view, const glm::mat4& projection,
-                                      const glm::vec3& camera_pos, const glm::vec3& light_dir) {
+                                      const glm::vec3& camera_pos, const glm::vec3& light_dir,
+                                      const scene::Frustum& frustum) {
     if (!model_manager_ || !pipeline_registry_ || !pass || !cmd) return;
     
     Model* mountain_small = model_manager_->get_model("mountain_small");
@@ -243,7 +245,13 @@ void WorldRenderer::render_mountains(SDL_GPURenderPass* pass, SDL_GPUCommandBuff
             mountain = mountain_medium ? mountain_medium : (mountain_small ? mountain_small : mountain_large);
         }
         if (!mountain) continue;
-        
+
+        // Frustum culling: use bounding sphere around mountain position
+        {
+            float max_extent = std::max({mountain->width(), mountain->height(), mountain->depth()}) * mp.scale * 0.5f;
+            if (!frustum.intersects_sphere(glm::vec3(mp.x, mp.y, mp.z), max_extent)) continue;
+        }
+
         glm::mat4 model_mat = glm::mat4(1.0f);
         model_mat = glm::translate(model_mat, glm::vec3(mp.x, mp.y, mp.z));
         model_mat = glm::rotate(model_mat, glm::radians(mp.rotation), glm::vec3(0.0f, 1.0f, 0.0f));

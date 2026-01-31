@@ -10,6 +10,7 @@ namespace mmo::engine::scene {
 struct CameraState {
     glm::mat4 view;
     glm::mat4 projection;
+    glm::mat4 view_projection;
     glm::vec3 position;
 };
 

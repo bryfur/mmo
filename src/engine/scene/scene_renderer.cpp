@@ -1,4 +1,5 @@
 #include "scene_renderer.hpp"
+#include "frustum.hpp"
 #include "SDL3/SDL_gpu.h"
 #include "engine/gpu/gpu_buffer.hpp"
 #include "engine/gpu/gpu_pipeline.hpp"
@@ -367,10 +368,39 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
                                         camera.position, light_dir_);
             }
 
+            // Frustum culling setup
+            Frustum frustum;
+            frustum.extract_from_matrix(camera.view_projection);
+            bool do_frustum_cull = gfx.frustum_culling;
+
             // Render model commands from the scene
             for (const auto& render_cmd : scene.commands()) {
                 std::visit([&](const auto& data) {
                     using T = std::decay_t<decltype(data)>;
+
+                    // Frustum cull using bounding sphere
+                    if (do_frustum_cull) {
+                        Model* model = model_manager_->get_model(data.model_name);
+                        if (model) {
+                            const glm::mat4& t = data.transform;
+                            glm::vec3 local_center(
+                                (model->min_x + model->max_x) * 0.5f,
+                                (model->min_y + model->max_y) * 0.5f,
+                                (model->min_z + model->max_z) * 0.5f
+                            );
+                            glm::vec3 world_center = glm::vec3(t * glm::vec4(local_center, 1.0f));
+                            float max_scale = std::max({
+                                glm::length(glm::vec3(t[0])),
+                                glm::length(glm::vec3(t[1])),
+                                glm::length(glm::vec3(t[2]))
+                            });
+                            float half_diag = glm::length(glm::vec3(
+                                model->width(), model->height(), model->depth()
+                            )) * 0.5f;
+                            if (!frustum.intersects_sphere(world_center, half_diag * max_scale)) return;
+                        }
+                    }
+
                     if constexpr (std::is_same_v<T, ModelCommand>) {
                         render_model_command(data, camera);
                     } else if constexpr (std::is_same_v<T, SkinnedModelCommand>) {
@@ -381,6 +411,11 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
 
             // Render effects
             for (const auto& effect : scene.effects()) {
+                if (do_frustum_cull) {
+                    glm::vec3 effect_pos(effect.x, 0.0f, effect.y);
+                    if (!frustum.intersects_sphere(effect_pos, effect.range * 2.0f)) continue;
+                }
+
                 effects_.draw_attack_effect(
                     main_render_pass_,
                     context_->current_command_buffer(),
@@ -393,7 +428,7 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
 
             if (scene.should_draw_mountains() && gfx.mountains_enabled) {
                 world_.render_mountains(main_render_pass_, cmd, camera.view, camera.projection,
-                                        camera.position, light_dir_);
+                                        camera.position, light_dir_, frustum);
             }
         }
 

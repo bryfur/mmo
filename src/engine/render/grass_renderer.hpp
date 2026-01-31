@@ -6,139 +6,111 @@
 #include "../gpu/pipeline_registry.hpp"
 #include <glm/glm.hpp>
 #include <memory>
-#include <functional>
 
 namespace mmo::engine::render {
 
 namespace gpu = mmo::engine::gpu;
 
 /**
- * Grass vertex format for SDL3 GPU API
- * Matches the vertex attributes expected by grass shaders (Vertex3D format)
+ * Heightmap parameters for GPU-side height sampling
  */
-struct GrassVertex {
-    glm::vec3 position;  // POSITION
-    glm::vec3 normal;    // NORMAL
-    glm::vec2 texCoord;  // TEXCOORD0
-    glm::vec4 color;     // COLOR0
+struct HeightmapParams {
+    float world_origin_x = 0.0f;
+    float world_origin_z = 0.0f;
+    float world_size = 1.0f;
+    float min_height = -500.0f;
+    float max_height = 500.0f;
 };
 
 /**
- * Grass transform uniforms - matches grass.vert.hlsl cbuffer
+ * Grass vertex uniforms - matches grass.vert.hlsl cbuffer
  */
-struct alignas(16) GrassTransformUniforms {
-    glm::mat4 view_projection;
-    glm::vec3 camera_pos;
-    float time;
-    float wind_strength;
-    glm::vec3 wind_direction;
+struct alignas(16) GrassVertexUniforms {
+    glm::mat4 view_projection;       // 64 bytes
+    glm::vec3 camera_grid;           // 12 bytes - snapped camera position
+    float time;                      // 4 bytes
+    float wind_strength;             // 4 bytes
+    float grass_spacing;             // 4 bytes
+    float grass_view_distance;       // 4 bytes
+    int grid_radius;                 // 4 bytes
+    glm::vec2 wind_direction;        // 8 bytes
+    float heightmap_world_origin_x;  // 4 bytes
+    float heightmap_world_origin_z;  // 4 bytes
+    float heightmap_world_size;      // 4 bytes
+    float heightmap_min_height;      // 4 bytes
+    float heightmap_max_height;      // 4 bytes
+    float world_width;               // 4 bytes
+    float world_height;              // 4 bytes
+    glm::vec2 camera_forward;        // 8 bytes (XZ direction camera is looking)
 };
 
 /**
- * Grass lighting uniforms - matches grass.frag.hlsl cbuffer
+ * Grass fragment uniforms - matches grass.frag.hlsl cbuffer
  */
 struct alignas(16) GrassLightingUniforms {
-    glm::vec3 fog_color;
+    glm::vec3 camera_pos;
     float fog_start;
+    glm::vec3 fog_color;
     float fog_end;
     int32_t fog_enabled;
-    int32_t _padding[2];
+    int32_t _padding[3];
 };
 
 /**
- * GPU-based procedural grass renderer (SDL3 GPU API)
- * 
- * Grass is generated based on camera position with world-space hashing for 
- * consistent placement. The geometry is generated on CPU and rendered using
- * vertex buffers. Wind animation is applied in the vertex shader.
+ * GPU-based grass renderer (SDL3 GPU API)
+ *
+ * Uses fully GPU-driven instanced rendering. A single blade mesh is created
+ * at init time. The vertex shader derives per-instance position from
+ * SV_InstanceID, samples a heightmap texture for terrain height, and applies
+ * wind animation. No per-frame CPU work beyond setting uniforms.
  */
 class GrassRenderer {
 public:
     GrassRenderer();
     ~GrassRenderer();
-    
-    // Non-copyable
+
     GrassRenderer(const GrassRenderer&) = delete;
     GrassRenderer& operator=(const GrassRenderer&) = delete;
-    
-    /**
-     * Initialize grass system.
-     * @param device The GPU device for resource creation
-     * @param pipeline_registry The pipeline registry for getting grass pipeline
-     * @param world_width World X dimension
-     * @param world_height World Z dimension
-     */
+
     bool init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry,
               float world_width, float world_height);
-    
-    /**
-     * Update time for wind animation.
-     */
+
     void update(float delta_time, float current_time);
-    
-    /**
-     * Render grass blades around camera position.
-     * @param pass The render pass to draw into
-     * @param cmd The command buffer for push constants
-     * @param view View matrix
-     * @param projection Projection matrix
-     * @param camera_pos Camera position
-     * @param light_dir Light direction
-     */
+
     void render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                 const glm::mat4& view, const glm::mat4& projection,
                 const glm::vec3& camera_pos, const glm::vec3& light_dir);
-    
-    /**
-     * Clean up resources.
-     */
+
     void shutdown();
-    
-    /**
-     * Set heightmap texture for terrain height reference.
-     */
-    void set_heightmap_texture(gpu::GPUTexture* texture) { heightmap_texture_ = texture; }
-    
-    /**
-     * Set terrain height callback for sampling height during grass generation.
-     */
-    void set_terrain_height_func(std::function<float(float, float)> func) {
-        terrain_height_func_ = std::move(func);
+
+    void set_heightmap(gpu::GPUTexture* texture, const HeightmapParams& params) {
+        heightmap_texture_ = texture;
+        heightmap_params_ = params;
     }
-    
+
     // Wind parameters
     float wind_magnitude = 0.8f;
-    float wind_wave_length = 1.2f;
-    float wind_wave_period = 1.5f;
-    
+
     // Grass parameters
-    float grass_spacing = 8.0f;           // Distance between grass blades
-    float grass_view_distance = 800.0f;   // Max render distance (reduced for performance)
-    
+    float grass_spacing = 8.0f;
+    float grass_view_distance = 2000.0f;
+
 private:
-    void generate_grass_geometry(const glm::vec3& camera_pos);
-    float get_terrain_height(float x, float z) const;
-    
-    // Hash functions for procedural generation
-    static float hash(glm::vec2 p);
-    static glm::vec2 hash2(glm::vec2 p);
-    
+    void generate_blade_mesh();
+
     gpu::GPUDevice* device_ = nullptr;
     gpu::PipelineRegistry* pipeline_registry_ = nullptr;
-    
-    // Dynamic buffer for grass geometry (regenerated when camera moves)
-    std::unique_ptr<gpu::GPUBuffer> vertex_buffer_;
-    std::unique_ptr<gpu::GPUBuffer> index_buffer_;
-    uint32_t index_count_ = 0;
-    
-    // Grass texture and sampler
-    std::unique_ptr<gpu::GPUTexture> grass_texture_;
-    std::unique_ptr<gpu::GPUSampler> grass_sampler_;
+
+    // Single blade mesh (created once at init)
+    std::unique_ptr<gpu::GPUBuffer> blade_vertex_buffer_;
+    std::unique_ptr<gpu::GPUBuffer> blade_index_buffer_;
+    uint32_t blade_index_count_ = 0;
+
+    // Heightmap for GPU height sampling
     gpu::GPUTexture* heightmap_texture_ = nullptr;
-    
-    // Terrain height callback
-    std::function<float(float, float)> terrain_height_func_;
-    
+    std::unique_ptr<gpu::GPUSampler> heightmap_sampler_;
+    HeightmapParams heightmap_params_;
+
     float world_width_ = 0.0f;
     float world_height_ = 0.0f;
     float current_time_ = 0.0f;

@@ -100,12 +100,16 @@ add_dependencies(mmo_engine compile_shaders)
 # Store shader output dir in cache so it's globally accessible
 set(MMO_SHADER_OUTPUT_DIR "${SHADER_OUTPUT_DIR}" CACHE INTERNAL "Path to compiled shaders")
 
-# Function for executables that link mmo_engine to copy shaders next to their binary
+# Function for executables that link mmo_engine to copy shaders next to their binary.
+# The copy_shaders target always runs after compile_shaders and copies the directory.
 function(mmo_engine_copy_shaders target)
-    add_custom_command(TARGET ${target} POST_BUILD
+    add_custom_target(${target}_copy_shaders ALL
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${MMO_SHADER_OUTPUT_DIR}"
             "$<TARGET_FILE_DIR:${target}>/shaders"
         COMMENT "Copying shaders to ${target} output directory"
     )
+    add_dependencies(${target}_copy_shaders compile_shaders)
+    add_dependencies(${target} ${target}_copy_shaders)
 endfunction()
+

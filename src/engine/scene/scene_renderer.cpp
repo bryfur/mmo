@@ -51,6 +51,8 @@ bool SceneRenderer::init(RenderContext& context, float world_width, float world_
     }
     pipeline_registry_.set_swapchain_format(context_->swapchain_format());
 
+    model_manager_->set_device(&context_->device());
+
     if (!terrain_.init(context_->device(), pipeline_registry_, world_width, world_height)) {
         std::cerr << "Failed to initialize terrain renderer" << std::endl;
         return false;
@@ -91,9 +93,6 @@ bool SceneRenderer::init(RenderContext& context, float world_width, float world_
     init_billboard_buffers();
 
     if (grass_renderer_) {
-        grass_renderer_->set_terrain_height_func([this](float x, float z) {
-            return terrain_.get_height(x, z);
-        });
         grass_renderer_->init(context_->device(), pipeline_registry_, world_width, world_height);
     }
 
@@ -213,6 +212,17 @@ void SceneRenderer::set_anisotropic_filter(int level) {
 
 void SceneRenderer::set_heightmap(const Heightmap& heightmap) {
     terrain_.set_heightmap(heightmap);
+
+    if (grass_renderer_ && terrain_.heightmap_texture()) {
+        render::HeightmapParams hm_params;
+        hm_params.world_origin_x = heightmap.world_origin_x;
+        hm_params.world_origin_z = heightmap.world_origin_z;
+        hm_params.world_size = heightmap.world_size;
+        hm_params.min_height = heightmap.min_height;
+        hm_params.max_height = heightmap.max_height;
+        grass_renderer_->set_heightmap(terrain_.heightmap_texture(), hm_params);
+    }
+
     std::cout << "[Renderer] Heightmap set for terrain rendering" << std::endl;
 }
 

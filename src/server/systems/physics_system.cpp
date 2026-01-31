@@ -1,6 +1,5 @@
 // JoltPhysics integration for MMO server
 // Must include Jolt.h first before any other Jolt headers
-
 #include <Jolt/Jolt.h>
 
 // Jolt includes

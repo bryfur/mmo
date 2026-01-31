@@ -1,53 +1,47 @@
 /**
  * Grass Fragment Shader - SDL3 GPU API
- * 
- * Renders grass blades with alpha testing and simple lighting.
+ *
+ * Renders grass blades using vertex colors with fog support.
  */
 
-// Fragment input (from vertex shader)
 struct PSInput {
     float4 position : SV_Position;
     float3 normal : TEXCOORD0;
     float2 texCoord : TEXCOORD1;
     float3 worldPos : TEXCOORD2;
-    float colorVariation : TEXCOORD3;
+    float4 color : TEXCOORD3;
 };
 
 // Uniform buffer - SDL3 GPU SPIR-V requires fragment uniforms in set 3
 [[vk::binding(0, 3)]]
 cbuffer GrassLightingUniforms {
-    float3 lightDir;
-    float _padding0;
-    float3 lightColor;
-    float _padding1;
-    float3 ambientColor;
-    float alphaThreshold;
+    float3 cameraPos;
+    float fogStart;
+    float3 fogColor;
+    float fogEnd;
+    int fogEnabled;
+    int _padding0;
+    int _padding1;
+    int _padding2;
 };
 
-// Texture and sampler - SDL3 GPU SPIR-V requires fragment textures in set 2
-[[vk::combinedImageSampler]][[vk::binding(0, 2)]]
-Texture2D grassTexture;
-[[vk::combinedImageSampler]][[vk::binding(0, 2)]]
-SamplerState grassSampler;
-
 float4 PSMain(PSInput input) : SV_Target {
-    // Sample grass texture
-    float4 texColor = grassTexture.Sample(grassSampler, input.texCoord);
-    
-    // Alpha test (discard transparent pixels)
-    if (texColor.a < alphaThreshold) {
-        discard;
-    }
-    
-    // Simple diffuse lighting
+    // Use vertex color directly
+    float3 color = input.color.rgb;
+
+    // Simple directional lighting
     float3 norm = normalize(input.normal);
-    float3 lightDirection = normalize(-lightDir);
-    float diff = max(dot(norm, lightDirection), 0.0);
-    
-    float3 lighting = ambientColor + diff * lightColor;
-    
-    // Apply per-instance color variation
-    float3 color = texColor.rgb * lighting * (1.0 + input.colorVariation * 0.2);
-    
-    return float4(color, texColor.a);
+    float3 lightDir = normalize(float3(0.3, -1.0, 0.5));
+    float diff = max(dot(norm, -lightDir), 0.0);
+    float3 ambient = float3(0.3, 0.35, 0.3);
+    color *= ambient + diff * float3(1.0, 0.95, 0.9);
+
+    // Fog based on distance from camera
+    if (fogEnabled != 0) {
+        float dist = length(input.worldPos - cameraPos);
+        float fogFactor = saturate((dist - fogStart) / (fogEnd - fogStart));
+        color = lerp(color, fogColor, fogFactor);
+    }
+
+    return float4(color, input.color.a);
 }

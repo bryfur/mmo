@@ -429,10 +429,11 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_effect_pipeline() {
 std::unique_ptr<GPUPipeline> PipelineRegistry::create_grass_pipeline() {
     ShaderResources vs_resources;
     vs_resources.num_uniform_buffers = 1;
+    vs_resources.num_samplers = 1;  // heightmap texture
 
     ShaderResources fs_resources;
     fs_resources.num_uniform_buffers = 1;
-    fs_resources.num_samplers = 1;
+    fs_resources.num_samplers = 0;
 
     auto* vs = shader_manager_->get(shader_path_ + "grass.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);

@@ -104,11 +104,6 @@ SDL_GPUTexture* GPUDevice::acquire_swapchain_texture(SDL_GPUCommandBuffer* cmd,
 
     // NULL texture with success means window is minimized or not ready
     if (!swapchain_texture) {
-        static int null_count = 0;
-        if (++null_count <= 3) {
-            SDL_Log("GPUDevice::acquire_swapchain_texture: SDL returned success but NULL texture (attempt %d, w=%u h=%u)",
-                    null_count, w, h);
-        }
         return nullptr;
     }
 

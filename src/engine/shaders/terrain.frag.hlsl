@@ -20,7 +20,7 @@ cbuffer LightingUniforms {
     float3 fogColor;
     float fogStart;
     float fogEnd;
-    float _padding0;
+    float _padding0[3];
     float3 lightDir;
     float _padding1;
 };

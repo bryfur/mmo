@@ -138,6 +138,21 @@ void MenuSystem::init_graphics_menu() {
     rocks.toggle_value = &graphics_settings_.rocks_enabled;
     menu_items_.push_back(rocks);
 
+    MenuItem draw_dist;
+    draw_dist.label = "Draw Distance";
+    draw_dist.type = MenuItemType::Slider;
+    draw_dist.slider_value = &graphics_settings_.draw_distance;
+    draw_dist.slider_min = 0;
+    draw_dist.slider_max = 4;
+    draw_dist.slider_labels = {"500", "1000", "2000", "4000", "8000"};
+    menu_items_.push_back(draw_dist);
+
+    MenuItem frustum_cull;
+    frustum_cull.label = "Frustum Culling";
+    frustum_cull.type = MenuItemType::Toggle;
+    frustum_cull.toggle_value = &graphics_settings_.frustum_culling;
+    menu_items_.push_back(frustum_cull);
+
     MenuItem aniso;
     aniso.label = "Anisotropic Filter";
     aniso.type = MenuItemType::Slider;

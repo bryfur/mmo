@@ -4,7 +4,7 @@ A multiplayer online game built with C++20 featuring a client-server architectur
 
 ## Features
 
-- 3D rendering with SDL3 GPU API (terrain, grass, effects, shadows, SSAO)
+- 3D rendering with SDL3 GPU API (terrain, grass, effects, UI, skybox)
 - Entity Component System architecture using EnTT
 - Physics simulation with Jolt Physics
 - glTF model loading for characters, buildings, and environment
@@ -12,6 +12,8 @@ A multiplayer online game built with C++20 featuring a client-server architectur
 - AI and combat systems
 - Client-side interpolation for smooth networked movement
 - Text rendering with SDL3_ttf
+- Gamepad/controller support
+- JSON-driven game data configuration (classes, monsters, world, etc.)
 
 ## Dependencies
 
@@ -20,22 +22,22 @@ Dependencies are managed via CMake FetchContent (automatically downloaded):
 - Jolt Physics v5.2.0
 - tinygltf v2.9.7
 - Standalone Asio 1.30.2
+- GLM 1.0.3
+- nlohmann/json v3.11.3
 - SDL_shadercross (HLSL to SPIR-V shader compilation)
 
-System dependencies (must be installed):
-- SDL3
-- SDL3_ttf
-- SDL3_image
-- GLM
-
-Or pass `-DVENDORED_SDL=ON` to build SDL3, SDL3_ttf, and SDL3_image from source.
+System dependencies (used if available, otherwise automatically built from source):
+- SDL3 >= 3.4.0
+- SDL3_ttf >= 3.2.2
+- SDL3_image >= 3.4.0
 
 ## Building
 
 ### Install System Dependencies (Ubuntu/Debian)
 
 ```bash
-sudo apt install libsdl3-dev libsdl3-ttf-dev libsdl3-image-dev libglm-dev
+# Optional - if not installed, these will be built from source automatically
+sudo apt install libsdl3-dev libsdl3-ttf-dev libsdl3-image-dev
 ```
 
 ### Build
@@ -47,17 +49,17 @@ make -j$(nproc)
 ```
 
 Produces:
-- `mmo_server` - Game server
-- `mmo_client` - Game client
+- `build/src/server/mmo_server` - Game server
+- `build/src/client/mmo_client` - Game client
 
 ## Running
 
 ```bash
 # Start server (default port 7777)
-./build/mmo_server [port]
+./build/src/server/mmo_server [port]
 
 # Start client
-./build/mmo_client [-h host] [-p port] [-n name]
+./build/src/client/mmo_client [-h host] [-p port]
 ```
 
 Or use the convenience script:
@@ -67,12 +69,19 @@ Or use the convenience script:
 
 ## Controls
 
+### Keyboard & Mouse
 - WASD / Arrow Keys - Move (camera-relative)
 - Right Mouse Button + Drag - Orbit camera
 - Mouse Wheel - Zoom in/out
 - Left Mouse Button / Space - Attack
 - Shift - Sprint
-- ESC - Quit
+- ESC - Menu
+
+### Gamepad
+- Left Stick - Move
+- Right Stick - Orbit camera
+- Right Trigger - Attack
+- Left Trigger - Sprint
 
 ## Project Structure
 
@@ -80,16 +89,26 @@ Or use the convenience script:
 mmo/
 ├── src/
 │   ├── client/           # Client application
+│   │   └── ecs/          # Client-side ECS components
+│   ├── engine/           # Core engine (rendering, GPU, input)
 │   │   ├── gpu/          # SDL3 GPU abstraction layer
-│   │   ├── render/       # Rendering subsystems (terrain, effects, UI, shadows)
+│   │   ├── render/       # Rendering subsystems (terrain, grass, effects, UI)
 │   │   ├── scene/        # Scene management
 │   │   ├── shaders/      # HLSL shader sources
-│   │   └── systems/      # Client-side ECS systems (camera, interpolation)
+│   │   └── systems/      # Engine systems (camera)
 │   ├── server/           # Server application
+│   │   ├── ecs/          # Server-side ECS components
 │   │   └── systems/      # Server-side ECS systems (AI, combat, movement, physics)
-│   └── common/           # Shared code (protocol, ECS components)
+│   └── protocol/         # Shared networking protocol
 ├── assets/               # Game assets
 │   ├── models/           # glTF models
 │   └── textures/         # Texture files
+├── data/                 # JSON game configuration
+│   ├── classes.json      # Character class definitions
+│   ├── monsters.json     # Monster definitions
+│   ├── environment.json  # Environment settings
+│   ├── server.json       # Server configuration
+│   ├── town.json         # Town layout
+│   └── world.json        # World settings
 └── tools/                # Python utilities
 ```

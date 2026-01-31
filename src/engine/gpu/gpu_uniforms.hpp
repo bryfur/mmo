@@ -72,4 +72,33 @@ struct alignas(16) UIFragmentUniforms {
     int _padding[3] = {0, 0, 0};
 };
 
+/**
+ * Shadow depth pass - vertex uniforms for static models (set 1, b0)
+ */
+struct alignas(16) ShadowTransformUniforms {
+    glm::mat4 lightViewProjection;
+    glm::mat4 model;
+};
+
+/**
+ * Shadow depth pass - vertex uniforms for terrain (set 1, b0)
+ * Terrain vertices are already in world space, no model matrix needed.
+ */
+struct alignas(16) ShadowTerrainUniforms {
+    glm::mat4 lightViewProjection;
+};
+
+/**
+ * Shadow data for fragment shaders in the main pass (set 3, b1)
+ * Contains cascade view-projection matrices and PCSS parameters.
+ */
+struct alignas(16) ShadowDataUniforms {
+    glm::mat4 lightViewProjection[4];  // Per-cascade light-space matrices
+    glm::vec4 cascadeSplits;           // View-space far depth per cascade
+    float shadowMapResolution;
+    float lightSize;                   // PCSS penumbra size
+    float shadowEnabled;
+    float _pad0 = 0.0f;
+};
+
 } // namespace mmo::engine::gpu

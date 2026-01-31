@@ -105,6 +105,22 @@ public:
     static std::unique_ptr<GPUTexture> create_depth(GPUDevice& device, int width, int height);
 
     /**
+     * @brief Create a 2D array depth texture (e.g., for cascaded shadow maps)
+     *
+     * @param device The GPU device
+     * @param width Texture width
+     * @param height Texture height
+     * @param layers Number of array layers
+     * @return Unique pointer to the texture, or nullptr on failure
+     */
+    static std::unique_ptr<GPUTexture> create_depth_array(GPUDevice& device, int width, int height, int layers);
+
+    /**
+     * @brief Get the number of array layers (1 for non-array textures)
+     */
+    int layers() const { return layers_; }
+
+    /**
      * @brief Create a depth-stencil buffer texture
      * 
      * @param device The GPU device
@@ -165,6 +181,7 @@ private:
     SDL_GPUTextureFormat format_ = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
     bool is_render_target_ = false;
     bool is_depth_ = false;
+    int layers_ = 1;
     uint32_t mip_levels_ = 1;
 
     static uint32_t calculate_mip_levels(int width, int height);

@@ -93,8 +93,16 @@ public:
     void render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                 const glm::mat4& view, const glm::mat4& projection,
                 const glm::vec3& camera_pos,
-                const glm::vec3& light_dir);
-    
+                const glm::vec3& light_dir,
+                const SDL_GPUTextureSamplerBinding* shadow_bindings = nullptr,
+                int shadow_binding_count = 0);
+
+    /**
+     * Render terrain into a shadow depth map.
+     */
+    void render_shadow(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                       const glm::mat4& light_view_projection);
+
     /**
      * Get terrain height at any world position.
      * Samples from CPU-side heightmap data (for physics, placement, etc.)

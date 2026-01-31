@@ -104,6 +104,15 @@ GPUPipeline* PipelineRegistry::get_pipeline(PipelineType type) {
         case PipelineType::Grass:
             pipeline = create_grass_pipeline();
             break;
+        case PipelineType::ShadowModel:
+            pipeline = create_shadow_model_pipeline();
+            break;
+        case PipelineType::ShadowSkinnedModel:
+            pipeline = create_shadow_skinned_model_pipeline();
+            break;
+        case PipelineType::ShadowTerrain:
+            pipeline = create_shadow_terrain_pipeline();
+            break;
         default:
             SDL_Log("PipelineRegistry: Unknown pipeline type %d", static_cast<int>(type));
             return nullptr;
@@ -163,8 +172,8 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_model_pipeline() {
     vs_resources.num_uniform_buffers = 1;
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 1;
-    fs_resources.num_samplers = 1;  // baseColor
+    fs_resources.num_uniform_buffers = 2;  // lighting + shadow data
+    fs_resources.num_samplers = 5;  // baseColor + 4 shadow cascade maps
 
     auto* vs = shader_manager_->get(shader_path_ + "model.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
@@ -188,8 +197,8 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_skinned_model_pipeline() {
     vs_resources.num_uniform_buffers = 2; // Camera + Bones
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 1;
-    fs_resources.num_samplers = 1;  // baseColor
+    fs_resources.num_uniform_buffers = 2;  // lighting + shadow data
+    fs_resources.num_samplers = 5;  // baseColor + 4 shadow cascade maps
 
     auto* vs = shader_manager_->get(shader_path_ + "skinned_model.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
@@ -213,8 +222,8 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_terrain_pipeline() {
     vs_resources.num_uniform_buffers = 1;
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 1;
-    fs_resources.num_samplers = 1;  // grassTexture
+    fs_resources.num_uniform_buffers = 2;  // lighting + shadow data
+    fs_resources.num_samplers = 5;  // grassTexture + 4 shadow cascade maps
 
     auto* vs = shader_manager_->get(shader_path_ + "terrain.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
@@ -432,8 +441,8 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_grass_pipeline() {
     vs_resources.num_samplers = 1;  // heightmap texture
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 1;
-    fs_resources.num_samplers = 0;
+    fs_resources.num_uniform_buffers = 2;  // lighting + shadow data
+    fs_resources.num_samplers = 4;  // 4 shadow cascade maps
 
     auto* vs = shader_manager_->get(shader_path_ + "grass.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
@@ -447,6 +456,93 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_grass_pipeline() {
     config.fragment_shader = fs->handle();
     config.with_vertex3d().opaque().no_cull();
     config.color_format = swapchain_format_;
+    config.depth_format = depth_format_;
+
+    return GPUPipeline::create(*device_, config);
+}
+
+std::unique_ptr<GPUPipeline> PipelineRegistry::create_shadow_model_pipeline() {
+    ShaderResources vs_resources;
+    vs_resources.num_uniform_buffers = 1;  // lightVP + model
+
+    ShaderResources fs_resources;
+    // Empty fragment shader: no uniforms, no samplers
+
+    auto* vs = shader_manager_->get(shader_path_ + "shadow_depth.vert.spv",
+                                     ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "shadow_depth.frag.spv",
+                                     ShaderStage::Fragment, "PSMain", fs_resources);
+
+    if (!vs || !fs) return nullptr;
+
+    PipelineConfig config;
+    config.vertex_shader = vs->handle();
+    config.fragment_shader = fs->handle();
+    config.with_vertex3d().opaque().cull_front().with_depth_bias(4.0f, 2.0f);
+    config.color_format = SDL_GPU_TEXTUREFORMAT_INVALID;  // depth-only
+    config.depth_format = depth_format_;
+
+    return GPUPipeline::create(*device_, config);
+}
+
+std::unique_ptr<GPUPipeline> PipelineRegistry::create_shadow_skinned_model_pipeline() {
+    ShaderResources vs_resources;
+    vs_resources.num_uniform_buffers = 2;  // lightVP+model, bones
+
+    ShaderResources fs_resources;
+
+    auto* vs = shader_manager_->get(shader_path_ + "shadow_skinned.vert.spv",
+                                     ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "shadow_depth.frag.spv",
+                                     ShaderStage::Fragment, "PSMain", fs_resources);
+
+    if (!vs || !fs) return nullptr;
+
+    PipelineConfig config;
+    config.vertex_shader = vs->handle();
+    config.fragment_shader = fs->handle();
+    config.with_skinned_vertex().opaque().cull_front().with_depth_bias(4.0f, 2.0f);
+    config.color_format = SDL_GPU_TEXTUREFORMAT_INVALID;
+    config.depth_format = depth_format_;
+
+    return GPUPipeline::create(*device_, config);
+}
+
+std::unique_ptr<GPUPipeline> PipelineRegistry::create_shadow_terrain_pipeline() {
+    ShaderResources vs_resources;
+    vs_resources.num_uniform_buffers = 1;  // lightVP
+
+    ShaderResources fs_resources;
+
+    auto* vs = shader_manager_->get(shader_path_ + "shadow_terrain.vert.spv",
+                                     ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "shadow_depth.frag.spv",
+                                     ShaderStage::Fragment, "PSMain", fs_resources);
+
+    if (!vs || !fs) return nullptr;
+
+    // Terrain vertex format: position(3), texcoord(2), color(4)
+    PipelineConfig config;
+    config.vertex_shader = vs->handle();
+    config.fragment_shader = fs->handle();
+
+    config.vertex_buffers = {{
+        .slot = 0,
+        .pitch = sizeof(float) * 9,
+        .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+        .instance_step_rate = 0
+    }};
+
+    config.vertex_attributes = {
+        { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, 0 },
+        { 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, sizeof(float) * 3 },
+        { 2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, sizeof(float) * 5 },
+    };
+
+    // Terrain is single-sided (upward-facing only), so no_cull is needed
+    // to ensure terrain triangles are written to the shadow map.
+    config.opaque().no_cull().with_depth_bias(4.0f, 2.0f);
+    config.color_format = SDL_GPU_TEXTUREFORMAT_INVALID;
     config.depth_format = depth_format_;
 
     return GPUPipeline::create(*device_, config);

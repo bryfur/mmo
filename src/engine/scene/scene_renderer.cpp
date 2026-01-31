@@ -97,6 +97,10 @@ bool SceneRenderer::init(RenderContext& context, float world_width, float world_
         grass_renderer_->init(context_->device(), pipeline_registry_, world_width, world_height);
     }
 
+    if (!shadow_map_.init(context_->device())) {
+        std::cerr << "Warning: Failed to initialize shadow map (shadows disabled)" << std::endl;
+    }
+
     return true;
 }
 
@@ -117,6 +121,7 @@ void SceneRenderer::shutdown() {
         default_sampler_ = nullptr;
     }
 
+    shadow_map_.shutdown();
     effects_.shutdown();
     ui_.shutdown();
     world_.shutdown();
@@ -346,6 +351,10 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
 
     bool has_content = scene.has_3d_content() || !scene.commands().empty();
     if (has_content) {
+        if (shadow_map_.is_ready() && gfx.shadow_mode > 0) {
+            render_shadow_passes(scene, camera);
+        }
+
         begin_main_pass();
 
         SDL_GPUCommandBuffer* cmd = context_->current_command_buffer();
@@ -357,32 +366,59 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
                 world_.render_skybox(main_render_pass_, cmd, camera.view, camera.projection);
             }
 
+            // Prepare shadow bindings for terrain/grass (they bind after pipeline)
+            SDL_GPUTextureSamplerBinding shadow_bindings[4] = {};
+            int shadow_binding_count = 0;
+            if (shadow_map_.is_ready()) {
+                for (int i = 0; i < render::CSM_CASCADE_COUNT; ++i) {
+                    shadow_bindings[i].texture = shadow_map_.shadow_texture(i);
+                    shadow_bindings[i].sampler = shadow_map_.shadow_sampler();
+                }
+                shadow_binding_count = render::CSM_CASCADE_COUNT;
+            }
+
             if (scene.should_draw_ground()) {
+                auto shadow_uniforms = shadow_map_.get_shadow_uniforms(gfx.shadow_mode);
+                SDL_PushGPUFragmentUniformData(cmd, 1, &shadow_uniforms, sizeof(shadow_uniforms));
                 terrain_.render(main_render_pass_, cmd, camera.view, camera.projection,
-                               camera.position, light_dir_);
+                               camera.position, light_dir_,
+                               shadow_binding_count > 0 ? shadow_bindings : nullptr,
+                               shadow_binding_count);
             }
 
             if (scene.should_draw_grass() && gfx.grass_enabled && grass_renderer_) {
+                auto shadow_uniforms = shadow_map_.get_shadow_uniforms(gfx.shadow_mode);
+                SDL_PushGPUFragmentUniformData(cmd, 1, &shadow_uniforms, sizeof(shadow_uniforms));
                 grass_renderer_->update(dt, skybox_time_);
                 grass_renderer_->render(main_render_pass_, cmd, camera.view, camera.projection,
-                                        camera.position, light_dir_);
+                                        camera.position, light_dir_,
+                                        shadow_binding_count > 0 ? shadow_bindings : nullptr,
+                                        shadow_binding_count);
             }
 
-            // Frustum culling setup
+            // Culling setup
             Frustum frustum;
             frustum.extract_from_matrix(camera.view_projection);
             bool do_frustum_cull = gfx.frustum_culling;
+            float draw_dist_sq = gfx.get_draw_distance() * gfx.get_draw_distance();
 
             // Render model commands from the scene
             for (const auto& render_cmd : scene.commands()) {
                 std::visit([&](const auto& data) {
                     using T = std::decay_t<decltype(data)>;
 
+                    const glm::mat4& t = data.transform;
+                    glm::vec3 world_pos(t[3][0], t[3][1], t[3][2]);
+
+                    // Distance cull (backup for engine-level safety)
+                    float dx = world_pos.x - camera.position.x;
+                    float dz = world_pos.z - camera.position.z;
+                    if (dx * dx + dz * dz > draw_dist_sq) return;
+
                     // Frustum cull using bounding sphere
                     if (do_frustum_cull) {
                         Model* model = model_manager_->get_model(data.model_name);
                         if (model) {
-                            const glm::mat4& t = data.transform;
                             glm::vec3 local_center(
                                 (model->min_x + model->max_x) * 0.5f,
                                 (model->min_y + model->max_y) * 0.5f,
@@ -411,6 +447,12 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
 
             // Render effects
             for (const auto& effect : scene.effects()) {
+                // Distance cull
+                float dx = effect.x - camera.position.x;
+                float dz = effect.y - camera.position.z;
+                if (dx * dx + dz * dz > draw_dist_sq) continue;
+
+                // Frustum cull
                 if (do_frustum_cull) {
                     glm::vec3 effect_pos(effect.x, 0.0f, effect.y);
                     if (!frustum.intersects_sphere(effect_pos, effect.range * 2.0f)) continue;
@@ -427,6 +469,7 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
             }
 
             if (scene.should_draw_mountains() && gfx.mountains_enabled) {
+                bind_shadow_data(main_render_pass_, cmd, 1);
                 world_.render_mountains(main_render_pass_, cmd, camera.view, camera.projection,
                                         camera.position, light_dir_, frustum);
             }
@@ -485,6 +528,9 @@ void SceneRenderer::render_model_command(const ModelCommand& cmd, const CameraSt
 
     pipeline->bind(main_render_pass_);
     SDL_PushGPUVertexUniformData(gpu_cmd, 0, &transform_uniforms, sizeof(transform_uniforms));
+
+    // Bind shadow map data (fragment sampler slot 1, uniform slot 1)
+    bind_shadow_data(main_render_pass_, gpu_cmd, 1);
 
     for (auto& mesh : model->meshes) {
         if (!mesh.uploaded) {
@@ -547,6 +593,9 @@ void SceneRenderer::render_skinned_model_command(const SkinnedModelCommand& cmd,
     SDL_PushGPUVertexUniformData(gpu_cmd, 0, &transform_uniforms, sizeof(transform_uniforms));
     SDL_PushGPUVertexUniformData(gpu_cmd, 1, cmd.bone_matrices.data(),
                                   MAX_BONES * sizeof(glm::mat4));
+
+    // Bind shadow map data (fragment sampler slot 1, uniform slot 1)
+    bind_shadow_data(main_render_pass_, gpu_cmd, 1);
 
     for (auto& mesh : model->meshes) {
         if (!mesh.uploaded) {
@@ -633,6 +682,117 @@ void SceneRenderer::draw_billboard_3d(const Billboard3DCommand& cmd,
     ui_.draw_filled_rect(x, y, bar_w, bar_h, cmd.bg_color);
     float fill_w = bar_w * cmd.fill_ratio;
     ui_.draw_filled_rect(x, y, fill_w, bar_h, cmd.fill_color);
+}
+
+// ============================================================================
+// Shadow Rendering
+// ============================================================================
+
+void SceneRenderer::render_shadow_passes(const RenderScene& scene, const CameraState& camera) {
+    SDL_GPUCommandBuffer* cmd = context_->current_command_buffer();
+    if (!cmd) return;
+
+    // Update cascade matrices
+    shadow_map_.update(camera.view, camera.projection, light_dir_, 5.0f, 2000.0f);
+
+    for (int cascade = 0; cascade < render::CSM_CASCADE_COUNT; ++cascade) {
+        SDL_GPURenderPass* shadow_pass = shadow_map_.begin_shadow_pass(cmd, cascade);
+        if (!shadow_pass) continue;
+
+        const auto& cascade_data = shadow_map_.cascades()[cascade];
+
+        // Render static models into shadow map
+        auto* shadow_pipeline = pipeline_registry_.get_shadow_model_pipeline();
+        if (shadow_pipeline) {
+            shadow_pipeline->bind(shadow_pass);
+
+            for (const auto& render_cmd : scene.commands()) {
+                std::visit([&](const auto& data) {
+                    using T = std::decay_t<decltype(data)>;
+
+                    if constexpr (std::is_same_v<T, ModelCommand>) {
+                        Model* model = model_manager_->get_model(data.model_name);
+                        if (!model) return;
+
+                        gpu::ShadowTransformUniforms shadow_uniforms = {};
+                        shadow_uniforms.lightViewProjection = cascade_data.light_view_projection;
+                        shadow_uniforms.model = data.transform;
+                        SDL_PushGPUVertexUniformData(cmd, 0, &shadow_uniforms, sizeof(shadow_uniforms));
+
+                        for (auto& mesh : model->meshes) {
+                            if (!mesh.uploaded) ModelLoader::upload_to_gpu(context_->device(), *model);
+                            if (!mesh.vertex_buffer || !mesh.index_buffer || mesh.indices.empty()) return;
+
+                            mesh.bind_buffers(shadow_pass);
+                            SDL_DrawGPUIndexedPrimitives(shadow_pass,
+                                                          static_cast<uint32_t>(mesh.indices.size()),
+                                                          1, 0, 0, 0);
+                        }
+                    }
+                }, render_cmd.data);
+            }
+        }
+
+        // Render skinned models into shadow map
+        auto* shadow_skinned_pipeline = pipeline_registry_.get_shadow_skinned_model_pipeline();
+        if (shadow_skinned_pipeline) {
+            shadow_skinned_pipeline->bind(shadow_pass);
+
+            for (const auto& render_cmd : scene.commands()) {
+                std::visit([&](const auto& data) {
+                    using T = std::decay_t<decltype(data)>;
+
+                    if constexpr (std::is_same_v<T, SkinnedModelCommand>) {
+                        Model* model = model_manager_->get_model(data.model_name);
+                        if (!model) return;
+
+                        gpu::ShadowTransformUniforms shadow_uniforms = {};
+                        shadow_uniforms.lightViewProjection = cascade_data.light_view_projection;
+                        shadow_uniforms.model = data.transform;
+                        SDL_PushGPUVertexUniformData(cmd, 0, &shadow_uniforms, sizeof(shadow_uniforms));
+                        SDL_PushGPUVertexUniformData(cmd, 1, data.bone_matrices.data(),
+                                                      MAX_BONES * sizeof(glm::mat4));
+
+                        for (auto& mesh : model->meshes) {
+                            if (!mesh.uploaded) ModelLoader::upload_to_gpu(context_->device(), *model);
+                            if (!mesh.vertex_buffer || !mesh.index_buffer || mesh.indices.empty()) return;
+
+                            mesh.bind_buffers(shadow_pass);
+                            SDL_DrawGPUIndexedPrimitives(shadow_pass,
+                                                          static_cast<uint32_t>(mesh.indices.size()),
+                                                          1, 0, 0, 0);
+                        }
+                    }
+                }, render_cmd.data);
+            }
+        }
+
+        // Render terrain into shadow map
+        terrain_.render_shadow(shadow_pass, cmd, cascade_data.light_view_projection);
+
+        shadow_map_.end_shadow_pass();
+    }
+}
+
+void SceneRenderer::render_shadow_models(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                           const RenderScene& scene, int cascade_index) {
+    // Currently handled inline in render_shadow_passes
+}
+
+void SceneRenderer::bind_shadow_data(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, int sampler_slot) {
+    if (!shadow_map_.is_ready()) return;
+
+    // Bind 4 individual cascade shadow textures starting at sampler_slot
+    SDL_GPUTextureSamplerBinding shadow_bindings[4];
+    for (int i = 0; i < render::CSM_CASCADE_COUNT; ++i) {
+        shadow_bindings[i].texture = shadow_map_.shadow_texture(i);
+        shadow_bindings[i].sampler = shadow_map_.shadow_sampler();
+    }
+    SDL_BindGPUFragmentSamplers(pass, sampler_slot, shadow_bindings, 4);
+
+    const GraphicsSettings& gs = graphics_ ? *graphics_ : default_graphics_;
+    auto shadow_uniforms = shadow_map_.get_shadow_uniforms(gs.shadow_mode);
+    SDL_PushGPUFragmentUniformData(cmd, 1, &shadow_uniforms, sizeof(shadow_uniforms));
 }
 
 } // namespace mmo::engine::scene

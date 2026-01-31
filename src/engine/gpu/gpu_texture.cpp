@@ -35,6 +35,7 @@ GPUTexture::GPUTexture(GPUTexture&& other) noexcept
     , format_(other.format_)
     , is_render_target_(other.is_render_target_)
     , is_depth_(other.is_depth_)
+    , layers_(other.layers_)
     , mip_levels_(other.mip_levels_) {
     other.device_ = nullptr;
     other.texture_ = nullptr;
@@ -53,6 +54,7 @@ GPUTexture& GPUTexture::operator=(GPUTexture&& other) noexcept {
         format_ = other.format_;
         is_render_target_ = other.is_render_target_;
         is_depth_ = other.is_depth_;
+        layers_ = other.layers_;
         mip_levels_ = other.mip_levels_;
 
         other.device_ = nullptr;
@@ -294,6 +296,35 @@ std::unique_ptr<GPUTexture> GPUTexture::create_depth(GPUDevice& device, int widt
     texture->texture_ = device.create_texture(tex_info);
     if (!texture->texture_) {
         SDL_Log("GPUTexture::create_depth: Failed to create texture: %s", SDL_GetError());
+        return nullptr;
+    }
+
+    return texture;
+}
+
+std::unique_ptr<GPUTexture> GPUTexture::create_depth_array(GPUDevice& device, int width, int height, int layers) {
+    auto texture = std::unique_ptr<GPUTexture>(new GPUTexture());
+    texture->device_ = &device;
+    texture->width_ = width;
+    texture->height_ = height;
+    texture->layers_ = layers;
+    texture->format_ = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+    texture->is_depth_ = true;
+    texture->is_render_target_ = true;
+    texture->mip_levels_ = 1;
+
+    SDL_GPUTextureCreateInfo tex_info = {};
+    tex_info.type = SDL_GPU_TEXTURETYPE_2D_ARRAY;
+    tex_info.format = texture->format_;
+    tex_info.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    tex_info.width = static_cast<Uint32>(width);
+    tex_info.height = static_cast<Uint32>(height);
+    tex_info.layer_count_or_depth = static_cast<Uint32>(layers);
+    tex_info.num_levels = 1;
+
+    texture->texture_ = device.create_texture(tex_info);
+    if (!texture->texture_) {
+        SDL_Log("GPUTexture::create_depth_array: Failed to create texture: %s", SDL_GetError());
         return nullptr;
     }
 

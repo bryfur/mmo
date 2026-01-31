@@ -21,6 +21,7 @@ struct VSOutput {
     float2 texCoord : TEXCOORD2;
     float4 vertexColor : TEXCOORD3;
     float fogDistance : TEXCOORD4;
+    float viewDepth : TEXCOORD5;
 };
 
 // Uniform buffer - SDL3 GPU SPIR-V requires vertex uniforms in set 1
@@ -49,7 +50,9 @@ VSOutput VSMain(VSInput input) {
     output.vertexColor = input.color;
     output.fogDistance = length(worldPos.xyz - cameraPos);
 
-    output.position = mul(projection, mul(view, worldPos));
+    float4 viewPos = mul(view, worldPos);
+    output.viewDepth = -viewPos.z;
+    output.position = mul(projection, viewPos);
 
     return output;
 }

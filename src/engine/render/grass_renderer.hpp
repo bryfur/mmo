@@ -79,7 +79,9 @@ public:
 
     void render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                 const glm::mat4& view, const glm::mat4& projection,
-                const glm::vec3& camera_pos, const glm::vec3& light_dir);
+                const glm::vec3& camera_pos, const glm::vec3& light_dir,
+                const SDL_GPUTextureSamplerBinding* shadow_bindings = nullptr,
+                int shadow_binding_count = 0);
 
     void shutdown();
 

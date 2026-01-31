@@ -20,6 +20,7 @@ struct VSOutput {
     float2 texCoord : TEXCOORD1;
     float3 worldPos : TEXCOORD2;
     float4 color : TEXCOORD3;
+    float viewDepth : TEXCOORD4;
 };
 
 // Uniform buffer (set 1 for SDL3 GPU vertex uniforms)
@@ -163,6 +164,7 @@ VSOutput VSMain(VSInput input) {
     output.normal = rotatedNormal;
     output.texCoord = input.texCoord;
     output.color = input.color;
+    output.viewDepth = length(worldPos - cameraGrid);
     output.position = mul(viewProjection, float4(worldPos, 1.0));
 
     return output;

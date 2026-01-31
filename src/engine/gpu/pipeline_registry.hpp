@@ -31,7 +31,12 @@ enum class PipelineType {
     // Effect pipelines
     Effect,             ///< Particle effects (additive blending)
     Grass,              ///< Instanced grass rendering
-    
+
+    // Shadow pipelines (depth-only)
+    ShadowModel,        ///< Shadow depth pass for static models
+    ShadowSkinnedModel, ///< Shadow depth pass for skinned models
+    ShadowTerrain,      ///< Shadow depth pass for terrain
+
     // Count for iteration
     Count
 };
@@ -50,8 +55,11 @@ inline const char* pipeline_type_to_string(PipelineType type) {
         case PipelineType::Text:          return "Text";
         case PipelineType::Billboard:     return "Billboard";
         case PipelineType::Effect:        return "Effect";
-        case PipelineType::Grass:         return "Grass";
-        default:                             return "Unknown";
+        case PipelineType::Grass:              return "Grass";
+        case PipelineType::ShadowModel:        return "ShadowModel";
+        case PipelineType::ShadowSkinnedModel: return "ShadowSkinnedModel";
+        case PipelineType::ShadowTerrain:      return "ShadowTerrain";
+        default:                               return "Unknown";
     }
 }
 
@@ -131,6 +139,10 @@ public:
     GPUPipeline* get_effect_pipeline() { return get_pipeline(PipelineType::Effect); }
     GPUPipeline* get_text_pipeline() { return get_pipeline(PipelineType::Text); }
     GPUPipeline* get_grid_pipeline() { return get_pipeline(PipelineType::Grid); }
+    GPUPipeline* get_shadow_model_pipeline() { return get_pipeline(PipelineType::ShadowModel); }
+    GPUPipeline* get_shadow_skinned_model_pipeline() { return get_pipeline(PipelineType::ShadowSkinnedModel); }
+    GPUPipeline* get_shadow_terrain_pipeline() { return get_pipeline(PipelineType::ShadowTerrain); }
+
     /**
      * @brief Pre-create all pipelines
      * 
@@ -179,6 +191,10 @@ private:
     std::unique_ptr<GPUPipeline> create_billboard_pipeline();
     std::unique_ptr<GPUPipeline> create_effect_pipeline();
     std::unique_ptr<GPUPipeline> create_grass_pipeline();
+    std::unique_ptr<GPUPipeline> create_shadow_model_pipeline();
+    std::unique_ptr<GPUPipeline> create_shadow_skinned_model_pipeline();
+    std::unique_ptr<GPUPipeline> create_shadow_terrain_pipeline();
+
     GPUDevice* device_ = nullptr;
     SDL_GPUTextureFormat swapchain_format_ = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
     SDL_GPUTextureFormat depth_format_ = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;

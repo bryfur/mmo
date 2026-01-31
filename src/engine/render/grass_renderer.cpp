@@ -118,7 +118,9 @@ void GrassRenderer::generate_blade_mesh() {
 
 void GrassRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                            const glm::mat4& view, const glm::mat4& projection,
-                           const glm::vec3& camera_pos, const glm::vec3& light_dir) {
+                           const glm::vec3& camera_pos, const glm::vec3& light_dir,
+                           const SDL_GPUTextureSamplerBinding* shadow_bindings,
+                           int shadow_binding_count) {
     if (!initialized_ || !pipeline_registry_ || !pass || !cmd) return;
     if (!blade_vertex_buffer_ || !blade_index_buffer_ || blade_index_count_ == 0) return;
     if (!heightmap_texture_ || !heightmap_sampler_) return;
@@ -178,6 +180,11 @@ void GrassRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
         heightmap_sampler_->handle()
     };
     SDL_BindGPUVertexSamplers(pass, 0, &heightmap_binding, 1);
+
+    // Bind shadow cascade textures (slots 0-3)
+    if (shadow_bindings && shadow_binding_count > 0) {
+        SDL_BindGPUFragmentSamplers(pass, 0, shadow_bindings, shadow_binding_count);
+    }
 
     // Bind blade mesh
     SDL_GPUBufferBinding vb_binding = { blade_vertex_buffer_->handle(), 0 };

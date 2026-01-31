@@ -8,18 +8,9 @@ NUM_CLIENTS=${1:-1}
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/build"
 
-# Check if executables exist
-if [[ ! -f "$BUILD_DIR/src/server/mmo_server" ]]; then
-    echo "Error: mmo_server not found in $BUILD_DIR"
-    echo "Please build the project first with: cmake --build build"
-    exit 1
-fi
-
-if [[ ! -f "$BUILD_DIR/src/client/mmo_client" ]]; then
-    echo "Error: mmo_client not found in $BUILD_DIR"
-    echo "Please build the project first with: cmake --build build"
-    exit 1
-fi
+# Build the project
+echo "Building..."
+cmake --build "$BUILD_DIR" -j$(nproc) || { echo "Build failed"; exit 1; }
 
 # Start the server in the background
 echo "Starting server..."

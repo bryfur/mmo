@@ -162,6 +162,15 @@ void MenuSystem::init_graphics_menu() {
     aniso.slider_labels = {"Off", "2x", "4x", "8x", "16x"};
     menu_items_.push_back(aniso);
 
+    MenuItem shadows;
+    shadows.label = "Shadows";
+    shadows.type = MenuItemType::Slider;
+    shadows.slider_value = &graphics_settings_.shadow_mode;
+    shadows.slider_min = 0;
+    shadows.slider_max = 2;
+    shadows.slider_labels = {"Off", "Hard", "PCSS"};
+    menu_items_.push_back(shadows);
+
     MenuItem vsync;
     vsync.label = "VSync";
     vsync.type = MenuItemType::Slider;

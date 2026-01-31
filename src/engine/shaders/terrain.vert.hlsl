@@ -19,6 +19,7 @@ struct VSOutput {
     float3 fragPos : TEXCOORD2;
     float fogDistance : TEXCOORD3;
     float3 normal : TEXCOORD4;
+    float viewDepth : TEXCOORD5;
 };
 
 // Uniform buffer - SDL3 GPU SPIR-V requires vertex uniforms in set 1
@@ -42,7 +43,9 @@ VSOutput VSMain(VSInput input) {
     // For a proper implementation, normals should come from vertex data
     output.normal = float3(0.0, 1.0, 0.0);
 
-    output.position = mul(projection, mul(view, float4(input.position, 1.0)));
+    float4 viewPos = mul(view, float4(input.position, 1.0));
+    output.viewDepth = -viewPos.z;
+    output.position = mul(projection, viewPos);
 
     return output;
 }

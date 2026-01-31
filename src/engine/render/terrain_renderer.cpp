@@ -1,6 +1,7 @@
 #include "terrain_renderer.hpp"
 #include "SDL3/SDL_gpu.h"
 #include "engine/gpu/gpu_buffer.hpp"
+#include "engine/gpu/gpu_uniforms.hpp"
 #include "engine/gpu/gpu_device.hpp"
 #include "engine/gpu/gpu_texture.hpp"
 #include "engine/gpu/gpu_types.hpp"
@@ -225,7 +226,9 @@ void TerrainRenderer::generate_terrain_mesh() {
 void TerrainRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                              const glm::mat4& view, const glm::mat4& projection,
                              const glm::vec3& camera_pos,
-                             const glm::vec3& light_dir) {
+                             const glm::vec3& light_dir,
+                             const SDL_GPUTextureSamplerBinding* shadow_bindings,
+                             int shadow_binding_count) {
     // Skip rendering if required resources aren't available
     if (!pipeline_registry_ || !vertex_buffer_ || !index_buffer_ || !pass || !cmd) return;
     if (!grass_texture_ || !grass_sampler_) {
@@ -267,7 +270,12 @@ void TerrainRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
     tex_binding.texture = grass_texture_->handle();
     tex_binding.sampler = grass_sampler_->handle();
     SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
-    
+
+    // Bind shadow cascade textures (slots 1-4)
+    if (shadow_bindings && shadow_binding_count > 0) {
+        SDL_BindGPUFragmentSamplers(pass, 1, shadow_bindings, shadow_binding_count);
+    }
+
     // Bind vertex buffer
     SDL_GPUBufferBinding vb_binding = {
         vertex_buffer_->handle(),
@@ -299,6 +307,28 @@ void TerrainRenderer::set_anisotropic_filter(float level) {
     if (!grass_sampler_) {
         SDL_Log("TerrainRenderer::set_anisotropic_filter: Failed to recreate grass sampler with level %.1f", level);
     }
+}
+
+void TerrainRenderer::render_shadow(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                     const glm::mat4& light_view_projection) {
+    if (!pipeline_registry_ || !vertex_buffer_ || !index_buffer_ || !pass || !cmd) return;
+
+    auto* pipeline = pipeline_registry_->get_shadow_terrain_pipeline();
+    if (!pipeline) return;
+
+    pipeline->bind(pass);
+
+    gpu::ShadowTerrainUniforms shadow_uniforms = {};
+    shadow_uniforms.lightViewProjection = light_view_projection;
+    SDL_PushGPUVertexUniformData(cmd, 0, &shadow_uniforms, sizeof(shadow_uniforms));
+
+    SDL_GPUBufferBinding vb_binding = { vertex_buffer_->handle(), 0 };
+    SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
+
+    SDL_GPUBufferBinding ib_binding = { index_buffer_->handle(), 0 };
+    SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+
+    SDL_DrawGPUIndexedPrimitives(pass, index_count_, 1, 0, 0, 0);
 }
 
 } // namespace mmo::engine::render

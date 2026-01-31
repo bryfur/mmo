@@ -8,6 +8,7 @@
 #include "engine/render/ui_renderer.hpp"
 #include "engine/render/effect_renderer.hpp"
 #include "engine/render/grass_renderer.hpp"
+#include "engine/render/shadow_map.hpp"
 #include "engine/gpu/gpu_buffer.hpp"
 #include "engine/gpu/gpu_texture.hpp"
 #include "engine/gpu/pipeline_registry.hpp"
@@ -87,6 +88,12 @@ private:
     void render_ui_commands(const UIScene& ui_scene, const CameraState& camera);
     void draw_billboard_3d(const Billboard3DCommand& cmd, const CameraState& camera);
 
+    // Shadow rendering
+    void render_shadow_passes(const RenderScene& scene, const CameraState& camera);
+    void render_shadow_models(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                               const RenderScene& scene, int cascade_index);
+    void bind_shadow_data(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, int sampler_slot);
+
     // Setup
     void init_pipelines();
     void init_billboard_buffers();
@@ -101,6 +108,7 @@ private:
     render::EffectRenderer effects_;
     std::unique_ptr<ModelManager> model_manager_;
     std::unique_ptr<render::GrassRenderer> grass_renderer_;
+    render::ShadowMap shadow_map_;
 
     // ========== GPU Resources ==========
     std::unique_ptr<gpu::GPUBuffer> billboard_vertex_buffer_;

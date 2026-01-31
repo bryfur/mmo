@@ -16,8 +16,8 @@ bool AmbientOcclusion::init(gpu::GPUDevice& device, int width, int height) {
     device_ = &device;
     width_ = width;
     height_ = height;
-    ao_width_ = std::max(1, width / 2);
-    ao_height_ = std::max(1, height / 2);
+    ao_width_ = std::max(1, width);
+    ao_height_ = std::max(1, height);
 
     create_textures(width, height);
     create_samplers();
@@ -57,8 +57,8 @@ void AmbientOcclusion::resize(int width, int height) {
 
     width_ = width;
     height_ = height;
-    ao_width_ = std::max(1, width / 2);
-    ao_height_ = std::max(1, height / 2);
+    ao_width_ = std::max(1, width);
+    ao_height_ = std::max(1, height);
 
     create_textures(width, height);
     SDL_Log("AmbientOcclusion: Resized to %dx%d (AO: %dx%d)", width, height, ao_width_, ao_height_);

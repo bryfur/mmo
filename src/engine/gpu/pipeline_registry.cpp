@@ -113,6 +113,18 @@ GPUPipeline* PipelineRegistry::get_pipeline(PipelineType type) {
         case PipelineType::ShadowTerrain:
             pipeline = create_shadow_terrain_pipeline();
             break;
+        case PipelineType::SSAO:
+            pipeline = create_ssao_pipeline();
+            break;
+        case PipelineType::GTAO:
+            pipeline = create_gtao_pipeline();
+            break;
+        case PipelineType::BlurAO:
+            pipeline = create_blur_ao_pipeline();
+            break;
+        case PipelineType::Composite:
+            pipeline = create_composite_pipeline();
+            break;
         default:
             SDL_Log("PipelineRegistry: Unknown pipeline type %d", static_cast<int>(type));
             return nullptr;
@@ -544,6 +556,100 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_shadow_terrain_pipeline() 
     config.opaque().no_cull().with_depth_bias(4.0f, 2.0f);
     config.color_format = SDL_GPU_TEXTUREFORMAT_INVALID;
     config.depth_format = depth_format_;
+
+    return GPUPipeline::create(*device_, config);
+}
+
+std::unique_ptr<GPUPipeline> PipelineRegistry::create_ssao_pipeline() {
+    ShaderResources vs_resources;
+
+    ShaderResources fs_resources;
+    fs_resources.num_uniform_buffers = 1;
+    fs_resources.num_samplers = 1;
+
+    auto* vs = shader_manager_->get(shader_path_ + "fullscreen.vert.spv",
+                                     ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "ssao.frag.spv",
+                                     ShaderStage::Fragment, "PSMain", fs_resources);
+
+    if (!vs || !fs) return nullptr;
+
+    PipelineConfig config;
+    config.vertex_shader = vs->handle();
+    config.fragment_shader = fs->handle();
+    config.opaque().no_depth().no_cull();
+    config.color_format = SDL_GPU_TEXTUREFORMAT_R8_UNORM;
+
+    return GPUPipeline::create(*device_, config);
+}
+
+std::unique_ptr<GPUPipeline> PipelineRegistry::create_gtao_pipeline() {
+    ShaderResources vs_resources;
+    // Fullscreen vertex shader: no uniforms, no samplers
+
+    ShaderResources fs_resources;
+    fs_resources.num_uniform_buffers = 1;  // GTAOUniforms
+    fs_resources.num_samplers = 1;         // depth texture
+
+    auto* vs = shader_manager_->get(shader_path_ + "fullscreen.vert.spv",
+                                     ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "gtao.frag.spv",
+                                     ShaderStage::Fragment, "PSMain", fs_resources);
+
+    if (!vs || !fs) return nullptr;
+
+    PipelineConfig config;
+    config.vertex_shader = vs->handle();
+    config.fragment_shader = fs->handle();
+    // No vertex input (fullscreen triangle from SV_VertexID)
+    config.opaque().no_depth().no_cull();
+    config.color_format = SDL_GPU_TEXTUREFORMAT_R8_UNORM;
+
+    return GPUPipeline::create(*device_, config);
+}
+
+std::unique_ptr<GPUPipeline> PipelineRegistry::create_blur_ao_pipeline() {
+    ShaderResources vs_resources;
+
+    ShaderResources fs_resources;
+    fs_resources.num_uniform_buffers = 1;  // BlurUniforms
+    fs_resources.num_samplers = 2;         // AO texture + depth texture
+
+    auto* vs = shader_manager_->get(shader_path_ + "fullscreen.vert.spv",
+                                     ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "blur_ao.frag.spv",
+                                     ShaderStage::Fragment, "PSMain", fs_resources);
+
+    if (!vs || !fs) return nullptr;
+
+    PipelineConfig config;
+    config.vertex_shader = vs->handle();
+    config.fragment_shader = fs->handle();
+    config.opaque().no_depth().no_cull();
+    config.color_format = SDL_GPU_TEXTUREFORMAT_R8_UNORM;
+
+    return GPUPipeline::create(*device_, config);
+}
+
+std::unique_ptr<GPUPipeline> PipelineRegistry::create_composite_pipeline() {
+    ShaderResources vs_resources;
+
+    ShaderResources fs_resources;
+    fs_resources.num_uniform_buffers = 1;  // CompositeUniforms
+    fs_resources.num_samplers = 2;         // color texture + AO texture
+
+    auto* vs = shader_manager_->get(shader_path_ + "fullscreen.vert.spv",
+                                     ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "composite.frag.spv",
+                                     ShaderStage::Fragment, "PSMain", fs_resources);
+
+    if (!vs || !fs) return nullptr;
+
+    PipelineConfig config;
+    config.vertex_shader = vs->handle();
+    config.fragment_shader = fs->handle();
+    config.opaque().no_depth().no_cull();
+    config.color_format = swapchain_format_;
 
     return GPUPipeline::create(*device_, config);
 }

@@ -9,6 +9,7 @@
 #include "engine/render/effect_renderer.hpp"
 #include "engine/render/grass_renderer.hpp"
 #include "engine/render/shadow_map.hpp"
+#include "engine/render/ambient_occlusion.hpp"
 #include "engine/gpu/gpu_buffer.hpp"
 #include "engine/gpu/gpu_texture.hpp"
 #include "engine/gpu/pipeline_registry.hpp"
@@ -82,7 +83,7 @@ private:
     void end_ui();
 
     // Rendering
-    void render_3d_scene(const RenderScene& scene, const CameraState& camera);
+    void render_3d_scene(const RenderScene& scene, const CameraState& camera, float dt);
     void render_model_command(const ModelCommand& cmd, const CameraState& camera);
     void render_skinned_model_command(const SkinnedModelCommand& cmd, const CameraState& camera);
     void render_ui_commands(const UIScene& ui_scene, const CameraState& camera);
@@ -109,6 +110,7 @@ private:
     std::unique_ptr<ModelManager> model_manager_;
     std::unique_ptr<render::GrassRenderer> grass_renderer_;
     render::ShadowMap shadow_map_;
+    render::AmbientOcclusion ao_;
 
     // ========== GPU Resources ==========
     std::unique_ptr<gpu::GPUBuffer> billboard_vertex_buffer_;

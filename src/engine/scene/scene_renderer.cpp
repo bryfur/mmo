@@ -97,8 +97,16 @@ bool SceneRenderer::init(RenderContext& context, float world_width, float world_
         grass_renderer_->init(context_->device(), pipeline_registry_, world_width, world_height);
     }
 
-    if (!shadow_map_.init(context_->device())) {
+    const GraphicsSettings& gfx = graphics_ ? *graphics_ : default_graphics_;
+    static constexpr int resolution_table[] = {512, 1024, 2048, 4096};
+    int shadow_res = resolution_table[std::clamp(gfx.shadow_resolution, 0, 3)];
+    shadow_map_.set_active_cascades(gfx.shadow_cascades + 1);
+    if (!shadow_map_.init(context_->device(), shadow_res)) {
         std::cerr << "Warning: Failed to initialize shadow map (shadows disabled)" << std::endl;
+    }
+
+    if (!ao_.init(context_->device(), w, h)) {
+        std::cerr << "Warning: Failed to initialize GTAO (AO disabled)" << std::endl;
     }
 
     return true;
@@ -121,6 +129,7 @@ void SceneRenderer::shutdown() {
         default_sampler_ = nullptr;
     }
 
+    ao_.shutdown();
     shadow_map_.shutdown();
     effects_.shutdown();
     ui_.shutdown();
@@ -173,9 +182,26 @@ void SceneRenderer::init_billboard_buffers() {
 
 void SceneRenderer::set_screen_size(int width, int height) {
     ui_.set_screen_size(width, height);
+    if (ao_.is_ready()) {
+        ao_.resize(width, height);
+    }
 }
 
 void SceneRenderer::set_graphics_settings(const GraphicsSettings& settings) {
+    // Check if shadow settings changed
+    if (graphics_) {
+        static constexpr int resolution_table[] = {512, 1024, 2048, 4096};
+        int new_res = resolution_table[std::clamp(settings.shadow_resolution, 0, 3)];
+        int new_cascades = settings.shadow_cascades + 1;
+
+        if (new_res != shadow_map_.resolution()) {
+            shadow_map_.reinit(new_res);
+        }
+        if (new_cascades != shadow_map_.active_cascades()) {
+            shadow_map_.set_active_cascades(new_cascades);
+        }
+    }
+
     default_graphics_ = settings;
     graphics_ = &default_graphics_;
 }
@@ -350,132 +376,58 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
     begin_frame();
 
     bool has_content = scene.has_3d_content() || !scene.commands().empty();
+    bool use_ao = gfx.ao_mode > 0 && ao_.is_ready();
+
     if (has_content) {
         if (shadow_map_.is_ready() && gfx.shadow_mode > 0) {
             render_shadow_passes(scene, camera);
         }
 
-        begin_main_pass();
-
         SDL_GPUCommandBuffer* cmd = context_->current_command_buffer();
 
-        if (main_render_pass_ && cmd) {
-            if (scene.should_draw_skybox() && gfx.skybox_enabled) {
-                skybox_time_ += dt;
-                world_.update(dt);
-                world_.render_skybox(main_render_pass_, cmd, camera.view, camera.projection);
+        if (use_ao) {
+            // === GTAO PATH: render to offscreen, then AO passes, then composite ===
+
+            // Acquire swapchain first (needed for composite + UI later)
+            uint32_t sw_width, sw_height;
+            current_swapchain_ = context_->acquire_swapchain_texture(cmd, &sw_width, &sw_height);
+
+            // Resize GTAO textures if window size changed
+            if (current_swapchain_) {
+                ao_.resize(static_cast<int>(sw_width), static_cast<int>(sw_height));
             }
 
-            // Prepare shadow bindings for terrain/grass (they bind after pipeline)
-            SDL_GPUTextureSamplerBinding shadow_bindings[4] = {};
-            int shadow_binding_count = 0;
-            if (shadow_map_.is_ready()) {
-                for (int i = 0; i < render::CSM_CASCADE_COUNT; ++i) {
-                    shadow_bindings[i].texture = shadow_map_.shadow_texture(i);
-                    shadow_bindings[i].sampler = shadow_map_.shadow_sampler();
+            // Render scene to offscreen RT
+            main_render_pass_ = ao_.begin_offscreen_pass(cmd);
+            had_main_pass_this_frame_ = (main_render_pass_ != nullptr);
+
+            if (main_render_pass_ && cmd) {
+                render_3d_scene(scene, camera, dt);
+                ao_.end_offscreen_pass();
+                main_render_pass_ = nullptr;
+            }
+
+            // AO computation + blur + composite to swapchain
+            if (current_swapchain_) {
+                glm::mat4 inv_proj = glm::inverse(camera.projection);
+                if (gfx.ao_mode == 1) {
+                    ao_.render_ssao_pass(cmd, pipeline_registry_, camera.projection, inv_proj);
+                } else {
+                    ao_.render_gtao_pass(cmd, pipeline_registry_, camera.projection, inv_proj);
                 }
-                shadow_binding_count = render::CSM_CASCADE_COUNT;
+                ao_.render_blur_pass(cmd, pipeline_registry_);
+                ao_.render_composite_pass(cmd, pipeline_registry_, current_swapchain_);
+            }
+        } else {
+            // === NORMAL PATH: render directly to swapchain ===
+            begin_main_pass();
+
+            if (main_render_pass_ && context_->current_command_buffer()) {
+                render_3d_scene(scene, camera, dt);
             }
 
-            if (scene.should_draw_ground()) {
-                auto shadow_uniforms = shadow_map_.get_shadow_uniforms(gfx.shadow_mode);
-                SDL_PushGPUFragmentUniformData(cmd, 1, &shadow_uniforms, sizeof(shadow_uniforms));
-                terrain_.render(main_render_pass_, cmd, camera.view, camera.projection,
-                               camera.position, light_dir_,
-                               shadow_binding_count > 0 ? shadow_bindings : nullptr,
-                               shadow_binding_count);
-            }
-
-            if (scene.should_draw_grass() && gfx.grass_enabled && grass_renderer_) {
-                auto shadow_uniforms = shadow_map_.get_shadow_uniforms(gfx.shadow_mode);
-                SDL_PushGPUFragmentUniformData(cmd, 1, &shadow_uniforms, sizeof(shadow_uniforms));
-                grass_renderer_->update(dt, skybox_time_);
-                grass_renderer_->render(main_render_pass_, cmd, camera.view, camera.projection,
-                                        camera.position, light_dir_,
-                                        shadow_binding_count > 0 ? shadow_bindings : nullptr,
-                                        shadow_binding_count);
-            }
-
-            // Culling setup
-            Frustum frustum;
-            frustum.extract_from_matrix(camera.view_projection);
-            bool do_frustum_cull = gfx.frustum_culling;
-            float draw_dist_sq = gfx.get_draw_distance() * gfx.get_draw_distance();
-
-            // Render model commands from the scene
-            for (const auto& render_cmd : scene.commands()) {
-                std::visit([&](const auto& data) {
-                    using T = std::decay_t<decltype(data)>;
-
-                    const glm::mat4& t = data.transform;
-                    glm::vec3 world_pos(t[3][0], t[3][1], t[3][2]);
-
-                    // Distance cull (backup for engine-level safety)
-                    float dx = world_pos.x - camera.position.x;
-                    float dz = world_pos.z - camera.position.z;
-                    if (dx * dx + dz * dz > draw_dist_sq) return;
-
-                    // Frustum cull using bounding sphere
-                    if (do_frustum_cull) {
-                        Model* model = model_manager_->get_model(data.model_name);
-                        if (model) {
-                            glm::vec3 local_center(
-                                (model->min_x + model->max_x) * 0.5f,
-                                (model->min_y + model->max_y) * 0.5f,
-                                (model->min_z + model->max_z) * 0.5f
-                            );
-                            glm::vec3 world_center = glm::vec3(t * glm::vec4(local_center, 1.0f));
-                            float max_scale = std::max({
-                                glm::length(glm::vec3(t[0])),
-                                glm::length(glm::vec3(t[1])),
-                                glm::length(glm::vec3(t[2]))
-                            });
-                            float half_diag = glm::length(glm::vec3(
-                                model->width(), model->height(), model->depth()
-                            )) * 0.5f;
-                            if (!frustum.intersects_sphere(world_center, half_diag * max_scale)) return;
-                        }
-                    }
-
-                    if constexpr (std::is_same_v<T, ModelCommand>) {
-                        render_model_command(data, camera);
-                    } else if constexpr (std::is_same_v<T, SkinnedModelCommand>) {
-                        render_skinned_model_command(data, camera);
-                    }
-                }, render_cmd.data);
-            }
-
-            // Render effects
-            for (const auto& effect : scene.effects()) {
-                // Distance cull
-                float dx = effect.x - camera.position.x;
-                float dz = effect.y - camera.position.z;
-                if (dx * dx + dz * dz > draw_dist_sq) continue;
-
-                // Frustum cull
-                if (do_frustum_cull) {
-                    glm::vec3 effect_pos(effect.x, 0.0f, effect.y);
-                    if (!frustum.intersects_sphere(effect_pos, effect.range * 2.0f)) continue;
-                }
-
-                effects_.draw_attack_effect(
-                    main_render_pass_,
-                    context_->current_command_buffer(),
-                    effect,
-                    camera.view,
-                    camera.projection,
-                    camera.position
-                );
-            }
-
-            if (scene.should_draw_mountains() && gfx.mountains_enabled) {
-                bind_shadow_data(main_render_pass_, cmd, 1);
-                world_.render_mountains(main_render_pass_, cmd, camera.view, camera.projection,
-                                        camera.position, light_dir_, frustum);
-            }
+            end_main_pass();
         }
-
-        end_main_pass();
     }
 
     begin_ui();
@@ -486,6 +438,125 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
     end_ui();
 
     end_frame();
+}
+
+// ============================================================================
+// 3D Scene Rendering (shared between normal and AO paths)
+// ============================================================================
+
+void SceneRenderer::render_3d_scene(const RenderScene& scene, const CameraState& camera, float dt) {
+    const GraphicsSettings& gfx = graphics_ ? *graphics_ : default_graphics_;
+    SDL_GPUCommandBuffer* cmd = context_->current_command_buffer();
+
+    if (scene.should_draw_skybox() && gfx.skybox_enabled) {
+        skybox_time_ += dt;
+        world_.update(dt);
+        world_.render_skybox(main_render_pass_, cmd, camera.view, camera.projection);
+    }
+
+    // Prepare shadow bindings for terrain/grass
+    SDL_GPUTextureSamplerBinding shadow_bindings[4] = {};
+    int shadow_binding_count = 0;
+    if (shadow_map_.is_ready()) {
+        for (int i = 0; i < render::CSM_MAX_CASCADES; ++i) {
+            shadow_bindings[i].texture = shadow_map_.shadow_texture(i);
+            shadow_bindings[i].sampler = shadow_map_.shadow_sampler();
+        }
+        shadow_binding_count = render::CSM_MAX_CASCADES;
+    }
+
+    if (scene.should_draw_ground()) {
+        auto shadow_uniforms = shadow_map_.get_shadow_uniforms(gfx.shadow_mode);
+        SDL_PushGPUFragmentUniformData(cmd, 1, &shadow_uniforms, sizeof(shadow_uniforms));
+        terrain_.render(main_render_pass_, cmd, camera.view, camera.projection,
+                       camera.position, light_dir_,
+                       shadow_binding_count > 0 ? shadow_bindings : nullptr,
+                       shadow_binding_count);
+    }
+
+    if (scene.should_draw_grass() && gfx.grass_enabled && grass_renderer_) {
+        auto shadow_uniforms = shadow_map_.get_shadow_uniforms(gfx.shadow_mode);
+        SDL_PushGPUFragmentUniformData(cmd, 1, &shadow_uniforms, sizeof(shadow_uniforms));
+        grass_renderer_->update(dt, skybox_time_);
+        grass_renderer_->render(main_render_pass_, cmd, camera.view, camera.projection,
+                                camera.position, light_dir_,
+                                shadow_binding_count > 0 ? shadow_bindings : nullptr,
+                                shadow_binding_count);
+    }
+
+    // Culling setup
+    Frustum frustum;
+    frustum.extract_from_matrix(camera.view_projection);
+    bool do_frustum_cull = gfx.frustum_culling;
+    float draw_dist_sq = gfx.get_draw_distance() * gfx.get_draw_distance();
+
+    // Render model commands from the scene
+    for (const auto& render_cmd : scene.commands()) {
+        std::visit([&](const auto& data) {
+            using T = std::decay_t<decltype(data)>;
+
+            const glm::mat4& t = data.transform;
+            glm::vec3 world_pos(t[3][0], t[3][1], t[3][2]);
+
+            float dx = world_pos.x - camera.position.x;
+            float dz = world_pos.z - camera.position.z;
+            if (dx * dx + dz * dz > draw_dist_sq) return;
+
+            if (do_frustum_cull) {
+                Model* model = model_manager_->get_model(data.model_name);
+                if (model) {
+                    glm::vec3 local_center(
+                        (model->min_x + model->max_x) * 0.5f,
+                        (model->min_y + model->max_y) * 0.5f,
+                        (model->min_z + model->max_z) * 0.5f
+                    );
+                    glm::vec3 world_center = glm::vec3(t * glm::vec4(local_center, 1.0f));
+                    float max_scale = std::max({
+                        glm::length(glm::vec3(t[0])),
+                        glm::length(glm::vec3(t[1])),
+                        glm::length(glm::vec3(t[2]))
+                    });
+                    float half_diag = glm::length(glm::vec3(
+                        model->width(), model->height(), model->depth()
+                    )) * 0.5f;
+                    if (!frustum.intersects_sphere(world_center, half_diag * max_scale)) return;
+                }
+            }
+
+            if constexpr (std::is_same_v<T, ModelCommand>) {
+                render_model_command(data, camera);
+            } else if constexpr (std::is_same_v<T, SkinnedModelCommand>) {
+                render_skinned_model_command(data, camera);
+            }
+        }, render_cmd.data);
+    }
+
+    // Render effects
+    for (const auto& effect : scene.effects()) {
+        float dx = effect.x - camera.position.x;
+        float dz = effect.y - camera.position.z;
+        if (dx * dx + dz * dz > draw_dist_sq) continue;
+
+        if (do_frustum_cull) {
+            glm::vec3 effect_pos(effect.x, 0.0f, effect.y);
+            if (!frustum.intersects_sphere(effect_pos, effect.range * 2.0f)) continue;
+        }
+
+        effects_.draw_attack_effect(
+            main_render_pass_,
+            context_->current_command_buffer(),
+            effect,
+            camera.view,
+            camera.projection,
+            camera.position
+        );
+    }
+
+    if (scene.should_draw_mountains() && gfx.mountains_enabled) {
+        bind_shadow_data(main_render_pass_, cmd, 1);
+        world_.render_mountains(main_render_pass_, cmd, camera.view, camera.projection,
+                                camera.position, light_dir_, frustum);
+    }
 }
 
 // ============================================================================
@@ -695,7 +766,7 @@ void SceneRenderer::render_shadow_passes(const RenderScene& scene, const CameraS
     // Update cascade matrices
     shadow_map_.update(camera.view, camera.projection, light_dir_, 5.0f, 2000.0f);
 
-    for (int cascade = 0; cascade < render::CSM_CASCADE_COUNT; ++cascade) {
+    for (int cascade = 0; cascade < shadow_map_.active_cascades(); ++cascade) {
         SDL_GPURenderPass* shadow_pass = shadow_map_.begin_shadow_pass(cmd, cascade);
         if (!shadow_pass) continue;
 
@@ -784,11 +855,11 @@ void SceneRenderer::bind_shadow_data(SDL_GPURenderPass* pass, SDL_GPUCommandBuff
 
     // Bind 4 individual cascade shadow textures starting at sampler_slot
     SDL_GPUTextureSamplerBinding shadow_bindings[4];
-    for (int i = 0; i < render::CSM_CASCADE_COUNT; ++i) {
+    for (int i = 0; i < render::CSM_MAX_CASCADES; ++i) {
         shadow_bindings[i].texture = shadow_map_.shadow_texture(i);
         shadow_bindings[i].sampler = shadow_map_.shadow_sampler();
     }
-    SDL_BindGPUFragmentSamplers(pass, sampler_slot, shadow_bindings, 4);
+    SDL_BindGPUFragmentSamplers(pass, sampler_slot, shadow_bindings, render::CSM_MAX_CASCADES);
 
     const GraphicsSettings& gs = graphics_ ? *graphics_ : default_graphics_;
     auto shadow_uniforms = shadow_map_.get_shadow_uniforms(gs.shadow_mode);

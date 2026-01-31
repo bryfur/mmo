@@ -101,4 +101,36 @@ struct alignas(16) ShadowDataUniforms {
     float _pad0 = 0.0f;
 };
 
+/**
+ * GTAO pass fragment uniforms (set 3, b0)
+ */
+struct alignas(16) GTAOUniforms {
+    glm::mat4 projection;
+    glm::mat4 invProjection;
+    glm::vec2 screenSize;
+    glm::vec2 invScreenSize;
+    float radius = 1.5f;
+    float bias = 0.01f;
+    int numDirections = 6;
+    int numSteps = 3;
+};
+
+/**
+ * Bilateral blur pass fragment uniforms (set 3, b0)
+ */
+struct alignas(16) BlurUniforms {
+    glm::vec2 direction;
+    glm::vec2 invScreenSize;
+    float sharpness = 40.0f;
+    float _padding[3] = {0.0f, 0.0f, 0.0f};
+};
+
+/**
+ * Composite pass fragment uniforms (set 3, b0)
+ */
+struct alignas(16) CompositeUniforms {
+    float aoStrength = 1.0f;
+    float _padding[3] = {0.0f, 0.0f, 0.0f};
+};
+
 } // namespace mmo::engine::gpu

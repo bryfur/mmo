@@ -171,6 +171,33 @@ void MenuSystem::init_graphics_menu() {
     shadows.slider_labels = {"Off", "Hard", "PCSS"};
     menu_items_.push_back(shadows);
 
+    MenuItem shadow_res;
+    shadow_res.label = "Shadow Resolution";
+    shadow_res.type = MenuItemType::Slider;
+    shadow_res.slider_value = &graphics_settings_.shadow_resolution;
+    shadow_res.slider_min = 0;
+    shadow_res.slider_max = 3;
+    shadow_res.slider_labels = {"512", "1024", "2048", "4096"};
+    menu_items_.push_back(shadow_res);
+
+    MenuItem ao;
+    ao.label = "Ambient Occlusion";
+    ao.type = MenuItemType::Slider;
+    ao.slider_value = &graphics_settings_.ao_mode;
+    ao.slider_min = 0;
+    ao.slider_max = 2;
+    ao.slider_labels = {"Off", "SSAO", "GTAO"};
+    menu_items_.push_back(ao);
+
+    MenuItem shadow_casc;
+    shadow_casc.label = "Shadow Cascades";
+    shadow_casc.type = MenuItemType::Slider;
+    shadow_casc.slider_value = &graphics_settings_.shadow_cascades;
+    shadow_casc.slider_min = 0;
+    shadow_casc.slider_max = 3;
+    shadow_casc.slider_labels = {"1", "2", "3", "4"};
+    menu_items_.push_back(shadow_casc);
+
     MenuItem vsync;
     vsync.label = "VSync";
     vsync.type = MenuItemType::Slider;
@@ -232,10 +259,16 @@ void MenuSystem::update(float dt) {
     } else if (item.type == MenuItemType::Slider) {
         if (item.slider_value) {
             if (input_.menu_left_pressed()) {
-                *item.slider_value = std::max(item.slider_min, *item.slider_value - 1);
+                if (*item.slider_value <= item.slider_min)
+                    *item.slider_value = item.slider_max;
+                else
+                    *item.slider_value -= 1;
             }
             if (input_.menu_right_pressed()) {
-                *item.slider_value = std::min(item.slider_max, *item.slider_value + 1);
+                if (*item.slider_value >= item.slider_max)
+                    *item.slider_value = item.slider_min;
+                else
+                    *item.slider_value += 1;
             }
         }
     } else if (item.type == MenuItemType::FloatSlider) {

@@ -19,6 +19,9 @@ struct GraphicsSettings {
     int anisotropic_filter = 4; // 0=off, 1=2x, 2=4x, 3=8x, 4=16x
     int vsync_mode = 1;      // 0=off, 1=double buffer (vsync), 2=triple buffer
     int shadow_mode = 2;     // 0=off, 1=hard, 2=PCSS
+    int shadow_cascades = 3; // 0=1, 1=2, 2=3, 3=4
+    int shadow_resolution = 2; // 0=512, 1=1024, 2=2048, 3=4096
+    int ao_mode = 2;         // 0=off, 1=SSAO, 2=GTAO
 
     float get_draw_distance() const {
         constexpr float distances[] = {500.0f, 1000.0f, 2000.0f, 4000.0f, 8000.0f};

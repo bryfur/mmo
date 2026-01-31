@@ -115,11 +115,6 @@ std::unique_ptr<GPUPipeline> GPUPipeline::create(GPUDevice& device, const Pipeli
         return nullptr;
     }
 
-    if (config.vertex_buffers.empty() || config.vertex_attributes.empty()) {
-        SDL_Log("GPUPipeline::create: No vertex input defined");
-        return nullptr;
-    }
-
     auto pipeline = std::unique_ptr<GPUPipeline>(new GPUPipeline());
     pipeline->device_ = &device;
 

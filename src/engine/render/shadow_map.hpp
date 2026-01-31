@@ -13,8 +13,7 @@ namespace mmo::engine::render {
 namespace gpu = mmo::engine::gpu;
 
 /// Shadow map configuration
-static constexpr int CSM_CASCADE_COUNT = 4;
-static constexpr int SHADOW_MAP_RESOLUTION = 2048;
+static constexpr int CSM_MAX_CASCADES = 4;
 
 /// Per-cascade data
 struct CascadeData {
@@ -40,8 +39,16 @@ public:
     ShadowMap(const ShadowMap&) = delete;
     ShadowMap& operator=(const ShadowMap&) = delete;
 
-    bool init(gpu::GPUDevice& device);
+    bool init(gpu::GPUDevice& device, int resolution = 2048);
     void shutdown();
+
+    /// Reinitialize with a new resolution (destroys and recreates textures)
+    bool reinit(int resolution);
+
+    /// Set number of active cascades (1-4), does not require reinit
+    void set_active_cascades(int count);
+    int active_cascades() const { return active_cascades_; }
+    int resolution() const { return resolution_; }
 
     void update(const glm::mat4& camera_view, const glm::mat4& camera_proj,
                 const glm::vec3& light_dir, float near_plane, float far_plane);
@@ -50,7 +57,7 @@ public:
     void end_shadow_pass();
 
     // Accessors
-    const std::array<CascadeData, CSM_CASCADE_COUNT>& cascades() const { return cascades_; }
+    const std::array<CascadeData, CSM_MAX_CASCADES>& cascades() const { return cascades_; }
 
     /// Returns the shadow texture handle for a specific cascade
     SDL_GPUTexture* shadow_texture(int cascade) const;
@@ -72,11 +79,13 @@ private:
                                      float near_split, float far_split);
 
     gpu::GPUDevice* device_ = nullptr;
-    std::array<std::unique_ptr<gpu::GPUTexture>, CSM_CASCADE_COUNT> cascade_textures_;
+    std::array<std::unique_ptr<gpu::GPUTexture>, CSM_MAX_CASCADES> cascade_textures_;
     SDL_GPUSampler* shadow_sampler_ = nullptr;
     SDL_GPURenderPass* current_shadow_pass_ = nullptr;
 
-    std::array<CascadeData, CSM_CASCADE_COUNT> cascades_ = {};
+    int active_cascades_ = CSM_MAX_CASCADES;
+    int resolution_ = 2048;
+    std::array<CascadeData, CSM_MAX_CASCADES> cascades_ = {};
 };
 
 } // namespace mmo::engine::render

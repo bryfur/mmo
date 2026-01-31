@@ -1,10 +1,24 @@
 #include "grass_renderer.hpp"
+#include "SDL3/SDL_gpu.h"
+#include "engine/gpu/gpu_buffer.hpp"
+#include "engine/gpu/gpu_device.hpp"
+#include "engine/gpu/gpu_texture.hpp"
+#include "engine/gpu/pipeline_registry.hpp"
+#include "glm/common.hpp"
+#include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/vector_float2.hpp"
+#include "glm/ext/vector_float3.hpp"
+#include "glm/ext/vector_float4.hpp"
+#include "glm/geometric.hpp"
+#include "glm/trigonometric.hpp"
 #include <SDL3/SDL_log.h>
-#include <SDL3_image/SDL_image.h>
 #include <cmath>
+#include <cstdint>
 #include <vector>
 
-namespace mmo {
+namespace mmo::engine::render {
+
+namespace gpu = mmo::engine::gpu;
 
 GrassRenderer::GrassRenderer() = default;
 
@@ -330,4 +344,4 @@ void GrassRenderer::shutdown() {
     initialized_ = false;
 }
 
-} // namespace mmo
+} // namespace mmo::engine::render

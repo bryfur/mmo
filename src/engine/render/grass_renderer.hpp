@@ -8,7 +8,9 @@
 #include <memory>
 #include <functional>
 
-namespace mmo {
+namespace mmo::engine::render {
+
+namespace gpu = mmo::engine::gpu;
 
 /**
  * Grass vertex format for SDL3 GPU API
@@ -143,4 +145,4 @@ private:
     bool initialized_ = false;
 };
 
-} // namespace mmo
+} // namespace mmo::engine::render

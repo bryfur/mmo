@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace mmo {
+namespace mmo::protocol {
 
 enum class EntityType : uint8_t {
     Player = 0,
@@ -237,4 +237,4 @@ private:
 // Default port for CLI usage (not game logic)
 constexpr uint16_t DEFAULT_PORT = 7777;
 
-} // namespace mmo
+} // namespace mmo::protocol

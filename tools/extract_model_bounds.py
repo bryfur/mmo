@@ -80,7 +80,7 @@ def generate_header(models_dir, output_path):
 #include <string>
 #include <unordered_map>
 
-namespace mmo::config {
+namespace mmo::server::config {
 
 /// Bounding box dimensions extracted from GLB model files
 struct ModelBounds {
@@ -122,7 +122,7 @@ inline const ModelBounds* get_model_bounds(const std::string& model_name) {
     return it != all_bounds.end() ? &it->second : nullptr;
 }
 
-} // namespace mmo::config
+} // namespace mmo::server::config
 ''')
     
     print(f"Successfully generated header with {len(bounds_data)} model bounds")

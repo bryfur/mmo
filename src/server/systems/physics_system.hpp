@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/ecs/components.hpp"
+#include "server/ecs/game_components.hpp"
 #include <entt/entt.hpp>
 #include <memory>
 #include <vector>
@@ -17,7 +17,9 @@ namespace JPH {
     class BodyID;
 }
 
-namespace mmo::systems {
+namespace mmo::server::systems {
+
+namespace ecs = mmo::server::ecs;
 
 // Collision layers for broadphase filtering
 namespace CollisionLayers {
@@ -197,4 +199,4 @@ private:
  */
 void update_physics(PhysicsSystem& physics, entt::registry& registry, float dt);
 
-} // namespace mmo::systems
+} // namespace mmo::server::systems

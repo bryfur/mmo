@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/protocol.hpp"
+#include "protocol/protocol.hpp"
 #include "game_config.hpp"
 #include "world.hpp"
 #include "session.hpp"
@@ -10,7 +10,7 @@
 #include <mutex>
 #include <atomic>
 
-namespace mmo {
+namespace mmo::server {
 
 class Server {
 public:
@@ -25,7 +25,7 @@ public:
     void on_client_connect(std::shared_ptr<Session> session, const std::string& name);
     void on_class_select(std::shared_ptr<Session> session, uint8_t class_index);
     void on_player_disconnect(uint32_t player_id);
-    void on_player_input(uint32_t player_id, const PlayerInput& input);
+    void on_player_input(uint32_t player_id, const mmo::protocol::PlayerInput& input);
     
     void broadcast(const std::vector<uint8_t>& data);
     void broadcast_except(const std::vector<uint8_t>& data, uint32_t exclude_id);
@@ -52,4 +52,4 @@ private:
     std::chrono::steady_clock::time_point last_tick_;
 };
 
-} // namespace mmo
+} // namespace mmo::server

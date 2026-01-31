@@ -7,12 +7,10 @@
 #include <string>
 #include <unordered_map>
 
-namespace mmo::gpu {
-// Forward declaration
-class ShaderManager;
-}
 
-namespace mmo::gpu {
+namespace mmo::engine::gpu {
+
+class ShaderManager;
 
 /**
  * @brief Pipeline type enumeration for all supported rendering pipelines
@@ -195,4 +193,4 @@ private:
     std::string shader_path_ = "shaders/";
 };
 
-} // namespace mmo::gpu
+} // namespace mmo::engine::gpu

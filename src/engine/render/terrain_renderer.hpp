@@ -8,7 +8,9 @@
 #include <glm/glm.hpp>
 #include <memory>
 
-namespace mmo {
+namespace mmo::engine::render {
+
+namespace gpu = mmo::engine::gpu;
 
 /**
  * Terrain vertex format for SDL3 GPU API
@@ -149,4 +151,4 @@ private:
     float fog_end_ = 4000.0f;
 };
 
-} // namespace mmo
+} // namespace mmo::engine::render

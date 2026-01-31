@@ -1,6 +1,6 @@
 #pragma once
 
-namespace mmo {
+namespace mmo::engine {
 
 struct GraphicsSettings {
     bool fog_enabled = true;
@@ -16,4 +16,4 @@ struct GraphicsSettings {
     int vsync_mode = 1;      // 0=off, 1=double buffer (vsync), 2=triple buffer
 };
 
-} // namespace mmo
+} // namespace mmo::engine

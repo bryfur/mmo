@@ -1,10 +1,8 @@
 #pragma once
 
-#include "common/ecs/components.hpp"
-#include "common/protocol.hpp"
 #include <entt/entt.hpp>
 
-namespace mmo {
+namespace mmo::client {
 
 class NetworkSmoother {
 public:
@@ -19,4 +17,4 @@ private:
     float interpolation_time_ = 1.0f / 60.0f;  // Default, updated from server config
 };
 
-} // namespace mmo
+} // namespace mmo::client

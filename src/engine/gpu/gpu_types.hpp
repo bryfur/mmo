@@ -3,13 +3,10 @@
 #include <SDL3/SDL_gpu.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <string>
 #include <vector>
-#include <memory>
-#include <array>
 #include <cstdint>
 
-namespace mmo::gpu {
+namespace mmo::engine::gpu {
 
 // Forward declarations
 class GPUDevice;
@@ -245,4 +242,4 @@ inline SDL_GPUVertexBufferDescription get_vertex2d_buffer_desc() {
     };
 }
 
-} // namespace mmo::gpu
+} // namespace mmo::engine::gpu

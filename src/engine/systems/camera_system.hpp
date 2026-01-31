@@ -1,31 +1,16 @@
 #pragma once
 
+#include "engine/systems/camera_controller.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 #include <functional>
 #include <deque>
 
-namespace mmo {
+namespace mmo::engine::systems {
 
 // Professional third-person action game camera system
 // Inspired by: God of War, Horizon Zero Dawn, Ghost of Tsushima, The Last of Us Part II
-
-// Camera mode presets
-enum class CameraMode {
-    Exploration,   // Wider FOV, slower follow, more freedom
-    Combat,        // Tighter framing, faster response, lock-on support
-    Cinematic,     // Smooth sweeping movements for cutscenes
-    Sprint         // Pulled back, lower angle for running
-};
-
-// Camera shake types for different feedback
-enum class ShakeType {
-    Impact,        // Quick punch - enemy hit
-    Heavy,         // Sustained rumble - big explosion
-    Directional,   // Shake toward a direction - getting hit
-    Subtle         // Breathing/idle micro-movements
-};
 
 struct CameraShake {
     ShakeType type;
@@ -51,54 +36,53 @@ struct CameraModeConfig {
     bool auto_center_enabled; // Whether to auto-center
 };
 
-class CameraSystem {
+class CameraSystem : public CameraController {
 public:
     CameraSystem();
     
     // Main update - call every frame with delta time
-    void update(float dt);
-    
+    void update(float dt) override;
+
     // Set the target to follow (player position in world space)
-    void set_target(const glm::vec3& position);
-    void set_target_velocity(const glm::vec3& velocity);
-    
+    void set_target(const glm::vec3& position) override;
+    void set_target_velocity(const glm::vec3& velocity) override;
+
     // Manual camera control (from mouse/controller input)
-    void rotate_yaw(float delta_degrees);
-    void rotate_pitch(float delta_degrees);
-    void set_yaw(float degrees);    // Direct set (no delta)
-    void set_pitch(float degrees);  // Direct set (no delta)
-    void adjust_zoom(float delta);
+    void rotate_yaw(float delta_degrees) override;
+    void rotate_pitch(float delta_degrees) override;
+    void set_yaw(float degrees) override;    // Direct set (no delta)
+    void set_pitch(float degrees) override;  // Direct set (no delta)
+    void adjust_zoom(float delta) override;
     float get_input_yaw() const { return input_yaw_; }
     float get_input_pitch() const { return input_pitch_; }
     
     // Mode switching with smooth transitions
-    void set_mode(CameraMode mode);
+    void set_mode(CameraMode mode) override;
     CameraMode get_mode() const { return current_mode_; }
     
     // Combat system integration
-    void set_combat_target(const glm::vec3* target);  // nullptr to clear
-    void set_in_combat(bool in_combat);
-    void notify_attack();  // Player attacked
-    void notify_hit(const glm::vec3& hit_direction, float damage);  // Player got hit
-    
+    void set_combat_target(const glm::vec3* target) override;  // nullptr to clear
+    void set_in_combat(bool in_combat) override;
+    void notify_attack() override;  // Player attacked
+    void notify_hit(const glm::vec3& hit_direction, float damage) override;  // Player got hit
+
     // Camera shake
-    void add_shake(ShakeType type, float intensity, float duration = 0.3f);
-    void add_directional_shake(const glm::vec3& direction, float intensity, float duration = 0.2f);
+    void add_shake(ShakeType type, float intensity, float duration = 0.3f) override;
+    void add_directional_shake(const glm::vec3& direction, float intensity, float duration = 0.2f) override;
     
     // Terrain collision callback - returns height at world XZ position
-    using TerrainHeightFunc = std::function<float(float x, float z)>;
-    void set_terrain_height_func(TerrainHeightFunc func) { get_terrain_height_ = func; }
+    void set_terrain_height_func(TerrainHeightFunc func) override { get_terrain_height_ = func; }
     
     // Obstacle/wall collision callback - returns true if line of sight is blocked
     using CollisionCheckFunc = std::function<bool(const glm::vec3& from, const glm::vec3& to, glm::vec3& hit_point)>;
     void set_collision_func(CollisionCheckFunc func) { check_collision_ = func; }
     
     // Get computed matrices and values
-    glm::mat4 get_view_matrix() const { return view_matrix_; }
-    glm::mat4 get_projection_matrix() const { return projection_matrix_; }
-    glm::vec3 get_position() const { return final_camera_pos_; }
+    glm::mat4 get_view_matrix() const override { return view_matrix_; }
+    glm::mat4 get_projection_matrix() const override { return projection_matrix_; }
+    glm::vec3 get_position() const override { return final_camera_pos_; }
     glm::vec3 get_target_position() const { return smoothed_target_; }  // Player/follow target position
-    glm::vec3 get_forward() const { return camera_forward_; }
+    glm::vec3 get_forward() const override { return camera_forward_; }
     glm::vec3 get_right() const { return camera_right_; }
     float get_yaw() const { return current_yaw_; }
     float get_pitch() const { return current_pitch_; }
@@ -106,7 +90,7 @@ public:
     float get_current_distance() const { return current_distance_; }
     
     // Set screen dimensions for projection matrix
-    void set_screen_size(int width, int height);
+    void set_screen_size(int width, int height) override;
     
     // Debug visualization
     void set_debug_draw_enabled(bool enabled) { debug_draw_ = enabled; }
@@ -234,4 +218,4 @@ private:
     bool had_input_this_frame_ = false;
 };
 
-} // namespace mmo
+} // namespace mmo::engine::systems

@@ -1,10 +1,21 @@
 #include "gpu_texture.hpp"
+#include "SDL3/SDL_error.h"
+#include "SDL3/SDL_gpu.h"
+#include "SDL3/SDL_pixels.h"
+#include "SDL3/SDL_stdinc.h"
+#include "SDL3/SDL_surface.h"
+#include "engine/gpu/gpu_device.hpp"
+#include "engine/gpu/gpu_types.hpp"
 #include <SDL3/SDL_log.h>
 #include <SDL3_image/SDL_image.h>
+#include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <cmath>
+#include <memory>
+#include <string>
 
-namespace mmo::gpu {
+namespace mmo::engine::gpu {
 
 // =============================================================================
 // GPUTexture Implementation
@@ -497,4 +508,4 @@ std::unique_ptr<GPUSampler> GPUSampler::create(GPUDevice& device, const SamplerC
     return sampler;
 }
 
-} // namespace mmo::gpu
+} // namespace mmo::engine::gpu

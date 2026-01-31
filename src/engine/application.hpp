@@ -3,14 +3,33 @@
 #include "engine/input_handler.hpp"
 #include <SDL3/SDL.h>
 #include <cstdint>
+#include <memory>
+#include <string>
+
+namespace mmo::engine::render { class RenderContext; }
+namespace mmo::engine::scene {
+    class RenderScene;
+    class UIScene;
+    struct CameraState;
+    class SceneRenderer;
+}
+namespace mmo::engine::systems {
+    class CameraController;
+    class CameraSystem;
+}
 
 namespace mmo::engine {
 
+class ModelManager;
+struct GraphicsSettings;
+struct Heightmap;
+
 /**
  * Base application class that owns the SDL lifecycle, main loop,
- * frame timing, and input handling.
+ * frame timing, input handling, and core engine subsystems.
  *
- * Game-specific subclasses override on_init/on_update/on_render/on_shutdown.
+ * Game-specific subclasses override on_init/on_update/on_render/on_shutdown
+ * and interact with the renderer and camera through the protected facade.
  */
 class Application {
 public:
@@ -47,6 +66,35 @@ protected:
     InputHandler& input() { return input_; }
     const InputHandler& input() const { return input_; }
 
+    // ========== Rendering facade ==========
+
+    /** Initialize the rendering subsystems (window, GPU, scene renderer, camera). */
+    bool init_renderer(int width, int height, const std::string& title,
+                       float world_width = 8000.0f, float world_height = 8000.0f);
+
+    /** Shut down all rendering subsystems. */
+    void shutdown_renderer();
+
+    /** Render a complete frame from scene descriptions. */
+    void render_frame(const scene::RenderScene& scene, const scene::UIScene& ui_scene,
+                      const scene::CameraState& camera, float dt);
+
+    void set_heightmap(const Heightmap& heightmap);
+    void set_graphics_settings(const GraphicsSettings& settings);
+    void set_anisotropic_filter(int level);
+    void set_vsync_mode(int mode);
+
+    ModelManager& models();
+    float get_terrain_height(float x, float z);
+
+    int screen_width() const;
+    int screen_height() const;
+
+    // ========== Camera facade ==========
+
+    systems::CameraController& camera();
+    const systems::CameraController& camera() const;
+
 private:
     InputHandler input_;
     bool running_ = false;
@@ -54,6 +102,11 @@ private:
     float fps_ = 0.0f;
     int frame_count_ = 0;
     uint64_t fps_timer_ = 0;
+
+    // Owned engine subsystems (opaque to subclasses)
+    std::unique_ptr<render::RenderContext> context_;
+    std::unique_ptr<scene::SceneRenderer> scene_renderer_;
+    std::unique_ptr<systems::CameraSystem> camera_;
 };
 
 } // namespace mmo::engine

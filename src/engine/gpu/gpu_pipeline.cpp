@@ -1,7 +1,13 @@
 #include "gpu_pipeline.hpp"
+#include "SDL3/SDL_error.h"
+#include "SDL3/SDL_gpu.h"
+#include "SDL3/SDL_stdinc.h"
+#include "engine/gpu/gpu_device.hpp"
+#include "engine/gpu/gpu_types.hpp"
 #include <SDL3/SDL_log.h>
+#include <memory>
 
-namespace mmo::gpu {
+namespace mmo::engine::gpu {
 
 // =============================================================================
 // PipelineConfig Implementation
@@ -199,4 +205,4 @@ void GPUPipeline::bind(SDL_GPURenderPass* render_pass) {
     SDL_BindGPUGraphicsPipeline(render_pass, pipeline_);
 }
 
-} // namespace mmo::gpu
+} // namespace mmo::engine::gpu

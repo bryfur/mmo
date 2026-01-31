@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/protocol.hpp"
+#include "protocol/protocol.hpp"
 #include <asio.hpp>
 #include <functional>
 #include <thread>
@@ -8,12 +8,12 @@
 #include <queue>
 #include <atomic>
 
-namespace mmo {
+namespace mmo::client {
 
 class NetworkClient {
 public:
     using tcp = asio::ip::tcp;
-    using MessageCallback = std::function<void(MessageType, const std::vector<uint8_t>&)>;
+    using MessageCallback = std::function<void(mmo::protocol::MessageType, const std::vector<uint8_t>&)>;
     
     NetworkClient();
     ~NetworkClient();
@@ -23,7 +23,7 @@ public:
     bool is_connected() const { return connected_; }
 
     void send_class_select(uint8_t class_index);
-    void send_input(const PlayerInput& input);
+    void send_input(const mmo::protocol::PlayerInput& input);
     
     void set_message_callback(MessageCallback callback) { message_callback_ = callback; }
     
@@ -48,9 +48,9 @@ private:
     uint32_t local_player_id_ = 0;
     
     // Read buffer
-    std::array<uint8_t, PacketHeader::size()> header_buffer_;
+    std::array<uint8_t, mmo::protocol::PacketHeader::size()> header_buffer_;
     std::vector<uint8_t> payload_buffer_;
-    PacketHeader current_header_;
+    mmo::protocol::PacketHeader current_header_;
     
     // Write queue
     std::queue<std::vector<uint8_t>> write_queue_;
@@ -59,7 +59,7 @@ private:
     
     // Message queue for main thread
     struct ReceivedMessage {
-        MessageType type;
+        mmo::protocol::MessageType type;
         std::vector<uint8_t> payload;
     };
     std::queue<ReceivedMessage> message_queue_;
@@ -68,4 +68,4 @@ private:
     MessageCallback message_callback_;
 };
 
-} // namespace mmo
+} // namespace mmo::client

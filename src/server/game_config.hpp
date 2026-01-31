@@ -1,13 +1,14 @@
 #pragma once
 
 #include "game_types.hpp"
-#include "common/protocol.hpp"
+#include "protocol/protocol.hpp"
 #include <string>
 #include <vector>
 #include <unordered_map>
 #include <cstdint>
 
-namespace mmo {
+namespace mmo::server {
+
 
 struct ClassConfig {
     std::string name;
@@ -126,7 +127,7 @@ public:
     float safe_zone_radius() const { return safe_zone_radius_; }
 
     // Build a ClassInfo for sending to clients
-    ClassInfo build_class_info(int index) const;
+    mmo::protocol::ClassInfo build_class_info(int index) const;
 
 private:
     bool load_server(const std::string& path);
@@ -152,4 +153,4 @@ private:
     float safe_zone_radius_ = 400.0f;
 };
 
-} // namespace mmo
+} // namespace mmo::server

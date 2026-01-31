@@ -1,18 +1,27 @@
 #include "ui_renderer.hpp"
+#include "SDL3/SDL_gpu.h"
+#include "SDL3/SDL_log.h"
+#include "SDL3/SDL_rect.h"
+#include "glm/ext/matrix_clip_space.hpp"
+#include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/vector_float4.hpp"
 #include "text_renderer.hpp"
 #include "../gpu/gpu_device.hpp"
 #include "../gpu/gpu_buffer.hpp"
 #include "../gpu/gpu_pipeline.hpp"
 #include "../gpu/gpu_uniforms.hpp"
 #include "../gpu/pipeline_registry.hpp"
-#include "../render_constants.hpp"
-#include <glm/gtc/matrix_transform.hpp>
+#include <cstdint>
+#include <memory>
+#include <string>
 #include <vector>
 #include <cmath>
 #include <iostream>
 #include <cstdio>
 
-namespace mmo {
+namespace mmo::engine::render {
+
+namespace gpu = mmo::engine::gpu;
 
 UIRenderer::UIRenderer() = default;
 
@@ -562,51 +571,4 @@ void UIRenderer::draw_button(float x, float y, float w, float h, const std::stri
     }
 }
 
-void UIRenderer::draw_player_health_bar(float health_ratio, float max_health, int screen_width, int screen_height) {
-    float bar_width = 250.0f;
-    float bar_height = 25.0f;
-    float padding = 20.0f;
-    float x = padding;
-    float y = screen_height - padding - bar_height;
-    
-    // Background
-    draw_filled_rect(x - 2, y - 2, bar_width + 4, bar_height + 4, ui_colors::HEALTH_FRAME);
-    draw_rect_outline(x - 2, y - 2, bar_width + 4, bar_height + 4, ui_colors::BORDER, 2.0f);
-    draw_filled_rect(x, y, bar_width, bar_height, ui_colors::HEALTH_BG);
-
-    // Health color
-    uint32_t hp_color;
-    if (health_ratio > 0.5f) {
-        hp_color = ui_colors::HEALTH_HIGH;
-    } else if (health_ratio > 0.25f) {
-        hp_color = ui_colors::HEALTH_MED;
-    } else {
-        hp_color = ui_colors::HEALTH_LOW;
-    }
-    draw_filled_rect(x, y, bar_width * health_ratio, bar_height, hp_color);
-    
-    // Health text
-    char hp_text[32];
-    snprintf(hp_text, sizeof(hp_text), "HP: %.0f / %.0f", health_ratio * max_health, max_health);
-    draw_text(hp_text, x + 10, y + 5, 0xFFFFFFFF, 1.0f);
-}
-
-void UIRenderer::draw_target_reticle(int screen_width, int screen_height) {
-    float center_x = screen_width / 2.0f;
-    float center_y = screen_height / 2.0f;
-    
-    float outer_radius = 12.0f;
-    float inner_radius = 4.0f;
-    float line_width = 2.0f;
-    uint32_t color = 0xCCFFFFFF;
-    
-    draw_line(center_x, center_y - outer_radius, center_x, center_y - inner_radius, color, line_width);
-    draw_line(center_x, center_y + inner_radius, center_x, center_y + outer_radius, color, line_width);
-    draw_line(center_x - outer_radius, center_y, center_x - inner_radius, center_y, color, line_width);
-    draw_line(center_x + inner_radius, center_y, center_x + outer_radius, center_y, color, line_width);
-    
-    float dot_size = 2.0f;
-    draw_filled_rect(center_x - dot_size/2, center_y - dot_size/2, dot_size, dot_size, color);
-}
-
-} // namespace mmo
+} // namespace mmo::engine::render

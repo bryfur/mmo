@@ -8,14 +8,16 @@
 #include <vector>
 
 // Forward declarations
-namespace mmo::gpu {
+namespace mmo::engine::gpu {
     class GPUDevice;
     class GPUBuffer;
     class GPUPipeline;
     class PipelineRegistry;
 }
 
-namespace mmo {
+namespace mmo::engine::render {
+
+namespace gpu = mmo::engine::gpu;
 
 class TextRenderer;
 
@@ -97,9 +99,6 @@ public:
     // Composite UI elements
     void draw_button(float x, float y, float w, float h, const std::string& label, 
                      uint32_t color, bool selected);
-    void draw_player_health_bar(float health_ratio, float max_health, int screen_width, int screen_height);
-    void draw_target_reticle(int screen_width, int screen_height);
-    
     // Access text renderer for advanced usage
     TextRenderer* text_renderer() { return text_renderer_.get(); }
     
@@ -150,4 +149,4 @@ private:
     std::vector<QueuedTextDraw> queued_text_draws_;
 };
 
-} // namespace mmo
+} // namespace mmo::engine::render

@@ -2,12 +2,27 @@
 #include "../gpu/gpu_texture.hpp"
 #include "../gpu/gpu_uniforms.hpp"
 #include "../render_constants.hpp"
+#include "SDL3/SDL_error.h"
+#include "SDL3/SDL_gpu.h"
+#include "engine/gpu/gpu_buffer.hpp"
+#include "engine/gpu/gpu_device.hpp"
+#include "engine/gpu/pipeline_registry.hpp"
+#include "engine/model_loader.hpp"
+#include "glm/ext/matrix_float3x3.hpp"
+#include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/ext/vector_float3.hpp"
+#include "glm/ext/vector_float4.hpp"
+#include "glm/matrix.hpp"
+#include "glm/trigonometric.hpp"
 #include <cmath>
-#include <cstdlib>
+#include <cstdint>
 #include <iostream>
-#include <glm/gtc/matrix_transform.hpp>
+#include <vector>
 
-namespace mmo {
+namespace mmo::engine::render {
+
+namespace gpu = mmo::engine::gpu;
 
 WorldRenderer::WorldRenderer() = default;
 
@@ -309,4 +324,4 @@ void WorldRenderer::render_grid(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* c
     SDL_DrawGPUPrimitives(pass, grid_vertex_count_, 1, 0, 0);
 }
 
-} // namespace mmo
+} // namespace mmo::engine::render

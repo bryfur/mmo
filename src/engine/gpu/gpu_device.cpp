@@ -1,7 +1,12 @@
 #include "gpu_device.hpp"
+#include "SDL3/SDL_error.h"
+#include "SDL3/SDL_gpu.h"
+#include "SDL3/SDL_video.h"
 #include <SDL3/SDL_log.h>
+#include <cstdint>
+#include <string>
 
-namespace mmo::gpu {
+namespace mmo::engine::gpu {
 
 GPUDevice::~GPUDevice() {
     shutdown();
@@ -239,4 +244,4 @@ bool GPUDevice::supports_format(SDL_GPUTextureFormat format, SDL_GPUTextureType 
     return SDL_GPUTextureSupportsFormat(device_, format, type, usage);
 }
 
-} // namespace mmo::gpu
+} // namespace mmo::engine::gpu

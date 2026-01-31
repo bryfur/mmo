@@ -5,7 +5,7 @@
 #include <memory>
 #include <vector>
 
-namespace mmo::gpu {
+namespace mmo::engine::gpu {
 
 // Forward declarations
 class GPUShader;
@@ -144,4 +144,4 @@ private:
     SDL_GPUGraphicsPipeline* pipeline_ = nullptr;
 };
 
-} // namespace mmo::gpu
+} // namespace mmo::engine::gpu

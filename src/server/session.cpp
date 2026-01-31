@@ -1,8 +1,22 @@
 #include "session.hpp"
+#include "asio/buffer.hpp"
+#include "asio/error_code.hpp"
+#include "asio/impl/read.hpp"
+#include "asio/impl/write.hpp"
+#include "protocol/protocol.hpp"
 #include "server.hpp"
+#include <cstddef>
+#include <cstdint>
 #include <iostream>
+#include <mutex>
+#include <string.h>
+#include <string>
+#include <utility>
+#include <vector>
 
-namespace mmo {
+namespace mmo::server {
+
+using namespace mmo::protocol;
 
 Session::Session(tcp::socket socket, Server& server)
     : socket_(std::move(socket))
@@ -137,4 +151,4 @@ void Session::do_write() {
         });
 }
 
-} // namespace mmo
+} // namespace mmo::server

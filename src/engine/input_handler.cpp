@@ -1,9 +1,19 @@
 #include "input_handler.hpp"
+#include "SDL3/SDL_events.h"
+#include "SDL3/SDL_gamepad.h"
+#include "SDL3/SDL_init.h"
+#include "SDL3/SDL_joystick.h"
+#include "SDL3/SDL_keyboard.h"
+#include "SDL3/SDL_keycode.h"
+#include "SDL3/SDL_mouse.h"
+#include "SDL3/SDL_scancode.h"
+#include "SDL3/SDL_stdinc.h"
 #include <cmath>
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
 
-namespace mmo {
+namespace mmo::engine {
 
 InputHandler::InputHandler() {
     // Get initial mouse position
@@ -413,4 +423,4 @@ void InputHandler::handle_controller_removed(SDL_JoystickID id) {
     }
 }
 
-} // namespace mmo
+} // namespace mmo::engine

@@ -33,7 +33,7 @@ file(GLOB_RECURSE SERVER_SOURCES CONFIGURE_DEPENDS "*.cpp")
 add_executable(mmo_server ${SERVER_SOURCES})
 
 target_link_libraries(mmo_server PRIVATE
-    mmo_common
+    mmo_protocol
     Jolt
     nlohmann_json::nlohmann_json
     pthread

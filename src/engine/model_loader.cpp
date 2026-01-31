@@ -1,9 +1,28 @@
 #include "model_loader.hpp"
+#include "SDL3/SDL_error.h"
+#include "SDL3/SDL_iostream.h"
+#include "SDL3/SDL_pixels.h"
+#include "SDL3/SDL_surface.h"
+#include "engine/gpu/gpu_types.hpp"
+#include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/ext/vector_float3.hpp"
+#include "glm/fwd.hpp"
+#include "glm/gtc/quaternion.hpp"
 #include "gpu/gpu_device.hpp"
 #include "gpu/gpu_buffer.hpp"
 #include "gpu/gpu_texture.hpp"
 
 #include <SDL3/SDL_gpu.h>
+#include <algorithm>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
 
 #define TINYGLTF_IMPLEMENTATION
 #define TINYGLTF_NO_STB_IMAGE
@@ -12,10 +31,8 @@
 #include <SDL3_image/SDL_image.h>
 
 #include <iostream>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
 
-namespace mmo {
+namespace mmo::engine {
 
 // Implementation of Mesh::bind_buffers
 void Mesh::bind_buffers(SDL_GPURenderPass* pass) const {
@@ -29,7 +46,7 @@ void Mesh::bind_buffers(SDL_GPURenderPass* pass) const {
     }
 }
 
-} // namespace mmo
+} // namespace mmo::engine
 
 namespace {
 
@@ -97,7 +114,7 @@ bool write_image_data(const std::string* basepath, const std::string* filename,
 
 }  // anonymous namespace
 
-namespace mmo {
+namespace mmo::engine {
 
 // Helper to interpolate between keyframes
 template<typename T>
@@ -750,4 +767,4 @@ void ModelManager::unload_all() {
     animation_states_.clear();
 }
 
-} // namespace mmo
+} // namespace mmo::engine

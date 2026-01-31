@@ -1,8 +1,15 @@
 #include "pipeline_registry.hpp"
+#include "SDL3/SDL_gpu.h"
+#include "engine/gpu/gpu_device.hpp"
+#include "engine/gpu/gpu_pipeline.hpp"
+#include "engine/gpu/gpu_shader.hpp"
 #include <SDL3/SDL_log.h>
 #include <SDL3/SDL_filesystem.h>
+#include <memory>
+#include <string>
+#include <utility>
 
-namespace mmo::gpu {
+namespace mmo::engine::gpu {
 
 // =============================================================================
 // PipelineRegistry Implementation
@@ -444,4 +451,4 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_grass_pipeline() {
     return GPUPipeline::create(*device_, config);
 }
 
-} // namespace mmo::gpu
+} // namespace mmo::engine::gpu

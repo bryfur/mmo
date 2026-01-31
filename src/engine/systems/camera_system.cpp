@@ -1,8 +1,15 @@
 #include "camera_system.hpp"
+#include "engine/systems/camera_controller.hpp"
+#include "glm/common.hpp"
+#include "glm/ext/matrix_clip_space.hpp"
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/ext/vector_float3.hpp"
+#include "glm/geometric.hpp"
+#include "glm/trigonometric.hpp"
 #include <algorithm>
 #include <cmath>
 
-namespace mmo {
+namespace mmo::engine::systems {
 
 CameraSystem::CameraSystem() {
     // Initialize mode configurations
@@ -102,9 +109,7 @@ void CameraSystem::update(float dt) {
     update_collision_avoidance(dt);
     update_camera_shake(dt);
     update_dynamic_fov(dt);
-    
-    // Idle breathing disabled - was causing unwanted shake
-    
+        
     compute_matrices();
     
     // Reset per-frame flags
@@ -618,4 +623,4 @@ void CameraSystem::set_screen_size(int width, int height) {
     screen_height_ = std::max(1, height);
 }
 
-} // namespace mmo
+} // namespace mmo::engine::systems

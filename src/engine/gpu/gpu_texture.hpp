@@ -5,7 +5,7 @@
 #include <memory>
 #include <string>
 
-namespace mmo::gpu {
+namespace mmo::engine::gpu {
 
 /**
  * @brief GPU Texture abstraction for 2D textures, render targets, and depth buffers
@@ -219,4 +219,4 @@ private:
     SDL_GPUSampler* sampler_ = nullptr;
 };
 
-} // namespace mmo::gpu
+} // namespace mmo::engine::gpu

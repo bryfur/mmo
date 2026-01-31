@@ -1,10 +1,12 @@
 #include "ui_scene.hpp"
+#include <cstdint>
+#include <string>
+#include <utility>
 
-namespace mmo {
+namespace mmo::engine::scene {
 
 void UIScene::clear() {
     commands_.clear();
-    has_target_reticle_ = false;
 }
 
 void UIScene::add_filled_rect(float x, float y, float w, float h, uint32_t color) {
@@ -65,24 +67,4 @@ void UIScene::add_button(float x, float y, float w, float h, const std::string& 
     commands_.push_back(std::move(cmd));
 }
 
-void UIScene::add_target_reticle() {
-    UICommand cmd;
-    cmd.data = TargetReticleCommand{};
-    commands_.push_back(std::move(cmd));
-    has_target_reticle_ = true;
-}
-
-void UIScene::add_player_health_bar(float health_ratio, float max_health) {
-    UICommand cmd;
-    cmd.data = PlayerHealthBarCommand{health_ratio, max_health};
-    commands_.push_back(std::move(cmd));
-}
-
-void UIScene::add_enemy_health_bar_3d(float world_x, float world_y, float world_z,
-                                       float width, float health_ratio) {
-    UICommand cmd;
-    cmd.data = EnemyHealthBar3DCommand{world_x, world_y, world_z, width, health_ratio};
-    commands_.push_back(std::move(cmd));
-}
-
-} // namespace mmo
+} // namespace mmo::engine::scene

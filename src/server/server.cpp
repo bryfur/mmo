@@ -1,7 +1,24 @@
 #include "server.hpp"
+#include "asio/error_code.hpp"
+#include "asio/io_context.hpp"
+#include "protocol/protocol.hpp"
+#include "server/game_config.hpp"
+#include "server/game_types.hpp"
+#include "server/session.hpp"
+#include <algorithm>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
 #include <iostream>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <utility>
+#include <vector>
 
-namespace mmo {
+namespace mmo::server {
+
+using namespace mmo::protocol;
 
 Server::Server(asio::io_context& io_context, uint16_t port, const GameConfig& config)
     : io_context_(io_context)
@@ -218,4 +235,4 @@ void Server::send_heightmap(std::shared_ptr<Session> session) {
     session->send(data);
 }
 
-} // namespace mmo
+} // namespace mmo::server

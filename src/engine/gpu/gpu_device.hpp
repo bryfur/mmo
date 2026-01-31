@@ -5,7 +5,7 @@
 #include <string>
 #include <memory>
 
-namespace mmo::gpu {
+namespace mmo::engine::gpu {
 
 /**
  * @brief GPU Device wrapper for SDL3 GPU API
@@ -178,4 +178,4 @@ private:
     SDL_Window* window_ = nullptr;
 };
 
-} // namespace mmo::gpu
+} // namespace mmo::engine::gpu

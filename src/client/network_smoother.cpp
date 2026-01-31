@@ -1,8 +1,9 @@
 #include "network_smoother.hpp"
-#include <cmath>
+#include "client/ecs/components.hpp"
+#include "entt/entity/fwd.hpp"
 #include <algorithm>
 
-namespace mmo {
+namespace mmo::client {
 
 void NetworkSmoother::update(entt::registry& registry, float dt) {
     // Interpolate entity positions for smooth rendering
@@ -43,4 +44,4 @@ void NetworkSmoother::update(entt::registry& registry, float dt) {
     }
 }
 
-} // namespace mmo
+} // namespace mmo::client

@@ -1,6 +1,6 @@
 #pragma once
 
-namespace mmo {
+namespace mmo::client {
 
 enum class GameState {
     Connecting,     // Connecting to server, waiting for ClassList
@@ -9,4 +9,4 @@ enum class GameState {
     Playing
 };
 
-} // namespace mmo
+} // namespace mmo::client

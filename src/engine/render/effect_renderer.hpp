@@ -11,19 +11,16 @@
 #include <memory>
 #include <functional>
 
-namespace mmo {
+namespace mmo::engine::render {
+
+namespace gpu = mmo::engine::gpu;
 
 /**
  * EffectRenderer handles visual attack effects:
- * - Warrior sword slash
- * - Mage fireball beam
- * - Paladin AOE circle
- * - Archer arrow projectile
- * 
- * SDL3 GPU Migration: This class now uses SDL3 GPU API instead of OpenGL.
- * - GL shaders replaced with PipelineRegistry pipelines
- * - Draw calls use SDL_DrawGPUIndexedPrimitives
- * - Mesh buffers come from ModelLoader's SDL3 GPU buffers
+ * - Melee slash (sword swing arc)
+ * - Projectile (traveling fireball)
+ * - Orbit AOE (circling objects)
+ * - Arrow (arcing projectile)
  */
 class EffectRenderer {
 public:
@@ -76,22 +73,26 @@ private:
                            const glm::vec3& light_color,
                            const glm::vec3& ambient_color);
     
-    void draw_warrior_slash(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                            float x, float y, float dir_x, float dir_y, float progress,
-                            const glm::mat4& view, const glm::mat4& projection,
-                            const glm::vec3& camera_pos);
-    void draw_mage_beam(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+    void draw_melee_slash(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                          const std::string& model_name,
+                          float x, float y, float dir_x, float dir_y, float progress,
+                          const glm::mat4& view, const glm::mat4& projection,
+                          const glm::vec3& camera_pos);
+    void draw_projectile(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                         const std::string& model_name,
+                         float x, float y, float dir_x, float dir_y, float progress, float range,
+                         const glm::mat4& view, const glm::mat4& projection,
+                         const glm::vec3& camera_pos);
+    void draw_orbit_aoe(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                        const std::string& model_name,
                         float x, float y, float dir_x, float dir_y, float progress, float range,
                         const glm::mat4& view, const glm::mat4& projection,
                         const glm::vec3& camera_pos);
-    void draw_paladin_aoe(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                          float x, float y, float dir_x, float dir_y, float progress, float range,
-                          const glm::mat4& view, const glm::mat4& projection,
-                          const glm::vec3& camera_pos);
-    void draw_archer_arrow(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                           float x, float y, float dir_x, float dir_y, float progress, float range,
-                           const glm::mat4& view, const glm::mat4& projection,
-                           const glm::vec3& camera_pos);
+    void draw_arrow(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                    const std::string& model_name,
+                    float x, float y, float dir_x, float dir_y, float progress, float range,
+                    const glm::mat4& view, const glm::mat4& projection,
+                    const glm::vec3& camera_pos);
     
     gpu::GPUDevice* device_ = nullptr;
     gpu::PipelineRegistry* pipeline_registry_ = nullptr;
@@ -100,4 +101,4 @@ private:
     std::function<float(float, float)> terrain_height_func_;
 };
 
-} // namespace mmo
+} // namespace mmo::engine::render

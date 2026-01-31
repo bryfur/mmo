@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 #include <cstdint>
 
-namespace mmo {
+namespace mmo::engine {
 
 // ============================================================================
 // Fog settings
@@ -26,23 +26,9 @@ namespace fog {
 // ============================================================================
 
 namespace lighting {
-    constexpr glm::vec3 SUN_DIRECTION = {0.5f, 0.8f, 0.3f};
-    constexpr glm::vec3 LIGHT_DIR = {-0.5f, -0.8f, -0.3f};
     constexpr glm::vec3 LIGHT_COLOR = {1.0f, 0.95f, 0.9f};
     constexpr glm::vec3 AMBIENT_COLOR = {0.4f, 0.4f, 0.5f};
     constexpr glm::vec3 AMBIENT_COLOR_NO_FOG = {0.5f, 0.5f, 0.55f};
-}
-
-// ============================================================================
-// Player class colors (ARGB format: 0xAARRGGBB)
-// ============================================================================
-
-namespace class_colors {
-    constexpr uint32_t WARRIOR = 0xFFC85050;
-    constexpr uint32_t MAGE    = 0xFF5050C8;
-    constexpr uint32_t PALADIN = 0xFFC8B450;
-    constexpr uint32_t ARCHER  = 0xFF50C850;
-    constexpr uint32_t DEFAULT = 0xFFFFFFFF;
 }
 
 // ============================================================================
@@ -58,7 +44,6 @@ namespace ui_colors {
     constexpr uint32_t TITLE_BG    = 0xFF332211;
     constexpr uint32_t SELECTION   = 0x40FFFFFF;
     constexpr uint32_t BORDER      = 0xFF666666;
-    constexpr uint32_t BORDER_DIM  = 0xFF888888;
 
     // Health bar
     constexpr uint32_t HEALTH_HIGH    = 0xFF00CC00;
@@ -75,19 +60,6 @@ namespace ui_colors {
     constexpr uint32_t VALUE_SLIDER = 0xFF00AAFF;
     constexpr uint32_t FPS_TEXT   = 0xFF00FF00;
 
-    // Reticle
-    constexpr uint32_t RETICLE = 0xCCFFFFFF;
 }
 
-// ============================================================================
-// Class select UI colors (background tiles, different from class_colors)
-// ============================================================================
-
-namespace class_select_colors {
-    constexpr uint32_t WARRIOR = 0xFF5050C8;
-    constexpr uint32_t MAGE    = 0xFFC85050;
-    constexpr uint32_t PALADIN = 0xFF50B4C8;
-    constexpr uint32_t ARCHER  = 0xFF50C850;
-}
-
-} // namespace mmo
+} // namespace mmo::engine

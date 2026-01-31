@@ -4,7 +4,7 @@
 #include <vector>
 #include <functional>
 
-namespace mmo {
+namespace mmo::client {
 
 enum class MenuPage {
     Main,
@@ -36,4 +36,4 @@ struct MenuItem {
     MenuPage target_page = MenuPage::Main;
 };
 
-} // namespace mmo
+} // namespace mmo::client

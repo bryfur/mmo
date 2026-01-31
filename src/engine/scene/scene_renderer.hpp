@@ -13,24 +13,15 @@
 #include "engine/gpu/pipeline_registry.hpp"
 #include "engine/model_loader.hpp"
 #include "engine/graphics_settings.hpp"
+#include "engine/scene/camera_state.hpp"
+#include "engine/heightmap.hpp"
 #include <glm/glm.hpp>
 #include <memory>
-#include <string>
 
-namespace mmo {
+namespace mmo::engine::scene {
 
-namespace engine {
-
-struct Heightmap;
-
-/**
- * Camera state passed from game logic to renderer each frame.
- */
-struct CameraState {
-    glm::mat4 view;
-    glm::mat4 projection;
-    glm::vec3 position;
-};
+namespace gpu = mmo::engine::gpu;
+namespace render = mmo::engine::render;
 
 /**
  * SceneRenderer consumes RenderScene + UIScene and produces a rendered frame.
@@ -51,7 +42,7 @@ public:
      * @param world_width World width for terrain/world renderers
      * @param world_height World height for terrain/world renderers
      */
-    bool init(RenderContext& context, float world_width = 8000.0f, float world_height = 8000.0f);
+    bool init(render::RenderContext& context, float world_width = 8000.0f, float world_height = 8000.0f);
 
     void shutdown();
 
@@ -75,9 +66,9 @@ public:
 
     // ========== Accessors ==========
 
-    TerrainRenderer& terrain() { return terrain_; }
+    render::TerrainRenderer& terrain() { return terrain_; }
     ModelManager& models() { return *model_manager_; }
-    GrassRenderer* grass() { return grass_renderer_.get(); }
+    render::GrassRenderer* grass() { return grass_renderer_.get(); }
     float get_terrain_height(float x, float z) { return terrain_.get_height(x, z); }
 
 private:
@@ -94,8 +85,7 @@ private:
     void render_model_command(const ModelCommand& cmd, const CameraState& camera);
     void render_skinned_model_command(const SkinnedModelCommand& cmd, const CameraState& camera);
     void render_ui_commands(const UIScene& ui_scene, const CameraState& camera);
-    void draw_enemy_health_bar_3d(float world_x, float world_y, float world_z,
-                                   float width, float health_ratio, const CameraState& camera);
+    void draw_billboard_3d(const Billboard3DCommand& cmd, const CameraState& camera);
 
     // Setup
     void init_pipelines();
@@ -103,14 +93,14 @@ private:
     void update_animations(float dt);
 
     // ========== Sub-renderers ==========
-    RenderContext* context_ = nullptr;
+    render::RenderContext* context_ = nullptr;
     gpu::PipelineRegistry pipeline_registry_;
-    TerrainRenderer terrain_;
-    WorldRenderer world_;
-    UIRenderer ui_;
-    EffectRenderer effects_;
+    render::TerrainRenderer terrain_;
+    render::WorldRenderer world_;
+    render::UIRenderer ui_;
+    render::EffectRenderer effects_;
     std::unique_ptr<ModelManager> model_manager_;
-    std::unique_ptr<GrassRenderer> grass_renderer_;
+    std::unique_ptr<render::GrassRenderer> grass_renderer_;
 
     // ========== GPU Resources ==========
     std::unique_ptr<gpu::GPUBuffer> billboard_vertex_buffer_;
@@ -127,5 +117,4 @@ private:
     GraphicsSettings default_graphics_;
 };
 
-} // namespace engine
-} // namespace mmo
+} // namespace mmo::engine::scene

@@ -4,10 +4,11 @@
 #include <SDL3/SDL_gpu.h>
 #include <glm/glm.hpp>
 #include <string>
-#include <memory>
 #include "engine/gpu/gpu_device.hpp"
 
-namespace mmo {
+namespace mmo::engine::render {
+
+namespace gpu = mmo::engine::gpu;
 
 /**
  * RenderContext manages the SDL window and GPU device for SDL3 GPU API rendering.
@@ -138,4 +139,4 @@ private:
     glm::vec4 clear_color_ = glm::vec4(0.05f, 0.07f, 0.1f, 1.0f);
 };
 
-} // namespace mmo
+} // namespace mmo::engine::render

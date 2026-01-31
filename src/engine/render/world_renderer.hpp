@@ -3,7 +3,6 @@
 #include "../model_loader.hpp"
 #include "../gpu/gpu_device.hpp"
 #include "../gpu/gpu_buffer.hpp"
-#include "../gpu/gpu_pipeline.hpp"
 #include "../gpu/pipeline_registry.hpp"
 #include <SDL3/SDL_gpu.h>
 #include <glm/glm.hpp>
@@ -11,7 +10,9 @@
 #include <vector>
 #include <functional>
 
-namespace mmo {
+namespace mmo::engine::render {
+
+namespace gpu = mmo::engine::gpu;
 
 /**
  * WorldRenderer handles environmental world rendering:
@@ -139,4 +140,4 @@ private:
     SDL_GPUSampler* sampler_ = nullptr;
 };
 
-} // namespace mmo
+} // namespace mmo::engine::render

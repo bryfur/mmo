@@ -2,11 +2,25 @@
 #include "../gpu/gpu_texture.hpp"
 #include "../gpu/gpu_uniforms.hpp"
 #include "../render_constants.hpp"
+#include "SDL3/SDL_error.h"
+#include "SDL3/SDL_gpu.h"
+#include "engine/effect_types.hpp"
+#include "engine/gpu/gpu_device.hpp"
+#include "engine/gpu/pipeline_registry.hpp"
+#include "engine/model_loader.hpp"
+#include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/ext/vector_float3.hpp"
+#include "glm/ext/vector_float4.hpp"
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <iostream>
-#include <glm/gtc/matrix_transform.hpp>
+#include <string>
 
-namespace mmo {
+namespace mmo::engine::render {
+
+namespace gpu = mmo::engine::gpu;
 
 EffectRenderer::EffectRenderer() = default;
 
@@ -69,18 +83,20 @@ void EffectRenderer::draw_attack_effect(SDL_GPURenderPass* pass, SDL_GPUCommandB
     const std::string& type = effect.effect_type;
     float range = effect.range;
 
+    const auto& model = effect.model_name;
+
     if (type == "melee_swing") {
-        draw_warrior_slash(pass, cmd, effect.x, effect.y, effect.direction_x, effect.direction_y,
-                          progress, view, projection, camera_pos);
+        draw_melee_slash(pass, cmd, model, effect.x, effect.y, effect.direction_x, effect.direction_y,
+                         progress, view, projection, camera_pos);
     } else if (type == "projectile") {
-        draw_mage_beam(pass, cmd, effect.x, effect.y, effect.direction_x, effect.direction_y,
-                      progress, range, view, projection, camera_pos);
-    } else if (type == "orbit") {
-        draw_paladin_aoe(pass, cmd, effect.x, effect.y, effect.direction_x, effect.direction_y,
+        draw_projectile(pass, cmd, model, effect.x, effect.y, effect.direction_x, effect.direction_y,
                         progress, range, view, projection, camera_pos);
+    } else if (type == "orbit") {
+        draw_orbit_aoe(pass, cmd, model, effect.x, effect.y, effect.direction_x, effect.direction_y,
+                       progress, range, view, projection, camera_pos);
     } else if (type == "arrow") {
-        draw_archer_arrow(pass, cmd, effect.x, effect.y, effect.direction_x, effect.direction_y,
-                         progress, range, view, projection, camera_pos);
+        draw_arrow(pass, cmd, model, effect.x, effect.y, effect.direction_x, effect.direction_y,
+                   progress, range, view, projection, camera_pos);
     }
 }
 
@@ -166,14 +182,15 @@ void EffectRenderer::draw_model_effect(SDL_GPURenderPass* pass, SDL_GPUCommandBu
     }
 }
 
-void EffectRenderer::draw_warrior_slash(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+void EffectRenderer::draw_melee_slash(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                         const std::string& model_name,
                                          float x, float y, float dir_x, float dir_y, float progress,
                                          const glm::mat4& view, const glm::mat4& projection,
                                          const glm::vec3& camera_pos) {
     if (!model_manager_) return;
-    
-    Model* sword = model_manager_->get_model("weapon_sword");
-    if (!sword) return;
+
+    Model* model = model_manager_->get_model(model_name);
+    if (!model) return;
     
     float base_angle = std::atan2(dir_x, dir_y);
     float swing_angle = -1.0f + progress * 2.0f;
@@ -184,37 +201,38 @@ void EffectRenderer::draw_warrior_slash(SDL_GPURenderPass* pass, SDL_GPUCommandB
     float pos_z = y + std::cos(rotation) * swing_radius;
     float terrain_y = get_terrain_height(pos_x, pos_z);
     float pos_y = terrain_y + 25.0f + std::sin(progress * 3.14159f) * 15.0f;
-    
+
     float tilt = std::sin(progress * 3.14159f) * 0.8f;
-    float scale = 25.0f / sword->max_dimension();
+    float scale = 25.0f / model->max_dimension();
     float alpha = progress < 0.7f ? 1.0f : (1.0f - (progress - 0.7f) / 0.3f);
-    
+
     glm::mat4 model_mat = glm::mat4(1.0f);
     model_mat = glm::translate(model_mat, glm::vec3(pos_x, pos_y, pos_z));
     model_mat = glm::rotate(model_mat, rotation + 1.57f, glm::vec3(0.0f, 1.0f, 0.0f));
     model_mat = glm::rotate(model_mat, tilt, glm::vec3(1.0f, 0.0f, 0.0f));
     model_mat = glm::rotate(model_mat, -0.5f, glm::vec3(0.0f, 0.0f, 1.0f));
     model_mat = glm::scale(model_mat, glm::vec3(scale));
-    
-    float cx = (sword->min_x + sword->max_x) / 2.0f;
-    float cy = sword->min_y;
-    float cz = (sword->min_z + sword->max_z) / 2.0f;
+
+    float cx = (model->min_x + model->max_x) / 2.0f;
+    float cy = model->min_y;
+    float cz = (model->min_z + model->max_z) / 2.0f;
     model_mat = model_mat * glm::translate(glm::mat4(1.0f), glm::vec3(-cx, -cy, -cz));
-    
-    draw_model_effect(pass, cmd, sword, model_mat, view, projection, camera_pos,
+
+    draw_model_effect(pass, cmd, model, model_mat, view, projection, camera_pos,
                       glm::vec4(1.0f, 1.0f, 1.0f, alpha),
                       glm::vec3(1.0f, 0.95f, 0.9f),
                       glm::vec3(0.4f, 0.4f, 0.5f));
 }
 
-void EffectRenderer::draw_mage_beam(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+void EffectRenderer::draw_projectile(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                     const std::string& model_name,
                                      float x, float y, float dir_x, float dir_y, float progress, float range,
                                      const glm::mat4& view, const glm::mat4& projection,
                                      const glm::vec3& camera_pos) {
     if (!model_manager_) return;
-    
-    Model* fireball = model_manager_->get_model("spell_fireball");
-    if (!fireball) return;
+
+    Model* model = model_manager_->get_model(model_name);
+    if (!model) return;
     
     float len = std::sqrt(dir_x * dir_x + dir_y * dir_y);
     if (len < 0.001f) { dir_x = 0; dir_y = 1; len = 1; }
@@ -228,7 +246,7 @@ void EffectRenderer::draw_mage_beam(SDL_GPURenderPass* pass, SDL_GPUCommandBuffe
     float pos_y = terrain_y + 30.0f + std::sin(progress * 6.28f) * 5.0f;
     
     float spin = progress * 10.0f;
-    float scale = 15.0f / fireball->max_dimension();
+    float scale = 15.0f / model->max_dimension();
     float size_mod = progress < 0.2f ? progress / 0.2f : 1.0f;
     float alpha = progress > 0.8f ? (1.0f - (progress - 0.8f) / 0.2f) : 1.0f;
     
@@ -238,37 +256,38 @@ void EffectRenderer::draw_mage_beam(SDL_GPURenderPass* pass, SDL_GPUCommandBuffe
     model_mat = glm::rotate(model_mat, spin * 0.7f, glm::vec3(1.0f, 0.0f, 0.0f));
     model_mat = glm::scale(model_mat, glm::vec3(scale * size_mod));
     
-    float cx = (fireball->min_x + fireball->max_x) / 2.0f;
-    float cy = (fireball->min_y + fireball->max_y) / 2.0f;
-    float cz = (fireball->min_z + fireball->max_z) / 2.0f;
+    float cx = (model->min_x + model->max_x) / 2.0f;
+    float cy = (model->min_y + model->max_y) / 2.0f;
+    float cz = (model->min_z + model->max_z) / 2.0f;
     model_mat = model_mat * glm::translate(glm::mat4(1.0f), glm::vec3(-cx, -cy, -cz));
     
-    draw_model_effect(pass, cmd, fireball, model_mat, view, projection, camera_pos,
+    draw_model_effect(pass, cmd, model, model_mat, view, projection, camera_pos,
                       glm::vec4(1.0f, 0.8f, 0.5f, alpha),
                       glm::vec3(1.5f, 1.2f, 0.8f),
                       glm::vec3(0.6f, 0.4f, 0.2f));
 }
 
-void EffectRenderer::draw_paladin_aoe(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+void EffectRenderer::draw_orbit_aoe(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                       const std::string& model_name,
                                        float x, float y, float dir_x, float dir_y, float progress, float range,
                                        const glm::mat4& view, const glm::mat4& projection,
                                        const glm::vec3& camera_pos) {
     if (!model_manager_) return;
+
+    Model* model = model_manager_->get_model(model_name);
+    if (!model) return;
     
-    Model* bible = model_manager_->get_model("spell_bible");
-    if (!bible) return;
-    
-    int num_bibles = 3;
+    int num_models = 3;
     float spin_speed = progress * 15.0f;
     float orbit_radius = range * 0.4f * std::min(1.0f, progress * 2.0f);
     float terrain_y = get_terrain_height(x, y);
     float base_height = terrain_y + 35.0f + std::sin(progress * 3.14159f) * 20.0f;
     
-    float scale = 12.0f / bible->max_dimension();
+    float scale = 12.0f / model->max_dimension();
     float alpha = progress > 0.7f ? (1.0f - (progress - 0.7f) / 0.3f) : 1.0f;
     
-    for (int i = 0; i < num_bibles; ++i) {
-        float angle = spin_speed + (i * 2.0f * 3.14159f / num_bibles);
+    for (int i = 0; i < num_models; ++i) {
+        float angle = spin_speed + (i * 2.0f * 3.14159f / num_models);
         float pos_x = x + std::cos(angle) * orbit_radius;
         float pos_z = y + std::sin(angle) * orbit_radius;
         float pos_y = base_height + std::sin(angle * 2.0f) * 10.0f;
@@ -280,24 +299,25 @@ void EffectRenderer::draw_paladin_aoe(SDL_GPURenderPass* pass, SDL_GPUCommandBuf
         model_mat = glm::rotate(model_mat, spin_speed * 0.5f, glm::vec3(0.0f, 0.0f, 1.0f));
         model_mat = glm::scale(model_mat, glm::vec3(scale));
         
-        float cx = (bible->min_x + bible->max_x) / 2.0f;
-        float cy = (bible->min_y + bible->max_y) / 2.0f;
-        float cz = (bible->min_z + bible->max_z) / 2.0f;
+        float cx = (model->min_x + model->max_x) / 2.0f;
+        float cy = (model->min_y + model->max_y) / 2.0f;
+        float cz = (model->min_z + model->max_z) / 2.0f;
         model_mat = model_mat * glm::translate(glm::mat4(1.0f), glm::vec3(-cx, -cy, -cz));
         
-        draw_model_effect(pass, cmd, bible, model_mat, view, projection, camera_pos,
+        draw_model_effect(pass, cmd, model, model_mat, view, projection, camera_pos,
                           glm::vec4(1.0f, 1.0f, 0.8f, alpha),
                           glm::vec3(1.2f, 1.2f, 0.8f),
                           glm::vec3(0.5f, 0.5f, 0.3f));
     }
 }
 
-void EffectRenderer::draw_archer_arrow(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+void EffectRenderer::draw_arrow(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                        const std::string& model_name,
                                         float x, float y, float dir_x, float dir_y, float progress, float range,
                                         const glm::mat4& view, const glm::mat4& projection,
                                         const glm::vec3& camera_pos) {
     if (!model_manager_) return;
-    
+
     float travel_dist = progress * range;
     float arrow_x = x + dir_x * travel_dist;
     float arrow_z = y + dir_y * travel_dist;
@@ -315,14 +335,13 @@ void EffectRenderer::draw_archer_arrow(SDL_GPURenderPass* pass, SDL_GPUCommandBu
     model_mat = glm::rotate(model_mat, tilt, glm::vec3(1.0f, 0.0f, 0.0f));
     model_mat = glm::scale(model_mat, glm::vec3(1.5f, 1.5f, 12.0f));
     
-    // Use fireball model as projectile stand-in
-    Model* projectile = model_manager_->get_model("spell_fireball");
-    if (projectile) {
-        draw_model_effect(pass, cmd, projectile, model_mat, view, projection, camera_pos,
+    Model* model = model_manager_->get_model(model_name);
+    if (model) {
+        draw_model_effect(pass, cmd, model, model_mat, view, projection, camera_pos,
                           glm::vec4(0.6f, 0.4f, 0.2f, alpha),
                           glm::vec3(0.9f, 0.85f, 0.7f),
                           glm::vec3(0.4f, 0.35f, 0.3f));
     }
 }
 
-} // namespace mmo
+} // namespace mmo::engine::render

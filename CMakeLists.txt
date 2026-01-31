@@ -77,10 +77,18 @@ FetchContent_Declare(
 set(GLM_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(glm)
 
+# EnTT (ECS library)
+FetchContent_Declare(
+    EnTT
+    GIT_REPOSITORY https://github.com/skypjack/entt.git
+    GIT_TAG v3.14.0
+)
+FetchContent_MakeAvailable(EnTT)
+
 # Generate model bounds header from GLB files
 add_subdirectory(assets/models)
 
-add_subdirectory(src/common)
+add_subdirectory(src/protocol)
 add_subdirectory(src/engine)
 add_subdirectory(src/server)
 add_subdirectory(src/client)

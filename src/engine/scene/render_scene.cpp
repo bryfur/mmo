@@ -1,10 +1,18 @@
 #include "render_scene.hpp"
+#include "engine/effect_types.hpp"
+#include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/vector_float4.hpp"
+#include <array>
+#include <cstdint>
+#include <string>
+#include <utility>
 
-namespace mmo {
+namespace mmo::engine::scene {
 
 void RenderScene::clear() {
     commands_.clear();
     effects_.clear();
+    billboards_.clear();
 
     // Reset world element flags to defaults
     draw_skybox_ = true;
@@ -45,4 +53,11 @@ void RenderScene::add_effect(const engine::EffectInstance& effect) {
     effects_.push_back(effect);
 }
 
-} // namespace mmo
+void RenderScene::add_billboard_3d(float world_x, float world_y, float world_z,
+                                    float width, float fill_ratio,
+                                    uint32_t fill_color, uint32_t bg_color, uint32_t frame_color) {
+    billboards_.push_back({world_x, world_y, world_z, width, fill_ratio,
+                           fill_color, bg_color, frame_color});
+}
+
+} // namespace mmo::engine::scene

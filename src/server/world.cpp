@@ -1,17 +1,30 @@
 #include "world.hpp"
 #include "ecs/game_components.hpp"
+#include "entt/entity/entity.hpp"
+#include "entt/entity/fwd.hpp"
+#include "protocol/heightmap.hpp"
+#include "protocol/protocol.hpp"
+#include "server/game_config.hpp"
+#include "server/game_types.hpp"
+#include "server/heightmap_generator.hpp"
 #include "systems/movement_system.hpp"
 #include "systems/combat_system.hpp"
 #include "systems/ai_system.hpp"
 #include "systems/physics_system.hpp"
 #include "entity_config.hpp"
-#include "common/heightmap.hpp"
-#include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <cmath>
 #include <iostream>
+#include <mutex>
+#include <random>
+#include <string>
+#include <utility>
+#include <vector>
 
-namespace mmo {
+namespace mmo::server {
+
+using namespace mmo::protocol;
 
 World::World(const GameConfig& config) : config_(&config), rng_(std::random_device{}()) {
     // Generate heightmap first (needed for terrain-aware spawning)
@@ -83,13 +96,13 @@ void World::setup_collision_callbacks() {
 
 void World::spawn_town() {
     const float TOWN_CENTER_X = config_->world().width / 2.0f;
-    const float TOWN_CENTER_Y = config_->world().height / 2.0f;
+    const float TOWN_CENTER_Z = config_->world().height / 2.0f;
 
     // Create buildings around town center
     struct BuildingPlacement {
         BuildingType type;
         float offset_x;
-        float offset_y;
+        float offset_z;
         const char* name;
         float rotation = 0.0f;  // Rotation in degrees
     };
@@ -125,23 +138,23 @@ void World::spawn_town() {
     }
     
     // West wall (solid)
-    for (float y = -WALL_DIST + 60.0f; y <= WALL_DIST - 60.0f; y += LOG_SPACING) {
-        buildings.push_back({BuildingType::WoodenLog, -WALL_DIST, y, "Log", 90.0f});
+    for (float z = -WALL_DIST + 60.0f; z <= WALL_DIST - 60.0f; z += LOG_SPACING) {
+        buildings.push_back({BuildingType::WoodenLog, -WALL_DIST, z, "Log", 90.0f});
     }
-    
+
     // East wall (with gate)
-    for (float y = -WALL_DIST + 60.0f; y <= WALL_DIST - 60.0f; y += LOG_SPACING) {
-        if (std::abs(y) < GATE_WIDTH / 2.0f) continue;  // Skip gate area
-        buildings.push_back({BuildingType::WoodenLog, WALL_DIST, y, "Log", 90.0f});
+    for (float z = -WALL_DIST + 60.0f; z <= WALL_DIST - 60.0f; z += LOG_SPACING) {
+        if (std::abs(z) < GATE_WIDTH / 2.0f) continue;  // Skip gate area
+        buildings.push_back({BuildingType::WoodenLog, WALL_DIST, z, "Log", 90.0f});
     }
     
     for (const auto& b : buildings) {
         auto entity = registry_.create();
         
         float world_x = TOWN_CENTER_X + b.offset_x;
-        float world_y = TOWN_CENTER_Y + b.offset_y;
-        float world_z = get_terrain_height(world_x, world_y);  // Get terrain height
-        
+        float world_z = TOWN_CENTER_Z + b.offset_z;
+        float world_y = get_terrain_height(world_x, world_z);  // Get terrain height
+
         registry_.emplace<ecs::NetworkId>(entity, next_network_id());
         ecs::Transform transform;
         transform.x = world_x;
@@ -188,7 +201,7 @@ void World::spawn_town() {
     struct TownNPCPlacement {
         NPCType type;
         float offset_x;
-        float offset_y;
+        float offset_z;
         const char* name;
         bool wanders;
         uint32_t color = 0xFFAAAAAA;
@@ -208,11 +221,11 @@ void World::spawn_town() {
     for (const auto& npc : town_npcs) {
         auto entity = registry_.create();
         float x = TOWN_CENTER_X + npc.offset_x;
-        float y = TOWN_CENTER_Y + npc.offset_y;
-        float z = get_terrain_height(x, y);  // Get terrain height at spawn position
-        
+        float z = TOWN_CENTER_Z + npc.offset_z;
+        float y = get_terrain_height(x, z);  // Get terrain height at spawn position
+
         registry_.emplace<ecs::NetworkId>(entity, next_network_id());
-        
+
         ecs::Transform transform;
         transform.x = x;
         transform.y = y;
@@ -238,7 +251,7 @@ void World::spawn_town() {
         collider.type = ecs::ColliderType::Capsule;
         collider.radius = config::get_collision_radius(npc_target_size);
         collider.half_height = config::get_collision_half_height(npc_target_size);
-        // Offset so capsule is centered at NPC mid-height (feet at transform.z)
+        // Offset so capsule is centered at NPC mid-height (feet at transform.y)
         collider.offset_y = collider.half_height + collider.radius;
         registry_.emplace<ecs::Collider>(entity, collider);
         
@@ -252,7 +265,7 @@ void World::spawn_town() {
         if (npc.wanders) {
             ecs::TownNPCAI ai;
             ai.home_x = x;
-            ai.home_y = y;
+            ai.home_z = z;
             ai.wander_radius = 80.0f;
             registry_.emplace<ecs::TownNPCAI>(entity, ai);
         } else {
@@ -263,32 +276,32 @@ void World::spawn_town() {
 
 void World::spawn_npcs() {
     const float TOWN_CENTER_X = config_->world().width / 2.0f;
-    const float TOWN_CENTER_Y = config_->world().height / 2.0f;
+    const float TOWN_CENTER_Z = config_->world().height / 2.0f;
     const float TOWN_SAFE_RADIUS = config_->safe_zone_radius();
 
     // Spawn hostile NPCs OUTSIDE the town safe zone
     std::uniform_real_distribution<float> dist_x(100.0f, config_->world().width - 100.0f);
-    std::uniform_real_distribution<float> dist_y(100.0f, config_->world().height - 100.0f);
+    std::uniform_real_distribution<float> dist_z(100.0f, config_->world().height - 100.0f);
 
     int spawned = 0;
     while (spawned < config_->monster().count) {
         float x = dist_x(rng_);
-        float y = dist_y(rng_);
+        float z = dist_z(rng_);
 
         // Skip if inside town safe zone
         float dx = x - TOWN_CENTER_X;
-        float dy = y - TOWN_CENTER_Y;
-        if (dx * dx + dy * dy < (TOWN_SAFE_RADIUS + 100.0f) * (TOWN_SAFE_RADIUS + 100.0f)) {
+        float dz = z - TOWN_CENTER_Z;
+        if (dx * dx + dz * dz < (TOWN_SAFE_RADIUS + 100.0f) * (TOWN_SAFE_RADIUS + 100.0f)) {
             continue;
         }
-        
+
         // Get terrain height at spawn position
-        float z = get_terrain_height(x, y);
-        
+        float y = get_terrain_height(x, z);
+
         auto entity = registry_.create();
-        
+
         registry_.emplace<ecs::NetworkId>(entity, next_network_id());
-        
+
         ecs::Transform transform;
         transform.x = x;
         transform.y = y;
@@ -317,7 +330,7 @@ void World::spawn_npcs() {
         collider.type = ecs::ColliderType::Capsule;
         collider.radius = config::get_collision_radius(npc_target_size);
         collider.half_height = config::get_collision_half_height(npc_target_size);
-        // Offset so capsule is centered at NPC mid-height (feet at transform.z)
+        // Offset so capsule is centered at NPC mid-height (feet at transform.y)
         collider.offset_y = collider.half_height + collider.radius;
         registry_.emplace<ecs::Collider>(entity, collider);
         
@@ -340,16 +353,16 @@ uint32_t World::add_player(const std::string& name, PlayerClass player_class) {
     
     // Spawn players in the town (safe zone)
     const float town_center_x = config_->world().width / 2.0f;
-    const float town_center_y = config_->world().height / 2.0f;
+    const float town_center_z = config_->world().height / 2.0f;
     std::uniform_real_distribution<float> dist_offset(-50.0f, 50.0f);
     float spawn_x = town_center_x + dist_offset(rng_);
-    float spawn_y = town_center_y + dist_offset(rng_);
-    
-    // Get terrain height at spawn position (z = height/elevation)
-    float spawn_z = get_terrain_height(spawn_x, spawn_y);
-    
+    float spawn_z = town_center_z + dist_offset(rng_);
+
+    // Get terrain height at spawn position (y = height/elevation)
+    float spawn_y = get_terrain_height(spawn_x, spawn_z);
+
     registry_.emplace<ecs::NetworkId>(entity, net_id);
-    
+
     ecs::Transform transform;
     transform.x = spawn_x;
     transform.y = spawn_y;
@@ -384,7 +397,7 @@ uint32_t World::add_player(const std::string& name, PlayerClass player_class) {
     collider.type = ecs::ColliderType::Capsule;
     collider.radius = config::get_collision_radius(player_target_size);
     collider.half_height = config::get_collision_half_height(player_target_size);
-    // Offset so capsule is centered at player mid-height (feet at transform.z)
+    // Offset so capsule is centered at player mid-height (feet at transform.y)
     collider.offset_y = collider.half_height + collider.radius;
     registry_.emplace<ecs::Collider>(entity, collider);
     
@@ -434,16 +447,16 @@ void World::spawn_environment() {
     std::uniform_real_distribution<float> scale_var(0.8f, 1.2f);
     
     float world_center_x = config_->world().width / 2.0f;
-    float world_center_y = config_->world().height / 2.0f;
-    
-    auto spawn_env = [&](EnvironmentType type, float x, float y, float scale, float rotation) {
+    float world_center_z = config_->world().height / 2.0f;
+
+    auto spawn_env = [&](EnvironmentType type, float x, float z, float scale, float rotation) {
         auto entity = registry_.create();
-        
+
         // Get terrain height at spawn position
-        float z = get_terrain_height(x, y);
-        
+        float y = get_terrain_height(x, z);
+
         registry_.emplace<ecs::NetworkId>(entity, next_network_id());
-        
+
         ecs::Transform transform;
         transform.x = x;
         transform.y = y;
@@ -495,7 +508,7 @@ void World::spawn_environment() {
         float angle = angle_dist(env_rng);
         float dist = 800.0f + (env_rng() / static_cast<float>(env_rng.max())) * 700.0f;
         float x = world_center_x + std::cos(angle) * dist;
-        float y = world_center_y + std::sin(angle) * dist;
+        float y = world_center_z + std::sin(angle) * dist;
         float scale = 15.0f + (env_rng() / static_cast<float>(env_rng.max())) * 25.0f;
         float rotation = rotation_dist(env_rng);
         EnvironmentType rock_type = static_cast<EnvironmentType>(env_rng() % 5);
@@ -507,7 +520,7 @@ void World::spawn_environment() {
         float angle = angle_dist(env_rng);
         float dist = 1500.0f + (env_rng() / static_cast<float>(env_rng.max())) * 1000.0f;
         float x = world_center_x + std::cos(angle) * dist;
-        float y = world_center_y + std::sin(angle) * dist;
+        float y = world_center_z + std::sin(angle) * dist;
         float scale = 25.0f + (env_rng() / static_cast<float>(env_rng.max())) * 40.0f;
         float rotation = rotation_dist(env_rng);
         EnvironmentType rock_type = static_cast<EnvironmentType>(env_rng() % 5);
@@ -519,7 +532,7 @@ void World::spawn_environment() {
         float angle = angle_dist(env_rng);
         float dist = 2500.0f + (env_rng() / static_cast<float>(env_rng.max())) * 1000.0f;
         float x = world_center_x + std::cos(angle) * dist;
-        float y = world_center_y + std::sin(angle) * dist;
+        float y = world_center_z + std::sin(angle) * dist;
         float scale = 40.0f + (env_rng() / static_cast<float>(env_rng.max())) * 60.0f;
         float rotation = rotation_dist(env_rng);
         EnvironmentType rock_type = static_cast<EnvironmentType>(env_rng() % 5);
@@ -549,7 +562,7 @@ void World::spawn_environment() {
             float angle = angle_dist(tree_rng);
             float dist = 400.0f + (tree_rng() / static_cast<float>(tree_rng.max())) * 500.0f;
             float x = world_center_x + std::cos(angle) * dist;
-            float y = world_center_y + std::sin(angle) * dist;
+            float y = world_center_z + std::sin(angle) * dist;
             
             if (!is_too_close(x, y, base_min_dist)) {
                 float scale = 240.0f + (tree_rng() / static_cast<float>(tree_rng.max())) * 320.0f;
@@ -569,7 +582,7 @@ void World::spawn_environment() {
             float angle = angle_dist(tree_rng);
             float dist = 900.0f + (tree_rng() / static_cast<float>(tree_rng.max())) * 900.0f;
             float x = world_center_x + std::cos(angle) * dist;
-            float y = world_center_y + std::sin(angle) * dist;
+            float y = world_center_z + std::sin(angle) * dist;
             
             if (!is_too_close(x, y, base_min_dist * 1.5f)) {
                 float scale = 320.0f + (tree_rng() / static_cast<float>(tree_rng.max())) * 400.0f;
@@ -589,7 +602,7 @@ void World::spawn_environment() {
             float angle = angle_dist(tree_rng);
             float dist = 1800.0f + (tree_rng() / static_cast<float>(tree_rng.max())) * 1000.0f;
             float x = world_center_x + std::cos(angle) * dist;
-            float y = world_center_y + std::sin(angle) * dist;
+            float y = world_center_z + std::sin(angle) * dist;
             
             if (!is_too_close(x, y, base_min_dist * 2.0f)) {
                 float scale = 400.0f + (tree_rng() / static_cast<float>(tree_rng.max())) * 480.0f;
@@ -609,7 +622,7 @@ void World::spawn_environment() {
                            (tree_rng() / static_cast<float>(tree_rng.max())) * 0.5f;
         float grove_dist = 600.0f + (tree_rng() / static_cast<float>(tree_rng.max())) * 800.0f;
         float grove_x = world_center_x + std::cos(grove_angle) * grove_dist;
-        float grove_y = world_center_y + std::sin(grove_angle) * grove_dist;
+        float grove_y = world_center_z + std::sin(grove_angle) * grove_dist;
         
         int grove_size = 10 + tree_rng() % 6;
         int grove_tree_type = tree_rng() % 2;
@@ -677,10 +690,10 @@ std::vector<NetEntityState> World::get_all_entities() const {
         state.environment_type = info.environment_type;
         state.x = transform.x;
         state.y = transform.y;
-        state.z = transform.z;  // Send terrain height to client
+        state.z = transform.z;
         state.rotation = transform.rotation;
         state.vx = velocity.x;
-        state.vy = velocity.y;
+        state.vy = velocity.z;
         state.health = health.current;
         state.max_health = health.max;
         state.color = info.color;
@@ -780,7 +793,7 @@ void World::generate_heightmap() {
     std::cout << "[World] Generating heightmap..." << std::endl;
     
     // Initialize chunk for the entire world (single chunk for now)
-    heightmap_.init(0, 0, heightmap_config::CHUNK_RESOLUTION);
+    heightmap_init(heightmap_, 0, 0, heightmap_config::CHUNK_RESOLUTION);
     
     // Generate using procedural algorithm
     heightmap_generator::generate_procedural(heightmap_, config_->world().width, config_->world().height);
@@ -789,4 +802,4 @@ void World::generate_heightmap() {
               << " (" << heightmap_.serialized_size() / 1024 << " KB)" << std::endl;
 }
 
-} // namespace mmo
+} // namespace mmo::server

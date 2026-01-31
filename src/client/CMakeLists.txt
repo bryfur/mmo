@@ -11,7 +11,7 @@ add_executable(mmo_client ${CLIENT_SOURCES})
 
 target_link_libraries(mmo_client PRIVATE
     mmo_engine
-    mmo_common
+    mmo_protocol
     pthread
 )
 

@@ -5,7 +5,7 @@
 #include <cstdint>
 #include <variant>
 
-namespace mmo {
+namespace mmo::engine::scene {
 
 /**
  * Filled rectangle command
@@ -73,28 +73,6 @@ struct ButtonCommand {
 };
 
 /**
- * Target reticle marker command
- */
-struct TargetReticleCommand {};
-
-/**
- * Player health bar (UI overlay)
- */
-struct PlayerHealthBarCommand {
-    float health_ratio;
-    float max_health;
-};
-
-/**
- * Enemy health bar in 3D space
- */
-struct EnemyHealthBar3DCommand {
-    float world_x, world_y, world_z;
-    float width;
-    float health_ratio;
-};
-
-/**
  * Generic UI command using std::variant for type-safe storage
  * Only stores one command type at a time for memory efficiency
  */
@@ -105,10 +83,7 @@ using UICommandData = std::variant<
     CircleOutlineCommand,
     LineCommand,
     TextCommand,
-    ButtonCommand,
-    TargetReticleCommand,
-    PlayerHealthBarCommand,
-    EnemyHealthBar3DCommand
+    ButtonCommand
 >;
 
 struct UICommand {
@@ -162,21 +137,12 @@ public:
     void add_button(float x, float y, float w, float h, const std::string& label,
                     uint32_t color, bool selected = false);
     
-    // ========== Special UI Elements ==========
-    
-    void add_target_reticle();
-    void add_player_health_bar(float health_ratio, float max_health);
-    void add_enemy_health_bar_3d(float world_x, float world_y, float world_z,
-                                  float width, float health_ratio);
-    
     // ========== Command Access ==========
-    
+
     const std::vector<UICommand>& commands() const { return commands_; }
-    bool has_target_reticle() const { return has_target_reticle_; }
-    
+
 private:
     std::vector<UICommand> commands_;
-    bool has_target_reticle_ = false;
 };
 
-} // namespace mmo
+} // namespace mmo::engine::scene

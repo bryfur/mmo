@@ -1,7 +1,14 @@
 #include "render_context.hpp"
+#include "SDL3/SDL_error.h"
+#include "SDL3/SDL_gpu.h"
+#include "SDL3/SDL_video.h"
 #include <SDL3/SDL_log.h>
+#include <cstdint>
+#include <string>
 
-namespace mmo {
+namespace mmo::engine::render {
+
+namespace gpu = mmo::engine::gpu;
 
 RenderContext::~RenderContext() {
     shutdown();
@@ -117,4 +124,4 @@ void RenderContext::set_blending(bool /*enabled*/, int /*src*/, int /*dst*/) {
     // Use SDL_GPUColorTargetBlendState when creating pipelines
 }
 
-} // namespace mmo
+} // namespace mmo::engine::render

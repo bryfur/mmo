@@ -3,12 +3,24 @@
 #include "../gpu/gpu_buffer.hpp"
 #include "../gpu/gpu_pipeline.hpp"
 #include "../gpu/pipeline_registry.hpp"
+#include "SDL3/SDL_error.h"
+#include "SDL3/SDL_gpu.h"
+#include "SDL3/SDL_pixels.h"
+#include "SDL3/SDL_stdinc.h"
+#include "SDL3/SDL_surface.h"
+#include "SDL3_ttf/SDL_ttf.h"
+#include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/vector_float4.hpp"
+#include <cstdint>
 #include <iostream>
-#include <glm/gtc/type_ptr.hpp>
 #include <cstring>
 #include <algorithm>
+#include <string>
+#include <vector>
 
-namespace mmo {
+namespace mmo::engine::render {
+
+namespace gpu = mmo::engine::gpu;
 
 TextRenderer::TextRenderer() {}
 
@@ -570,4 +582,4 @@ void TextRenderer::draw_text_immediate(SDL_GPUCommandBuffer* cmd, SDL_GPURenderP
     SDL_DrawGPUPrimitives(render_pass, 6, 1, 0, 0);
 }
 
-} // namespace mmo
+} // namespace mmo::engine::render

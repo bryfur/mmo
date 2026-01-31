@@ -10,6 +10,7 @@ namespace mmo::engine {
  */
 struct EffectInstance {
     std::string effect_type;    // "melee_swing", "projectile", "orbit", "arrow"
+    std::string model_name;     // model to render (e.g. "weapon_sword", "spell_fireball")
     float x = 0.0f;
     float y = 0.0f;
     float direction_x = 0.0f;

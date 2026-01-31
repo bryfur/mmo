@@ -7,11 +7,12 @@
  * scaling between visual rendering and physics collision.
  */
 
+#include "protocol/protocol.hpp"
 #include "game_types.hpp"
-#include "common/protocol.hpp"  // For EntityType
 #include "model_bounds_generated.hpp"
 
-namespace mmo::config {
+namespace mmo::server::config {
+
 
 // ============================================================================
 // Target Sizes (Design Decisions - SINGLE SOURCE OF TRUTH)
@@ -52,16 +53,15 @@ inline float get_environment_target_scale(EnvironmentType type) {
     }
 }
 
-// Character sizes (server-only, matches GameConfig defaults)
 constexpr float CHARACTER_PLAYER_SIZE = 32.0f;
 constexpr float CHARACTER_NPC_SIZE = 36.0f;
 
 /// Get the target visual size for a character type
-inline float get_character_target_size(EntityType type) {
+inline float get_character_target_size(mmo::protocol::EntityType type) {
     switch (type) {
-        case EntityType::Player:  return CHARACTER_PLAYER_SIZE;
-        case EntityType::NPC:     return CHARACTER_NPC_SIZE;
-        case EntityType::TownNPC: return CHARACTER_PLAYER_SIZE * 0.9f;
+        case mmo::protocol::EntityType::Player:  return CHARACTER_PLAYER_SIZE;
+        case mmo::protocol::EntityType::NPC:     return CHARACTER_NPC_SIZE;
+        case mmo::protocol::EntityType::TownNPC: return CHARACTER_PLAYER_SIZE * 0.9f;
         default:                  return CHARACTER_PLAYER_SIZE;
     }
 }
@@ -254,4 +254,4 @@ inline float get_tree_collision_radius(EnvironmentType type, float scale) {
     }
 }
 
-} // namespace mmo::config
+} // namespace mmo::server::config

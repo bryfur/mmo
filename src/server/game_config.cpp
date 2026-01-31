@@ -1,12 +1,19 @@
 #include "game_config.hpp"
+#include "nlohmann/json_fwd.hpp"
+#include "protocol/protocol.hpp"
+#include <cstdint>
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <iostream>
 #include <cstring>
+#include <string>
+#include <utility>
 
 using json = nlohmann::json;
 
-namespace mmo {
+namespace mmo::server {
+
+using namespace mmo::protocol;
 
 uint32_t GameConfig::parse_color(const std::string& s) {
     if (s.size() >= 3 && s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
@@ -265,4 +272,4 @@ ClassInfo GameConfig::build_class_info(int index) const {
     return info;
 }
 
-} // namespace mmo
+} // namespace mmo::server

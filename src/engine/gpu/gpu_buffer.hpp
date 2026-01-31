@@ -4,7 +4,7 @@
 #include <memory>
 #include <cstddef>
 
-namespace mmo::gpu {
+namespace mmo::engine::gpu {
 
 /**
  * @brief GPU Buffer abstraction for vertex, index, uniform, and storage buffers
@@ -109,4 +109,4 @@ private:
     static SDL_GPUBufferUsageFlags get_usage_flags(Type type);
 };
 
-} // namespace mmo::gpu
+} // namespace mmo::engine::gpu

@@ -1,10 +1,19 @@
 #include "gpu_shader.hpp"
+#include "SDL3/SDL_error.h"
+#include "engine/gpu/gpu_device.hpp"
 #include <SDL3/SDL_log.h>
 #include <SDL3_shadercross/SDL_shadercross.h>
+#include <cstddef>
+#include <cstdint>
 #include <fstream>
+#include <ios>
+#include <memory>
 #include <sstream>
+#include <string>
+#include <utility>
+#include <vector>
 
-namespace mmo::gpu {
+namespace mmo::engine::gpu {
 
 // Static member initialization
 bool GPUShader::s_compiler_initialized = false;
@@ -301,4 +310,4 @@ std::unique_ptr<ShaderProgram> ShaderProgram::load(
     return program;
 }
 
-} // namespace mmo::gpu
+} // namespace mmo::engine::gpu

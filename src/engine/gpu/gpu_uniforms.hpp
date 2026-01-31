@@ -2,7 +2,7 @@
 
 #include <glm/glm.hpp>
 
-namespace mmo::gpu {
+namespace mmo::engine::gpu {
 
 /**
  * Model vertex shader uniforms - matches model.vert.hlsl TransformUniforms (set 1, b0)
@@ -72,4 +72,4 @@ struct alignas(16) UIFragmentUniforms {
     int _padding[3] = {0, 0, 0};
 };
 
-} // namespace mmo::gpu
+} // namespace mmo::engine::gpu

@@ -18,7 +18,7 @@
 struct SDL_GPUDevice;
 struct SDL_GPUCommandBuffer;
 
-namespace mmo {
+namespace mmo::engine {
 
 // Maximum bones per model (must match shader)
 constexpr int MAX_BONES = 64;
@@ -203,4 +203,4 @@ private:
     std::unordered_map<std::string, AnimationState> animation_states_;
 };
 
-} // namespace mmo
+} // namespace mmo::engine

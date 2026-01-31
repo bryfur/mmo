@@ -1,8 +1,13 @@
 #include "gpu_buffer.hpp"
+#include "SDL3/SDL_error.h"
+#include "SDL3/SDL_gpu.h"
+#include "SDL3/SDL_stdinc.h"
+#include "engine/gpu/gpu_device.hpp"
 #include <SDL3/SDL_log.h>
 #include <cstring>
+#include <memory>
 
-namespace mmo::gpu {
+namespace mmo::engine::gpu {
 
 GPUBuffer::~GPUBuffer() {
     if (device_) {
@@ -237,4 +242,4 @@ void GPUBuffer::update(SDL_GPUCommandBuffer* cmd, const void* data, size_t size,
     SDL_EndGPUCopyPass(copy_pass);
 }
 
-} // namespace mmo::gpu
+} // namespace mmo::engine::gpu

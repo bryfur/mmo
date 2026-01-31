@@ -1,16 +1,40 @@
 #include "game.hpp"
+#include "client/ecs/components.hpp"
+#include "client/game_state.hpp"
+#include "client/menu_system.hpp"
+#include "engine/effect_types.hpp"
+#include "engine/scene/camera_state.hpp"
+#include "engine/scene/ui_scene.hpp"
+#include "engine/systems/camera_controller.hpp"
+#include "engine/model_loader.hpp"
 #include "engine/render_constants.hpp"
 #include "engine/heightmap.hpp"
-#include "common/heightmap.hpp"
-#include <glm/gtc/type_ptr.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include "entt/entity/fwd.hpp"
+#include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/ext/vector_float3.hpp"
+#include "glm/ext/vector_float4.hpp"
+#include "protocol/heightmap.hpp"
+#include "protocol/protocol.hpp"
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <cstdio>
 #include <iostream>
+#include <memory>
+#include <string>
 #include <unordered_set>
 #include <random>
 #include <cstring>
 #include <cmath>
+#include <vector>
 
-namespace mmo {
+namespace mmo::client {
+
+using namespace mmo::protocol;
+using namespace mmo::engine;
+using namespace mmo::engine::scene;
+using namespace mmo::engine::systems;
 
 static std::string generate_random_name() {
     static const char* adjectives[] = {"Swift", "Brave", "Clever", "Mighty", "Silent", "Bold", "Wild", "Fierce"};
@@ -45,11 +69,7 @@ bool Game::init(const std::string& host, uint16_t port) {
 }
 
 bool Game::on_init() {
-    if (!context_.init(1280, 720, "MMO Client - Select Class")) {
-        return false;
-    }
-
-    if (!scene_renderer_.init(context_)) {
+    if (!init_renderer(1280, 720, "MMO Client - Select Class")) {
         return false;
     }
 
@@ -70,7 +90,7 @@ bool Game::on_init() {
     game_state_ = GameState::Connecting;
     connecting_timer_ = 0.0f;
 
-    init_menu_items();
+    menu_system_ = std::make_unique<MenuSystem>(input(), [this]() { quit(); });
 
     if (!network_.connect(host_, port_, player_name_)) {
         std::cerr << "Failed to connect to server" << std::endl;
@@ -87,13 +107,14 @@ void Game::shutdown() {
 
 void Game::on_shutdown() {
     network_.disconnect();
-    scene_renderer_.shutdown();
-    context_.shutdown();
+    shutdown_renderer();
 }
 
 void Game::on_update(float dt) {
     if (game_state_ == GameState::Playing || game_state_ == GameState::ClassSelect) {
-        update_menu(dt);
+        menu_system_->update(dt);
+        apply_graphics_settings();
+        apply_controls_settings();
     }
 
     switch (game_state_) {
@@ -166,20 +187,22 @@ void Game::update_class_select(float dt) {
 void Game::render_class_select() {
     player_x_ = world_config_.world_width / 2.0f;
     player_z_ = world_config_.world_height / 2.0f;
-    camera_system_.set_yaw(0.0f);
-    camera_system_.set_pitch(30.0f);
+    camera().set_yaw(0.0f);
+    camera().set_pitch(30.0f);
     update_camera_smooth(0.016f);
 
     render_scene_.clear();
+    render_scene_.set_draw_skybox(false);
+    render_scene_.set_draw_mountains(false);
+    render_scene_.set_draw_ground(false);
+    render_scene_.set_draw_grass(false);
     ui_scene_.clear();
 
     build_class_select_ui(ui_scene_);
 
-    if (menu_open_) {
-        build_menu_ui(ui_scene_);
-    }
+    menu_system_->build_ui(ui_scene_, static_cast<float>(screen_width()), static_cast<float>(screen_height()));
 
-    scene_renderer_.render_frame(render_scene_, ui_scene_, get_camera_state(), 0.016f);
+    render_frame(render_scene_, ui_scene_, get_camera_state(), 0.016f);
 }
 
 void Game::update_connecting(float dt) {
@@ -211,16 +234,20 @@ void Game::render_spawning() {
 void Game::render_connecting() {
     player_x_ = world_config_.world_width / 2.0f;
     player_z_ = world_config_.world_height / 2.0f;
-    camera_system_.set_yaw(0.0f);
-    camera_system_.set_pitch(30.0f);
+    camera().set_yaw(0.0f);
+    camera().set_pitch(30.0f);
     update_camera_smooth(0.016f);
 
     render_scene_.clear();
+    render_scene_.set_draw_skybox(false);
+    render_scene_.set_draw_mountains(false);
+    render_scene_.set_draw_ground(false);
+    render_scene_.set_draw_grass(false);
     ui_scene_.clear();
 
     build_connecting_ui(ui_scene_);
 
-    scene_renderer_.render_frame(render_scene_, ui_scene_, get_camera_state(), 0.016f);
+    render_frame(render_scene_, ui_scene_, get_camera_state(), 0.016f);
 }
 
 void Game::update_playing(float dt) {
@@ -232,7 +259,7 @@ void Game::update_playing(float dt) {
 
     network_.poll_messages();
 
-    input().set_player_screen_pos(context_.width() / 2.0f, context_.height() / 2.0f);
+    input().set_player_screen_pos(screen_width() / 2.0f, screen_height() / 2.0f);
 
     static float input_send_timer = 0.0f;
     input_send_timer += dt;
@@ -267,19 +294,19 @@ void Game::update_playing(float dt) {
         auto& combat = registry_.get<ecs::Combat>(entity);
 
         if (info.model_name.empty()) continue;
-        Model* model = scene_renderer_.models().get_model(info.model_name);
+        Model* model = models().get_model(info.model_name);
         if (!model || !model->has_skeleton) continue;
 
         std::string anim_name;
         if (combat.is_attacking) {
             anim_name = "Attack";
-        } else if (std::abs(vel.x) > 1.0f || std::abs(vel.y) > 1.0f) {
+        } else if (std::abs(vel.x) > 1.0f || std::abs(vel.z) > 1.0f) {
             anim_name = "Walk";
         } else {
             anim_name = "Idle";
         }
 
-        AnimationState* state = scene_renderer_.models().get_animation_state(info.model_name);
+        AnimationState* state = models().get_animation_state(info.model_name);
         if (state) {
             int clip_idx = model->find_animation(anim_name);
             if (clip_idx >= 0 && clip_idx != state->current_clip) {
@@ -294,36 +321,36 @@ void Game::update_playing(float dt) {
     if (it != network_to_entity_.end() && registry_.valid(it->second)) {
         auto& transform = registry_.get<ecs::Transform>(it->second);
         player_x_ = transform.x;
-        player_z_ = transform.y;
+        player_z_ = transform.z;
 
         if (auto* vel = registry_.try_get<ecs::Velocity>(it->second)) {
-            camera_system_.set_target_velocity(glm::vec3(vel->x, 0.0f, vel->y));
+            camera().set_target_velocity(glm::vec3(vel->x, 0.0f, vel->z));
         }
 
         if (auto* combat = registry_.try_get<ecs::Combat>(it->second)) {
-            camera_system_.set_in_combat(combat->is_attacking || combat->current_cooldown > 0);
+            camera().set_in_combat(combat->is_attacking || combat->current_cooldown > 0);
         }
     }
 
-    camera_system_.set_yaw(input().get_camera_yaw());
-    camera_system_.set_pitch(input().get_camera_pitch());
+    camera().set_yaw(input().get_camera_yaw());
+    camera().set_pitch(input().get_camera_pitch());
 
     bool sprinting = input().is_sprinting() &&
         (input().move_forward() || input().move_backward() ||
          input().move_left() || input().move_right());
     if (sprinting) {
-        camera_system_.set_mode(CameraMode::Sprint);
+        camera().set_mode(CameraMode::Sprint);
     }
 
     float zoom_delta = input().get_camera_zoom_delta();
     if (zoom_delta != 0.0f) {
-        camera_system_.adjust_zoom(zoom_delta);
+        camera().adjust_zoom(zoom_delta);
     }
     input().reset_camera_deltas();
 
     update_camera_smooth(dt);
 
-    glm::vec3 cam_forward = camera_system_.get_forward();
+    glm::vec3 cam_forward = camera().get_forward();
     input().set_camera_forward(cam_forward.x, cam_forward.z);
 }
 
@@ -331,17 +358,19 @@ void Game::render_playing() {
     render_scene_.clear();
     ui_scene_.clear();
 
-    render_scene_.set_draw_skybox(graphics_settings_.skybox_enabled);
-    render_scene_.set_draw_mountains(graphics_settings_.mountains_enabled);
-    render_scene_.set_draw_rocks(graphics_settings_.rocks_enabled);
-    render_scene_.set_draw_trees(graphics_settings_.trees_enabled);
+    const auto& gfx = menu_system_->graphics_settings();
+    render_scene_.set_draw_skybox(gfx.skybox_enabled);
+    render_scene_.set_draw_mountains(gfx.mountains_enabled);
+    render_scene_.set_draw_rocks(gfx.rocks_enabled);
+    render_scene_.set_draw_trees(gfx.trees_enabled);
     render_scene_.set_draw_ground(true);
-    render_scene_.set_draw_grass(graphics_settings_.grass_enabled);
+    render_scene_.set_draw_grass(gfx.grass_enabled);
 
     // Add effects to scene
     for (const auto& effect : attack_effects_) {
         engine::EffectInstance ei;
         ei.effect_type = effect.effect_type;
+        ei.model_name = effect.effect_model;
         ei.x = effect.x;
         ei.y = effect.y;
         ei.direction_x = effect.direction_x;
@@ -371,11 +400,9 @@ void Game::render_playing() {
 
     build_playing_ui(ui_scene_);
 
-    if (menu_open_) {
-        build_menu_ui(ui_scene_);
-    }
+    menu_system_->build_ui(ui_scene_, static_cast<float>(screen_width()), static_cast<float>(screen_height()));
 
-    scene_renderer_.render_frame(render_scene_, ui_scene_, get_camera_state(), 0.016f);
+    render_frame(render_scene_, ui_scene_, get_camera_state(), 0.016f);
 }
 
 // ============================================================================
@@ -389,7 +416,7 @@ void Game::add_entity_to_scene(entt::entity entity, bool is_local) {
 
     if (info.model_name.empty()) return;
 
-    Model* model = scene_renderer_.models().get_model(info.model_name);
+    Model* model = models().get_model(info.model_name);
     if (!model) return;
 
     // Compute rotation
@@ -402,8 +429,8 @@ void Game::add_entity_to_scene(entt::entity entity, bool is_local) {
         }
     } else {
         if (auto* vel = registry_.try_get<ecs::Velocity>(entity)) {
-            if (vel->x != 0.0f || vel->y != 0.0f) {
-                rotation = std::atan2(vel->x, vel->y);
+            if (vel->x != 0.0f || vel->z != 0.0f) {
+                rotation = std::atan2(vel->x, vel->z);
             }
         }
     }
@@ -424,7 +451,7 @@ void Game::add_entity_to_scene(entt::entity entity, bool is_local) {
     }
 
     // Build transform matrix
-    glm::vec3 position(transform.x, transform.z, transform.y);
+    glm::vec3 position(transform.x, transform.y, transform.z);
     glm::mat4 model_mat = glm::mat4(1.0f);
     model_mat = glm::translate(model_mat, position);
     model_mat = glm::rotate(model_mat, rotation, glm::vec3(0.0f, 1.0f, 0.0f));
@@ -443,7 +470,7 @@ void Game::add_entity_to_scene(entt::entity entity, bool is_local) {
 
     // Add model command to scene
     if (model->has_skeleton) {
-        AnimationState* anim_state = scene_renderer_.models().get_animation_state(info.model_name);
+        AnimationState* anim_state = models().get_animation_state(info.model_name);
         std::array<glm::mat4, 64> bones;
         if (anim_state) {
             bones = anim_state->bone_matrices;
@@ -461,9 +488,10 @@ void Game::add_entity_to_scene(entt::entity entity, bool is_local) {
                             info.type != EntityType::TownNPC);
     if (show_health_bar && !is_local) {
         float health_ratio = health.current / health.max;
-        float bar_height_offset = transform.z + target_size * 1.3f;
-        ui_scene_.add_enemy_health_bar_3d(transform.x, bar_height_offset, transform.y,
-                                           target_size * 0.8f, health_ratio);
+        float bar_height_offset = transform.y + target_size * 1.3f;
+        render_scene_.add_billboard_3d(transform.x, bar_height_offset, transform.z,
+                                       target_size * 0.8f, health_ratio,
+                                       ui_colors::HEALTH_HIGH, ui_colors::HEALTH_BAR_BG, ui_colors::HEALTH_3D_BG);
     }
 }
 
@@ -558,7 +586,7 @@ void Game::on_heightmap_chunk(const std::vector<uint8_t>& payload) {
         engine_hm.max_height = heightmap_config::MAX_HEIGHT;
         engine_hm.height_data = heightmap_->height_data;
 
-        scene_renderer_.set_heightmap(engine_hm);
+        set_heightmap(engine_hm);
     } else {
         std::cerr << "Failed to deserialize heightmap!" << std::endl;
         heightmap_.reset();
@@ -599,7 +627,7 @@ void Game::on_world_state(const std::vector<uint8_t>& payload) {
             spawn_attack_effect(state, dir_x, dir_y);
 
             if (state.id == local_player_id_) {
-                camera_system_.notify_attack();
+                camera().notify_attack();
             }
         }
         prev_attacking_[state.id] = state.is_attacking;
@@ -695,7 +723,7 @@ void Game::update_entity_from_state(entt::entity entity, const NetEntityState& s
     transform.rotation = state.rotation;
 
     velocity.x = state.vx;
-    velocity.y = state.vy;
+    velocity.z = state.vy;
 
     health.current = state.health;
     health.max = state.max_health;
@@ -747,7 +775,7 @@ void Game::spawn_attack_effect(const NetEntityState& state, float dir_x, float d
     effect.effect_type = state.effect_type;
     effect.effect_model = state.effect_model;
     effect.x = state.x;
-    effect.y = state.y;
+    effect.y = state.z;
     effect.direction_x = dir_x;
     effect.direction_y = dir_y;
     effect.duration = state.effect_duration;
@@ -756,7 +784,7 @@ void Game::spawn_attack_effect(const NetEntityState& state, float dir_x, float d
 
     if (effect.effect_type == "orbit") {
         effect.target_x = state.x + dir_x * state.cone_angle * 0.5f;
-        effect.target_y = state.y + dir_y * state.cone_angle * 0.5f;
+        effect.target_y = state.z + dir_y * state.cone_angle * 0.5f;
     }
 
     effect.timer = effect.duration;
@@ -781,61 +809,61 @@ void Game::update_attack_effects(float dt) {
 // ============================================================================
 
 bool Game::load_models(const std::string& assets_path) {
-    auto& models = scene_renderer_.models();
+    auto& mdl = models();
     std::string models_path = assets_path + "/models/";
 
     bool success = true;
 
-    if (!models.load_model("warrior", models_path + "warrior_rigged.glb")) {
-        success &= models.load_model("warrior", models_path + "warrior.glb");
+    if (!mdl.load_model("warrior", models_path + "warrior_rigged.glb")) {
+        success &= mdl.load_model("warrior", models_path + "warrior.glb");
     }
-    if (!models.load_model("mage", models_path + "mage_rigged.glb")) {
-        success &= models.load_model("mage", models_path + "mage.glb");
+    if (!mdl.load_model("mage", models_path + "mage_rigged.glb")) {
+        success &= mdl.load_model("mage", models_path + "mage.glb");
     }
-    if (!models.load_model("paladin", models_path + "paladin_rigged.glb")) {
-        success &= models.load_model("paladin", models_path + "paladin.glb");
+    if (!mdl.load_model("paladin", models_path + "paladin_rigged.glb")) {
+        success &= mdl.load_model("paladin", models_path + "paladin.glb");
     }
-    if (!models.load_model("archer", models_path + "archer_rigged.glb")) {
-        success &= models.load_model("archer", models_path + "archer.glb");
+    if (!mdl.load_model("archer", models_path + "archer_rigged.glb")) {
+        success &= mdl.load_model("archer", models_path + "archer.glb");
     }
-    success &= models.load_model("npc", models_path + "npc_enemy.glb");
+    success &= mdl.load_model("npc", models_path + "npc_enemy.glb");
 
-    models.load_model("ground_grass", models_path + "ground_grass.glb");
-    models.load_model("ground_stone", models_path + "ground_stone.glb");
+    mdl.load_model("ground_grass", models_path + "ground_grass.glb");
+    mdl.load_model("ground_stone", models_path + "ground_stone.glb");
 
-    models.load_model("mountain_small", models_path + "mountain_small.glb");
-    models.load_model("mountain_medium", models_path + "mountain_medium.glb");
-    models.load_model("mountain_large", models_path + "mountain_large.glb");
+    mdl.load_model("mountain_small", models_path + "mountain_small.glb");
+    mdl.load_model("mountain_medium", models_path + "mountain_medium.glb");
+    mdl.load_model("mountain_large", models_path + "mountain_large.glb");
 
-    models.load_model("building_tavern", models_path + "building_tavern.glb");
-    models.load_model("building_blacksmith", models_path + "building_blacksmith.glb");
-    models.load_model("building_tower", models_path + "building_tower.glb");
-    models.load_model("building_shop", models_path + "building_shop.glb");
-    models.load_model("building_well", models_path + "building_well.glb");
-    models.load_model("building_house", models_path + "building_house.glb");
-    models.load_model("building_inn", models_path + "inn.glb");
-    models.load_model("wooden_log", models_path + "wooden_log.glb");
-    models.load_model("log_tower", models_path + "log_tower.glb");
+    mdl.load_model("building_tavern", models_path + "building_tavern.glb");
+    mdl.load_model("building_blacksmith", models_path + "building_blacksmith.glb");
+    mdl.load_model("building_tower", models_path + "building_tower.glb");
+    mdl.load_model("building_shop", models_path + "building_shop.glb");
+    mdl.load_model("building_well", models_path + "building_well.glb");
+    mdl.load_model("building_house", models_path + "building_house.glb");
+    mdl.load_model("building_inn", models_path + "inn.glb");
+    mdl.load_model("wooden_log", models_path + "wooden_log.glb");
+    mdl.load_model("log_tower", models_path + "log_tower.glb");
 
-    models.load_model("npc_merchant", models_path + "npc_merchant.glb");
-    models.load_model("npc_guard", models_path + "npc_guard.glb");
-    models.load_model("npc_blacksmith", models_path + "npc_blacksmith.glb");
-    models.load_model("npc_innkeeper", models_path + "npc_innkeeper.glb");
-    models.load_model("npc_villager", models_path + "npc_villager.glb");
+    mdl.load_model("npc_merchant", models_path + "npc_merchant.glb");
+    mdl.load_model("npc_guard", models_path + "npc_guard.glb");
+    mdl.load_model("npc_blacksmith", models_path + "npc_blacksmith.glb");
+    mdl.load_model("npc_innkeeper", models_path + "npc_innkeeper.glb");
+    mdl.load_model("npc_villager", models_path + "npc_villager.glb");
 
-    models.load_model("weapon_sword", models_path + "weapon_sword.glb");
-    models.load_model("spell_fireball", models_path + "spell_fireball.glb");
-    models.load_model("spell_bible", models_path + "spell_bible.glb");
+    mdl.load_model("weapon_sword", models_path + "weapon_sword.glb");
+    mdl.load_model("spell_fireball", models_path + "spell_fireball.glb");
+    mdl.load_model("spell_bible", models_path + "spell_bible.glb");
 
-    models.load_model("rock_boulder", models_path + "rock_boulder.glb");
-    models.load_model("rock_slate", models_path + "rock_slate.glb");
-    models.load_model("rock_spire", models_path + "rock_spire.glb");
-    models.load_model("rock_cluster", models_path + "rock_cluster.glb");
-    models.load_model("rock_mossy", models_path + "rock_mossy.glb");
+    mdl.load_model("rock_boulder", models_path + "rock_boulder.glb");
+    mdl.load_model("rock_slate", models_path + "rock_slate.glb");
+    mdl.load_model("rock_spire", models_path + "rock_spire.glb");
+    mdl.load_model("rock_cluster", models_path + "rock_cluster.glb");
+    mdl.load_model("rock_mossy", models_path + "rock_mossy.glb");
 
-    models.load_model("tree_oak", models_path + "tree_oak.glb");
-    models.load_model("tree_pine", models_path + "tree_pine.glb");
-    models.load_model("tree_dead", models_path + "tree_dead.glb");
+    mdl.load_model("tree_oak", models_path + "tree_oak.glb");
+    mdl.load_model("tree_pine", models_path + "tree_pine.glb");
+    mdl.load_model("tree_dead", models_path + "tree_dead.glb");
 
     if (success) {
         std::cout << "All 3D models loaded successfully" << std::endl;
@@ -851,276 +879,37 @@ bool Game::load_models(const std::string& assets_path) {
 // ============================================================================
 
 void Game::update_camera_smooth(float dt) {
-    camera_system_.set_screen_size(context_.width(), context_.height());
-    camera_system_.set_terrain_height_func([this](float x, float z) {
-        return scene_renderer_.get_terrain_height(x, z);
+    camera().set_screen_size(screen_width(), screen_height());
+    camera().set_terrain_height_func([this](float x, float z) {
+        return get_terrain_height(x, z);
     });
 
-    float terrain_y = scene_renderer_.get_terrain_height(player_x_, player_z_);
-    camera_system_.set_target(glm::vec3(player_x_, terrain_y, player_z_));
-    camera_system_.update(dt);
+    float terrain_y = get_terrain_height(player_x_, player_z_);
+    camera().set_target(glm::vec3(player_x_, terrain_y, player_z_));
+    camera().update(dt);
 }
 
-engine::CameraState Game::get_camera_state() const {
-    engine::CameraState state;
-    state.view = camera_system_.get_view_matrix();
-    state.projection = camera_system_.get_projection_matrix();
-    state.position = camera_system_.get_position();
+CameraState Game::get_camera_state() const {
+    CameraState state;
+    state.view = camera().get_view_matrix();
+    state.projection = camera().get_projection_matrix();
+    state.position = camera().get_position();
     return state;
 }
 
-// ============================================================================
-// MENU SYSTEM
-// ============================================================================
-
-void Game::init_menu_items() {
-    current_menu_page_ = MenuPage::Main;
-    init_main_menu();
-}
-
-void Game::init_main_menu() {
-    menu_items_.clear();
-    menu_selected_index_ = 0;
-
-    MenuItem controls_item;
-    controls_item.label = "Controls";
-    controls_item.type = MenuItemType::Submenu;
-    controls_item.target_page = MenuPage::Controls;
-    menu_items_.push_back(controls_item);
-
-    MenuItem graphics_item;
-    graphics_item.label = "Graphics";
-    graphics_item.type = MenuItemType::Submenu;
-    graphics_item.target_page = MenuPage::Graphics;
-    menu_items_.push_back(graphics_item);
-
-    MenuItem resume_item;
-    resume_item.label = "Resume Game";
-    resume_item.type = MenuItemType::Button;
-    resume_item.action = [this]() {
-        menu_open_ = false;
-        input().set_game_input_enabled(true);
-    };
-    menu_items_.push_back(resume_item);
-
-    MenuItem quit_item;
-    quit_item.label = "Quit to Desktop";
-    quit_item.type = MenuItemType::Button;
-    quit_item.action = [this]() {
-        quit();
-    };
-    menu_items_.push_back(quit_item);
-}
-
-void Game::init_controls_menu() {
-    menu_items_.clear();
-    menu_selected_index_ = 0;
-
-    MenuItem mouse_sens;
-    mouse_sens.label = "Mouse Sensitivity";
-    mouse_sens.type = MenuItemType::FloatSlider;
-    mouse_sens.float_value = &controls_settings_.mouse_sensitivity;
-    mouse_sens.float_min = 0.05f;
-    mouse_sens.float_max = 1.0f;
-    mouse_sens.float_step = 0.05f;
-    menu_items_.push_back(mouse_sens);
-
-    MenuItem ctrl_sens;
-    ctrl_sens.label = "Controller Sensitivity";
-    ctrl_sens.type = MenuItemType::FloatSlider;
-    ctrl_sens.float_value = &controls_settings_.controller_sensitivity;
-    ctrl_sens.float_min = 0.5f;
-    ctrl_sens.float_max = 5.0f;
-    ctrl_sens.float_step = 0.25f;
-    menu_items_.push_back(ctrl_sens);
-
-    MenuItem invert_x;
-    invert_x.label = "Invert Camera X";
-    invert_x.type = MenuItemType::Toggle;
-    invert_x.toggle_value = &controls_settings_.invert_camera_x;
-    menu_items_.push_back(invert_x);
-
-    MenuItem invert_y;
-    invert_y.label = "Invert Camera Y";
-    invert_y.type = MenuItemType::Toggle;
-    invert_y.toggle_value = &controls_settings_.invert_camera_y;
-    menu_items_.push_back(invert_y);
-
-    MenuItem back_item;
-    back_item.label = "< Back";
-    back_item.type = MenuItemType::Submenu;
-    back_item.target_page = MenuPage::Main;
-    menu_items_.push_back(back_item);
-}
-
-void Game::init_graphics_menu() {
-    menu_items_.clear();
-    menu_selected_index_ = 0;
-
-    MenuItem fog;
-    fog.label = "Fog";
-    fog.type = MenuItemType::Toggle;
-    fog.toggle_value = &graphics_settings_.fog_enabled;
-    menu_items_.push_back(fog);
-
-    MenuItem grass;
-    grass.label = "Grass";
-    grass.type = MenuItemType::Toggle;
-    grass.toggle_value = &graphics_settings_.grass_enabled;
-    menu_items_.push_back(grass);
-
-    MenuItem skybox;
-    skybox.label = "Skybox";
-    skybox.type = MenuItemType::Toggle;
-    skybox.toggle_value = &graphics_settings_.skybox_enabled;
-    menu_items_.push_back(skybox);
-
-    MenuItem mountains;
-    mountains.label = "Mountains";
-    mountains.type = MenuItemType::Toggle;
-    mountains.toggle_value = &graphics_settings_.mountains_enabled;
-    menu_items_.push_back(mountains);
-
-    MenuItem trees;
-    trees.label = "Trees";
-    trees.type = MenuItemType::Toggle;
-    trees.toggle_value = &graphics_settings_.trees_enabled;
-    menu_items_.push_back(trees);
-
-    MenuItem rocks;
-    rocks.label = "Rocks";
-    rocks.type = MenuItemType::Toggle;
-    rocks.toggle_value = &graphics_settings_.rocks_enabled;
-    menu_items_.push_back(rocks);
-
-    MenuItem aniso;
-    aniso.label = "Anisotropic Filter";
-    aniso.type = MenuItemType::Slider;
-    aniso.slider_value = &graphics_settings_.anisotropic_filter;
-    aniso.slider_min = 0;
-    aniso.slider_max = 4;
-    aniso.slider_labels = {"Off", "2x", "4x", "8x", "16x"};
-    menu_items_.push_back(aniso);
-
-    MenuItem vsync;
-    vsync.label = "VSync";
-    vsync.type = MenuItemType::Slider;
-    vsync.slider_value = &graphics_settings_.vsync_mode;
-    vsync.slider_min = 0;
-    vsync.slider_max = 2;
-    vsync.slider_labels = {"Off", "Double Buffer", "Triple Buffer"};
-    menu_items_.push_back(vsync);
-
-    MenuItem fps_counter;
-    fps_counter.label = "Show FPS";
-    fps_counter.type = MenuItemType::Toggle;
-    fps_counter.toggle_value = &graphics_settings_.show_fps;
-    menu_items_.push_back(fps_counter);
-
-    MenuItem back_item;
-    back_item.label = "< Back";
-    back_item.type = MenuItemType::Submenu;
-    back_item.target_page = MenuPage::Main;
-    menu_items_.push_back(back_item);
-}
-
-void Game::update_menu(float dt) {
-    menu_highlight_progress_ = std::min(1.0f, menu_highlight_progress_ + dt * 8.0f);
-
-    if (menu_selected_index_ != prev_menu_selected_) {
-        menu_highlight_progress_ = 0.0f;
-        prev_menu_selected_ = menu_selected_index_;
-    }
-
-    if (input().menu_toggle_pressed()) {
-        if (current_menu_page_ != MenuPage::Main) {
-            current_menu_page_ = MenuPage::Main;
-            init_main_menu();
-        } else {
-            menu_open_ = !menu_open_;
-            input().set_game_input_enabled(!menu_open_);
-        }
-        input().clear_menu_inputs();
-        return;
-    }
-
-    if (!menu_open_) return;
-
-    if (input().menu_up_pressed()) {
-        menu_selected_index_ = (menu_selected_index_ - 1 + static_cast<int>(menu_items_.size())) % static_cast<int>(menu_items_.size());
-    }
-    if (input().menu_down_pressed()) {
-        menu_selected_index_ = (menu_selected_index_ + 1) % static_cast<int>(menu_items_.size());
-    }
-
-    MenuItem& item = menu_items_[menu_selected_index_];
-    if (item.type == MenuItemType::Toggle) {
-        if (input().menu_select_pressed() || input().menu_left_pressed() || input().menu_right_pressed()) {
-            if (item.toggle_value) {
-                *item.toggle_value = !*item.toggle_value;
-                apply_graphics_settings();
-                apply_controls_settings();
-            }
-        }
-    } else if (item.type == MenuItemType::Slider) {
-        if (item.slider_value) {
-            if (input().menu_left_pressed()) {
-                *item.slider_value = std::max(item.slider_min, *item.slider_value - 1);
-                apply_graphics_settings();
-            }
-            if (input().menu_right_pressed()) {
-                *item.slider_value = std::min(item.slider_max, *item.slider_value + 1);
-                apply_graphics_settings();
-            }
-        }
-    } else if (item.type == MenuItemType::FloatSlider) {
-        if (item.float_value) {
-            if (input().menu_left_pressed()) {
-                *item.float_value = std::max(item.float_min, *item.float_value - item.float_step);
-                apply_controls_settings();
-            }
-            if (input().menu_right_pressed()) {
-                *item.float_value = std::min(item.float_max, *item.float_value + item.float_step);
-                apply_controls_settings();
-            }
-        }
-    } else if (item.type == MenuItemType::Button) {
-        if (input().menu_select_pressed()) {
-            if (item.action) {
-                item.action();
-            }
-        }
-    } else if (item.type == MenuItemType::Submenu) {
-        if (input().menu_select_pressed()) {
-            current_menu_page_ = item.target_page;
-            switch (item.target_page) {
-                case MenuPage::Main:
-                    init_main_menu();
-                    break;
-                case MenuPage::Controls:
-                    init_controls_menu();
-                    break;
-                case MenuPage::Graphics:
-                    init_graphics_menu();
-                    break;
-            }
-        }
-    }
-
-    input().clear_menu_inputs();
-}
-
 void Game::apply_graphics_settings() {
-    scene_renderer_.set_graphics_settings(graphics_settings_);
-    scene_renderer_.set_anisotropic_filter(graphics_settings_.anisotropic_filter);
-    scene_renderer_.set_vsync_mode(graphics_settings_.vsync_mode);
+    const auto& gfx = menu_system_->graphics_settings();
+    set_graphics_settings(gfx);
+    set_anisotropic_filter(gfx.anisotropic_filter);
+    set_vsync_mode(gfx.vsync_mode);
 }
 
 void Game::apply_controls_settings() {
-    input().set_mouse_sensitivity(controls_settings_.mouse_sensitivity);
-    input().set_controller_sensitivity(controls_settings_.controller_sensitivity);
-    input().set_camera_x_inverted(controls_settings_.invert_camera_x);
-    input().set_camera_y_inverted(controls_settings_.invert_camera_y);
+    const auto& ctrl = menu_system_->controls_settings();
+    input().set_mouse_sensitivity(ctrl.mouse_sensitivity);
+    input().set_controller_sensitivity(ctrl.controller_sensitivity);
+    input().set_camera_x_inverted(ctrl.invert_camera_x);
+    input().set_camera_y_inverted(ctrl.invert_camera_y);
 }
 
 // ============================================================================
@@ -1128,12 +917,12 @@ void Game::apply_controls_settings() {
 // ============================================================================
 
 void Game::build_class_select_ui(UIScene& ui) {
-    float center_x = context_.width() / 2.0f;
-    float center_y = context_.height() / 2.0f;
+    float center_x = screen_width() / 2.0f;
+    float center_y = screen_height() / 2.0f;
     int num_classes = static_cast<int>(available_classes_.size());
     if (num_classes == 0) return;
 
-    ui.add_filled_rect(0, 0, static_cast<float>(context_.width()), 100, ui_colors::TITLE_BG);
+    ui.add_filled_rect(0, 0, static_cast<float>(screen_width()), 100, ui_colors::TITLE_BG);
     ui.add_text("SELECT YOUR CLASS", center_x - 150.0f, 30.0f, 2.0f, ui_colors::WHITE);
     ui.add_text("Use A/D to select, SPACE to confirm", center_x - 160.0f, 70.0f, 1.0f, ui_colors::TEXT_DIM);
 
@@ -1167,18 +956,18 @@ void Game::build_class_select_ui(UIScene& ui) {
     }
 
     const auto& sel = available_classes_[selected_class_index_];
-    ui.add_filled_rect(center_x - 200, context_.height() - 120, 400, 80, ui_colors::PANEL_BG);
-    ui.add_rect_outline(center_x - 200, context_.height() - 120, 400, 80, sel.select_color, 2.0f);
+    ui.add_filled_rect(center_x - 200, screen_height() - 120, 400, 80, ui_colors::PANEL_BG);
+    ui.add_rect_outline(center_x - 200, screen_height() - 120, 400, 80, sel.select_color, 2.0f);
 
-    ui.add_text(sel.desc_line1, center_x - 180.0f, context_.height() - 105.0f, 0.9f, ui_colors::WHITE);
-    ui.add_text(sel.desc_line2, center_x - 180.0f, context_.height() - 80.0f, 0.9f, ui_colors::WHITE);
+    ui.add_text(sel.desc_line1, center_x - 180.0f, screen_height() - 105.0f, 0.9f, ui_colors::WHITE);
+    ui.add_text(sel.desc_line2, center_x - 180.0f, screen_height() - 80.0f, 0.9f, ui_colors::WHITE);
 
-    ui.add_text("Press ESC anytime to open Settings Menu", center_x - 150.0f, context_.height() - 25.0f, 0.8f, ui_colors::TEXT_HINT);
+    ui.add_text("Press ESC anytime to open Settings Menu", center_x - 150.0f, screen_height() - 25.0f, 0.8f, ui_colors::TEXT_HINT);
 }
 
 void Game::build_connecting_ui(UIScene& ui) {
-    float center_x = context_.width() / 2.0f;
-    float center_y = context_.height() / 2.0f;
+    float center_x = screen_width() / 2.0f;
+    float center_y = screen_height() / 2.0f;
 
     ui.add_filled_rect(center_x - 200, center_y - 100, 400, 200, ui_colors::PANEL_BG);
     ui.add_rect_outline(center_x - 200, center_y - 100, 400, 200, ui_colors::WHITE, 2.0f);
@@ -1207,97 +996,47 @@ void Game::build_connecting_ui(UIScene& ui) {
 void Game::build_playing_ui(UIScene& ui) {
     if (selected_class_index_ >= 0 && selected_class_index_ < static_cast<int>(available_classes_.size()) &&
         available_classes_[selected_class_index_].shows_reticle) {
-        ui.add_target_reticle();
+        float cx = screen_width() / 2.0f;
+        float cy = screen_height() / 2.0f;
+        float outer = 12.0f, inner = 4.0f, dot = 2.0f;
+        ui.add_line(cx, cy - outer, cx, cy - inner, 0xCCFFFFFF, 2.0f);
+        ui.add_line(cx, cy + inner, cx, cy + outer, 0xCCFFFFFF, 2.0f);
+        ui.add_line(cx - outer, cy, cx - inner, cy, 0xCCFFFFFF, 2.0f);
+        ui.add_line(cx + inner, cy, cx + outer, cy, 0xCCFFFFFF, 2.0f);
+        ui.add_filled_rect(cx - dot / 2, cy - dot / 2, dot, dot, 0xCCFFFFFF);
     }
 
     auto it = network_to_entity_.find(local_player_id_);
     if (it != network_to_entity_.end() && registry_.valid(it->second)) {
         auto& health = registry_.get<ecs::Health>(it->second);
         float health_ratio = health.current / health.max;
-        ui.add_player_health_bar(health_ratio, health.max);
+
+        float bar_width = 250.0f;
+        float bar_height = 25.0f;
+        float padding = 20.0f;
+        float hx = padding;
+        float hy = screen_height() - padding - bar_height;
+
+        ui.add_filled_rect(hx - 2, hy - 2, bar_width + 4, bar_height + 4, ui_colors::HEALTH_FRAME);
+        ui.add_rect_outline(hx - 2, hy - 2, bar_width + 4, bar_height + 4, ui_colors::BORDER, 2.0f);
+        ui.add_filled_rect(hx, hy, bar_width, bar_height, ui_colors::HEALTH_BG);
+
+        uint32_t hp_color;
+        if (health_ratio > 0.5f) hp_color = ui_colors::HEALTH_HIGH;
+        else if (health_ratio > 0.25f) hp_color = ui_colors::HEALTH_MED;
+        else hp_color = ui_colors::HEALTH_LOW;
+        ui.add_filled_rect(hx, hy, bar_width * health_ratio, bar_height, hp_color);
+
+        char hp_text[32];
+        snprintf(hp_text, sizeof(hp_text), "HP: %.0f / %.0f", health_ratio * health.max, health.max);
+        ui.add_text(hp_text, hx + 10, hy + 5, 1.0f, ui_colors::WHITE);
     }
 
-    if (graphics_settings_.show_fps) {
+    if (menu_system_->graphics_settings().show_fps) {
         char fps_text[32];
         snprintf(fps_text, sizeof(fps_text), "FPS: %.0f", fps());
         ui.add_text(fps_text, 10.0f, 10.0f, 1.0f, ui_colors::FPS_TEXT);
     }
 }
 
-void Game::build_menu_ui(UIScene& ui) {
-    if (!menu_open_) return;
-
-    float screen_w = static_cast<float>(context_.width());
-    float screen_h = static_cast<float>(context_.height());
-
-    float panel_w = 550.0f;
-    float panel_h = 70.0f + menu_items_.size() * 50.0f + 50.0f;
-    float panel_x = (screen_w - panel_w) / 2.0f;
-    float panel_y = (screen_h - panel_h) / 2.0f;
-
-    ui.add_filled_rect(panel_x, panel_y, panel_w, panel_h, ui_colors::MENU_BG);
-    ui.add_rect_outline(panel_x, panel_y, panel_w, panel_h, ui_colors::WHITE, 2.0f);
-
-    const char* title = "SETTINGS";
-    switch (current_menu_page_) {
-        case MenuPage::Main: title = "SETTINGS"; break;
-        case MenuPage::Controls: title = "CONTROLS"; break;
-        case MenuPage::Graphics: title = "GRAPHICS"; break;
-    }
-    ui.add_text(title, panel_x + panel_w / 2.0f - 60.0f, panel_y + 15.0f, 1.5f, ui_colors::WHITE);
-
-    float item_y = panel_y + 70.0f;
-    for (size_t i = 0; i < menu_items_.size(); ++i) {
-        const MenuItem& item = menu_items_[i];
-        bool selected = (static_cast<int>(i) == menu_selected_index_);
-
-        if (selected) {
-            ui.add_filled_rect(panel_x + 10.0f, item_y, panel_w - 20.0f, 40.0f, ui_colors::SELECTION);
-        }
-
-        uint32_t text_color = selected ? ui_colors::WHITE : ui_colors::TEXT_DIM;
-        ui.add_text(item.label, panel_x + 30.0f, item_y + 10.0f, 1.0f, text_color);
-
-        if (item.type == MenuItemType::Toggle && item.toggle_value) {
-            std::string value_str = *item.toggle_value ? "ON" : "OFF";
-            uint32_t value_color = *item.toggle_value ? ui_colors::VALUE_ON : ui_colors::VALUE_OFF;
-            ui.add_text(value_str, panel_x + panel_w - 80.0f, item_y + 10.0f, 1.0f, value_color);
-        } else if (item.type == MenuItemType::Slider && item.slider_value) {
-            std::string value_str;
-            int idx = *item.slider_value - item.slider_min;
-            if (!item.slider_labels.empty() && idx >= 0 && idx < static_cast<int>(item.slider_labels.size())) {
-                value_str = item.slider_labels[idx];
-            } else {
-                char buf[16];
-                snprintf(buf, sizeof(buf), "%d", *item.slider_value);
-                value_str = buf;
-            }
-
-            std::string display = "< " + value_str + " >";
-            ui.add_text(display, panel_x + panel_w - 120.0f, item_y + 10.0f, 1.0f, ui_colors::VALUE_SLIDER);
-        } else if (item.type == MenuItemType::FloatSlider && item.float_value) {
-            float slider_x = panel_x + panel_w - 200.0f;
-            float slider_w = 120.0f;
-            float slider_h = 8.0f;
-            float slider_y_center = item_y + 18.0f;
-
-            ui.add_filled_rect(slider_x, slider_y_center - slider_h/2, slider_w, slider_h, 0xFF444444);
-
-            float fill_pct = (*item.float_value - item.float_min) / (item.float_max - item.float_min);
-            ui.add_filled_rect(slider_x, slider_y_center - slider_h/2, slider_w * fill_pct, slider_h, ui_colors::VALUE_SLIDER);
-
-            char value_buf[32];
-            snprintf(value_buf, sizeof(value_buf), "%.2f", *item.float_value);
-            ui.add_text(value_buf, panel_x + panel_w - 65.0f, item_y + 10.0f, 0.9f, ui_colors::WHITE);
-        } else if (item.type == MenuItemType::Submenu) {
-            ui.add_text(">", panel_x + panel_w - 40.0f, item_y + 10.0f, 1.0f, text_color);
-        }
-
-        item_y += 50.0f;
-    }
-
-    const char* hint = "W/S: Navigate  |  A/D: Adjust  |  SPACE: Select  |  ESC: Back";
-    ui.add_text(hint, panel_x + 20.0f, panel_y + panel_h - 30.0f, 0.75f, ui_colors::TEXT_HINT);
-}
-
-} // namespace mmo
+} // namespace mmo::client

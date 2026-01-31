@@ -1,6 +1,6 @@
 #pragma once
 
-namespace mmo {
+namespace mmo::client {
 
 struct ControlsSettings {
     float mouse_sensitivity = 0.35f;
@@ -9,4 +9,4 @@ struct ControlsSettings {
     bool invert_camera_y = false;
 };
 
-} // namespace mmo
+} // namespace mmo::client

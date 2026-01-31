@@ -1,7 +1,12 @@
+#include "asio/io_context.hpp"
 #include "server/server.hpp"
 #include "server/game_config.hpp"
+#include <cstdint>
+#include <exception>
+#include <functional>
 #include <iostream>
 #include <csignal>
+#include <string>
 
 std::function<void()> shutdown_handler;
 
@@ -14,7 +19,7 @@ void signal_handler(int signal) {
 
 int main(int argc, char* argv[]) {
     // Load game configuration from JSON files
-    mmo::GameConfig config;
+    mmo::server::GameConfig config;
     std::string data_dir = "data";
 
     // Check for data dir relative to executable or current directory
@@ -36,7 +41,7 @@ int main(int argc, char* argv[]) {
     try {
         asio::io_context io_context;
 
-        mmo::Server server(io_context, port, config);
+        mmo::server::Server server(io_context, port, config);
 
         shutdown_handler = [&]() {
             server.stop();

@@ -1,6 +1,12 @@
 #include "protocol.hpp"
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <string>
+#include <vector>
 
-namespace mmo {
+namespace mmo::protocol {
 
 void NetEntityState::serialize(std::vector<uint8_t>& buffer) const {
     size_t offset = buffer.size();
@@ -225,4 +231,4 @@ void ClassInfo::deserialize(const uint8_t* data) {
     shows_reticle = reticle_byte != 0;
 }
 
-} // namespace mmo
+} // namespace mmo::protocol

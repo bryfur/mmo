@@ -2,12 +2,13 @@
 
 #include "engine/effect_types.hpp"
 #include <glm/glm.hpp>
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <array>
 #include <variant>
 
-namespace mmo {
+namespace mmo::engine::scene {
 
 /**
  * Model render command data
@@ -37,6 +38,19 @@ using RenderCommandData = std::variant<
     ModelCommand,
     SkinnedModelCommand
 >;
+
+/**
+ * Billboard UI element positioned in 3D world space.
+ * The renderer projects to screen coordinates and scales by distance.
+ */
+struct Billboard3DCommand {
+    float world_x, world_y, world_z;
+    float width;
+    float fill_ratio;
+    uint32_t fill_color;
+    uint32_t bg_color;
+    uint32_t frame_color;
+};
 
 struct RenderCommand {
     RenderCommandData data;
@@ -89,6 +103,13 @@ public:
      */
     void add_effect(const engine::EffectInstance& effect);
 
+    /**
+     * Add a 3D billboard (projected to screen space during rendering)
+     */
+    void add_billboard_3d(float world_x, float world_y, float world_z,
+                          float width, float fill_ratio,
+                          uint32_t fill_color, uint32_t bg_color, uint32_t frame_color);
+
     // ========== World Element Flags ==========
 
     void set_draw_skybox(bool draw) { draw_skybox_ = draw; }
@@ -113,10 +134,12 @@ public:
 
     const std::vector<RenderCommand>& commands() const { return commands_; }
     const std::vector<engine::EffectInstance>& effects() const { return effects_; }
+    const std::vector<Billboard3DCommand>& billboards() const { return billboards_; }
 
 private:
     std::vector<RenderCommand> commands_;
     std::vector<engine::EffectInstance> effects_;
+    std::vector<Billboard3DCommand> billboards_;
 
     bool draw_skybox_ = false;
     bool draw_mountains_ = false;
@@ -126,4 +149,4 @@ private:
     bool draw_grass_ = false;
 };
 
-} // namespace mmo
+} // namespace mmo::engine::scene

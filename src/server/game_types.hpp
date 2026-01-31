@@ -2,7 +2,7 @@
 
 #include <cstdint>
 
-namespace mmo {
+namespace mmo::server {
 
 enum class PlayerClass : uint8_t {
     Warrior = 0,
@@ -46,4 +46,4 @@ enum class EnvironmentType : uint8_t {
     TreeDead = 7,
 };
 
-} // namespace mmo
+} // namespace mmo::server

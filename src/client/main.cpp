@@ -1,6 +1,9 @@
+#include "SDL3/SDL_log.h"
+#include "SDL3/SDL_stdinc.h"
 #include "client/game.hpp"
-#include "common/protocol.hpp"
-#include <SDL3/SDL.h>
+#include "protocol/protocol.hpp"
+#include <cstdint>
+#include <ctime>
 #include <iostream>
 #include <string>
 #include <chrono>
@@ -40,13 +43,13 @@ void print_usage(const char* program) {
     std::cout << "Usage: " << program << " [options]" << std::endl;
     std::cout << "Options:" << std::endl;
     std::cout << "  -h, --host <host>    Server host (default: localhost)" << std::endl;
-    std::cout << "  -p, --port <port>    Server port (default: " << mmo::DEFAULT_PORT << ")" << std::endl;
+    std::cout << "  -p, --port <port>    Server port (default: " << mmo::protocol::DEFAULT_PORT << ")" << std::endl;
     std::cout << "  --help               Show this help message" << std::endl;
 }
 
 int main(int argc, char* argv[]) {
     std::string host = "localhost";
-    uint16_t port = mmo::DEFAULT_PORT;
+    uint16_t port = mmo::protocol::DEFAULT_PORT;
     
     // Parse command line arguments
     for (int i = 1; i < argc; ++i) {
@@ -74,7 +77,7 @@ int main(int argc, char* argv[]) {
     // Set up timestamped logging
     SDL_SetLogOutputFunction(log_with_timestamp, nullptr);
 
-    mmo::Game game;
+    mmo::client::Game game;
     
     if (!game.init(host, port)) {
         std::cerr << "Failed to initialize game" << std::endl;

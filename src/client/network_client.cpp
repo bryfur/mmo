@@ -1,7 +1,27 @@
 #include "network_client.hpp"
+#include "asio/buffer.hpp"
+#include "asio/error_code.hpp"
+#include "asio/impl/connect.hpp"
+#include "asio/impl/read.hpp"
+#include "asio/impl/write.hpp"
+#include "asio/io_context.hpp"
+#include "protocol/protocol.hpp"
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <exception>
 #include <iostream>
+#include <memory>
+#include <mutex>
+#include <queue>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
 
-namespace mmo {
+namespace mmo::client {
+
+using namespace mmo::protocol;
 
 NetworkClient::NetworkClient()
     : socket_(io_context_) {
@@ -208,4 +228,4 @@ void NetworkClient::do_write() {
         });
 }
 
-} // namespace mmo
+} // namespace mmo::client

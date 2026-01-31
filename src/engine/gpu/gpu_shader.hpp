@@ -6,7 +6,7 @@
 #include <vector>
 #include <unordered_map>
 
-namespace mmo::gpu {
+namespace mmo::engine::gpu {
 
 /**
  * @brief Shader stage types
@@ -229,4 +229,4 @@ private:
     std::unique_ptr<GPUShader> fragment_;
 };
 
-} // namespace mmo::gpu
+} // namespace mmo::engine::gpu

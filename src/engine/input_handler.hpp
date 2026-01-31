@@ -1,10 +1,11 @@
 #pragma once
 
+#include "SDL3/SDL_gamepad.h"
+#include "SDL3/SDL_joystick.h"
 #include "engine/input_state.hpp"
 #include <SDL3/SDL.h>
-#include <vector>
 
-namespace mmo {
+namespace mmo::engine {
 
 class InputHandler {
 public:
@@ -156,4 +157,4 @@ private:
     bool controller_sprint_ = false;
 };
 
-} // namespace mmo
+} // namespace mmo::engine

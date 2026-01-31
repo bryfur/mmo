@@ -10,14 +10,16 @@
 #include <unordered_map>
 
 // Forward declarations
-namespace mmo::gpu {
+namespace mmo::engine::gpu {
     class GPUDevice;
     class GPUBuffer;
     class GPUTexture;
     class PipelineRegistry;
 }
 
-namespace mmo {
+namespace mmo::engine::render {
+
+namespace gpu = mmo::engine::gpu;
 
 /**
  * TextRenderer handles text rendering using SDL_ttf and SDL3 GPU API.
@@ -177,4 +179,4 @@ private:
     static constexpr size_t MAX_QUEUED_TEXTS = 256;
 };
 
-} // namespace mmo
+} // namespace mmo::engine::render

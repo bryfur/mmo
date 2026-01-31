@@ -1,17 +1,37 @@
 #include "scene_renderer.hpp"
+#include "SDL3/SDL_gpu.h"
+#include "engine/gpu/gpu_buffer.hpp"
+#include "engine/gpu/gpu_pipeline.hpp"
+#include "engine/gpu/gpu_texture.hpp"
+#include "engine/model_loader.hpp"
+#include "engine/render/grass_renderer.hpp"
 #include "engine/render_constants.hpp"
 #include "engine/gpu/gpu_uniforms.hpp"
 #include "engine/heightmap.hpp"
 #include "engine/render/render_context.hpp"
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
+#include <algorithm>
+#include <cstdint>
 #include <iostream>
 #include <cstring>
+#include <memory>
 #include <type_traits>
+#include <variant>
 
 #include "engine/graphics_settings.hpp"
+#include "engine/scene/camera_state.hpp"
+#include "engine/scene/render_scene.hpp"
+#include "engine/scene/ui_scene.hpp"
+#include "glm/common.hpp"
+#include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/vector_float3.hpp"
+#include "glm/ext/vector_float4.hpp"
+#include "glm/matrix.hpp"
 
-namespace mmo::engine {
+namespace mmo::engine::scene {
+
+namespace gpu = mmo::engine::gpu;
+namespace render = mmo::engine::render;
+using namespace mmo::engine::render;
 
 SceneRenderer::SceneRenderer()
     : model_manager_(std::make_unique<ModelManager>()),
@@ -372,6 +392,9 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
 
     begin_ui();
     render_ui_commands(ui_scene, camera);
+    for (const auto& billboard : scene.billboards()) {
+        draw_billboard_3d(billboard, camera);
+    }
     end_ui();
 
     end_frame();
@@ -534,25 +557,13 @@ void SceneRenderer::render_ui_commands(const UIScene& ui_scene, const CameraStat
             else if constexpr (std::is_same_v<T, ButtonCommand>) {
                 ui_.draw_button(data.x, data.y, data.w, data.h, data.label, data.color, data.selected);
             }
-            else if constexpr (std::is_same_v<T, TargetReticleCommand>) {
-                ui_.draw_target_reticle(context_->width(), context_->height());
-            }
-            else if constexpr (std::is_same_v<T, PlayerHealthBarCommand>) {
-                ui_.draw_player_health_bar(data.health_ratio, data.max_health,
-                                           context_->width(), context_->height());
-            }
-            else if constexpr (std::is_same_v<T, EnemyHealthBar3DCommand>) {
-                draw_enemy_health_bar_3d(data.world_x, data.world_y, data.world_z,
-                                        data.width, data.health_ratio, camera);
-            }
         }, cmd.data);
     }
 }
 
-void SceneRenderer::draw_enemy_health_bar_3d(float world_x, float world_y, float world_z,
-                                              float bar_width, float health_ratio,
-                                              const CameraState& camera) {
-    glm::vec4 world_pos(world_x, world_y, world_z, 1.0f);
+void SceneRenderer::draw_billboard_3d(const Billboard3DCommand& cmd,
+                                       const CameraState& camera) {
+    glm::vec4 world_pos(cmd.world_x, cmd.world_y, cmd.world_z, 1.0f);
     glm::vec4 clip_pos = camera.projection * camera.view * world_pos;
     if (clip_pos.w <= 0.01f) return;
 
@@ -567,16 +578,16 @@ void SceneRenderer::draw_enemy_health_bar_3d(float world_x, float world_y, float
     float distance_scale = 100.0f / clip_pos.w;
     distance_scale = glm::clamp(distance_scale, 0.3f, 1.5f);
 
-    float bar_w = bar_width * 2.0f * distance_scale;
-    float bar_h = bar_width * 0.4f * distance_scale;
+    float bar_w = cmd.width * 2.0f * distance_scale;
+    float bar_h = cmd.width * 0.4f * distance_scale;
 
     float x = screen_x - bar_w * 0.5f;
     float y = screen_y - bar_h * 0.5f;
 
-    ui_.draw_filled_rect(x - 1, y - 1, bar_w + 2, bar_h + 2, ui_colors::HEALTH_3D_BG);
-    ui_.draw_filled_rect(x, y, bar_w, bar_h, ui_colors::HEALTH_BAR_BG);
-    float fill_w = bar_w * health_ratio;
-    ui_.draw_filled_rect(x, y, fill_w, bar_h, ui_colors::HEALTH_HIGH);
+    ui_.draw_filled_rect(x - 1, y - 1, bar_w + 2, bar_h + 2, cmd.frame_color);
+    ui_.draw_filled_rect(x, y, bar_w, bar_h, cmd.bg_color);
+    float fill_w = bar_w * cmd.fill_ratio;
+    ui_.draw_filled_rect(x, y, fill_w, bar_h, cmd.fill_color);
 }
 
-} // namespace mmo::engine
+} // namespace mmo::engine::scene

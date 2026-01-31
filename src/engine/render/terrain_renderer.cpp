@@ -1,10 +1,25 @@
 #include "terrain_renderer.hpp"
+#include "SDL3/SDL_gpu.h"
+#include "engine/gpu/gpu_buffer.hpp"
+#include "engine/gpu/gpu_device.hpp"
+#include "engine/gpu/gpu_texture.hpp"
+#include "engine/gpu/gpu_types.hpp"
+#include "engine/gpu/pipeline_registry.hpp"
+#include "engine/heightmap.hpp"
+#include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/vector_float2.hpp"
+#include "glm/ext/vector_float3.hpp"
+#include "glm/ext/vector_float4.hpp"
+#include <algorithm>
 #include <cmath>
+#include <cstdint>
+#include <memory>
 #include <vector>
-#include <SDL3_image/SDL_image.h>
 #include <SDL3/SDL_log.h>
 
-namespace mmo {
+namespace mmo::engine::render {
+
+namespace gpu = mmo::engine::gpu;
 
 TerrainRenderer::TerrainRenderer() = default;
 
@@ -286,4 +301,4 @@ void TerrainRenderer::set_anisotropic_filter(float level) {
     }
 }
 
-} // namespace mmo
+} // namespace mmo::engine::render

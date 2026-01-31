@@ -1,12 +1,12 @@
 #pragma once
 
-#include "common/protocol.hpp"
+#include "protocol/protocol.hpp"
 #include <asio.hpp>
 #include <memory>
 #include <functional>
 #include <array>
 
-namespace mmo {
+namespace mmo::server {
 
 class Server;
 
@@ -40,9 +40,9 @@ private:
     std::string player_name_;
     
     // Read buffer
-    std::array<uint8_t, PacketHeader::size()> header_buffer_;
+    std::array<uint8_t, mmo::protocol::PacketHeader::size()> header_buffer_;
     std::vector<uint8_t> payload_buffer_;
-    PacketHeader current_header_;
+    mmo::protocol::PacketHeader current_header_;
     
     // Write queue
     std::vector<std::vector<uint8_t>> write_queue_;
@@ -50,4 +50,4 @@ private:
     std::mutex write_mutex_;
 };
 
-} // namespace mmo
+} // namespace mmo::server

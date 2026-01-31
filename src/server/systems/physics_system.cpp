@@ -20,14 +20,24 @@
 #include <Jolt/Physics/Collision/CastResult.h>
 
 #include "physics_system.hpp"
+#include "entt/entity/entity.hpp"
+#include "entt/entity/fwd.hpp"
+#include "server/ecs/game_components.hpp"
+#include <algorithm>
+#include <cstddef>
+#include <cstdint>
+#include <cstdlib>
+#include <memory>
 #include <unordered_map>
 #include <iostream>
 #include <thread>
+#include <utility>
+#include <vector>
 
 // Disable common warnings from Jolt
 JPH_SUPPRESS_WARNINGS
 
-namespace mmo::systems {
+namespace mmo::server::systems {
 
 // Jolt memory allocation hooks
 static void* JoltAlloc(size_t inSize) {
@@ -367,12 +377,9 @@ void PhysicsSystem::create_bodies(entt::registry& registry) {
             layer = CollisionLayers::TRIGGER;
         }
 
-        // Convert to 3D position for Jolt:
-        // - transform.x = world X
-        // - transform.y = world Z (horizontal)  
-        // - transform.z = world Y (height/elevation)
+        // Both ECS and Jolt use Y-up: x,z = ground plane, y = height
         // Add collider.offset_y to elevate the collision shape (e.g., for capsules centered at character midpoint)
-        JPH::RVec3 position(transform.x, transform.z + collider.offset_y, transform.y);
+        JPH::RVec3 position(transform.x, transform.y + collider.offset_y, transform.z);
         
         // Create body settings
         JPH::BodyCreationSettings settings(
@@ -478,8 +485,8 @@ void PhysicsSystem::update(entt::registry& registry, float dt) {
         
         auto it = impl_->network_to_body.find(network_id.id);
         if (it != impl_->network_to_body.end()) {
-            // Teleport body to new position (x, z->Y height, y->Z) and reset velocity
-            JPH::RVec3 new_pos(transform.x, transform.z, transform.y);
+            // Teleport body to new position and reset velocity
+            JPH::RVec3 new_pos(transform.x, transform.y, transform.z);
             body_interface.SetPosition(it->second, new_pos, JPH::EActivation::Activate);
             body_interface.SetLinearVelocity(it->second, JPH::Vec3::sZero());
         }
@@ -500,9 +507,8 @@ void PhysicsSystem::update(entt::registry& registry, float dt) {
 
         auto it = impl_->network_to_body.find(network_id.id);
         if (it != impl_->network_to_body.end()) {
-            // Set linear velocity: game (x, y, z) -> Jolt (x, z, y)
-            // velocity.z is vertical (gravity/jumping), maps to Jolt Y
-            JPH::Vec3 phys_vel(velocity.x, velocity.z, velocity.y);
+            // Both ECS and Jolt use Y-up, no swapping needed
+            JPH::Vec3 phys_vel(velocity.x, velocity.y, velocity.z);
             body_interface.SetLinearVelocity(it->second, phys_vel);
             
             // Activate the body if it has velocity
@@ -526,8 +532,8 @@ void PhysicsSystem::update(entt::registry& registry, float dt) {
 
         auto it = impl_->network_to_body.find(network_id->id);
         if (it != impl_->network_to_body.end()) {
-            // Move kinematic body to new position: game (x, y, z) -> Jolt (x, z, y)
-            JPH::RVec3 new_pos(transform.x, transform.z, transform.y);
+            // Move kinematic body to new position
+            JPH::RVec3 new_pos(transform.x, transform.y, transform.z);
             body_interface.MoveKinematic(it->second, new_pos, JPH::Quat::sIdentity(), dt);
         }
     }
@@ -590,23 +596,23 @@ void PhysicsSystem::sync_transforms(entt::registry& registry) {
         
         auto& transform = view.get<ecs::Transform>(entity);
         float new_x = static_cast<float>(position.GetX());
-        float new_y = static_cast<float>(position.GetZ()); // Jolt Z -> Game Y (horizontal)
-        // Jolt Y is the collision center height, subtract offset_y to get ground-level transform.z
-        float physics_center_z = static_cast<float>(position.GetY()); // Jolt Y -> collision center
-        float new_z = physics_center_z - collider.offset_y; // Convert to ground level
+        // Jolt Y is the collision center height, subtract offset_y to get ground-level transform.y
+        float physics_center_y = static_cast<float>(position.GetY());
+        float new_y = physics_center_y - collider.offset_y; // Convert to ground level
+        float new_z = static_cast<float>(position.GetZ());
         
         // Apply terrain height snapping if callback is set
         // This keeps entities locked to terrain height (no jumping/falling)
         if (impl_->terrain_height_callback) {
-            float terrain_height = impl_->terrain_height_callback(new_x, new_y);
-            
+            float terrain_height = impl_->terrain_height_callback(new_x, new_z);
+
             // Always snap entity to terrain height (ground-locked movement)
-            // For jumping/falling games, you'd only snap when new_z < terrain_height
-            new_z = terrain_height;
-            
+            // For jumping/falling games, you'd only snap when new_y < terrain_height
+            new_y = terrain_height;
+
             // Update physics body position to match (collision center at terrain + offset)
-            float corrected_center_z = new_z + collider.offset_y;
-            JPH::RVec3 corrected_pos(new_x, corrected_center_z, new_y);
+            float corrected_center_y = new_y + collider.offset_y;
+            JPH::RVec3 corrected_pos(new_x, corrected_center_y, new_z);
             body_interface.SetPosition(it->second, corrected_pos, JPH::EActivation::DontActivate);
             
             // Zero out vertical velocity since we're ground-locked
@@ -617,8 +623,8 @@ void PhysicsSystem::sync_transforms(entt::registry& registry) {
         }
         
         transform.x = new_x;
-        transform.y = new_y;
-        transform.z = new_z;
+        transform.y = new_y;  // Height
+        transform.z = new_z;  // Horizontal depth
     }
 }
 
@@ -760,4 +766,4 @@ void update_physics(PhysicsSystem& physics, entt::registry& registry, float dt) 
     physics.update(registry, dt);
 }
 
-} // namespace mmo::systems
+} // namespace mmo::server::systems

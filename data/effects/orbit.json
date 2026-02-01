@@ -1,0 +1,40 @@
+{
+  "name": "orbit",
+  "duration": 0.6,
+  "default_range": 50.0,
+  "emitters": [{
+    "name": "circling_objects",
+    "particle_type": "mesh",
+    "model": "spell_bible",
+    "spawn_mode": "burst",
+    "spawn_count": 3,
+    "lifetime": 0.6,
+    "velocity": {
+      "type": "orbital",
+      "speed": 0,
+      "orbit_radius": 30.0,
+      "orbit_speed": 1.0,
+      "orbit_height_base": 35.0,
+      "height_variation": 10.0
+    },
+    "rotation": {
+      "initial": [0, 0, 0],
+      "rate": [0, 180, 0],
+      "face_velocity": false
+    },
+    "appearance": {
+      "scale_over_lifetime": {
+        "type": "constant",
+        "start": 15.0,
+        "end": 15.0
+      },
+      "opacity_over_lifetime": {
+        "type": "fade_out_late",
+        "start": 1.0,
+        "end": 0.0,
+        "fade_start": 0.7
+      },
+      "color_tint": [1.0, 1.0, 0.8, 1.0]
+    }
+  }]
+}

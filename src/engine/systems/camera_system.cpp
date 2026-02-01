@@ -12,95 +12,25 @@
 namespace mmo::engine::systems {
 
 CameraSystem::CameraSystem() {
-    // Initialize mode configurations
-    
-    // Exploration mode - relaxed, cinematic feel
-    exploration_config_ = {
-        .distance = 280.0f,
-        .height_offset = 90.0f,
-        .shoulder_offset = 40.0f,  // Over-the-shoulder offset
-        .fov = 55.0f,
-        .position_lag = 0.001f,    // No lag (original: 0.08f)
-        .rotation_lag = 0.001f,    // No lag (original: 0.08f)
-        .look_ahead_dist = 60.0f,   // Look ahead when moving
-        .pitch_min = -70.0f,
-        .pitch_max = 70.0f,
-        .auto_return_speed = 1.5f,
-        .auto_center_enabled = true
-    };
-    
-    // Combat mode - tight, responsive, action-focused
-    combat_config_ = {
-        .distance = 220.0f,         // Closer for better combat awareness
-        .height_offset = 75.0f,
-        .shoulder_offset = 50.0f,   // More offset for over-the-shoulder aiming
-        .fov = 52.0f,               // Slightly narrower for focus
-        .position_lag = 0.001f,     // No lag (original: 0.08f)
-        .rotation_lag = 0.001f,     // No lag (original: 0.05f)
-        .look_ahead_dist = 40.0f,
-        .pitch_min = -70.0f,
-        .pitch_max = 70.0f,
-        .auto_return_speed = 2.5f,
-        .auto_center_enabled = false  // Don't auto-center during combat
-    };
-    
-    // Cinematic mode - smooth, sweeping
-    cinematic_config_ = {
-        .distance = 350.0f,
-        .height_offset = 100.0f,
-        .shoulder_offset = 0.0f,    // Centered for cinematic framing
-        .fov = 50.0f,
-        .position_lag = 0.001f,     // No lag (original: 0.25f)
-        .rotation_lag = 0.001f,     // No lag (original: 0.2f)
-        .look_ahead_dist = 80.0f,
-        .pitch_min = -45.0f,
-        .pitch_max = 70.0f,
-        .auto_return_speed = 0.5f,
-        .auto_center_enabled = false
-    };
-    
-    // Sprint mode - dynamic, pulled back
-    sprint_config_ = {
-        .distance = 320.0f,         // Further back
-        .height_offset = 70.0f,     // Lower angle
-        .shoulder_offset = 30.0f,   // Slight offset while sprinting
-        .fov = 62.0f,               // Wider for speed sensation
-        .position_lag = 0.001f,     // No lag (original: 0.12f)
-        .rotation_lag = 0.001f,     // No lag (original: 0.1f)
-        .look_ahead_dist = 100.0f,  // Strong look-ahead
-        .pitch_min = -70.0f,
-        .pitch_max = 70.0f,
-        .auto_return_speed = 3.0f,
-        .auto_center_enabled = true
-    };
-    
-    // Initialize with exploration settings
-    input_distance_ = exploration_config_.distance;
-    current_distance_ = exploration_config_.distance;
-    base_fov_ = exploration_config_.fov;
-    current_fov_ = exploration_config_.fov;
+    // Initialize with default configuration
+    current_config_ = {};  // Uses default values from struct definition
+
+    input_distance_ = current_config_.distance;
+    current_distance_ = current_config_.distance;
+    base_fov_ = current_config_.fov;
+    current_fov_ = current_config_.fov;
 }
 
-const CameraModeConfig& CameraSystem::get_config(CameraMode mode) const {
-    switch (mode) {
-        case CameraMode::Exploration: return exploration_config_;
-        case CameraMode::Combat: return combat_config_;
-        case CameraMode::Cinematic: return cinematic_config_;
-        case CameraMode::Sprint: return sprint_config_;
-    }
-    return exploration_config_;
-}
 
 void CameraSystem::update(float dt) {
     // Clamp dt to avoid instability
     dt = std::min(dt, 0.1f);
-    
+
     // Track total time for idle breathing effect
     static float total_time = 0.0f;
     total_time += dt;
-    
+
     // Update in proper order
-    update_mode_transition(dt);
     update_input_smoothing(dt);
     update_look_ahead(dt);
     update_auto_centering(dt);
@@ -109,25 +39,15 @@ void CameraSystem::update(float dt) {
     update_collision_avoidance(dt);
     update_camera_shake(dt);
     update_dynamic_fov(dt);
-        
+
     compute_matrices();
-    
+
     // Reset per-frame flags
     had_input_this_frame_ = false;
 }
 
-void CameraSystem::update_mode_transition(float dt) {
-    if (current_mode_ != target_mode_) {
-        mode_transition_ += mode_transition_speed_ * dt;
-        if (mode_transition_ >= 1.0f) {
-            mode_transition_ = 1.0f;
-            current_mode_ = target_mode_;
-        }
-    }
-}
-
 void CameraSystem::update_input_smoothing(float dt) {
-    const auto& config = get_config(current_mode_);
+    const auto& config = current_config_;
     
     // Track time since last input for auto-centering
     if (had_input_this_frame_) {
@@ -155,7 +75,7 @@ void CameraSystem::update_input_smoothing(float dt) {
 }
 
 void CameraSystem::update_look_ahead(float dt) {
-    const auto& config = get_config(current_mode_);
+    const auto& config = current_config_;
     
     // Calculate look-ahead based on target velocity
     float speed = glm::length(target_velocity_);
@@ -171,7 +91,7 @@ void CameraSystem::update_look_ahead(float dt) {
 }
 
 void CameraSystem::update_auto_centering(float dt) {
-    const auto& config = get_config(current_mode_);
+    const auto& config = current_config_;
     
     if (!config.auto_center_enabled) {
         return;
@@ -241,7 +161,7 @@ void CameraSystem::update_soft_lock(float dt) {
 }
 
 void CameraSystem::update_camera_position(float dt) {
-    const auto& config = get_config(current_mode_);
+    const auto& config = current_config_;
     
     // Smooth target position (player following)
     smoothed_target_ = smooth_damp(smoothed_target_, target_position_,
@@ -416,7 +336,7 @@ void CameraSystem::update_camera_shake(float dt) {
 }
 
 void CameraSystem::update_dynamic_fov(float dt) {
-    const auto& config = get_config(current_mode_);
+    const auto& config = current_config_;
     
     // Base FOV from current mode
     float target_fov = config.fov;
@@ -522,7 +442,7 @@ void CameraSystem::rotate_yaw(float delta_degrees) {
 }
 
 void CameraSystem::rotate_pitch(float delta_degrees) {
-    const auto& config = get_config(current_mode_);
+    const auto& config = current_config_;
     input_pitch_ = std::clamp(input_pitch_ + delta_degrees, config.pitch_min, config.pitch_max);
     had_input_this_frame_ = true;
 }
@@ -534,7 +454,7 @@ void CameraSystem::set_yaw(float degrees) {
 }
 
 void CameraSystem::set_pitch(float degrees) {
-    const auto& config = get_config(current_mode_);
+    const auto& config = current_config_;
     input_pitch_ = std::clamp(degrees, config.pitch_min, config.pitch_max);
 }
 
@@ -543,14 +463,11 @@ void CameraSystem::adjust_zoom(float delta) {
     had_input_this_frame_ = true;
 }
 
-void CameraSystem::set_mode(CameraMode mode) {
-    if (target_mode_ != mode) {
-        target_mode_ = mode;
-        mode_transition_ = 0.0f;
-        
-        // Update base distance for the new mode
-        input_distance_ = get_config(mode).distance;
-    }
+void CameraSystem::set_config(const CameraModeConfig& config) {
+    current_config_ = config;
+
+    // Update distance to match new config
+    input_distance_ = config.distance;
 }
 
 void CameraSystem::set_combat_target(const glm::vec3* target) {
@@ -558,14 +475,7 @@ void CameraSystem::set_combat_target(const glm::vec3* target) {
 }
 
 void CameraSystem::set_in_combat(bool in_combat) {
-    if (in_combat != in_combat_) {
-        in_combat_ = in_combat;
-        if (in_combat) {
-            set_mode(CameraMode::Combat);
-        } else {
-            set_mode(CameraMode::Exploration);
-        }
-    }
+    in_combat_ = in_combat;
 }
 
 void CameraSystem::notify_attack() {

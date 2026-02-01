@@ -114,8 +114,6 @@ bool GameConfig::load_classes(const std::string& path) {
             cls.desc_line2 = c.value("desc_line2", "");
             cls.shows_reticle = c.value("shows_reticle", false);
             cls.effect_type = c.value("effect_type", "");
-            cls.effect_model = c.value("effect_model", "");
-            cls.effect_duration = c.value("effect_duration", 0.3f);
             cls.cone_angle = c.value("cone_angle", 0.5f);
             cls.speed = c.value("speed", 200.0f);
             cls.size = c.value("size", 32.0f);

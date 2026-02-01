@@ -2,7 +2,6 @@
 #include "client/ecs/components.hpp"
 #include "client/game_state.hpp"
 #include "client/menu_system.hpp"
-#include "engine/effect_types.hpp"
 #include "engine/scene/camera_state.hpp"
 #include "engine/scene/ui_scene.hpp"
 #include "engine/systems/camera_controller.hpp"
@@ -49,6 +48,49 @@ static std::string generate_random_name() {
 
 Game::Game() {
     player_name_ = generate_random_name();
+
+    // Initialize camera configurations
+    exploration_camera_config_ = {
+        .distance = 280.0f,
+        .height_offset = 90.0f,
+        .shoulder_offset = 40.0f,
+        .fov = 55.0f,
+        .position_lag = 0.001f,
+        .rotation_lag = 0.001f,
+        .look_ahead_dist = 60.0f,
+        .pitch_min = -70.0f,
+        .pitch_max = 70.0f,
+        .auto_return_speed = 1.5f,
+        .auto_center_enabled = true
+    };
+
+    sprint_camera_config_ = {
+        .distance = 320.0f,
+        .height_offset = 70.0f,
+        .shoulder_offset = 30.0f,
+        .fov = 62.0f,
+        .position_lag = 0.001f,
+        .rotation_lag = 0.001f,
+        .look_ahead_dist = 100.0f,
+        .pitch_min = -70.0f,
+        .pitch_max = 70.0f,
+        .auto_return_speed = 3.0f,
+        .auto_center_enabled = true
+    };
+
+    combat_camera_config_ = {
+        .distance = 220.0f,
+        .height_offset = 75.0f,
+        .shoulder_offset = 50.0f,
+        .fov = 52.0f,
+        .position_lag = 0.001f,
+        .rotation_lag = 0.001f,
+        .look_ahead_dist = 40.0f,
+        .pitch_min = -70.0f,
+        .pitch_max = 70.0f,
+        .auto_return_speed = 2.5f,
+        .auto_center_enabled = false
+    };
 }
 
 Game::~Game() {
@@ -77,6 +119,16 @@ bool Game::on_init() {
         if (!load_models(assets_path)) {
             assets_path = "../../assets";
             load_models(assets_path);
+        }
+    }
+
+    // Load effect definitions
+    std::string effects_path = "data/effects";
+    if (!effect_registry_.load_effects_directory(effects_path)) {
+        effects_path = "../data/effects";
+        if (!effect_registry_.load_effects_directory(effects_path)) {
+            effects_path = "../../data/effects";
+            effect_registry_.load_effects_directory(effects_path);
         }
     }
 
@@ -120,6 +172,8 @@ void Game::on_shutdown() {
 }
 
 void Game::on_update(float dt) {
+    last_dt_ = dt;  // Store for use in render functions
+
     if (game_state_ == GameState::Playing || game_state_ == GameState::ClassSelect) {
         menu_system_->update(dt);
         apply_graphics_settings();
@@ -202,7 +256,7 @@ void Game::render_class_select() {
     player_z_ = world_config_.world_height / 2.0f;
     camera().set_yaw(0.0f);
     camera().set_pitch(30.0f);
-    update_camera_smooth(0.016f);
+    update_camera_smooth(last_dt_);
 
     render_scene_.clear();
     render_scene_.set_draw_skybox(false);
@@ -215,7 +269,7 @@ void Game::render_class_select() {
 
     menu_system_->build_ui(ui_scene_, static_cast<float>(screen_width()), static_cast<float>(screen_height()));
 
-    render_frame(render_scene_, ui_scene_, get_camera_state(), 0.016f);
+    render_frame(render_scene_, ui_scene_, get_camera_state(), last_dt_);
 }
 
 void Game::update_connecting(float dt) {
@@ -249,7 +303,7 @@ void Game::render_connecting() {
     player_z_ = world_config_.world_height / 2.0f;
     camera().set_yaw(0.0f);
     camera().set_pitch(30.0f);
-    update_camera_smooth(0.016f);
+    update_camera_smooth(last_dt_);
 
     render_scene_.clear();
     render_scene_.set_draw_skybox(false);
@@ -260,7 +314,7 @@ void Game::render_connecting() {
 
     build_connecting_ui(ui_scene_);
 
-    render_frame(render_scene_, ui_scene_, get_camera_state(), 0.016f);
+    render_frame(render_scene_, ui_scene_, get_camera_state(), last_dt_);
 }
 
 void Game::update_playing(float dt) {
@@ -297,8 +351,6 @@ void Game::update_playing(float dt) {
     local_player_id_ = network_.local_player_id();
 
     network_smoother_.update(registry_, dt);
-
-    update_attack_effects(dt);
 
     // Tick down attack cooldowns locally for visual effects
     {
@@ -365,7 +417,9 @@ void Game::update_playing(float dt) {
         (input().move_forward() || input().move_backward() ||
          input().move_left() || input().move_right());
     if (sprinting) {
-        camera().set_mode(CameraMode::Sprint);
+        camera().set_config(sprint_camera_config_);
+    } else {
+        camera().set_config(exploration_camera_config_);
     }
 
     float zoom_delta = input().get_camera_zoom_delta();
@@ -391,21 +445,6 @@ void Game::render_playing() {
     render_scene_.set_draw_trees(gfx.trees_enabled);
     render_scene_.set_draw_ground(true);
     render_scene_.set_draw_grass(gfx.grass_enabled);
-
-    // Add effects to scene
-    for (const auto& effect : attack_effects_) {
-        engine::EffectInstance ei;
-        ei.effect_type = effect.effect_type;
-        ei.model_name = effect.effect_model;
-        ei.x = effect.x;
-        ei.y = effect.y;
-        ei.direction_x = effect.direction_x;
-        ei.direction_y = effect.direction_y;
-        ei.timer = effect.timer;
-        ei.duration = effect.duration;
-        ei.range = effect.range;
-        render_scene_.add_effect(ei);
-    }
 
     // Add entities to scene as model commands
     // Distance cull from player position (camera is 200-350 units behind player)
@@ -440,7 +479,7 @@ void Game::render_playing() {
 
     menu_system_->build_ui(ui_scene_, static_cast<float>(screen_width()), static_cast<float>(screen_height()));
 
-    render_frame(render_scene_, ui_scene_, get_camera_state(), 0.016f);
+    render_frame(render_scene_, ui_scene_, get_camera_state(), last_dt_);
 }
 
 // ============================================================================
@@ -727,8 +766,6 @@ void Game::update_entity_from_state(entt::entity entity, const NetEntityState& s
     info.model_name = state.model_name;
     info.target_size = state.target_size;
     info.effect_type = state.effect_type;
-    info.effect_model = state.effect_model;
-    info.effect_duration = state.effect_duration;
     info.cone_angle = state.cone_angle;
     info.shows_reticle = state.shows_reticle;
 
@@ -761,38 +798,17 @@ void Game::remove_entity(uint32_t network_id) {
 }
 
 void Game::spawn_attack_effect(const NetEntityState& state, float dir_x, float dir_y) {
-    ecs::AttackEffect effect;
-    effect.effect_type = state.effect_type;
-    effect.effect_model = state.effect_model;
-    effect.x = state.x;
-    effect.y = state.z;
-    effect.direction_x = dir_x;
-    effect.direction_y = dir_y;
-    effect.duration = state.effect_duration;
-    effect.range = state.cone_angle;
-    effect.cone_angle = state.cone_angle;
+    const ::engine::EffectDefinition* effect_def = effect_registry_.get_effect(state.effect_type);
+    if (effect_def) {
+        // Both use x,z horizontal, y up
+        glm::vec3 direction(dir_x, 0.0f, dir_y);
+        glm::vec3 position(state.x, state.y, state.z);
 
-    if (effect.effect_type == "orbit") {
-        effect.target_x = state.x + dir_x * state.cone_angle * 0.5f;
-        effect.target_y = state.z + dir_y * state.cone_angle * 0.5f;
-    }
-
-    effect.timer = effect.duration;
-    if (effect.duration > 0.0f) {
-        attack_effects_.push_back(effect);
+        // Use effect definition's default_range (pass -1.0f)
+        render_scene_.add_particle_effect_spawn(effect_def, position, direction, -1.0f);
     }
 }
 
-void Game::update_attack_effects(float dt) {
-    for (auto it = attack_effects_.begin(); it != attack_effects_.end(); ) {
-        it->timer -= dt;
-        if (it->timer <= 0.0f) {
-            it = attack_effects_.erase(it);
-        } else {
-            ++it;
-        }
-    }
-}
 
 // ============================================================================
 // Asset Loading
@@ -1196,9 +1212,6 @@ void Game::apply_delta_to_entity(entt::entity entity, const mmo::protocol::Entit
                     state.z = transform.z;
                     std::strncpy(state.effect_type, info.effect_type.c_str(), 15);
                     state.effect_type[15] = '\0';
-                    std::strncpy(state.effect_model, info.effect_model.c_str(), 31);
-                    state.effect_model[31] = '\0';
-                    state.effect_duration = info.effect_duration;
                     state.cone_angle = info.cone_angle;
 
                     spawn_attack_effect(state, dir_x, dir_y);

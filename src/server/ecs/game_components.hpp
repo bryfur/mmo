@@ -58,8 +58,6 @@ struct EntityInfo {
     std::string model_name;
     float target_size = 0.0f;
     std::string effect_type;
-    std::string effect_model;
-    float effect_duration = 0.0f;
     float cone_angle = 0.0f;
     bool shows_reticle = false;
 };

@@ -1,12 +1,19 @@
 #pragma once
 
-#include "engine/effect_types.hpp"
 #include <glm/glm.hpp>
 #include <cstdint>
 #include <string>
 #include <vector>
 #include <array>
 #include <variant>
+
+namespace engine {
+    struct EffectDefinition;
+}
+
+namespace mmo::engine::systems {
+    class EffectSystem;
+}
 
 namespace mmo::engine::scene {
 
@@ -50,6 +57,17 @@ struct Billboard3DCommand {
     uint32_t fill_color;
     uint32_t bg_color;
     uint32_t frame_color;
+};
+
+/**
+ * Particle effect spawn command.
+ * Tells the renderer to spawn a particle effect this frame.
+ */
+struct ParticleEffectSpawnCommand {
+    const ::engine::EffectDefinition* definition = nullptr;
+    glm::vec3 position = {0, 0, 0};
+    glm::vec3 direction = {1, 0, 0};
+    float range = -1.0f;
 };
 
 struct RenderCommand {
@@ -99,9 +117,30 @@ public:
                            const glm::vec4& tint = {1.0f, 1.0f, 1.0f, 1.0f});
 
     /**
-     * Add an attack effect to the scene
+     * Add a particle effect spawn command
+     * @param definition Effect definition (from EffectRegistry)
+     * @param position World position to spawn effect
+     * @param direction Direction vector for directional effects
+     * @param range Effect range/scale (-1 = use definition default)
      */
-    void add_effect(const engine::EffectInstance& effect);
+    void add_particle_effect_spawn(const ::engine::EffectDefinition* definition,
+                                    const glm::vec3& position,
+                                    const glm::vec3& direction = {1, 0, 0},
+                                    float range = -1.0f);
+
+    /**
+     * Get all particle effect spawn commands for this frame
+     */
+    const std::vector<ParticleEffectSpawnCommand>& particle_effect_spawns() const {
+        return particle_effect_spawns_;
+    }
+
+    /**
+     * Clear particle effect spawn commands (called by renderer after consuming)
+     */
+    void clear_particle_effect_spawns() {
+        particle_effect_spawns_.clear();
+    }
 
     /**
      * Add a 3D billboard (projected to screen space during rendering)
@@ -127,19 +166,18 @@ public:
 
     bool has_3d_content() const {
         return draw_skybox_ || draw_ground_ || draw_grass_ || draw_mountains_ ||
-               !effects_.empty() || !commands_.empty();
+               !commands_.empty();
     }
 
     // ========== Command Access ==========
 
     const std::vector<RenderCommand>& commands() const { return commands_; }
-    const std::vector<engine::EffectInstance>& effects() const { return effects_; }
     const std::vector<Billboard3DCommand>& billboards() const { return billboards_; }
 
 private:
     std::vector<RenderCommand> commands_;
-    std::vector<engine::EffectInstance> effects_;
     std::vector<Billboard3DCommand> billboards_;
+    std::vector<ParticleEffectSpawnCommand> particle_effect_spawns_;
 
     bool draw_skybox_ = false;
     bool draw_mountains_ = false;

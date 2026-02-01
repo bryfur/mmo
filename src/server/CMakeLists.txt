@@ -30,16 +30,33 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(json)
 
 file(GLOB_RECURSE SERVER_SOURCES CONFIGURE_DEPENDS "*.cpp")
-add_executable(mmo_server ${SERVER_SOURCES})
 
-target_link_libraries(mmo_server PRIVATE
+# Separate main.cpp from library sources
+list(REMOVE_ITEM SERVER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp")
+
+# Create server library (for use by editor and other tools)
+add_library(mmo_server_lib ${SERVER_SOURCES})
+
+target_link_libraries(mmo_server_lib PUBLIC
     mmo_protocol
     Jolt
     nlohmann_json::nlohmann_json
     pthread
 )
 
-target_include_directories(mmo_server PRIVATE
+target_include_directories(mmo_server_lib PUBLIC
+    ${CMAKE_SOURCE_DIR}/src
     ${asio_SOURCE_DIR}/asio/include
     ${JoltPhysics_SOURCE_DIR}/..
+)
+
+# Create server executable
+add_executable(mmo_server main.cpp)
+
+target_link_libraries(mmo_server PRIVATE
+    mmo_server_lib
+)
+
+target_include_directories(mmo_server PRIVATE
+    ${asio_SOURCE_DIR}/asio/include
 )

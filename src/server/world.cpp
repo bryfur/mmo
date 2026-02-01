@@ -844,8 +844,6 @@ void World::populate_render_data(NetEntityState& state, const ecs::EntityInfo& i
             strncpy_safe(state.model_name, cls.model.c_str(), 32);
             state.target_size = config::get_character_target_size(EntityType::Player);
             strncpy_safe(state.effect_type, cls.effect_type.c_str(), 16);
-            strncpy_safe(state.effect_model, cls.effect_model.c_str(), 32);
-            state.effect_duration = cls.effect_duration;
             state.cone_angle = cls.cone_angle;
             state.shows_reticle = cls.shows_reticle;
             break;

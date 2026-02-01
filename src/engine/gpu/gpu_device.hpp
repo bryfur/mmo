@@ -152,10 +152,16 @@ public:
     // =========================================================================
 
     /**
+     * @brief Check if a swapchain present mode is supported
+     */
+    bool supports_present_mode(SDL_GPUPresentMode mode) const;
+
+    /**
      * @brief Set swapchain present mode and composition
      * @param present_mode SDL_GPU_PRESENTMODE_VSYNC, IMMEDIATE, or MAILBOX
+     * @return true if the mode was set, false if unsupported
      */
-    void set_swapchain_parameters(SDL_GPUPresentMode present_mode);
+    bool set_swapchain_parameters(SDL_GPUPresentMode present_mode);
 
     SDL_GPUDevice* handle() const { return device_; }
     SDL_Window* window() const { return window_; }

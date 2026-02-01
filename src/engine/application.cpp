@@ -70,6 +70,7 @@ bool Application::init_renderer(int width, int height, const std::string& title,
                                 float world_width, float world_height) {
     context_ = std::make_unique<RenderContext>();
     if (!context_->init(width, height, title)) return false;
+    context_->query_display_modes();
 
     scene_renderer_ = std::make_unique<SceneRenderer>();
     if (!scene_renderer_->init(*context_, world_width, world_height)) return false;
@@ -108,8 +109,20 @@ void Application::set_vsync_mode(int mode) {
     scene_renderer_->set_vsync_mode(mode);
 }
 
-void Application::set_fullscreen(bool exclusive) {
-    context_->set_fullscreen(exclusive);
+int Application::max_vsync_mode() const {
+    return scene_renderer_->max_vsync_mode();
+}
+
+void Application::set_window_mode(int window_mode, int resolution_index) {
+    context_->set_window_mode(window_mode, resolution_index);
+}
+
+std::vector<Application::DisplayMode> Application::available_resolutions() const {
+    std::vector<DisplayMode> result;
+    for (const auto& m : context_->available_resolutions()) {
+        result.push_back({m.w, m.h});
+    }
+    return result;
 }
 
 ModelManager& Application::models() {

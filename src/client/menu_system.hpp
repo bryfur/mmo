@@ -12,7 +12,7 @@ namespace mmo::client {
 
 class MenuSystem {
 public:
-    MenuSystem(engine::InputHandler& input, std::function<void()> on_quit);
+    MenuSystem(engine::InputHandler& input, std::function<void()> on_quit, int max_vsync_mode = 2);
 
     void update(float dt);
     void build_ui(engine::scene::UIScene& ui, float screen_w, float screen_h);
@@ -20,6 +20,11 @@ public:
     bool is_open() const { return menu_open_; }
 
     const engine::GraphicsSettings& graphics_settings() const { return graphics_settings_; }
+
+    struct ResolutionOption { int w, h; };
+    void set_available_resolutions(const std::vector<ResolutionOption>& resolutions) {
+        available_resolutions_ = resolutions;
+    }
     const ControlsSettings& controls_settings() const { return controls_settings_; }
 
 private:
@@ -36,11 +41,13 @@ private:
     MenuPage current_menu_page_ = MenuPage::Main;
     std::vector<MenuItem> menu_items_;
 
+    int max_vsync_mode_ = 2;
     engine::GraphicsSettings graphics_settings_;
     ControlsSettings controls_settings_;
 
     int prev_menu_selected_ = -1;
     float menu_highlight_progress_ = 1.0f;
+    std::vector<ResolutionOption> available_resolutions_;
 };
 
 } // namespace mmo::client

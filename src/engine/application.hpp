@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "engine/render_stats.hpp"
 
@@ -85,7 +86,11 @@ protected:
     void set_graphics_settings(const GraphicsSettings& settings);
     void set_anisotropic_filter(int level);
     void set_vsync_mode(int mode);
-    void set_fullscreen(bool exclusive);
+    int max_vsync_mode() const;
+    void set_window_mode(int window_mode, int resolution_index = 0);
+
+    struct DisplayMode { int w, h; };
+    std::vector<DisplayMode> available_resolutions() const;
 
     ModelManager& models();
     float get_terrain_height(float x, float z);

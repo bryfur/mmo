@@ -32,6 +32,10 @@ enum class PipelineType {
     Effect,             ///< Particle effects (additive blending)
     Grass,              ///< Instanced grass rendering
 
+    // Instanced rendering pipelines
+    InstancedModel,     ///< Instanced static models (rocks, trees)
+    InstancedShadowModel, ///< Instanced shadow depth pass
+
     // Shadow pipelines (depth-only)
     ShadowModel,        ///< Shadow depth pass for static models
     ShadowSkinnedModel, ///< Shadow depth pass for skinned models
@@ -62,6 +66,8 @@ inline const char* pipeline_type_to_string(PipelineType type) {
         case PipelineType::Billboard:     return "Billboard";
         case PipelineType::Effect:        return "Effect";
         case PipelineType::Grass:              return "Grass";
+        case PipelineType::InstancedModel:     return "InstancedModel";
+        case PipelineType::InstancedShadowModel: return "InstancedShadowModel";
         case PipelineType::ShadowModel:        return "ShadowModel";
         case PipelineType::ShadowSkinnedModel: return "ShadowSkinnedModel";
         case PipelineType::ShadowTerrain:      return "ShadowTerrain";
@@ -149,6 +155,8 @@ public:
     GPUPipeline* get_effect_pipeline() { return get_pipeline(PipelineType::Effect); }
     GPUPipeline* get_text_pipeline() { return get_pipeline(PipelineType::Text); }
     GPUPipeline* get_grid_pipeline() { return get_pipeline(PipelineType::Grid); }
+    GPUPipeline* get_instanced_model_pipeline() { return get_pipeline(PipelineType::InstancedModel); }
+    GPUPipeline* get_instanced_shadow_model_pipeline() { return get_pipeline(PipelineType::InstancedShadowModel); }
     GPUPipeline* get_shadow_model_pipeline() { return get_pipeline(PipelineType::ShadowModel); }
     GPUPipeline* get_shadow_skinned_model_pipeline() { return get_pipeline(PipelineType::ShadowSkinnedModel); }
     GPUPipeline* get_shadow_terrain_pipeline() { return get_pipeline(PipelineType::ShadowTerrain); }
@@ -205,6 +213,8 @@ private:
     std::unique_ptr<GPUPipeline> create_billboard_pipeline();
     std::unique_ptr<GPUPipeline> create_effect_pipeline();
     std::unique_ptr<GPUPipeline> create_grass_pipeline();
+    std::unique_ptr<GPUPipeline> create_instanced_model_pipeline();
+    std::unique_ptr<GPUPipeline> create_instanced_shadow_model_pipeline();
     std::unique_ptr<GPUPipeline> create_shadow_model_pipeline();
     std::unique_ptr<GPUPipeline> create_shadow_skinned_model_pipeline();
     std::unique_ptr<GPUPipeline> create_shadow_terrain_pipeline();

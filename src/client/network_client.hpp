@@ -61,7 +61,7 @@ private:
     uint32_t local_player_id_ = 0;
     
     // Read buffer
-    std::array<uint8_t, mmo::protocol::PacketHeader::size()> header_buffer_;
+    std::array<uint8_t, mmo::protocol::PacketHeader::serialized_size()> header_buffer_;
     std::vector<uint8_t> payload_buffer_;
     mmo::protocol::PacketHeader current_header_;
     

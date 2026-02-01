@@ -4,6 +4,7 @@
 #include <SDL3/SDL_gpu.h>
 #include <glm/glm.hpp>
 #include <string>
+#include <vector>
 #include "engine/gpu/gpu_device.hpp"
 
 namespace mmo::engine::render {
@@ -13,10 +14,6 @@ namespace gpu = mmo::engine::gpu;
 /**
  * RenderContext manages the SDL window and GPU device for SDL3 GPU API rendering.
  * This is the foundation that other renderers build upon.
- * 
- * Migration from OpenGL: This class now wraps GPUDevice instead of OpenGL context.
- * State management (depth test, blending, etc.) is now handled through pipelines,
- * not through global state functions.
  */
 class RenderContext {
 public:
@@ -95,15 +92,36 @@ public:
                                                uint32_t* out_height = nullptr);
     
     /**
-     * Set VSync mode: 0=off, 1=vsync, 2=adaptive vsync
+     * Set VSync mode: 0=off, 1=vsync, 2=triple buffer (mailbox)
      * Note: In SDL3 GPU, this is controlled via swapchain present mode
      */
     void set_vsync_mode(int mode);
 
     /**
-     * Set fullscreen mode: true=exclusive fullscreen, false=windowed
+     * Query the maximum supported vsync mode (0=immediate only, 1=vsync, 2=mailbox)
      */
-    void set_fullscreen(bool exclusive);
+    int max_vsync_mode() const;
+
+    /**
+     * Set window mode: 0=windowed, 1=borderless fullscreen, 2=exclusive fullscreen.
+     */
+    void set_window_mode(int window_mode, int resolution_index = 0);
+
+    struct DisplayMode {
+        int w, h;
+        float refresh_rate;
+        float pixel_density;
+    };
+
+    /**
+     * Get available native display modes (pixel_density == 1.0).
+     */
+    const std::vector<DisplayMode>& available_resolutions() const { return available_resolutions_; }
+
+    /**
+     * Refresh the list of available native display modes.
+     */
+    void query_display_modes();
     
     /**
      * Get clear color for render passes
@@ -115,27 +133,13 @@ public:
      */
     void set_clear_color(const glm::vec4& color) { clear_color_ = color; }
     
-    // =========================================================================
-    // Legacy State Management (deprecated - use pipelines instead)
-    // These are no-ops in SDL3 GPU API since state is bound to pipelines.
-    // Kept for compatibility during migration.
-    // =========================================================================
-    
-    /** @deprecated Use pipeline depth state instead */
-    void set_depth_test(bool enabled);
-    /** @deprecated Use pipeline depth state instead */
-    void set_depth_write(bool enabled);
-    /** @deprecated Use pipeline rasterizer state instead */
-    void set_culling(bool enabled, int face = 0);
-    /** @deprecated Use pipeline blend state instead */
-    void set_blending(bool enabled, int src = 0, int dst = 0);
-    
 private:
     SDL_Window* window_ = nullptr;
     gpu::GPUDevice device_;
     int width_ = 0;
     int height_ = 0;
     int vsync_mode_ = 1;  // Track desired vsync mode
+    std::vector<DisplayMode> available_resolutions_;
     
     // Current frame's command buffer (valid between begin_frame and end_frame)
     SDL_GPUCommandBuffer* current_cmd_ = nullptr;

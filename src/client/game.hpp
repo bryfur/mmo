@@ -53,7 +53,6 @@ private:
     void on_connection_accepted(const std::vector<uint8_t>& payload);
     void on_class_list(const std::vector<uint8_t>& payload);
     void on_heightmap_chunk(const std::vector<uint8_t>& payload);
-    void on_world_state(const std::vector<uint8_t>& payload);
     void on_player_joined(const std::vector<uint8_t>& payload);
     void on_player_left(const std::vector<uint8_t>& payload);
 
@@ -123,6 +122,8 @@ private:
     float player_x_ = 0.0f;
     float player_z_ = 0.0f;
 
+    // Reusable buffers for network message processing (avoids per-frame allocations)
+    std::vector<uint32_t> to_remove_buffer_;
 };
 
 } // namespace mmo::client

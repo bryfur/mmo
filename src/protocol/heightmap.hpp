@@ -7,9 +7,11 @@
  * Clients upload to GPU as texture for shader sampling.
  */
 
+#include "buffer_reader.hpp"
 #include <cstdint>
-#include <vector>
 #include <cstring>
+#include <span>
+#include <vector>
 
 namespace mmo::protocol {
 
@@ -81,26 +83,26 @@ struct HeightmapChunk {
     /**
      * Deserialize from byte buffer
      */
-    bool deserialize(const uint8_t* data, size_t size) {
-        if (size < 24) return false;
-        
-        const uint8_t* ptr = data;
-        std::memcpy(&chunk_x, ptr, 4); ptr += 4;
-        std::memcpy(&chunk_z, ptr, 4); ptr += 4;
-        std::memcpy(&resolution, ptr, 4); ptr += 4;
-        std::memcpy(&world_origin_x, ptr, 4); ptr += 4;
-        std::memcpy(&world_origin_z, ptr, 4); ptr += 4;
-        std::memcpy(&world_size, ptr, 4); ptr += 4;
-        
+    bool deserialize(std::span<const uint8_t> data) {
+        if (data.size() < 24) return false;
+
+        BufferReader r(data);
+        chunk_x = r.read<int32_t>();
+        chunk_z = r.read<int32_t>();
+        resolution = r.read<uint32_t>();
+        world_origin_x = r.read<float>();
+        world_origin_z = r.read<float>();
+        world_size = r.read<float>();
+
         // Reject unreasonable resolutions to prevent excessive memory allocation
         if (resolution == 0 || resolution > 4096) return false;
 
         size_t data_size = resolution * resolution;
-        if (size < 24 + data_size * sizeof(uint16_t)) return false;
+        if (data.size() < 24 + data_size * sizeof(uint16_t)) return false;
 
         height_data.resize(data_size);
-        std::memcpy(height_data.data(), ptr, data_size * sizeof(uint16_t));
-        
+        r.read_bytes(height_data.data(), data_size * sizeof(uint16_t));
+
         return true;
     }
 };

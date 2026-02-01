@@ -239,13 +239,23 @@ bool GPUDevice::supports_format(SDL_GPUTextureFormat format, SDL_GPUTextureType 
     return SDL_GPUTextureSupportsFormat(device_, format, type, usage);
 }
 
-void GPUDevice::set_swapchain_parameters(SDL_GPUPresentMode present_mode) {
-    if (!device_ || !window_) return;
+bool GPUDevice::supports_present_mode(SDL_GPUPresentMode mode) const {
+    if (!device_ || !window_) return false;
+    return SDL_WindowSupportsGPUPresentMode(device_, window_, mode);
+}
 
-    SDL_SetGPUSwapchainParameters(device_, window_,
-                                   SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
-                                   present_mode);
+bool GPUDevice::set_swapchain_parameters(SDL_GPUPresentMode present_mode) {
+    if (!device_ || !window_) return false;
+
+    if (!SDL_SetGPUSwapchainParameters(device_, window_,
+                                        SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+                                        present_mode)) {
+        SDL_Log("GPUDevice::set_swapchain_parameters: present_mode=%d not supported: %s",
+                (int)present_mode, SDL_GetError());
+        return false;
+    }
     SDL_Log("GPUDevice::set_swapchain_parameters: present_mode=%d", (int)present_mode);
+    return true;
 }
 
 } // namespace mmo::engine::gpu

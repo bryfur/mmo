@@ -53,7 +53,7 @@ void Session::read_header() {
         asio::buffer(header_buffer_),
         [this, self](asio::error_code ec, std::size_t /*length*/) {
             if (!ec) {
-                current_header_.deserialize(header_buffer_.data());
+                current_header_.deserialize(header_buffer_);
                 if (current_header_.payload_size > 0) {
                     payload_buffer_.resize(current_header_.payload_size);
                     read_payload();
@@ -86,19 +86,21 @@ void Session::read_payload() {
 void Session::handle_packet() {
     switch (current_header_.type) {
         case MessageType::Connect: {
-            std::string name = "Player";
-            if (current_header_.payload_size >= 32) {
-                name = std::string(reinterpret_cast<char*>(payload_buffer_.data()),
-                    strnlen(reinterpret_cast<char*>(payload_buffer_.data()), 32));
+            ConnectMsg msg;
+            if (current_header_.payload_size >= ConnectMsg::serialized_size()) {
+                msg.deserialize(payload_buffer_);
             }
+            std::string name(msg.name, strnlen(msg.name, sizeof(msg.name)));
+            if (name.empty()) name = "Player";
             server_.on_client_connect(shared_from_this(), name);
             break;
         }
 
         case MessageType::ClassSelect: {
-            if (current_header_.payload_size >= 1) {
-                uint8_t class_index = payload_buffer_[0];
-                server_.on_class_select(shared_from_this(), class_index);
+            if (current_header_.payload_size >= ClassSelectMsg::serialized_size()) {
+                ClassSelectMsg msg;
+                msg.deserialize(payload_buffer_);
+                server_.on_class_select(shared_from_this(), msg.class_index);
             }
             break;
         }
@@ -111,7 +113,7 @@ void Session::handle_packet() {
         case MessageType::PlayerInput: {
             if (current_header_.payload_size >= 1 && player_id_ != 0) {
                 PlayerInput input;
-                input.deserialize(payload_buffer_.data(), current_header_.payload_size);
+                input.deserialize(payload_buffer_);
                 server_.on_player_input(player_id_, input);
             }
             break;

@@ -40,7 +40,7 @@ private:
     std::string player_name_;
     
     // Read buffer
-    std::array<uint8_t, mmo::protocol::PacketHeader::size()> header_buffer_;
+    std::array<uint8_t, mmo::protocol::PacketHeader::serialized_size()> header_buffer_;
     std::vector<uint8_t> payload_buffer_;
     mmo::protocol::PacketHeader current_header_;
     

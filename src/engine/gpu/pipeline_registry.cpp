@@ -104,6 +104,12 @@ GPUPipeline* PipelineRegistry::get_pipeline(PipelineType type) {
         case PipelineType::Grass:
             pipeline = create_grass_pipeline();
             break;
+        case PipelineType::InstancedModel:
+            pipeline = create_instanced_model_pipeline();
+            break;
+        case PipelineType::InstancedShadowModel:
+            pipeline = create_instanced_shadow_model_pipeline();
+            break;
         case PipelineType::ShadowModel:
             pipeline = create_shadow_model_pipeline();
             break;
@@ -199,6 +205,57 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_model_pipeline() {
     config.fragment_shader = fs->handle();
     config.with_vertex3d().opaque();
     config.color_format = swapchain_format_;
+    config.depth_format = depth_format_;
+
+    return GPUPipeline::create(*device_, config);
+}
+
+std::unique_ptr<GPUPipeline> PipelineRegistry::create_instanced_model_pipeline() {
+    ShaderResources vs_resources;
+    vs_resources.num_uniform_buffers = 1;  // camera uniforms
+    vs_resources.num_storage_buffers = 1;  // instance data
+
+    ShaderResources fs_resources;
+    fs_resources.num_uniform_buffers = 2;  // lighting + shadow data
+    fs_resources.num_samplers = 5;  // baseColor + 4 shadow cascade maps
+
+    auto* vs = shader_manager_->get(shader_path_ + "model_instanced.vert.spv",
+                                     ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "model_instanced.frag.spv",
+                                     ShaderStage::Fragment, "PSMain", fs_resources);
+
+    if (!vs || !fs) return nullptr;
+
+    PipelineConfig config;
+    config.vertex_shader = vs->handle();
+    config.fragment_shader = fs->handle();
+    config.with_vertex3d().opaque();
+    config.color_format = swapchain_format_;
+    config.depth_format = depth_format_;
+
+    return GPUPipeline::create(*device_, config);
+}
+
+std::unique_ptr<GPUPipeline> PipelineRegistry::create_instanced_shadow_model_pipeline() {
+    ShaderResources vs_resources;
+    vs_resources.num_uniform_buffers = 1;  // lightViewProjection
+    vs_resources.num_storage_buffers = 1;  // instance model matrices
+
+    ShaderResources fs_resources;
+    // Empty fragment shader: no uniforms, no samplers
+
+    auto* vs = shader_manager_->get(shader_path_ + "shadow_depth_instanced.vert.spv",
+                                     ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "shadow_depth.frag.spv",
+                                     ShaderStage::Fragment, "PSMain", fs_resources);
+
+    if (!vs || !fs) return nullptr;
+
+    PipelineConfig config;
+    config.vertex_shader = vs->handle();
+    config.fragment_shader = fs->handle();
+    config.with_vertex3d().opaque().cull_front().with_depth_bias(4.0f, 2.0f);
+    config.color_format = SDL_GPU_TEXTUREFORMAT_INVALID;  // depth-only
     config.depth_format = depth_format_;
 
     return GPUPipeline::create(*device_, config);

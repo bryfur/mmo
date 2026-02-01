@@ -88,6 +88,12 @@ SDL_GPUTexture* RenderContext::acquire_swapchain_texture(SDL_GPUCommandBuffer* c
     return device_.acquire_swapchain_texture(cmd, out_width, out_height);
 }
 
+int RenderContext::max_vsync_mode() const {
+    if (device_.supports_present_mode(SDL_GPU_PRESENTMODE_MAILBOX)) return 2;
+    if (device_.supports_present_mode(SDL_GPU_PRESENTMODE_VSYNC)) return 1;
+    return 0;
+}
+
 void RenderContext::set_vsync_mode(int mode) {
     if (vsync_mode_ == mode) return;
     vsync_mode_ = mode;
@@ -103,40 +109,70 @@ void RenderContext::set_vsync_mode(int mode) {
     device_.set_swapchain_parameters(present_mode);
 }
 
-void RenderContext::set_fullscreen(bool exclusive) {
+void RenderContext::query_display_modes() {
+    available_resolutions_.clear();
     if (!window_) return;
 
-    if (exclusive) {
+    SDL_DisplayID display = SDL_GetDisplayForWindow(window_);
+    int count = 0;
+    const SDL_DisplayMode* const* modes = SDL_GetFullscreenDisplayModes(display, &count);
+    if (!modes) return;
+
+    for (int i = 0; i < count; i++) {
+        // Deduplicate by w×h — SDL may list the same resolution at different refresh rates
+        bool duplicate = false;
+        for (const auto& existing : available_resolutions_) {
+            if (existing.w == modes[i]->w && existing.h == modes[i]->h &&
+                existing.pixel_density == modes[i]->pixel_density) {
+                duplicate = true;
+                break;
+            }
+        }
+        if (!duplicate) {
+            available_resolutions_.push_back({modes[i]->w, modes[i]->h,
+                                              modes[i]->refresh_rate, modes[i]->pixel_density});
+        }
+    }
+}
+
+void RenderContext::set_window_mode(int window_mode, int resolution_index) {
+    if (!window_) return;
+
+    if (window_mode == 0) {
+        // Windowed
+        SDL_SetWindowFullscreenMode(window_, nullptr);
+        SDL_SetWindowFullscreen(window_, false);
+    } else if (window_mode == 1) {
+        // Borderless fullscreen
+        SDL_SetWindowFullscreenMode(window_, nullptr);
         SDL_SetWindowFullscreen(window_, true);
     } else {
-        SDL_SetWindowFullscreen(window_, false);
+        // Exclusive fullscreen — use selected display mode
+        if (available_resolutions_.empty()) query_display_modes();
+
+        SDL_DisplayID display = SDL_GetDisplayForWindow(window_);
+        int count = 0;
+        const SDL_DisplayMode* const* modes = SDL_GetFullscreenDisplayModes(display, &count);
+        const SDL_DisplayMode* selected = nullptr;
+
+        if (modes && resolution_index >= 0 &&
+            resolution_index < static_cast<int>(available_resolutions_.size())) {
+            const auto& res = available_resolutions_[resolution_index];
+            for (int i = 0; i < count; i++) {
+                if (modes[i]->w == res.w && modes[i]->h == res.h &&
+                    modes[i]->pixel_density == res.pixel_density) {
+                    selected = modes[i];
+                    break;
+                }
+            }
+        }
+
+        if (selected) {
+            SDL_SetWindowFullscreenMode(window_, selected);
+        }
+        SDL_SetWindowFullscreen(window_, true);
     }
     update_viewport();
-}
-
-// =========================================================================
-// Legacy State Management (no-ops for SDL3 GPU compatibility)
-// In SDL3 GPU, these states are set per-pipeline, not globally.
-// =========================================================================
-
-void RenderContext::set_depth_test(bool /*enabled*/) {
-    // No-op: Depth testing is configured in pipeline state
-    // Use SDL_GPUDepthStencilState when creating pipelines
-}
-
-void RenderContext::set_depth_write(bool /*enabled*/) {
-    // No-op: Depth writing is configured in pipeline state
-    // Use SDL_GPUDepthStencilState.enable_depth_write when creating pipelines
-}
-
-void RenderContext::set_culling(bool /*enabled*/, int /*face*/) {
-    // No-op: Culling is configured in pipeline state
-    // Use SDL_GPURasterizerState when creating pipelines
-}
-
-void RenderContext::set_blending(bool /*enabled*/, int /*src*/, int /*dst*/) {
-    // No-op: Blending is configured in pipeline state
-    // Use SDL_GPUColorTargetBlendState when creating pipelines
 }
 
 } // namespace mmo::engine::render

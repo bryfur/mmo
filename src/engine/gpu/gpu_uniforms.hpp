@@ -73,6 +73,59 @@ struct alignas(16) UIFragmentUniforms {
 };
 
 /**
+ * Instanced model vertex shader camera uniforms - matches model_instanced.vert.hlsl (set 1, b0)
+ */
+struct alignas(16) InstancedCameraUniforms {
+    glm::mat4 view;
+    glm::mat4 projection;
+    glm::vec3 cameraPos;
+    float _padding0 = 0.0f;
+};
+
+/**
+ * Instanced model fragment shader uniforms - matches model_instanced.frag.hlsl (set 3, b0)
+ */
+struct alignas(16) InstancedLightingUniforms {
+    glm::vec3 lightDir;
+    float _padding0 = 0.0f;
+    glm::vec3 lightColor;
+    float _padding1 = 0.0f;
+    glm::vec3 ambientColor;
+    float _padding2 = 0.0f;
+    glm::vec3 fogColor;
+    float fogStart;
+    float fogEnd;
+    int hasTexture;
+    int fogEnabled;
+    float _padding3 = 0.0f;
+};
+
+/**
+ * Per-instance data for instanced model rendering (storage buffer).
+ */
+struct InstanceData {
+    glm::mat4 model;
+    glm::mat4 normalMatrix;
+    glm::vec4 tint;
+    float noFog;
+    float _pad[3] = {0.0f, 0.0f, 0.0f};
+};
+
+/**
+ * Per-instance data for instanced shadow rendering (storage buffer).
+ */
+struct ShadowInstanceData {
+    glm::mat4 model;
+};
+
+/**
+ * Instanced shadow vertex uniforms (set 1, b0)
+ */
+struct alignas(16) InstancedShadowUniforms {
+    glm::mat4 lightViewProjection;
+};
+
+/**
  * Shadow depth pass - vertex uniforms for static models (set 1, b0)
  */
 struct alignas(16) ShadowTransformUniforms {

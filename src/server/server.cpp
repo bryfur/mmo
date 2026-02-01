@@ -75,9 +75,11 @@ void Server::on_client_connect(std::shared_ptr<Session> session, const std::stri
     std::cout << "Client '" << name << "' connected, sending class list" << std::endl;
 
     // Send connection accepted (player_id=0 means "not spawned yet, pick a class")
-    Packet accept_packet(MessageType::ConnectionAccepted);
-    accept_packet.write_uint32(0);
-    session->send(accept_packet.build());
+    {
+        ConnectionAcceptedMsg msg;
+        msg.player_id = 0;
+        session->send(build_packet(MessageType::ConnectionAccepted, msg));
+    }
 
     // Send world config so client knows dimensions, tick rate, etc.
     {
@@ -85,26 +87,20 @@ void Server::on_client_connect(std::shared_ptr<Session> session, const std::stri
         wc.world_width = config_.world().width;
         wc.world_height = config_.world().height;
         wc.tick_rate = config_.server().tick_rate;
-
-        Packet wc_packet(MessageType::WorldConfig);
-        uint8_t buf[NetWorldConfig::serialized_size()];
-        wc.serialize(buf);
-        for (size_t i = 0; i < sizeof(buf); ++i) {
-            wc_packet.write_uint8(buf[i]);
-        }
-        session->send(wc_packet.build());
+        session->send(build_packet(MessageType::WorldConfig, wc));
     }
 
     // Send heightmap early so client can start loading terrain
     send_heightmap(session);
 
     // Build and send available classes from config
-    Packet class_packet(MessageType::ClassList);
-    class_packet.write_uint8(static_cast<uint8_t>(config_.class_count()));
-    for (int i = 0; i < config_.class_count(); ++i) {
-        class_packet.write_class_info(config_.build_class_info(i));
+    {
+        std::vector<ClassInfo> classes;
+        for (int i = 0; i < config_.class_count(); ++i) {
+            classes.push_back(config_.build_class_info(i));
+        }
+        session->send(build_packet(MessageType::ClassList, classes));
     }
-    session->send(class_packet.build());
 }
 
 void Server::on_class_select(std::shared_ptr<Session> session, uint8_t class_index) {
@@ -123,18 +119,20 @@ void Server::on_class_select(std::shared_ptr<Session> session, uint8_t class_ind
     std::cout << "Player '" << name << "' (" << cls.name << ") spawned with ID " << player_id << std::endl;
 
     // Send real player ID now
-    Packet id_packet(MessageType::ConnectionAccepted);
-    id_packet.write_uint32(player_id);
-    session->send(id_packet.build());
+    {
+        ConnectionAcceptedMsg msg;
+        msg.player_id = player_id;
+        session->send(build_packet(MessageType::ConnectionAccepted, msg));
+    }
 
     // Delta system will send EntityEnter for nearby entities on next tick
     // No need to send full WorldState - spatial filtering handles everything
 
     // Broadcast new player to others (they'll get EntityEnter for this new player)
-    auto player_state = world_.get_entity_state(player_id);
-    Packet join_packet(MessageType::PlayerJoined);
-    join_packet.write_entity_state(player_state);
-    broadcast_except(join_packet.build(), player_id);
+    {
+        auto player_state = world_.get_entity_state(player_id);
+        broadcast_except(build_packet(MessageType::PlayerJoined, player_state), player_id);
+    }
 }
 
 void Server::on_player_disconnect(uint32_t player_id) {
@@ -152,9 +150,11 @@ void Server::on_player_disconnect(uint32_t player_id) {
 
     std::cout << "Player " << player_id << " disconnected" << std::endl;
 
-    Packet leave_packet(MessageType::PlayerLeft);
-    leave_packet.write_uint32(player_id);
-    broadcast(leave_packet.build());
+    {
+        PlayerLeftMsg msg;
+        msg.player_id = player_id;
+        broadcast(build_packet(MessageType::PlayerLeft, msg));
+    }
 }
 
 void Server::on_player_input(uint32_t player_id, const PlayerInput& input) {
@@ -243,12 +243,7 @@ void Server::broadcast_world_state() {
 
         // Send WorldState with only visible entities to this client
         if (!visible_entities.empty()) {
-            Packet packet(MessageType::WorldState);
-            packet.write_uint16(static_cast<uint16_t>(visible_entities.size()));
-            for (const auto& state : visible_entities) {
-                packet.write_entity_state(state);
-            }
-            session->send(packet.build());
+            session->send(build_packet(MessageType::WorldState, visible_entities));
         }
     }
 }
@@ -256,17 +251,9 @@ void Server::broadcast_world_state() {
 void Server::send_heightmap(std::shared_ptr<Session> session) {
     const auto& heightmap = world_.heightmap();
 
-    // Serialize heightmap into a standard packet (header now supports uint32_t size)
-    std::vector<uint8_t> data;
-    data.reserve(PacketHeader::size() + heightmap.serialized_size());
-
-    PacketHeader header;
-    header.type = MessageType::HeightmapChunk;
-    header.payload_size = static_cast<uint32_t>(heightmap.serialized_size());
-
-    data.resize(PacketHeader::size());
-    header.serialize(data.data());
-    heightmap.serialize(data);
+    std::vector<uint8_t> payload;
+    heightmap.serialize(payload);
+    auto data = build_packet(MessageType::HeightmapChunk, payload);
 
     std::cout << "[Server] Sending heightmap to player " << session->player_id()
               << " (" << data.size() / 1024 << " KB)" << std::endl;
@@ -321,9 +308,7 @@ void Server::send_entity_deltas() {
         for (uint32_t id : visible_now) {
             if (!view->knows_entity(id)) {
                 auto state = world_.get_entity_state(id);
-                Packet packet(MessageType::EntityEnter);
-                packet.write_entity_state(state);
-                session->send(packet.build());
+                session->send(build_packet(MessageType::EntityEnter, state));
                 view->add_known_entity(id, state);
             }
         }
@@ -332,9 +317,9 @@ void Server::send_entity_deltas() {
         std::vector<uint32_t> to_remove;
         for (uint32_t id : known) {
             if (std::find(visible_now.begin(), visible_now.end(), id) == visible_now.end()) {
-                Packet packet(MessageType::EntityExit);
-                packet.write_uint32(id);
-                session->send(packet.build());
+                EntityExitMsg msg;
+                msg.entity_id = id;
+                session->send(build_packet(MessageType::EntityExit, msg));
                 to_remove.push_back(id);
             }
         }
@@ -366,23 +351,7 @@ void Server::send_entity_deltas() {
 
             // Only send if there are actual changes flagged
             if (delta.flags != 0) {
-                // Serialize delta to buffer
-                std::vector<uint8_t> delta_data;
-                delta.serialize(delta_data);
-
-                // Build packet with header + delta payload
-                std::vector<uint8_t> packet_data;
-                packet_data.reserve(PacketHeader::size() + delta_data.size());
-
-                PacketHeader header;
-                header.type = MessageType::EntityUpdate;
-                header.payload_size = static_cast<uint32_t>(delta_data.size());
-
-                packet_data.resize(PacketHeader::size());
-                header.serialize(packet_data.data());
-                packet_data.insert(packet_data.end(), delta_data.begin(), delta_data.end());
-
-                session->send(packet_data);
+                session->send(build_packet(MessageType::EntityUpdate, delta));
 
                 view->update_last_state(id, current_state);
                 view->mark_sent(id);

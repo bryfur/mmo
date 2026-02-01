@@ -17,9 +17,13 @@
 #include "engine/graphics_settings.hpp"
 #include "engine/scene/camera_state.hpp"
 #include "engine/render_stats.hpp"
+#include "engine/gpu/gpu_uniforms.hpp"
 #include "engine/heightmap.hpp"
 #include <glm/glm.hpp>
 #include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace mmo::engine::scene {
 
@@ -65,6 +69,7 @@ public:
     void set_anisotropic_filter(int level);
     void set_graphics_settings(const GraphicsSettings& settings);
     void set_vsync_mode(int mode);
+    int max_vsync_mode() const;
     void set_screen_size(int width, int height);
 
     // ========== Debug Stats ==========
@@ -92,6 +97,11 @@ private:
     void render_3d_scene(const RenderScene& scene, const CameraState& camera, float dt);
     void render_model_command(const ModelCommand& cmd, const CameraState& camera);
     void render_skinned_model_command(const SkinnedModelCommand& cmd, const CameraState& camera);
+    void build_instance_batches(const RenderScene& scene, const CameraState& camera);
+    void upload_instance_buffers();
+    void render_instanced_models(const CameraState& camera);
+    void render_instanced_shadow_models(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                         const glm::mat4& light_view_projection);
     void render_ui_commands(const UIScene& ui_scene, const CameraState& camera);
     void draw_billboard_3d(const Billboard3DCommand& cmd, const CameraState& camera);
 
@@ -122,6 +132,16 @@ private:
     std::unique_ptr<gpu::GPUBuffer> billboard_vertex_buffer_;
     std::unique_ptr<gpu::GPUTexture> depth_texture_;
     SDL_GPUSampler* default_sampler_ = nullptr;
+
+    // ========== Instanced Rendering ==========
+    // Per-model-type batched instance data, rebuilt each frame
+    std::unordered_map<std::string, std::vector<gpu::InstanceData>> instance_batches_;
+    std::unordered_map<std::string, std::vector<gpu::ShadowInstanceData>> shadow_instance_batches_;
+    std::vector<const ModelCommand*> non_instanced_commands_;  // individual draw fallback
+    std::unique_ptr<gpu::GPUBuffer> instance_storage_buffer_;
+    size_t instance_storage_capacity_ = 0;
+    std::unique_ptr<gpu::GPUBuffer> shadow_instance_storage_buffer_;
+    size_t shadow_instance_storage_capacity_ = 0;
 
     // ========== Render State ==========
     SDL_GPURenderPass* main_render_pass_ = nullptr;

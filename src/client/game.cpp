@@ -15,7 +15,6 @@
 #include "glm/ext/vector_float3.hpp"
 #include "glm/ext/vector_float4.hpp"
 #include "protocol/heightmap.hpp"
-#include "protocol/protocol.hpp"
 #include <algorithm>
 #include <array>
 #include <cstdint>
@@ -23,7 +22,6 @@
 #include <iostream>
 #include <memory>
 #include <string>
-#include <unordered_set>
 #include <random>
 #include <cstring>
 #include <cmath>
@@ -90,7 +88,18 @@ bool Game::on_init() {
     game_state_ = GameState::Connecting;
     connecting_timer_ = 0.0f;
 
-    menu_system_ = std::make_unique<MenuSystem>(input(), [this]() { quit(); });
+    menu_system_ = std::make_unique<MenuSystem>(input(), [this]() { quit(); }, max_vsync_mode());
+    {
+        auto modes = available_resolutions();
+        std::vector<MenuSystem::ResolutionOption> res_opts;
+        for (const auto& m : modes) {
+            res_opts.push_back({m.w, m.h});
+        }
+        menu_system_->set_available_resolutions(res_opts);
+    }
+
+    // Pre-allocate network processing buffers to avoid per-frame allocations
+    to_remove_buffer_.reserve(100);
 
     if (!network_.connect(host_, port_, player_name_)) {
         std::cerr << "Failed to connect to server" << std::endl;
@@ -535,7 +544,7 @@ void Game::handle_network_message(MessageType type, const std::vector<uint8_t>& 
             break;
         case MessageType::WorldConfig:
             if (payload.size() >= NetWorldConfig::serialized_size()) {
-                world_config_.deserialize(payload.data());
+                world_config_.deserialize(payload);
                 world_config_received_ = true;
                 network_smoother_.set_interpolation_time(1.0f / world_config_.tick_rate);
                 std::cout << "Received world config: " << world_config_.world_width << "x" << world_config_.world_height
@@ -547,9 +556,6 @@ void Game::handle_network_message(MessageType type, const std::vector<uint8_t>& 
             break;
         case MessageType::HeightmapChunk:
             on_heightmap_chunk(payload);
-            break;
-        case MessageType::WorldState:
-            on_world_state(payload);
             break;
         case MessageType::PlayerJoined:
             on_player_joined(payload);
@@ -572,13 +578,13 @@ void Game::handle_network_message(MessageType type, const std::vector<uint8_t>& 
 }
 
 void Game::on_connection_accepted(const std::vector<uint8_t>& payload) {
-    if (payload.size() >= 4) {
-        uint32_t id;
-        std::memcpy(&id, payload.data(), sizeof(id));
-        if (id == 0) {
+    if (payload.size() >= ConnectionAcceptedMsg::serialized_size()) {
+        ConnectionAcceptedMsg msg;
+        msg.deserialize(payload);
+        if (msg.player_id == 0) {
             std::cout << "Connection accepted, waiting for class list..." << std::endl;
         } else {
-            local_player_id_ = id;
+            local_player_id_ = msg.player_id;
             std::cout << "Spawned with player ID: " << local_player_id_ << std::endl;
             if (game_state_ == GameState::Spawning) {
                 game_state_ = GameState::Playing;
@@ -590,17 +596,18 @@ void Game::on_connection_accepted(const std::vector<uint8_t>& payload) {
 void Game::on_class_list(const std::vector<uint8_t>& payload) {
     if (payload.empty()) return;
 
-    uint8_t count = payload[0];
-    available_classes_.clear();
+    BufferReader r(payload);
+    uint16_t count = r.get_array_size();
+
+    // Ensure buffer has enough capacity (only reallocates if needed)
+    if (available_classes_.capacity() < count) {
+        available_classes_.reserve(count);
+    }
     available_classes_.resize(count);
 
-    size_t offset = 1;
-    for (uint8_t i = 0; i < count && offset + ClassInfo::serialized_size() <= payload.size(); ++i) {
-        available_classes_[i].deserialize(payload.data() + offset);
-        offset += ClassInfo::serialized_size();
-    }
+    r.read_array_into(std::span(available_classes_), count);
 
-    std::cout << "Received " << static_cast<int>(count) << " classes from server" << std::endl;
+    std::cout << "Received " << available_classes_.size() << " classes from server" << std::endl;
 
     if (game_state_ == GameState::Connecting) {
         game_state_ = GameState::ClassSelect;
@@ -610,7 +617,7 @@ void Game::on_class_list(const std::vector<uint8_t>& payload) {
 
 void Game::on_heightmap_chunk(const std::vector<uint8_t>& payload) {
     heightmap_ = std::make_unique<HeightmapChunk>();
-    if (heightmap_->deserialize(payload.data(), payload.size())) {
+    if (heightmap_->deserialize(payload)) {
         heightmap_received_ = true;
         std::cout << "Received heightmap: " << heightmap_->resolution << "x" << heightmap_->resolution
                   << " covering " << heightmap_->world_size << "x" << heightmap_->world_size << " world units" << std::endl;
@@ -631,65 +638,10 @@ void Game::on_heightmap_chunk(const std::vector<uint8_t>& payload) {
     }
 }
 
-void Game::on_world_state(const std::vector<uint8_t>& payload) {
-    if (payload.size() < 2) return;
-
-    uint16_t entity_count;
-    std::memcpy(&entity_count, payload.data(), sizeof(entity_count));
-
-    size_t offset = sizeof(entity_count);
-
-    std::unordered_set<uint32_t> received_ids;
-
-    for (uint16_t i = 0; i < entity_count && offset + EntityState::serialized_size() <= payload.size(); ++i) {
-        NetEntityState state;
-        state.deserialize(payload.data() + offset);
-        offset += EntityState::serialized_size();
-
-        received_ids.insert(state.id);
-
-        bool was_attacking = prev_attacking_[state.id];
-        if (state.is_attacking && !was_attacking) {
-            float dir_x = state.attack_dir_x;
-            float dir_y = state.attack_dir_y;
-
-            float len = std::sqrt(dir_x * dir_x + dir_y * dir_y);
-            if (len < 0.001f) {
-                dir_x = 0;
-                dir_y = 1;
-            } else {
-                dir_x /= len;
-                dir_y /= len;
-            }
-
-            spawn_attack_effect(state, dir_x, dir_y);
-
-            if (state.id == local_player_id_) {
-                camera().notify_attack();
-            }
-        }
-        prev_attacking_[state.id] = state.is_attacking;
-
-        entt::entity entity = find_or_create_entity(state.id);
-        update_entity_from_state(entity, state);
-    }
-
-    std::vector<uint32_t> to_remove;
-    for (const auto& [net_id, entity] : network_to_entity_) {
-        if (received_ids.find(net_id) == received_ids.end()) {
-            to_remove.push_back(net_id);
-        }
-    }
-    for (uint32_t id : to_remove) {
-        remove_entity(id);
-        prev_attacking_.erase(id);
-    }
-}
-
 void Game::on_player_joined(const std::vector<uint8_t>& payload) {
     if (payload.size() >= EntityState::serialized_size()) {
         NetEntityState state;
-        state.deserialize(payload.data());
+        state.deserialize(payload);
 
         entt::entity entity = find_or_create_entity(state.id);
         update_entity_from_state(entity, state);
@@ -699,20 +651,20 @@ void Game::on_player_joined(const std::vector<uint8_t>& payload) {
 }
 
 void Game::on_player_left(const std::vector<uint8_t>& payload) {
-    if (payload.size() >= 4) {
-        uint32_t player_id;
-        std::memcpy(&player_id, payload.data(), sizeof(player_id));
+    if (payload.size() >= PlayerLeftMsg::serialized_size()) {
+        PlayerLeftMsg msg;
+        msg.deserialize(payload);
 
-        auto it = network_to_entity_.find(player_id);
+        auto it = network_to_entity_.find(msg.player_id);
         if (it != network_to_entity_.end()) {
             if (registry_.valid(it->second)) {
                 auto* name = registry_.try_get<ecs::Name>(it->second);
                 if (name) {
-                    std::cout << "Player left: " << name->value << " (ID: " << player_id << ")" << std::endl;
+                    std::cout << "Player left: " << name->value << " (ID: " << msg.player_id << ")" << std::endl;
                 }
             }
-            remove_entity(player_id);
-            prev_attacking_.erase(player_id);
+            remove_entity(msg.player_id);
+            prev_attacking_.erase(msg.player_id);
         }
     }
 }
@@ -941,7 +893,7 @@ void Game::apply_graphics_settings() {
     set_graphics_settings(gfx);
     set_anisotropic_filter(gfx.anisotropic_filter);
     set_vsync_mode(gfx.vsync_mode);
-    set_fullscreen(gfx.window_mode == 1);
+    set_window_mode(gfx.window_mode, gfx.resolution_index);
 }
 
 void Game::apply_controls_settings() {
@@ -1122,7 +1074,7 @@ void Game::build_playing_ui(UIScene& ui) {
 void Game::on_entity_enter(const std::vector<uint8_t>& payload) {
     // Deserialize full entity state
     NetEntityState state;
-    state.deserialize(payload.data());
+    state.deserialize(payload);
 
     // Create or find entity
     entt::entity entity = find_or_create_entity(state.id);
@@ -1137,7 +1089,7 @@ void Game::on_entity_update(const std::vector<uint8_t>& payload) {
 
     // Deserialize delta
     mmo::protocol::EntityDeltaUpdate delta;
-    delta.deserialize(payload.data(), payload.size());
+    delta.deserialize(payload);
 
     // Find entity
     auto it = network_to_entity_.find(delta.id);
@@ -1153,12 +1105,12 @@ void Game::on_entity_update(const std::vector<uint8_t>& payload) {
 }
 
 void Game::on_entity_exit(const std::vector<uint8_t>& payload) {
-    if (payload.size() >= 4) {
-        uint32_t entity_id = 0;
-        std::memcpy(&entity_id, payload.data(), sizeof(entity_id));
+    if (payload.size() >= EntityExitMsg::serialized_size()) {
+        EntityExitMsg msg;
+        msg.deserialize(payload);
 
-        remove_entity(entity_id);
-        prev_attacking_.erase(entity_id);
+        remove_entity(msg.entity_id);
+        prev_attacking_.erase(msg.entity_id);
     }
 }
 

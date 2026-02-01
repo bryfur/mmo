@@ -15,8 +15,8 @@ namespace mmo::client {
 using namespace mmo::engine;
 using namespace mmo::engine::scene;
 
-MenuSystem::MenuSystem(InputHandler& input, std::function<void()> on_quit)
-    : input_(input), on_quit_(std::move(on_quit)) {
+MenuSystem::MenuSystem(InputHandler& input, std::function<void()> on_quit, int max_vsync_mode)
+    : input_(input), on_quit_(std::move(on_quit)), max_vsync_mode_(max_vsync_mode) {
     init_menu_items();
 }
 
@@ -203,17 +203,32 @@ void MenuSystem::init_graphics_menu() {
     window_mode.type = MenuItemType::Slider;
     window_mode.slider_value = &graphics_settings_.window_mode;
     window_mode.slider_min = 0;
-    window_mode.slider_max = 1;
-    window_mode.slider_labels = {"Windowed", "Fullscreen"};
+    window_mode.slider_max = 2;
+    window_mode.slider_labels = {"Windowed", "Borderless", "Exclusive"};
     menu_items_.push_back(window_mode);
+
+    if (!available_resolutions_.empty()) {
+        MenuItem resolution;
+        resolution.label = "Resolution";
+        resolution.type = MenuItemType::Slider;
+        resolution.slider_value = &graphics_settings_.resolution_index;
+        resolution.slider_min = 0;
+        resolution.slider_max = static_cast<int>(available_resolutions_.size()) - 1;
+        for (const auto& res : available_resolutions_) {
+            char buf[32];
+            snprintf(buf, sizeof(buf), "%dx%d", res.w, res.h);
+            resolution.slider_labels.emplace_back(buf);
+        }
+        menu_items_.push_back(resolution);
+    }
 
     MenuItem vsync;
     vsync.label = "VSync";
     vsync.type = MenuItemType::Slider;
     vsync.slider_value = &graphics_settings_.vsync_mode;
     vsync.slider_min = 0;
-    vsync.slider_max = 2;
-    vsync.slider_labels = {"Off", "Double Buffer", "Triple Buffer"};
+    vsync.slider_max = max_vsync_mode_;
+    vsync.slider_labels = {"Off", "VSync", "Mailbox"};
     menu_items_.push_back(vsync);
 
     MenuItem fps_counter;

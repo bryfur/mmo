@@ -48,10 +48,9 @@ bool NetworkClient::connect(const std::string& host, uint16_t port, const std::s
         read_header();
 
         // Send connect message with player name only (no class - server sends class list)
-        Packet connect_packet(MessageType::Connect);
-        connect_packet.write_string(player_name, 32);
-
-        auto data = connect_packet.build();
+        ConnectMsg msg;
+        std::strncpy(msg.name, player_name.c_str(), sizeof(msg.name) - 1);
+        auto data = build_packet(MessageType::Connect, msg);
         {
             std::lock_guard<std::mutex> lock(write_mutex_);
             write_queue_.push(data);
@@ -73,10 +72,9 @@ bool NetworkClient::connect(const std::string& host, uint16_t port, const std::s
 void NetworkClient::send_class_select(uint8_t class_index) {
     if (!connected_) return;
 
-    Packet packet(MessageType::ClassSelect);
-    packet.write_uint8(class_index);
-
-    auto data = packet.build();
+    ClassSelectMsg msg;
+    msg.class_index = class_index;
+    auto data = build_packet(MessageType::ClassSelect, msg);
     {
         std::lock_guard<std::mutex> lock(write_mutex_);
         write_queue_.push(data);
@@ -93,8 +91,7 @@ void NetworkClient::disconnect() {
     connected_ = false;
     
     // Send disconnect message
-    Packet disconnect_packet(MessageType::Disconnect);
-    auto data = disconnect_packet.build();
+    auto data = build_packet(MessageType::Disconnect, {});
     
     asio::error_code ec;
     asio::write(socket_, asio::buffer(data), ec);
@@ -113,15 +110,7 @@ void NetworkClient::disconnect() {
 void NetworkClient::send_input(const PlayerInput& input) {
     if (!connected_) return;
     
-    Packet input_packet(MessageType::PlayerInput);
-    // Write full input including attack direction
-    std::vector<uint8_t> input_data;
-    input.serialize(input_data);
-    for (uint8_t b : input_data) {
-        input_packet.write_uint8(b);
-    }
-    
-    auto data = input_packet.build();
+    auto data = build_packet(MessageType::PlayerInput, input);
     {
         std::lock_guard<std::mutex> lock(write_mutex_);
         write_queue_.push(data);
@@ -165,7 +154,7 @@ void NetworkClient::read_header() {
         asio::buffer(header_buffer_),
         [this](asio::error_code ec, std::size_t /*length*/) {
             if (!ec) {
-                current_header_.deserialize(header_buffer_.data());
+                current_header_.deserialize(header_buffer_);
                 
                 if (current_header_.payload_size > 0) {
                     payload_buffer_.resize(current_header_.payload_size);
@@ -186,7 +175,7 @@ void NetworkClient::read_payload() {
         asio::buffer(payload_buffer_),
         [this](asio::error_code ec, std::size_t length) {
             if (!ec) {
-                bytes_recv_total_ += length + mmo::protocol::PacketHeader::size();
+                bytes_recv_total_ += length + mmo::protocol::PacketHeader::serialized_size();
                 packets_recv_total_++;
                 handle_message();
                 read_header();
@@ -199,8 +188,11 @@ void NetworkClient::read_payload() {
 
 void NetworkClient::handle_message() {
     // Handle connection accepted immediately to get player ID
-    if (current_header_.type == MessageType::ConnectionAccepted && payload_buffer_.size() >= 4) {
-        std::memcpy(&local_player_id_, payload_buffer_.data(), sizeof(local_player_id_));
+    if (current_header_.type == MessageType::ConnectionAccepted &&
+        payload_buffer_.size() >= ConnectionAcceptedMsg::serialized_size()) {
+        ConnectionAcceptedMsg msg;
+        msg.deserialize(payload_buffer_);
+        local_player_id_ = msg.player_id;
         std::cout << "Assigned player ID: " << local_player_id_ << std::endl;
     }
     

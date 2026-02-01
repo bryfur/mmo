@@ -26,7 +26,10 @@ namespace mmo::server {
 
 using namespace mmo::protocol;
 
-World::World(const GameConfig& config) : config_(&config), rng_(std::random_device{}()) {
+World::World(const GameConfig& config)
+    : config_(&config)
+    , spatial_grid_(config.network().spatial_grid_cell_size)
+    , rng_(std::random_device{}()) {
     // Generate heightmap first (needed for terrain-aware spawning)
     generate_heightmap();
     
@@ -300,7 +303,8 @@ void World::spawn_npcs() {
 
         auto entity = registry_.create();
 
-        registry_.emplace<ecs::NetworkId>(entity, next_network_id());
+        uint32_t net_id = next_network_id();
+        registry_.emplace<ecs::NetworkId>(entity, net_id);
 
         ecs::Transform transform;
         transform.x = x;
@@ -340,7 +344,10 @@ void World::spawn_npcs() {
         rb.mass = 80.0f;
         rb.linear_damping = 0.9f;
         registry_.emplace<ecs::RigidBody>(entity, rb);
-        
+
+        // Add to spatial grid
+        spatial_grid_.update_entity(net_id, x, z, EntityType::NPC);
+
         spawned++;
     }
 }
@@ -407,15 +414,21 @@ uint32_t World::add_player(const std::string& name, PlayerClass player_class) {
     rb.mass = 70.0f;  // ~70kg for a character
     rb.linear_damping = 0.9f;  // High damping for responsive control
     registry_.emplace<ecs::RigidBody>(entity, rb);
-    
+
+    // Add to spatial grid
+    spatial_grid_.update_entity(net_id, spawn_x, spawn_z, EntityType::Player);
+
     return net_id;
 }
 
 void World::remove_player(uint32_t player_id) {
     std::lock_guard<std::mutex> lock(mutex_);
-    
+
     auto entity = find_entity_by_network_id(player_id);
     if (entity != entt::null) {
+        // Remove from spatial grid
+        spatial_grid_.remove_entity(player_id);
+
         // Remove physics body first
         physics_.destroy_body(registry_, entity);
         registry_.destroy(entity);
@@ -654,24 +667,89 @@ void World::spawn_environment() {
 
 void World::update(float dt) {
     std::lock_guard<std::mutex> lock(mutex_);
-    
+
     // Update game systems
     systems::update_movement(registry_, dt, *config_);
     systems::update_ai(registry_, dt, *config_);
     systems::update_combat(registry_, dt, *config_);
-    
+
     // Update physics (handles collision detection and response)
     physics_.update(registry_, dt);
+
+    // Update spatial grid with new positions
+    auto view = registry_.view<ecs::NetworkId, ecs::Transform, ecs::EntityInfo>();
+    for (auto entity : view) {
+        const auto& net_id = view.get<ecs::NetworkId>(entity);
+        const auto& transform = view.get<ecs::Transform>(entity);
+        const auto& info = view.get<ecs::EntityInfo>(entity);
+        spatial_grid_.update_entity(net_id.id, transform.x, transform.z, info.type);
+    }
+}
+
+NetEntityState World::get_entity_state(uint32_t network_id) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto entity = find_entity_by_network_id(network_id);
+    if (entity == entt::null) {
+        return NetEntityState{};  // Return empty state if not found
+    }
+
+    const auto& net_id = registry_.get<ecs::NetworkId>(entity);
+    const auto& transform = registry_.get<ecs::Transform>(entity);
+    const auto& velocity = registry_.get<ecs::Velocity>(entity);
+    const auto& health = registry_.get<ecs::Health>(entity);
+    const auto& combat = registry_.get<ecs::Combat>(entity);
+    const auto& info = registry_.get<ecs::EntityInfo>(entity);
+    const auto& name = registry_.get<ecs::Name>(entity);
+
+    NetEntityState state;
+    state.id = net_id.id;
+    state.type = info.type;
+    state.player_class = info.player_class;
+    state.npc_type = info.npc_type;
+    state.building_type = info.building_type;
+    state.environment_type = info.environment_type;
+    state.x = transform.x;
+    state.y = transform.y;
+    state.z = transform.z;
+    state.rotation = transform.rotation;
+    state.vx = velocity.x;
+    state.vy = velocity.z;
+    state.health = health.current;
+    state.max_health = health.max;
+    state.color = info.color;
+    state.is_attacking = combat.is_attacking;
+    state.attack_cooldown = combat.current_cooldown;
+
+    // Include attack direction if available
+    if (registry_.all_of<ecs::AttackDirection>(entity)) {
+        const auto& attack_dir = registry_.get<ecs::AttackDirection>(entity);
+        state.attack_dir_x = attack_dir.x;
+        state.attack_dir_y = attack_dir.y;
+    }
+
+    // Include per-instance scale if available
+    if (registry_.all_of<ecs::Scale>(entity)) {
+        state.scale = registry_.get<ecs::Scale>(entity).value;
+    }
+
+    std::strncpy(state.name, name.value.c_str(), 31);
+    state.name[31] = '\0';
+
+    // Populate rendering data
+    populate_render_data(state, info, combat);
+
+    return state;
 }
 
 std::vector<NetEntityState> World::get_all_entities() const {
     std::lock_guard<std::mutex> lock(mutex_);
-    
+
     std::vector<NetEntityState> result;
-    
-    auto view = registry_.view<ecs::NetworkId, ecs::Transform, ecs::Velocity, 
+
+    auto view = registry_.view<ecs::NetworkId, ecs::Transform, ecs::Velocity,
                                ecs::Health, ecs::Combat, ecs::EntityInfo, ecs::Name>();
-    
+
     for (auto entity : view) {
         const auto& net_id = view.get<ecs::NetworkId>(entity);
         const auto& transform = view.get<ecs::Transform>(entity);
@@ -743,6 +821,12 @@ size_t World::npc_count() const {
     std::lock_guard<std::mutex> lock(mutex_);
     return registry_.view<ecs::NPCTag>().size();
 }
+
+std::vector<uint32_t> World::query_entities_near(float x, float y, float radius) const {
+    // Query spatial grid for nearby entities
+    return spatial_grid_.query_radius(x, y, radius);
+}
+
 
 uint32_t World::next_network_id() {
     return next_id_++;

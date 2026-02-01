@@ -16,6 +16,7 @@
 #include "engine/model_loader.hpp"
 #include "engine/graphics_settings.hpp"
 #include "engine/scene/camera_state.hpp"
+#include "engine/render_stats.hpp"
 #include "engine/heightmap.hpp"
 #include <glm/glm.hpp>
 #include <memory>
@@ -65,6 +66,11 @@ public:
     void set_graphics_settings(const GraphicsSettings& settings);
     void set_vsync_mode(int mode);
     void set_screen_size(int width, int height);
+
+    // ========== Debug Stats ==========
+
+    void set_collect_stats(bool enabled) { collect_stats_ = enabled; }
+    const engine::RenderStats& render_stats() const { return render_stats_; }
 
     // ========== Accessors ==========
 
@@ -125,6 +131,10 @@ private:
     float skybox_time_ = 0.0f;
     GraphicsSettings* graphics_ = nullptr;
     GraphicsSettings default_graphics_;
+
+    // ========== Debug Stats ==========
+    bool collect_stats_ = false;
+    engine::RenderStats render_stats_;
 };
 
 } // namespace mmo::engine::scene

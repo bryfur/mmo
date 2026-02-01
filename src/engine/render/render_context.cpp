@@ -90,13 +90,28 @@ SDL_GPUTexture* RenderContext::acquire_swapchain_texture(SDL_GPUCommandBuffer* c
 
 void RenderContext::set_vsync_mode(int mode) {
     if (vsync_mode_ == mode) return;
-
-    // SDL3 GPU vsync is controlled via swapchain present mode
-    // This requires recreating the swapchain with different parameters
-    // For now, we just store the preference - actual implementation would need
-    // SDL_SetGPUSwapchainParameters when that API is available
     vsync_mode_ = mode;
-    SDL_Log("RenderContext::set_vsync_mode: VSync mode set to %d (requires swapchain recreation)", mode);
+
+    // Map our mode to SDL present modes:
+    // 0 = off (immediate), 1 = vsync, 2 = triple buffer (mailbox)
+    SDL_GPUPresentMode present_mode = SDL_GPU_PRESENTMODE_IMMEDIATE;
+    switch (mode) {
+        case 1:  present_mode = SDL_GPU_PRESENTMODE_VSYNC; break;
+        case 2:  present_mode = SDL_GPU_PRESENTMODE_MAILBOX; break;
+        default: present_mode = SDL_GPU_PRESENTMODE_IMMEDIATE; break;
+    }
+    device_.set_swapchain_parameters(present_mode);
+}
+
+void RenderContext::set_fullscreen(bool exclusive) {
+    if (!window_) return;
+
+    if (exclusive) {
+        SDL_SetWindowFullscreen(window_, true);
+    } else {
+        SDL_SetWindowFullscreen(window_, false);
+    }
+    update_viewport();
 }
 
 // =========================================================================

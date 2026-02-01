@@ -6,6 +6,7 @@
 #include "game_types.hpp"
 #include "game_config.hpp"
 #include "systems/physics_system.hpp"
+#include "spatial_grid.hpp"
 #include <entt/entt.hpp>
 #include <vector>
 #include <mutex>
@@ -25,8 +26,12 @@ public:
     void update(float dt);
 
     std::vector<mmo::protocol::NetEntityState> get_all_entities() const;
+    mmo::protocol::NetEntityState get_entity_state(uint32_t network_id) const;
     entt::entity find_entity_by_network_id(uint32_t id) const;
-    
+
+    // Spatial queries
+    std::vector<uint32_t> query_entities_near(float x, float y, float radius) const;
+
     size_t player_count() const;
     size_t npc_count() const;
     
@@ -55,6 +60,7 @@ private:
     mutable std::mutex mutex_;
     entt::registry registry_;
     systems::PhysicsSystem physics_;
+    SpatialGrid spatial_grid_;
     mmo::protocol::HeightmapChunk heightmap_;
     uint32_t next_id_ = 1;
     std::mt19937 rng_;

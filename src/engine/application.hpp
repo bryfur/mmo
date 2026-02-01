@@ -6,19 +6,21 @@
 #include <memory>
 #include <string>
 
-namespace mmo::engine::render { class RenderContext; }
-namespace mmo::engine::scene {
+#include "engine/render_stats.hpp"
+
+namespace mmo::engine {
+
+namespace render { class RenderContext; }
+namespace scene {
+    class SceneRenderer;
     class RenderScene;
     class UIScene;
     struct CameraState;
-    class SceneRenderer;
 }
-namespace mmo::engine::systems {
+namespace systems {
     class CameraController;
     class CameraSystem;
 }
-
-namespace mmo::engine {
 
 class ModelManager;
 struct GraphicsSettings;
@@ -83,12 +85,17 @@ protected:
     void set_graphics_settings(const GraphicsSettings& settings);
     void set_anisotropic_filter(int level);
     void set_vsync_mode(int mode);
+    void set_fullscreen(bool exclusive);
 
     ModelManager& models();
     float get_terrain_height(float x, float z);
 
     int screen_width() const;
     int screen_height() const;
+
+    void set_collect_render_stats(bool enabled);
+    const RenderStats& render_stats() const;
+    std::string gpu_driver_name() const;
 
     // ========== Camera facade ==========
 

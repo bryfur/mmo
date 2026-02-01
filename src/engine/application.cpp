@@ -108,6 +108,10 @@ void Application::set_vsync_mode(int mode) {
     scene_renderer_->set_vsync_mode(mode);
 }
 
+void Application::set_fullscreen(bool exclusive) {
+    context_->set_fullscreen(exclusive);
+}
+
 ModelManager& Application::models() {
     return scene_renderer_->models();
 }
@@ -122,6 +126,18 @@ int Application::screen_width() const {
 
 int Application::screen_height() const {
     return context_->height();
+}
+
+void Application::set_collect_render_stats(bool enabled) {
+    scene_renderer_->set_collect_stats(enabled);
+}
+
+const RenderStats& Application::render_stats() const {
+    return scene_renderer_->render_stats();
+}
+
+std::string Application::gpu_driver_name() const {
+    return context_->device().driver_name();
 }
 
 // ========== Camera facade ==========

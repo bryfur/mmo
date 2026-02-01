@@ -38,6 +38,11 @@ enum class MessageType : uint8_t {
     WorldConfig = 29,         // Server sends world dimensions + tick rate
     ClassList = 30,           // Server sends available classes after connection
     ClassSelect = 31,         // Client sends chosen class index
+
+    // Delta compression messages (replaces WorldState for incremental updates)
+    EntityEnter = 40,         // Full entity state when entering view
+    EntityUpdate = 41,        // Changed fields only
+    EntityExit = 42,          // Entity ID leaving view
 };
 
 // World configuration sent from server to client on connect
@@ -191,6 +196,129 @@ struct NetEntityState {
 
 using EntityState = NetEntityState;
 using PlayerState = NetEntityState;
+
+// Compact delta update for frequently-changing fields
+struct EntityDeltaUpdate {
+    uint32_t id = 0;
+    uint8_t flags = 0;  // Bit flags for which fields are present
+
+    // Optional fields (only included if flag is set)
+    float x = 0.0f, y = 0.0f, z = 0.0f;           // Position (12 bytes if moving)
+    float vx = 0.0f, vy = 0.0f;                   // Velocity (8 bytes if moving)
+    float health = 0.0f;                          // Health (4 bytes if damaged)
+    uint8_t is_attacking = 0;                     // Attack state (1 byte if changed)
+    float attack_dir_x = 0.0f, attack_dir_y = 0.0f;  // Attack direction (8 bytes if attacking)
+    float rotation = 0.0f;                        // Rotation (4 bytes if rotated)
+
+    static constexpr uint8_t FLAG_POSITION = 0x01;
+    static constexpr uint8_t FLAG_VELOCITY = 0x02;
+    static constexpr uint8_t FLAG_HEALTH = 0x04;
+    static constexpr uint8_t FLAG_ATTACKING = 0x08;
+    static constexpr uint8_t FLAG_ATTACK_DIR = 0x10;
+    static constexpr uint8_t FLAG_ROTATION = 0x20;
+
+    // Variable size based on flags
+    static size_t serialized_size(uint8_t flags) {
+        size_t size = sizeof(uint32_t) + sizeof(uint8_t);  // id + flags
+        if (flags & FLAG_POSITION) size += sizeof(float) * 3;
+        if (flags & FLAG_VELOCITY) size += sizeof(float) * 2;
+        if (flags & FLAG_HEALTH) size += sizeof(float);
+        if (flags & FLAG_ATTACKING) size += sizeof(uint8_t);
+        if (flags & FLAG_ATTACK_DIR) size += sizeof(float) * 2;
+        if (flags & FLAG_ROTATION) size += sizeof(float);
+        return size;
+    }
+
+    void serialize(std::vector<uint8_t>& buffer) const {
+        buffer.reserve(buffer.size() + serialized_size(flags));
+
+        // Write ID and flags
+        const uint8_t* id_bytes = reinterpret_cast<const uint8_t*>(&id);
+        buffer.insert(buffer.end(), id_bytes, id_bytes + sizeof(id));
+        buffer.push_back(flags);
+
+        // Write optional fields based on flags
+        if (flags & FLAG_POSITION) {
+            const uint8_t* x_bytes = reinterpret_cast<const uint8_t*>(&x);
+            buffer.insert(buffer.end(), x_bytes, x_bytes + sizeof(x));
+            const uint8_t* y_bytes = reinterpret_cast<const uint8_t*>(&y);
+            buffer.insert(buffer.end(), y_bytes, y_bytes + sizeof(y));
+            const uint8_t* z_bytes = reinterpret_cast<const uint8_t*>(&z);
+            buffer.insert(buffer.end(), z_bytes, z_bytes + sizeof(z));
+        }
+
+        if (flags & FLAG_VELOCITY) {
+            const uint8_t* vx_bytes = reinterpret_cast<const uint8_t*>(&vx);
+            buffer.insert(buffer.end(), vx_bytes, vx_bytes + sizeof(vx));
+            const uint8_t* vy_bytes = reinterpret_cast<const uint8_t*>(&vy);
+            buffer.insert(buffer.end(), vy_bytes, vy_bytes + sizeof(vy));
+        }
+
+        if (flags & FLAG_HEALTH) {
+            const uint8_t* health_bytes = reinterpret_cast<const uint8_t*>(&health);
+            buffer.insert(buffer.end(), health_bytes, health_bytes + sizeof(health));
+        }
+
+        if (flags & FLAG_ATTACKING) {
+            buffer.push_back(is_attacking);
+        }
+
+        if (flags & FLAG_ATTACK_DIR) {
+            const uint8_t* attack_dir_x_bytes = reinterpret_cast<const uint8_t*>(&attack_dir_x);
+            buffer.insert(buffer.end(), attack_dir_x_bytes, attack_dir_x_bytes + sizeof(attack_dir_x));
+            const uint8_t* attack_dir_y_bytes = reinterpret_cast<const uint8_t*>(&attack_dir_y);
+            buffer.insert(buffer.end(), attack_dir_y_bytes, attack_dir_y_bytes + sizeof(attack_dir_y));
+        }
+
+        if (flags & FLAG_ROTATION) {
+            const uint8_t* rotation_bytes = reinterpret_cast<const uint8_t*>(&rotation);
+            buffer.insert(buffer.end(), rotation_bytes, rotation_bytes + sizeof(rotation));
+        }
+    }
+
+    void deserialize(const uint8_t* data, size_t size) {
+        if (size < sizeof(uint32_t) + sizeof(uint8_t)) return;
+
+        size_t offset = 0;
+        std::memcpy(&id, data + offset, sizeof(id));
+        offset += sizeof(id);
+        flags = data[offset++];
+
+        if (flags & FLAG_POSITION) {
+            if (offset + sizeof(float) * 3 > size) return;
+            std::memcpy(&x, data + offset, sizeof(x)); offset += sizeof(x);
+            std::memcpy(&y, data + offset, sizeof(y)); offset += sizeof(y);
+            std::memcpy(&z, data + offset, sizeof(z)); offset += sizeof(z);
+        }
+
+        if (flags & FLAG_VELOCITY) {
+            if (offset + sizeof(float) * 2 > size) return;
+            std::memcpy(&vx, data + offset, sizeof(vx)); offset += sizeof(vx);
+            std::memcpy(&vy, data + offset, sizeof(vy)); offset += sizeof(vy);
+        }
+
+        if (flags & FLAG_HEALTH) {
+            if (offset + sizeof(float) > size) return;
+            std::memcpy(&health, data + offset, sizeof(health)); offset += sizeof(health);
+        }
+
+        if (flags & FLAG_ATTACKING) {
+            if (offset + sizeof(uint8_t) > size) return;
+            is_attacking = data[offset++];
+        }
+
+        if (flags & FLAG_ATTACK_DIR) {
+            if (offset + sizeof(float) * 2 > size) return;
+            std::memcpy(&attack_dir_x, data + offset, sizeof(attack_dir_x)); offset += sizeof(attack_dir_x);
+            std::memcpy(&attack_dir_y, data + offset, sizeof(attack_dir_y)); offset += sizeof(attack_dir_y);
+        }
+
+        if (flags & FLAG_ROTATION) {
+            if (offset + sizeof(float) > size) return;
+            std::memcpy(&rotation, data + offset, sizeof(rotation)); offset += sizeof(rotation);
+        }
+    }
+};
 
 struct PacketHeader {
     MessageType type;

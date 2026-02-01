@@ -2,6 +2,7 @@
 
 #include "game_types.hpp"
 #include "protocol/protocol.hpp"
+#include <algorithm>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -94,6 +95,38 @@ struct WorldConfig {
     float height = 8000.0f;
 };
 
+struct NetworkConfig {
+    float player_view_distance = 1500.0f;
+    float npc_view_distance = 1200.0f;
+    float town_npc_view_distance = 1000.0f;
+    float building_view_distance = 3000.0f;
+    float environment_view_distance = 2000.0f;
+    float spatial_grid_cell_size = 500.0f;
+
+    float max_view_distance() const {
+        return std::max({player_view_distance, npc_view_distance, town_npc_view_distance,
+                         building_view_distance, environment_view_distance});
+    }
+
+    // Helper to get view distance for an entity type
+    float get_view_distance_for_type(mmo::protocol::EntityType type) const {
+        switch(type) {
+            case mmo::protocol::EntityType::Building:
+                return building_view_distance;
+            case mmo::protocol::EntityType::Environment:
+                return environment_view_distance;
+            case mmo::protocol::EntityType::Player:
+                return player_view_distance;
+            case mmo::protocol::EntityType::NPC:
+                return npc_view_distance;
+            case mmo::protocol::EntityType::TownNPC:
+                return town_npc_view_distance;
+            default:
+                return player_view_distance;
+        }
+    }
+};
+
 class GameConfig {
 public:
     bool load(const std::string& data_dir);
@@ -103,6 +136,9 @@ public:
 
     // World
     const WorldConfig& world() const { return world_; }
+
+    // Network
+    const NetworkConfig& network() const { return network_; }
 
     // Classes
     const std::vector<ClassConfig>& classes() const { return classes_; }
@@ -132,6 +168,7 @@ public:
 private:
     bool load_server(const std::string& path);
     bool load_world(const std::string& path);
+    bool load_network(const std::string& path);
     bool load_classes(const std::string& path);
     bool load_monsters(const std::string& path);
     bool load_environment(const std::string& path);
@@ -141,6 +178,7 @@ private:
 
     ServerConfig server_;
     WorldConfig world_;
+    NetworkConfig network_;
     std::vector<ClassConfig> classes_;
     MonsterConfig monster_;
     std::vector<TownNPCConfig> town_npcs_;

@@ -198,6 +198,15 @@ void MenuSystem::init_graphics_menu() {
     shadow_casc.slider_labels = {"1", "2", "3", "4"};
     menu_items_.push_back(shadow_casc);
 
+    MenuItem window_mode;
+    window_mode.label = "Window Mode";
+    window_mode.type = MenuItemType::Slider;
+    window_mode.slider_value = &graphics_settings_.window_mode;
+    window_mode.slider_min = 0;
+    window_mode.slider_max = 1;
+    window_mode.slider_labels = {"Windowed", "Fullscreen"};
+    menu_items_.push_back(window_mode);
+
     MenuItem vsync;
     vsync.label = "VSync";
     vsync.type = MenuItemType::Slider;
@@ -212,6 +221,12 @@ void MenuSystem::init_graphics_menu() {
     fps_counter.type = MenuItemType::Toggle;
     fps_counter.toggle_value = &graphics_settings_.show_fps;
     menu_items_.push_back(fps_counter);
+
+    MenuItem debug_hud;
+    debug_hud.label = "Debug HUD";
+    debug_hud.type = MenuItemType::Toggle;
+    debug_hud.toggle_value = &graphics_settings_.show_debug_hud;
+    menu_items_.push_back(debug_hud);
 
     MenuItem back_item;
     back_item.label = "< Back";

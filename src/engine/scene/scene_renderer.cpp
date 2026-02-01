@@ -369,6 +369,7 @@ void SceneRenderer::update_animations(float dt) {
 
 void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_scene,
                                   const CameraState& camera, float dt) {
+    if (collect_stats_) render_stats_ = {};
     const GraphicsSettings& gfx = graphics_ ? *graphics_ : default_graphics_;
 
     update_animations(dt);
@@ -500,7 +501,12 @@ void SceneRenderer::render_3d_scene(const RenderScene& scene, const CameraState&
 
             float dx = world_pos.x - camera.position.x;
             float dz = world_pos.z - camera.position.z;
-            if (dx * dx + dz * dz > draw_dist_sq) return;
+            if (dx * dx + dz * dz > draw_dist_sq) {
+                if (collect_stats_) {
+                    render_stats_.entities_distance_culled++;
+                }
+                return;
+            }
 
             if (do_frustum_cull) {
                 Model* model = model_manager_->get_model(data.model_name);
@@ -519,10 +525,16 @@ void SceneRenderer::render_3d_scene(const RenderScene& scene, const CameraState&
                     float half_diag = glm::length(glm::vec3(
                         model->width(), model->height(), model->depth()
                     )) * 0.5f;
-                    if (!frustum.intersects_sphere(world_center, half_diag * max_scale)) return;
+                    if (!frustum.intersects_sphere(world_center, half_diag * max_scale)) {
+                        if (collect_stats_) {
+                            render_stats_.entities_frustum_culled++;
+                        }
+                        return;
+                    }
                 }
             }
 
+            if (collect_stats_) render_stats_.entities_rendered++;
             if constexpr (std::is_same_v<T, ModelCommand>) {
                 render_model_command(data, camera);
             } else if constexpr (std::is_same_v<T, SkinnedModelCommand>) {
@@ -620,6 +632,7 @@ void SceneRenderer::render_model_command(const ModelCommand& cmd, const CameraSt
         }
 
         mesh.bind_buffers(main_render_pass_);
+        if (collect_stats_) { render_stats_.draw_calls++; render_stats_.triangle_count += static_cast<uint32_t>(mesh.indices.size()) / 3; }
         SDL_DrawGPUIndexedPrimitives(main_render_pass_,
                                       static_cast<uint32_t>(mesh.indices.size()),
                                       1, 0, 0, 0);
@@ -685,6 +698,7 @@ void SceneRenderer::render_skinned_model_command(const SkinnedModelCommand& cmd,
         }
 
         mesh.bind_buffers(main_render_pass_);
+        if (collect_stats_) { render_stats_.draw_calls++; render_stats_.triangle_count += static_cast<uint32_t>(mesh.indices.size()) / 3; }
         SDL_DrawGPUIndexedPrimitives(main_render_pass_,
                                       static_cast<uint32_t>(mesh.indices.size()),
                                       1, 0, 0, 0);
@@ -795,6 +809,7 @@ void SceneRenderer::render_shadow_passes(const RenderScene& scene, const CameraS
                             if (!mesh.vertex_buffer || !mesh.index_buffer || mesh.indices.empty()) return;
 
                             mesh.bind_buffers(shadow_pass);
+                            if (collect_stats_) { render_stats_.draw_calls++; render_stats_.triangle_count += static_cast<uint32_t>(mesh.indices.size()) / 3; }
                             SDL_DrawGPUIndexedPrimitives(shadow_pass,
                                                           static_cast<uint32_t>(mesh.indices.size()),
                                                           1, 0, 0, 0);
@@ -829,6 +844,7 @@ void SceneRenderer::render_shadow_passes(const RenderScene& scene, const CameraS
                             if (!mesh.vertex_buffer || !mesh.index_buffer || mesh.indices.empty()) return;
 
                             mesh.bind_buffers(shadow_pass);
+                            if (collect_stats_) { render_stats_.draw_calls++; render_stats_.triangle_count += static_cast<uint32_t>(mesh.indices.size()) / 3; }
                             SDL_DrawGPUIndexedPrimitives(shadow_pass,
                                                           static_cast<uint32_t>(mesh.indices.size()),
                                                           1, 0, 0, 0);

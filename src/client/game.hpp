@@ -57,6 +57,12 @@ private:
     void on_player_joined(const std::vector<uint8_t>& payload);
     void on_player_left(const std::vector<uint8_t>& payload);
 
+    // Delta compression handlers
+    void on_entity_enter(const std::vector<uint8_t>& payload);
+    void on_entity_update(const std::vector<uint8_t>& payload);
+    void on_entity_exit(const std::vector<uint8_t>& payload);
+    void apply_delta_to_entity(entt::entity entity, const mmo::protocol::EntityDeltaUpdate& delta);
+
     entt::entity find_or_create_entity(uint32_t network_id);
     void update_entity_from_state(entt::entity entity, const mmo::protocol::NetEntityState& state);
     void remove_entity(uint32_t network_id);
@@ -110,6 +116,8 @@ private:
 
     std::unique_ptr<mmo::protocol::HeightmapChunk> heightmap_;
     bool heightmap_received_ = false;
+
+    float input_send_timer_ = 0.0f;
 
     // Camera state
     float player_x_ = 0.0f;

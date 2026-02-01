@@ -239,4 +239,13 @@ bool GPUDevice::supports_format(SDL_GPUTextureFormat format, SDL_GPUTextureType 
     return SDL_GPUTextureSupportsFormat(device_, format, type, usage);
 }
 
+void GPUDevice::set_swapchain_parameters(SDL_GPUPresentMode present_mode) {
+    if (!device_ || !window_) return;
+
+    SDL_SetGPUSwapchainParameters(device_, window_,
+                                   SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+                                   present_mode);
+    SDL_Log("GPUDevice::set_swapchain_parameters: present_mode=%d", (int)present_mode);
+}
+
 } // namespace mmo::engine::gpu

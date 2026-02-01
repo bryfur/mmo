@@ -99,6 +99,11 @@ public:
      * Note: In SDL3 GPU, this is controlled via swapchain present mode
      */
     void set_vsync_mode(int mode);
+
+    /**
+     * Set fullscreen mode: true=exclusive fullscreen, false=windowed
+     */
+    void set_fullscreen(bool exclusive);
     
     /**
      * Get clear color for render passes

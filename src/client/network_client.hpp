@@ -31,8 +31,21 @@ public:
     void poll_messages();
     
     uint32_t local_player_id() const { return local_player_id_; }
-    
+
+    // Debug stats
+    struct NetworkStats {
+        float bytes_sent_per_sec = 0.0f;
+        float bytes_recv_per_sec = 0.0f;
+        float packets_sent_per_sec = 0.0f;
+        float packets_recv_per_sec = 0.0f;
+        uint32_t message_queue_size = 0;
+    };
+
+    void set_collect_stats(bool enabled) { collect_stats_ = enabled; }
+    const NetworkStats& network_stats() const { return network_stats_; }
+
 private:
+    void update_stats();
     void io_thread_func();
     void read_header();
     void read_payload();
@@ -66,6 +79,21 @@ private:
     std::mutex message_mutex_;
     
     MessageCallback message_callback_;
+
+    // Debug stats accumulators (written from IO thread, read from main thread)
+    std::atomic<uint64_t> bytes_sent_total_{0};
+    std::atomic<uint64_t> bytes_recv_total_{0};
+    std::atomic<uint32_t> packets_sent_total_{0};
+    std::atomic<uint32_t> packets_recv_total_{0};
+
+    // Snapshot for per-second rate calculation
+    uint64_t prev_bytes_sent_{0};
+    uint64_t prev_bytes_recv_{0};
+    uint32_t prev_packets_sent_{0};
+    uint32_t prev_packets_recv_{0};
+    uint64_t prev_stats_time_ms_{0};
+    bool collect_stats_ = false;
+    NetworkStats network_stats_;
 };
 
 } // namespace mmo::client

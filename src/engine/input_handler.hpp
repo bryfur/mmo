@@ -47,6 +47,7 @@ public:
     bool move_right() const { return move_right_; }
     bool is_attacking() const { return attacking_; }
     bool is_sprinting() const { return sprinting_; }
+    void consume_attack() { attack_latched_ = false; }
     
     // Set actual camera forward direction (accounting for shoulder offset)
     void set_camera_forward(float x, float z) { camera_forward_x_ = x; camera_forward_z_ = z; }
@@ -113,6 +114,7 @@ private:
     bool move_left_ = false;
     bool move_right_ = false;
     bool attacking_ = false;
+    bool attack_latched_ = false;  // Latched on keydown, cleared after network send
     bool sprinting_ = false;
     
     // Camera orbit controls

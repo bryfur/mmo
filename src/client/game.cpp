@@ -134,6 +134,10 @@ void Game::on_update(float dt) {
 }
 
 void Game::on_render() {
+    bool debug_hud = menu_system_ && menu_system_->graphics_settings().show_debug_hud;
+    set_collect_render_stats(debug_hud);
+    network_.set_collect_stats(debug_hud);
+
     switch (game_state_) {
         case GameState::Connecting:
             render_connecting();
@@ -261,9 +265,10 @@ void Game::update_playing(float dt) {
 
     input().set_player_screen_pos(screen_width() / 2.0f, screen_height() / 2.0f);
 
-    static float input_send_timer = 0.0f;
-    input_send_timer += dt;
-    if (input_send_timer >= 0.016f) {
+    float send_interval = world_config_.tick_rate > 0 ? (1.0f / world_config_.tick_rate) : 0.05f;
+    input_send_timer_ += dt;
+    if (input_send_timer_ >= send_interval) {
+        input_send_timer_ -= send_interval;
         auto& eng_input = input().get_input();
         PlayerInput net_input;
         net_input.move_up = eng_input.move_up;
@@ -276,7 +281,7 @@ void Game::update_playing(float dt) {
         net_input.attack_dir_x = eng_input.attack_dir_x;
         net_input.attack_dir_y = eng_input.attack_dir_y;
         network_.send_input(net_input);
-        input_send_timer = 0.0f;
+        input().consume_attack();
     }
     input().reset_changed();
 
@@ -285,6 +290,18 @@ void Game::update_playing(float dt) {
     network_smoother_.update(registry_, dt);
 
     update_attack_effects(dt);
+
+    // Tick down attack cooldowns locally for visual effects
+    {
+        auto cooldown_view = registry_.view<ecs::Combat>();
+        for (auto entity : cooldown_view) {
+            auto& combat = cooldown_view.get<ecs::Combat>(entity);
+            if (combat.current_cooldown > 0.0f) {
+                combat.current_cooldown -= dt;
+                if (combat.current_cooldown < 0.0f) combat.current_cooldown = 0.0f;
+            }
+        }
+    }
 
     // Set animations on entities before render
     auto view = registry_.view<ecs::NetworkId, ecs::Transform, ecs::Velocity, ecs::EntityInfo, ecs::Combat>();
@@ -539,6 +556,15 @@ void Game::handle_network_message(MessageType type, const std::vector<uint8_t>& 
             break;
         case MessageType::PlayerLeft:
             on_player_left(payload);
+            break;
+        case MessageType::EntityEnter:
+            on_entity_enter(payload);
+            break;
+        case MessageType::EntityUpdate:
+            on_entity_update(payload);
+            break;
+        case MessageType::EntityExit:
+            on_entity_exit(payload);
             break;
         default:
             break;
@@ -838,7 +864,7 @@ bool Game::load_models(const std::string& assets_path) {
     if (!mdl.load_model("archer", models_path + "archer_rigged.glb")) {
         success &= mdl.load_model("archer", models_path + "archer.glb");
     }
-    success &= mdl.load_model("npc", models_path + "npc_enemy.glb");
+    success &= mdl.load_model("npc_enemy", models_path + "npc_enemy.glb");
 
     mdl.load_model("ground_grass", models_path + "ground_grass.glb");
     mdl.load_model("ground_stone", models_path + "ground_stone.glb");
@@ -915,6 +941,7 @@ void Game::apply_graphics_settings() {
     set_graphics_settings(gfx);
     set_anisotropic_filter(gfx.anisotropic_filter);
     set_vsync_mode(gfx.vsync_mode);
+    set_fullscreen(gfx.window_mode == 1);
 }
 
 void Game::apply_controls_settings() {
@@ -1049,6 +1076,205 @@ void Game::build_playing_ui(UIScene& ui) {
         char fps_text[32];
         snprintf(fps_text, sizeof(fps_text), "FPS: %.0f", fps());
         ui.add_text(fps_text, 10.0f, 10.0f, 1.0f, ui_colors::FPS_TEXT);
+    }
+
+    if (menu_system_->graphics_settings().show_debug_hud) {
+        auto& rs = render_stats();
+        auto& ns = network_.network_stats();
+        float x = 10.0f;
+        float y = menu_system_->graphics_settings().show_fps ? 30.0f : 10.0f;
+        float line_h = 18.0f;
+        uint32_t color = ui_colors::FPS_TEXT;
+
+        ui.add_filled_rect(x - 5, y - 5, 420, 5 * line_h + 10, 0x80000000);
+
+        char buf[128];
+        snprintf(buf, sizeof(buf), "GPU: %s %dx%d | Draws: %u | Tris: %uK",
+                 gpu_driver_name().c_str(), screen_width(), screen_height(),
+                 rs.draw_calls, rs.triangle_count / 1000);
+        ui.add_text(buf, x, y, 0.8f, color);
+        y += line_h;
+
+        snprintf(buf, sizeof(buf), "Entities: %u rendered, %u dist culled, %u frustum culled",
+                 rs.entities_rendered, rs.entities_distance_culled, rs.entities_frustum_culled);
+        ui.add_text(buf, x, y, 0.8f, color);
+        y += line_h;
+
+        snprintf(buf, sizeof(buf), "Frame: %.1f ms (%.0f FPS)", 1000.0f / fps(), fps());
+        ui.add_text(buf, x, y, 0.8f, color);
+        y += line_h;
+
+        snprintf(buf, sizeof(buf), "Net: %.1f KB/s up, %.1f KB/s down",
+                 ns.bytes_sent_per_sec / 1024.0f, ns.bytes_recv_per_sec / 1024.0f);
+        ui.add_text(buf, x, y, 0.8f, color);
+        y += line_h;
+
+        snprintf(buf, sizeof(buf), "Net: %.0f pkt/s up, %.0f pkt/s down, queue: %u",
+                 ns.packets_sent_per_sec, ns.packets_recv_per_sec, ns.message_queue_size);
+        ui.add_text(buf, x, y, 0.8f, color);
+    }
+}
+
+// ============================================================================
+// Delta Compression Handlers
+// ============================================================================
+
+void Game::on_entity_enter(const std::vector<uint8_t>& payload) {
+    // Deserialize full entity state
+    NetEntityState state;
+    state.deserialize(payload.data());
+
+    // Create or find entity
+    entt::entity entity = find_or_create_entity(state.id);
+    update_entity_from_state(entity, state);
+
+    // Track attack state for spawning attack effects
+    prev_attacking_[state.id] = state.is_attacking;
+}
+
+void Game::on_entity_update(const std::vector<uint8_t>& payload) {
+    if (payload.size() < sizeof(uint32_t) + sizeof(uint8_t)) return;
+
+    // Deserialize delta
+    mmo::protocol::EntityDeltaUpdate delta;
+    delta.deserialize(payload.data(), payload.size());
+
+    // Find entity
+    auto it = network_to_entity_.find(delta.id);
+    if (it == network_to_entity_.end()) {
+        return;  // Unknown entity (shouldn't happen)
+    }
+
+    entt::entity entity = it->second;
+    if (!registry_.valid(entity)) return;
+
+    // Apply delta to entity components
+    apply_delta_to_entity(entity, delta);
+}
+
+void Game::on_entity_exit(const std::vector<uint8_t>& payload) {
+    if (payload.size() >= 4) {
+        uint32_t entity_id = 0;
+        std::memcpy(&entity_id, payload.data(), sizeof(entity_id));
+
+        remove_entity(entity_id);
+        prev_attacking_.erase(entity_id);
+    }
+}
+
+void Game::apply_delta_to_entity(entt::entity entity, const mmo::protocol::EntityDeltaUpdate& delta) {
+    // Update transform (position)
+    if (delta.flags & mmo::protocol::EntityDeltaUpdate::FLAG_POSITION) {
+        if (registry_.all_of<ecs::Transform, ecs::Interpolation>(entity)) {
+            auto& transform = registry_.get<ecs::Transform>(entity);
+            auto& interp = registry_.get<ecs::Interpolation>(entity);
+
+            interp.prev_x = transform.x;
+            interp.prev_y = transform.y;
+            interp.prev_z = transform.z;
+            interp.target_x = delta.x;
+            interp.target_y = delta.y;
+            interp.target_z = delta.z;
+            interp.alpha = 0.0f;
+        }
+    }
+
+    // Update velocity
+    if (delta.flags & mmo::protocol::EntityDeltaUpdate::FLAG_VELOCITY) {
+        if (registry_.all_of<ecs::Velocity>(entity)) {
+            auto& velocity = registry_.get<ecs::Velocity>(entity);
+            velocity.x = delta.vx;
+            velocity.z = delta.vy;
+        }
+    }
+
+    // Update health
+    if (delta.flags & mmo::protocol::EntityDeltaUpdate::FLAG_HEALTH) {
+        if (registry_.all_of<ecs::Health>(entity)) {
+            auto& health = registry_.get<ecs::Health>(entity);
+            health.current = delta.health;
+        }
+    }
+
+    // Update attacking state
+    if (delta.flags & mmo::protocol::EntityDeltaUpdate::FLAG_ATTACKING) {
+        if (registry_.all_of<ecs::Combat>(entity)) {
+            auto& combat = registry_.get<ecs::Combat>(entity);
+            bool was_attacking = combat.is_attacking;
+            combat.is_attacking = (delta.is_attacking != 0);
+
+            // Set cooldown so the attack tilt animation plays
+            if (combat.is_attacking) {
+                combat.current_cooldown = 0.5f;
+            } else {
+                combat.current_cooldown = 0.0f;
+            }
+
+            // Spawn attack effect if transitioning to attacking
+            if (combat.is_attacking && !was_attacking) {
+                if (registry_.all_of<ecs::NetworkId, ecs::Transform, ecs::EntityInfo>(entity)) {
+                    uint32_t net_id = registry_.get<ecs::NetworkId>(entity).id;
+                    prev_attacking_[net_id] = true;
+
+                    // Get attack direction
+                    float dir_x = 0.0f;
+                    float dir_y = 1.0f;
+                    if (delta.flags & mmo::protocol::EntityDeltaUpdate::FLAG_ATTACK_DIR) {
+                        dir_x = delta.attack_dir_x;
+                        dir_y = delta.attack_dir_y;
+                    } else if (registry_.all_of<ecs::AttackDirection>(entity)) {
+                        auto& dir = registry_.get<ecs::AttackDirection>(entity);
+                        dir_x = dir.x;
+                        dir_y = dir.y;
+                    }
+
+                    float len = std::sqrt(dir_x * dir_x + dir_y * dir_y);
+                    if (len < 0.001f) {
+                        dir_x = 0; dir_y = 1;
+                    } else {
+                        dir_x /= len; dir_y /= len;
+                    }
+
+                    // Build state from cached entity components for effect spawning
+                    auto& transform = registry_.get<ecs::Transform>(entity);
+                    auto& info = registry_.get<ecs::EntityInfo>(entity);
+                    NetEntityState state;
+                    state.id = net_id;
+                    state.x = transform.x;
+                    state.z = transform.z;
+                    std::strncpy(state.effect_type, info.effect_type.c_str(), 15);
+                    state.effect_type[15] = '\0';
+                    std::strncpy(state.effect_model, info.effect_model.c_str(), 31);
+                    state.effect_model[31] = '\0';
+                    state.effect_duration = info.effect_duration;
+                    state.cone_angle = info.cone_angle;
+
+                    spawn_attack_effect(state, dir_x, dir_y);
+
+                    if (net_id == local_player_id_) {
+                        camera().notify_attack();
+                    }
+                }
+            }
+        }
+    }
+
+    // Update attack direction
+    if (delta.flags & mmo::protocol::EntityDeltaUpdate::FLAG_ATTACK_DIR) {
+        if (!registry_.all_of<ecs::AttackDirection>(entity)) {
+            registry_.emplace<ecs::AttackDirection>(entity);
+        }
+        auto& attack_dir = registry_.get<ecs::AttackDirection>(entity);
+        attack_dir.x = delta.attack_dir_x;
+        attack_dir.y = delta.attack_dir_y;
+    }
+
+    // Update rotation
+    if (delta.flags & mmo::protocol::EntityDeltaUpdate::FLAG_ROTATION) {
+        if (registry_.all_of<ecs::Transform>(entity)) {
+            auto& transform = registry_.get<ecs::Transform>(entity);
+            transform.rotation = delta.rotation;
+        }
     }
 }
 

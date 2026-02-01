@@ -125,7 +125,11 @@ bool InputHandler::process_events() {
                     break;
                 case SDLK_RETURN:
                 case SDLK_SPACE:
-                    if (!game_input_enabled_) menu_select_pressed_ = true;
+                    if (!game_input_enabled_) {
+                        menu_select_pressed_ = true;
+                    } else {
+                        attack_latched_ = true;
+                    }
                     break;
             }
         }
@@ -141,6 +145,7 @@ bool InputHandler::process_events() {
                 }
                 if (event.button.button == SDL_BUTTON_LEFT) {
                     attacking_ = true;
+                    attack_latched_ = true;
                 }
             }
             if (event.type == SDL_EVENT_MOUSE_BUTTON_UP) {
@@ -213,6 +218,7 @@ bool InputHandler::process_events() {
         move_left_ = false;
         move_right_ = false;
         attacking_ = false;
+        attack_latched_ = false;
         current_input_.move_dir_x = 0.0f;
         current_input_.move_dir_y = 0.0f;
         current_input_.attacking = false;
@@ -251,7 +257,7 @@ void InputHandler::update_input_from_keyboard() {
     bool space_attack = keys[SDL_SCANCODE_SPACE];
     uint32_t mouse_state = SDL_GetMouseState(nullptr, nullptr);
     bool mouse_attack = (mouse_state & SDL_BUTTON_LMASK) != 0;
-    attacking_ = space_attack || mouse_attack || controller_attack_;
+    attacking_ = space_attack || mouse_attack || controller_attack_ || attack_latched_;
 }
 
 void InputHandler::update_camera_from_mouse() {

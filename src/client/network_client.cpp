@@ -6,6 +6,7 @@
 #include "asio/impl/write.hpp"
 #include "asio/io_context.hpp"
 #include "protocol/protocol.hpp"
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -132,12 +133,16 @@ void NetworkClient::send_input(const PlayerInput& input) {
 }
 
 void NetworkClient::poll_messages() {
+    if (collect_stats_) {
+        update_stats();
+    }
+
     std::queue<ReceivedMessage> messages;
     {
         std::lock_guard<std::mutex> lock(message_mutex_);
         std::swap(messages, message_queue_);
     }
-    
+
     while (!messages.empty()) {
         auto& msg = messages.front();
         if (message_callback_) {
@@ -179,8 +184,10 @@ void NetworkClient::read_header() {
 void NetworkClient::read_payload() {
     asio::async_read(socket_,
         asio::buffer(payload_buffer_),
-        [this](asio::error_code ec, std::size_t /*length*/) {
+        [this](asio::error_code ec, std::size_t length) {
             if (!ec) {
+                bytes_recv_total_ += length + mmo::protocol::PacketHeader::size();
+                packets_recv_total_++;
                 handle_message();
                 read_header();
             } else if (connected_) {
@@ -211,9 +218,11 @@ void NetworkClient::do_write() {
     auto& front = write_queue_.front();
     asio::async_write(socket_,
         asio::buffer(front),
-        [this](asio::error_code ec, std::size_t /*length*/) {
+        [this](asio::error_code ec, std::size_t length) {
             std::lock_guard<std::mutex> lock(write_mutex_);
             if (!ec) {
+                bytes_sent_total_ += length;
+                packets_sent_total_++;
                 write_queue_.pop();
                 if (!write_queue_.empty()) {
                     do_write();
@@ -226,6 +235,46 @@ void NetworkClient::do_write() {
                 writing_ = false;
             }
         });
+}
+
+void NetworkClient::update_stats() {
+    auto now = static_cast<uint64_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch())
+            .count());
+
+    uint64_t bs = bytes_sent_total_.load(std::memory_order_relaxed);
+    uint64_t br = bytes_recv_total_.load(std::memory_order_relaxed);
+    uint32_t ps = packets_sent_total_.load(std::memory_order_relaxed);
+    uint32_t pr = packets_recv_total_.load(std::memory_order_relaxed);
+
+    if (prev_stats_time_ms_ > 0) {
+        float elapsed = static_cast<float>(now - prev_stats_time_ms_) / 1000.0f;
+        if (elapsed > 0.0f) {
+            float instant_bs = static_cast<float>(bs - prev_bytes_sent_) / elapsed;
+            float instant_br = static_cast<float>(br - prev_bytes_recv_) / elapsed;
+            float instant_ps = static_cast<float>(ps - prev_packets_sent_) / elapsed;
+            float instant_pr = static_cast<float>(pr - prev_packets_recv_) / elapsed;
+
+            constexpr float EMA_FACTOR = 0.1f; // lower = smoother
+            auto ema = [](float prev, float cur, float a) { return prev + a * (cur - prev); };
+            network_stats_.bytes_sent_per_sec = ema(network_stats_.bytes_sent_per_sec, instant_bs, EMA_FACTOR);
+            network_stats_.bytes_recv_per_sec = ema(network_stats_.bytes_recv_per_sec, instant_br, EMA_FACTOR);
+            network_stats_.packets_sent_per_sec = ema(network_stats_.packets_sent_per_sec, instant_ps, EMA_FACTOR);
+            network_stats_.packets_recv_per_sec = ema(network_stats_.packets_recv_per_sec, instant_pr, EMA_FACTOR);
+        }
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(message_mutex_);
+        network_stats_.message_queue_size = static_cast<uint32_t>(message_queue_.size());
+    }
+
+    prev_bytes_sent_ = bs;
+    prev_bytes_recv_ = br;
+    prev_packets_sent_ = ps;
+    prev_packets_recv_ = pr;
+    prev_stats_time_ms_ = now;
 }
 
 } // namespace mmo::client

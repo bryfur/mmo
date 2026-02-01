@@ -26,6 +26,7 @@ bool GameConfig::load(const std::string& data_dir) {
     bool ok = true;
     ok = load_server(data_dir + "/server.json") && ok;
     ok = load_world(data_dir + "/world.json") && ok;
+    ok = load_network(data_dir + "/network.json") && ok;
     ok = load_classes(data_dir + "/classes.json") && ok;
     ok = load_monsters(data_dir + "/monsters.json") && ok;
     ok = load_environment(data_dir + "/environment.json") && ok;
@@ -60,6 +61,27 @@ bool GameConfig::load_world(const std::string& path) {
         json j = json::parse(f);
         world_.width = j.value("width", 8000.0f);
         world_.height = j.value("height", 8000.0f);
+        return true;
+    } catch (const json::exception& e) {
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << std::endl;
+        return false;
+    }
+}
+
+bool GameConfig::load_network(const std::string& path) {
+    std::ifstream f(path);
+    if (!f.is_open()) {
+        std::cerr << "[GameConfig] Failed to open " << path << std::endl;
+        return false;
+    }
+    try {
+        json j = json::parse(f);
+        network_.player_view_distance = j.value("player_view_distance", 1500.0f);
+        network_.npc_view_distance = j.value("npc_view_distance", 1200.0f);
+        network_.town_npc_view_distance = j.value("town_npc_view_distance", 1000.0f);
+        network_.building_view_distance = j.value("building_view_distance", 3000.0f);
+        network_.environment_view_distance = j.value("environment_view_distance", 2000.0f);
+        network_.spatial_grid_cell_size = j.value("spatial_grid_cell_size", 500.0f);
         return true;
     } catch (const json::exception& e) {
         std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << std::endl;

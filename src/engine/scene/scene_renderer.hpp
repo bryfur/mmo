@@ -19,6 +19,7 @@
 #include "engine/render_stats.hpp"
 #include "engine/gpu/gpu_uniforms.hpp"
 #include "engine/heightmap.hpp"
+#include "engine/systems/effect_system.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <string>
@@ -116,6 +117,12 @@ private:
     void init_billboard_buffers();
     void update_animations(float dt);
 
+    // Effect spawning (internal - consumes scene commands)
+    int spawn_effect(const ::engine::EffectDefinition* definition,
+                     const glm::vec3& position,
+                     const glm::vec3& direction = {1, 0, 0},
+                     float range = -1.0f);
+
     // ========== Sub-renderers ==========
     render::RenderContext* context_ = nullptr;
     gpu::PipelineRegistry pipeline_registry_;
@@ -123,6 +130,7 @@ private:
     render::WorldRenderer world_;
     render::UIRenderer ui_;
     render::EffectRenderer effects_;
+    mmo::engine::systems::EffectSystem effect_system_;  // Particle effect system
     std::unique_ptr<ModelManager> model_manager_;
     std::unique_ptr<render::GrassRenderer> grass_renderer_;
     render::ShadowMap shadow_map_;

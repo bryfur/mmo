@@ -5,12 +5,19 @@
 
 namespace mmo::engine::systems {
 
-// Camera mode presets
-enum class CameraMode {
-    Exploration,   // Wider FOV, slower follow, more freedom
-    Combat,        // Tighter framing, faster response, lock-on support
-    Cinematic,     // Smooth sweeping movements for cutscenes
-    Sprint         // Pulled back, lower angle for running
+// Configuration for camera behavior
+struct CameraModeConfig {
+    float distance = 280.0f;           // Base distance from target
+    float height_offset = 90.0f;       // Height above target
+    float shoulder_offset = 40.0f;     // Horizontal shoulder offset
+    float fov = 55.0f;                 // Field of view
+    float position_lag = 0.001f;       // Position smoothing (0-1, lower = more lag)
+    float rotation_lag = 0.001f;       // Rotation smoothing
+    float look_ahead_dist = 60.0f;     // How far to look ahead based on velocity
+    float pitch_min = -70.0f;          // Minimum pitch (looking up)
+    float pitch_max = 70.0f;           // Maximum pitch (looking down)
+    float auto_return_speed = 1.5f;    // Speed of auto-centering behind player
+    bool auto_center_enabled = true;   // Whether to auto-center
 };
 
 // Camera shake types for different feedback
@@ -40,8 +47,9 @@ public:
     virtual void rotate_pitch(float delta_degrees) = 0;
     virtual void adjust_zoom(float delta) = 0;
 
-    // Mode
-    virtual void set_mode(CameraMode mode) = 0;
+    // Configuration
+    virtual void set_config(const CameraModeConfig& config) = 0;
+    virtual const CameraModeConfig& get_config() const = 0;
 
     // Combat
     virtual void set_in_combat(bool in_combat) = 0;

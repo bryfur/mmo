@@ -1,7 +1,5 @@
 #pragma once
 
-#include "protocol/protocol.hpp"
-#include "client/ecs/components.hpp"
 #include "protocol/heightmap.hpp"
 #include "network_client.hpp"
 #include "engine/application.hpp"
@@ -9,6 +7,8 @@
 #include "engine/scene/render_scene.hpp"
 #include "engine/scene/ui_scene.hpp"
 #include "engine/scene/camera_state.hpp"
+#include "engine/systems/camera_controller.hpp"
+#include "client/effect_loader.hpp"
 #include "game_state.hpp"
 #include "menu_system.hpp"
 #include <glm/glm.hpp>
@@ -68,7 +68,6 @@ private:
 
     // Attack effects
     void spawn_attack_effect(const mmo::protocol::NetEntityState& state, float dir_x, float dir_y);
-    void update_attack_effects(float dt);
 
     // Scene building - populates RenderScene/UIScene for SceneRenderer
     void add_entity_to_scene(entt::entity entity, bool is_local);
@@ -94,7 +93,9 @@ private:
     GameState game_state_ = GameState::Connecting;
     entt::registry registry_;
     std::unordered_map<uint32_t, entt::entity> network_to_entity_;
-    std::vector<ecs::AttackEffect> attack_effects_;
+
+    // Effect registry (loads effect definitions from JSON)
+    EffectRegistry effect_registry_;
 
     std::unordered_map<uint32_t, bool> prev_attacking_;
 
@@ -121,6 +122,14 @@ private:
     // Camera state
     float player_x_ = 0.0f;
     float player_z_ = 0.0f;
+
+    // Frame timing
+    float last_dt_ = 0.016f;  // Last frame's delta time for rendering
+
+    // Camera configurations
+    engine::systems::CameraModeConfig exploration_camera_config_;
+    engine::systems::CameraModeConfig sprint_camera_config_;
+    engine::systems::CameraModeConfig combat_camera_config_;
 
     // Reusable buffers for network message processing (avoids per-frame allocations)
     std::vector<uint32_t> to_remove_buffer_;

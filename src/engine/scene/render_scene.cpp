@@ -1,6 +1,6 @@
 #include "render_scene.hpp"
-#include "engine/effect_types.hpp"
 #include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/vector_float3.hpp"
 #include "glm/ext/vector_float4.hpp"
 #include <array>
 #include <cstdint>
@@ -11,8 +11,9 @@ namespace mmo::engine::scene {
 
 void RenderScene::clear() {
     commands_.clear();
-    effects_.clear();
     billboards_.clear();
+    // NOTE: particle_effect_spawns_ is NOT cleared here - it's cleared by the renderer
+    // after consuming the commands, so they persist from update to render
 
     // Reset world element flags to defaults
     draw_skybox_ = true;
@@ -49,8 +50,16 @@ void RenderScene::add_skinned_model(const std::string& model_name, const glm::ma
     commands_.push_back(std::move(cmd));
 }
 
-void RenderScene::add_effect(const engine::EffectInstance& effect) {
-    effects_.push_back(effect);
+void RenderScene::add_particle_effect_spawn(const ::engine::EffectDefinition* definition,
+                                             const glm::vec3& position,
+                                             const glm::vec3& direction,
+                                             float range) {
+    ParticleEffectSpawnCommand cmd;
+    cmd.definition = definition;
+    cmd.position = position;
+    cmd.direction = direction;
+    cmd.range = range;
+    particle_effect_spawns_.push_back(cmd);
 }
 
 void RenderScene::add_billboard_3d(float world_x, float world_y, float world_z,

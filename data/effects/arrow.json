@@ -1,0 +1,40 @@
+{
+  "name": "arrow",
+  "duration": 0.5,
+  "default_range": 200.0,
+  "emitters": [{
+    "name": "arrow_projectile",
+    "particle_type": "mesh",
+    "model": "spell_fireball",
+    "spawn_mode": "burst",
+    "spawn_count": 1,
+    "lifetime": 0.5,
+    "velocity": {
+      "type": "directional",
+      "speed": 400.0,
+      "direction": [1, 0, 0],
+      "spread_angle": 0.0,
+      "gravity": [0, -100, 0],
+      "drag": 0.0
+    },
+    "rotation": {
+      "initial": [0, 0, 0],
+      "rate": [0, 0, 0],
+      "face_velocity": true
+    },
+    "appearance": {
+      "scale_over_lifetime": {
+        "type": "constant",
+        "start": 15.0,
+        "end": 15.0
+      },
+      "opacity_over_lifetime": {
+        "type": "fade_out_late",
+        "start": 1.0,
+        "end": 0.0,
+        "fade_start": 0.9
+      },
+      "color_tint": [0.6, 0.4, 0.2, 1.0]
+    }
+  }]
+}

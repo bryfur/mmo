@@ -262,6 +262,13 @@ void SceneRenderer::set_heightmap(const Heightmap& heightmap) {
     std::cout << "[Renderer] Heightmap set for terrain rendering" << std::endl;
 }
 
+int SceneRenderer::spawn_effect(const ::engine::EffectDefinition* definition,
+                                  const glm::vec3& position,
+                                  const glm::vec3& direction,
+                                  float range) {
+    return effect_system_.spawn_effect(definition, position, direction, range);
+}
+
 // ============================================================================
 // Frame Lifecycle
 // ============================================================================
@@ -377,6 +384,12 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
     const GraphicsSettings& gfx = graphics_ ? *graphics_ : default_graphics_;
 
     update_animations(dt);
+
+    // Update particle effect system
+    auto get_terrain_height = [this](float x, float z) -> float {
+        return terrain_.get_height(x, z);
+    };
+    effect_system_.update(dt, get_terrain_height);
 
     begin_frame();
 
@@ -551,26 +564,28 @@ void SceneRenderer::render_3d_scene(const RenderScene& scene, const CameraState&
         render_skinned_model_command(data, camera);
     }
 
-    // Render effects
-    for (const auto& effect : scene.effects()) {
-        float dx = effect.x - camera.position.x;
-        float dz = effect.y - camera.position.z;
-        if (dx * dx + dz * dz > draw_dist_sq) continue;
-
-        if (do_frustum_cull) {
-            glm::vec3 effect_pos(effect.x, 0.0f, effect.y);
-            if (!frustum.intersects_sphere(effect_pos, effect.range * 2.0f)) continue;
+    // Process particle effect spawn commands from the scene
+    auto& spawns = scene.particle_effect_spawns();
+    for (const auto& spawn_cmd : spawns) {
+        if (spawn_cmd.definition) {
+            effect_system_.spawn_effect(spawn_cmd.definition, spawn_cmd.position,
+                                       spawn_cmd.direction, spawn_cmd.range);
         }
-
-        effects_.draw_attack_effect(
-            main_render_pass_,
-            context_->current_command_buffer(),
-            effect,
-            camera.view,
-            camera.projection,
-            camera.position
-        );
     }
+
+    // Clear the spawn commands now that we've consumed them
+    // Note: Using const_cast because we need to clear after reading
+    const_cast<RenderScene&>(scene).clear_particle_effect_spawns();
+
+    // Render new particle-based effects
+    effects_.draw_particle_effects(
+        main_render_pass_,
+        context_->current_command_buffer(),
+        effect_system_,
+        camera.view,
+        camera.projection,
+        camera.position
+    );
 
     if (scene.should_draw_mountains() && gfx.mountains_enabled) {
         bind_shadow_data(main_render_pass_, cmd, 1);

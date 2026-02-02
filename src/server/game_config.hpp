@@ -26,8 +26,6 @@ struct ClassConfig {
     std::string desc_line2;
     bool shows_reticle = false;
     std::string effect_type;
-    std::string effect_model;
-    float effect_duration = 0.3f;
     float cone_angle = 0.5f;
     float speed = 200.0f;
     float size = 32.0f;

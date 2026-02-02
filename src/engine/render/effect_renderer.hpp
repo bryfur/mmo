@@ -5,7 +5,7 @@
 #include "../gpu/gpu_buffer.hpp"
 #include "../gpu/gpu_pipeline.hpp"
 #include "../gpu/pipeline_registry.hpp"
-#include "engine/effect_types.hpp"
+#include "engine/systems/effect_system.hpp"
 #include <SDL3/SDL_gpu.h>
 #include <glm/glm.hpp>
 #include <memory>
@@ -51,20 +51,38 @@ public:
     void set_terrain_height_func(std::function<float(float, float)> func) {
         terrain_height_func_ = std::move(func);
     }
-    
+
     /**
-     * Draw an attack effect based on its properties (SDL3 GPU API version).
+     * Draw all particles from an effect system.
      * @param pass Active render pass
      * @param cmd Command buffer for uniform uploads
+     * @param effect_system Effect system containing all active effects and particles
+     * @param view View matrix
+     * @param projection Projection matrix
+     * @param camera_pos Camera position
      */
-    void draw_attack_effect(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                            const engine::EffectInstance& effect, 
-                            const glm::mat4& view, const glm::mat4& projection,
-                            const glm::vec3& camera_pos);
+    void draw_particle_effects(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                const mmo::engine::systems::EffectSystem& effect_system,
+                                const glm::mat4& view, const glm::mat4& projection,
+                                const glm::vec3& camera_pos);
+
+    /**
+     * Draw a single particle.
+     * @param pass Active render pass
+     * @param cmd Command buffer for uniform uploads
+     * @param particle Particle to render
+     * @param view View matrix
+     * @param projection Projection matrix
+     * @param camera_pos Camera position
+     */
+    void draw_particle(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                       const mmo::engine::systems::Particle& particle,
+                       const glm::mat4& view, const glm::mat4& projection,
+                       const glm::vec3& camera_pos);
     
 private:
     float get_terrain_height(float x, float z) const;
-    
+
     void draw_model_effect(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                            Model* model, const glm::mat4& model_mat,
                            const glm::mat4& view, const glm::mat4& projection,
@@ -72,28 +90,7 @@ private:
                            const glm::vec4& tint_color,
                            const glm::vec3& light_color,
                            const glm::vec3& ambient_color);
-    
-    void draw_melee_slash(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                          const std::string& model_name,
-                          float x, float y, float dir_x, float dir_y, float progress,
-                          const glm::mat4& view, const glm::mat4& projection,
-                          const glm::vec3& camera_pos);
-    void draw_projectile(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                         const std::string& model_name,
-                         float x, float y, float dir_x, float dir_y, float progress, float range,
-                         const glm::mat4& view, const glm::mat4& projection,
-                         const glm::vec3& camera_pos);
-    void draw_orbit_aoe(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                        const std::string& model_name,
-                        float x, float y, float dir_x, float dir_y, float progress, float range,
-                        const glm::mat4& view, const glm::mat4& projection,
-                        const glm::vec3& camera_pos);
-    void draw_arrow(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                    const std::string& model_name,
-                    float x, float y, float dir_x, float dir_y, float progress, float range,
-                    const glm::mat4& view, const glm::mat4& projection,
-                    const glm::vec3& camera_pos);
-    
+
     gpu::GPUDevice* device_ = nullptr;
     gpu::PipelineRegistry* pipeline_registry_ = nullptr;
     ModelManager* model_manager_ = nullptr;

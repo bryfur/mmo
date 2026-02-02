@@ -9,8 +9,7 @@
 
 namespace mmo::engine::systems {
 
-// Professional third-person action game camera system
-// Inspired by: God of War, Horizon Zero Dawn, Ghost of Tsushima, The Last of Us Part II
+// Third-person camera system with smooth following and configuration support
 
 struct CameraShake {
     ShakeType type;
@@ -19,21 +18,6 @@ struct CameraShake {
     float elapsed;
     glm::vec3 direction;  // For directional shakes
     float frequency;      // Oscillation frequency
-};
-
-// Configuration for each camera mode
-struct CameraModeConfig {
-    float distance;           // Base distance from target
-    float height_offset;      // Height above target
-    float shoulder_offset;    // Horizontal shoulder offset
-    float fov;               // Field of view
-    float position_lag;       // Position smoothing (0-1, lower = more lag)
-    float rotation_lag;       // Rotation smoothing
-    float look_ahead_dist;    // How far to look ahead based on velocity
-    float pitch_min;          // Minimum pitch (looking up)
-    float pitch_max;          // Maximum pitch (looking down)
-    float auto_return_speed;  // Speed of auto-centering behind player
-    bool auto_center_enabled; // Whether to auto-center
 };
 
 class CameraSystem : public CameraController {
@@ -56,9 +40,9 @@ public:
     float get_input_yaw() const { return input_yaw_; }
     float get_input_pitch() const { return input_pitch_; }
     
-    // Mode switching with smooth transitions
-    void set_mode(CameraMode mode) override;
-    CameraMode get_mode() const { return current_mode_; }
+    // Configuration
+    void set_config(const CameraModeConfig& config) override;
+    const CameraModeConfig& get_config() const override { return current_config_; }
     
     // Combat system integration
     void set_combat_target(const glm::vec3* target) override;  // nullptr to clear
@@ -97,7 +81,6 @@ public:
     
 private:
     // Internal update stages
-    void update_mode_transition(float dt);
     void update_input_smoothing(float dt);
     void update_look_ahead(float dt);
     void update_auto_centering(float dt);
@@ -107,27 +90,17 @@ private:
     void update_camera_shake(float dt);
     void update_dynamic_fov(float dt);
     void compute_matrices();
-    
+
     // Smooth damping helper (critically-damped spring)
-    static glm::vec3 smooth_damp(const glm::vec3& current, const glm::vec3& target, 
+    static glm::vec3 smooth_damp(const glm::vec3& current, const glm::vec3& target,
                                   glm::vec3& velocity, float smoothTime, float dt);
-    static float smooth_damp_angle(float current, float target, float& velocity, 
+    static float smooth_damp_angle(float current, float target, float& velocity,
                                     float smoothTime, float dt);
     static float smooth_damp_float(float current, float target, float& velocity,
                                     float smoothTime, float dt);
-    
-    // Configuration for each mode
-    CameraModeConfig exploration_config_;
-    CameraModeConfig combat_config_;
-    CameraModeConfig cinematic_config_;
-    CameraModeConfig sprint_config_;
-    const CameraModeConfig& get_config(CameraMode mode) const;
-    
-    // Current mode and transition
-    CameraMode current_mode_ = CameraMode::Exploration;
-    CameraMode target_mode_ = CameraMode::Exploration;
-    float mode_transition_ = 1.0f;  // 0 = transitioning, 1 = arrived
-    float mode_transition_speed_ = 3.0f;
+
+    // Current configuration
+    CameraModeConfig current_config_;
     
     // Target tracking
     glm::vec3 target_position_ = glm::vec3(0.0f);

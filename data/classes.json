@@ -14,8 +14,6 @@
         "desc_line2": "and powerful sword attacks.",
         "shows_reticle": false,
         "effect_type": "melee_swing",
-        "effect_model": "weapon_sword",
-        "effect_duration": 0.3,
         "cone_angle": 1.1,
         "speed": 180.0,
         "size": 34.0
@@ -35,8 +33,6 @@
         "desc_line2": "but has lower health.",
         "shows_reticle": true,
         "effect_type": "projectile",
-        "effect_model": "spell_fireball",
-        "effect_duration": 0.4,
         "cone_angle": 0.2,
         "speed": 190.0,
         "size": 30.0
@@ -56,8 +52,6 @@
         "desc_line2": "with moderate health.",
         "shows_reticle": false,
         "effect_type": "orbit",
-        "effect_model": "spell_bible",
-        "effect_duration": 0.6,
         "cone_angle": 3.14159,
         "speed": 185.0,
         "size": 33.0
@@ -77,8 +71,6 @@
         "desc_line2": "but must stay nimble to survive.",
         "shows_reticle": true,
         "effect_type": "arrow",
-        "effect_model": "spell_fireball",
-        "effect_duration": 0.5,
         "cone_angle": 0.15,
         "speed": 210.0,
         "size": 30.0

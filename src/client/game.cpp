@@ -802,7 +802,10 @@ void Game::spawn_attack_effect(const NetEntityState& state, float dir_x, float d
     if (effect_def) {
         // Both use x,z horizontal, y up
         glm::vec3 direction(dir_x, 0.0f, dir_y);
-        glm::vec3 position(state.x, state.y, state.z);
+        // Sample client-side terrain height and offset to weapon/torso height
+        float terrain_y = get_terrain_height(state.x, state.z);
+        std::cout << "Attack effect at: x=" << state.x << " y=" << terrain_y << " state.y=" << state.y << " z=" << state.z << std::endl;
+        glm::vec3 position(state.x, terrain_y, state.z);
 
         // Use effect definition's default_range (pass -1.0f)
         render_scene_.add_particle_effect_spawn(effect_def, position, direction, -1.0f);

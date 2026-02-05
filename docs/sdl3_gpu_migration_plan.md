@@ -106,6 +106,97 @@ This document outlines the migration from OpenGL 4.1 to SDL3 GPU API. The migrat
 
 ---
 
+## Tasks with Dependency Chains
+
+Each task below lists its dependencies. A task can only begin once all its dependencies are complete.
+
+| Task | Name | Dependencies | Phase |
+|------|------|--------------|-------|
+| Task 0 | Decouple Rendering from Game Logic | None | Phase 0: Architecture |
+| Task 1 | Scaffolding & Build System Setup | Task 0 | Phase 1: Infrastructure |
+| Task 2 | Shader System | Task 1 | Phase 2: Core Systems |
+| Task 3 | GPU Context & Device | Task 1 | Phase 2: Core Systems |
+| Task 4 | Buffer Abstraction | Task 1, Task 3 | Phase 2: Core Systems |
+| Task 5 | Pipeline System | Task 2, Task 3, Task 4 | Phase 2: Core Systems |
+| Task 6 | Model Loader | Task 4, Task 5 | Phase 3: Renderer Ports |
+| Task 7 | Terrain Renderer | Task 5, Task 6 | Phase 3: Renderer Ports |
+| Task 8 | World Renderer | Task 5, Task 6 | Phase 3: Renderer Ports |
+| Task 9 | UI Renderer | Task 4, Task 5 | Phase 3: Renderer Ports |
+| Task 10 | Text Renderer | Task 9 | Phase 3: Renderer Ports |
+| Task 11 | Shadow System | Task 5, Task 6 | Phase 4: Advanced Systems |
+| Task 12 | Effect Renderer | Task 5, Task 6 | Phase 4: Advanced Systems |
+| Task 13 | Grass Renderer | Task 5, Task 6 | Phase 4: Advanced Systems |
+| Task 14 | Main Renderer Integration | Task 6, Task 7, Task 8, Task 9, Task 10, Task 11, Task 12, Task 13 | Phase 5: Integration |
+| Task 15 | Cleanup & Validation | Task 14 | Phase 5: Cleanup |
+
+### Dependency Chain Visualization
+
+```
+Task 0 (None)
+   │
+   └──► Task 1 (Task 0)
+           │
+           ├──► Task 2 (Task 1) ──────────────────────┐
+           │                                          │
+           ├──► Task 3 (Task 1) ──────────────────────┼──► Task 5 (Task 2, 3, 4)
+           │         │                                │           │
+           └──► Task 4 (Task 1, Task 3) ──────────────┘           │
+                                                                  │
+                     ┌────────────────────────────────────────────┘
+                     │
+                     ├──► Task 6 (Task 4, 5) ──────────────────────┬──► Task 7 (Task 5, 6)
+                     │         │                                   │
+                     │         │                                   ├──► Task 8 (Task 5, 6)
+                     │         │                                   │
+                     │         │                                   ├──► Task 11 (Task 5, 6)
+                     │         │                                   │
+                     │         │                                   ├──► Task 12 (Task 5, 6)
+                     │         │                                   │
+                     │         │                                   └──► Task 13 (Task 5, 6)
+                     │         │
+                     └──► Task 9 (Task 4, 5) ──► Task 10 (Task 9)
+                                                       │
+                     ┌─────────────────────────────────┘
+                     │
+                     └──► Task 14 (Task 6-13)
+                              │
+                              └──► Task 15 (Task 14)
+```
+
+### Critical Path
+
+The critical path (longest sequence of dependent tasks):
+```
+Task 0 → Task 1 → Task 3 → Task 4 → Task 5 → Task 6 → Task 7/8/11/12/13 → Task 14 → Task 15
+```
+
+### Parallelization Opportunities
+
+Tasks that can execute in parallel once their dependencies are met:
+
+**After Task 1 completes:**
+- Task 2 (Shader System)
+- Task 3 (GPU Context & Device)
+
+**After Task 3 completes:**
+- Task 4 (Buffer Abstraction) - can start alongside Task 2
+
+**After Task 5 completes:**
+- Task 6 (Model Loader)
+- Task 9 (UI Renderer) - can start earlier since it only needs Task 4 and 5
+
+**After Task 6 completes:**
+- Task 7 (Terrain Renderer)
+- Task 8 (World Renderer)
+- Task 11 (Shadow System)
+- Task 12 (Effect Renderer)
+- Task 13 (Grass Renderer)
+
+**After Task 9 completes:**
+- Task 10 (Text Renderer)
+
+---
+
 ## Phase 0: Architecture Refactoring (Pre-Migration)
 
 ### Task 0: Decouple Rendering from Game Logic

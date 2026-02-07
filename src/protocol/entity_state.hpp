@@ -34,13 +34,14 @@ struct NetEntityState : Serializable<NetEntityState> {
     char model_name[32] = {0};       // Model to render (e.g. "warrior", "building_tower")
     float target_size = 0.0f;        // Visual target size in world units
     char effect_type[16] = {0};      // Attack effect: "melee_swing", "projectile", "orbit", ""
+    char animation[16] = {0};        // Animation config name (e.g. "humanoid"), empty = none
     float cone_angle = 0.0f;         // Attack cone angle for hit detection and visualization
     bool shows_reticle = false;      // Whether to show targeting reticle
 
     static constexpr size_t serialized_size() {
         return sizeof(uint32_t) + sizeof(EntityType) + sizeof(uint8_t) * 4 +
                sizeof(float) * 11 + sizeof(uint32_t) + 32 + sizeof(uint8_t) +
-               32 + sizeof(float) + 16 + sizeof(float) + sizeof(uint8_t);
+               32 + sizeof(float) + 16 + 16 + sizeof(float) + sizeof(uint8_t);
     }
 
     void serialize_impl(BufferWriter& w) const {
@@ -62,6 +63,7 @@ struct NetEntityState : Serializable<NetEntityState> {
         w.write_bytes(model_name, 32);
         w.write(target_size);
         w.write_bytes(effect_type, 16);
+        w.write_bytes(animation, 16);
         w.write(cone_angle);
         w.write<uint8_t>(shows_reticle ? 1 : 0);
     }
@@ -85,6 +87,7 @@ struct NetEntityState : Serializable<NetEntityState> {
         r.read_bytes(model_name, 32);
         target_size = r.read<float>();
         r.read_bytes(effect_type, 16);
+        r.read_bytes(animation, 16);
         cone_angle = r.read<float>();
         shows_reticle = r.read<uint8_t>() != 0;
     }

@@ -114,6 +114,7 @@ bool GameConfig::load_classes(const std::string& path) {
             cls.desc_line2 = c.value("desc_line2", "");
             cls.shows_reticle = c.value("shows_reticle", false);
             cls.effect_type = c.value("effect_type", "");
+            cls.animation = c.value("animation", "");
             cls.cone_angle = c.value("cone_angle", 0.5f);
             cls.speed = c.value("speed", 200.0f);
             cls.size = c.value("size", 32.0f);
@@ -144,6 +145,7 @@ bool GameConfig::load_monsters(const std::string& path) {
         monster_.aggro_range = j.value("aggro_range", 300.0f);
         monster_.count = j.value("count", 10);
         monster_.model = j.value("model", "npc_enemy");
+        monster_.animation = j.value("animation", "");
         monster_.color = parse_color(j.value("color", "0xFF4444FF"));
         std::cout << "[GameConfig] Loaded monster config: " << monster_.count << " monsters" << std::endl;
         return true;

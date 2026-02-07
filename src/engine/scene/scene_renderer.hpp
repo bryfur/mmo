@@ -115,7 +115,7 @@ private:
     // Setup
     void init_pipelines();
     void init_billboard_buffers();
-    void update_animations(float dt);
+
 
     // Effect spawning (internal - consumes scene commands)
     int spawn_effect(const ::engine::EffectDefinition* definition,

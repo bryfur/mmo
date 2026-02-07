@@ -10,6 +10,7 @@ struct PlayerInput : Serializable<PlayerInput> {
     bool move_left = false;
     bool move_right = false;
     bool attacking = false;
+    bool sprinting = false;
     float attack_dir_x = 0.0f;  // Normalized attack direction from mouse
     float attack_dir_y = 1.0f;
     float move_dir_x = 0.0f;    // Continuous movement direction (normalized)
@@ -23,6 +24,7 @@ struct PlayerInput : Serializable<PlayerInput> {
         if (move_left) flags |= 0x04;
         if (move_right) flags |= 0x08;
         if (attacking) flags |= 0x10;
+        if (sprinting) flags |= 0x20;
         return flags;
     }
 
@@ -32,6 +34,7 @@ struct PlayerInput : Serializable<PlayerInput> {
         move_left = flags & 0x04;
         move_right = flags & 0x08;
         attacking = flags & 0x10;
+        sprinting = flags & 0x20;
     }
 
     static constexpr size_t serialized_size() { return 17; }

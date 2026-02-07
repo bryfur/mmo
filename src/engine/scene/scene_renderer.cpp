@@ -367,14 +367,6 @@ void SceneRenderer::end_ui() {
 }
 
 // ============================================================================
-// Animation
-// ============================================================================
-
-void SceneRenderer::update_animations(float dt) {
-    model_manager_->update_all_animations(dt);
-}
-
-// ============================================================================
 // Main Render Frame
 // ============================================================================
 
@@ -382,8 +374,6 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
                                   const CameraState& camera, float dt) {
     if (collect_stats_) render_stats_ = {};
     const GraphicsSettings& gfx = graphics_ ? *graphics_ : default_graphics_;
-
-    update_animations(dt);
 
     // Update particle effect system
     auto get_terrain_height = [this](float x, float z) -> float {

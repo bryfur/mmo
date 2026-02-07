@@ -1,6 +1,8 @@
 #pragma once
 
 #include "protocol/protocol.hpp"
+#include "engine/animation/animation_player.hpp"
+#include "engine/animation/animation_state_machine.hpp"
 #include <string>
 #include <cstdint>
 
@@ -54,6 +56,7 @@ struct EntityInfo {
     std::string model_name;
     float target_size = 0.0f;
     std::string effect_type;
+    std::string animation;     // Animation config name (e.g. "humanoid")
     float cone_angle = 0.0f;
     bool shows_reticle = false;
 };
@@ -104,6 +107,9 @@ struct Facing {
     float y = 1.0f;  // Default facing down
 };
 
+// Smooth visual rotation — thin alias for engine type so it works as an ECS component
+using SmoothRotation = mmo::engine::animation::RotationSmoother;
+
 // Per-instance scale multiplier
 struct Scale {
     float value = 1.0f;
@@ -131,6 +137,15 @@ struct HealthBarRenderable {
     float width = 1.0f;
     float y_offset = 2.0f;  // Height above entity
     bool show_always = false;
+};
+
+// Per-entity animation state (each entity gets independent animation)
+struct AnimationInstance {
+    mmo::engine::animation::AnimationPlayer player;
+    mmo::engine::animation::AnimationStateMachine state_machine;
+    mmo::engine::animation::ProceduralConfig procedural;
+    bool bound = false;
+    float attack_tilt = 0.0f;
 };
 
 } // namespace mmo::client::ecs

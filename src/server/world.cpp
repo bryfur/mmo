@@ -440,7 +440,15 @@ void World::update_player_input(uint32_t player_id, const PlayerInput& input) {
     
     auto entity = find_entity_by_network_id(player_id);
     if (entity != entt::null && registry_.all_of<ecs::InputState>(entity)) {
-        registry_.get<ecs::InputState>(entity).input = input;
+        auto& state = registry_.get<ecs::InputState>(entity);
+        // Latch attacking flag so it persists until the combat system consumes it.
+        // Without this, a subsequent input packet with attacking=false can overwrite
+        // a pending attack before the server tick processes it.
+        bool was_attacking = state.input.attacking;
+        state.input = input;
+        if (was_attacking && !input.attacking) {
+            state.input.attacking = true;
+        }
         
         // Always update attack direction so player faces where mouse is pointing
         if (!registry_.all_of<ecs::AttackDirection>(entity)) {
@@ -844,6 +852,7 @@ void World::populate_render_data(NetEntityState& state, const ecs::EntityInfo& i
             strncpy_safe(state.model_name, cls.model.c_str(), 32);
             state.target_size = config::get_character_target_size(EntityType::Player);
             strncpy_safe(state.effect_type, cls.effect_type.c_str(), 16);
+            strncpy_safe(state.animation, cls.animation.c_str(), 16);
             state.cone_angle = cls.cone_angle;
             state.shows_reticle = cls.shows_reticle;
             break;
@@ -851,6 +860,7 @@ void World::populate_render_data(NetEntityState& state, const ecs::EntityInfo& i
         case EntityType::NPC:
             strncpy_safe(state.model_name, config::get_npc_model_name(static_cast<NPCType>(info.npc_type)), 32);
             state.target_size = config::get_character_target_size(EntityType::NPC);
+            strncpy_safe(state.animation, config_->monster().animation.c_str(), 16);
             break;
         case EntityType::TownNPC:
             strncpy_safe(state.model_name, config::get_npc_model_name(static_cast<NPCType>(info.npc_type)), 32);

@@ -22,6 +22,9 @@ void update_movement(entt::registry& registry, float dt, const GameConfig& confi
         const auto& input = input_state.input;
         const auto& info = player_view.get<ecs::EntityInfo>(entity);
         float speed = config.get_class(info.player_class).speed;
+        if (input.sprinting) {
+            speed *= 1.6f;
+        }
 
         // Use continuous movement direction for smooth camera-relative movement
         // move_dir is already normalized by the client

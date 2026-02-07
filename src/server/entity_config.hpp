@@ -254,4 +254,64 @@ inline float get_tree_collision_radius(EnvironmentType type, float scale) {
     }
 }
 
+// ============================================================================
+// Reverse Lookups (model name → subtype enum)
+// ============================================================================
+
+inline BuildingType building_type_from_model(const std::string& model) {
+    if (model == "building_tavern")      return BuildingType::Tavern;
+    if (model == "building_blacksmith")  return BuildingType::Blacksmith;
+    if (model == "building_tower")       return BuildingType::Tower;
+    if (model == "building_shop")        return BuildingType::Shop;
+    if (model == "building_well")        return BuildingType::Well;
+    if (model == "building_house")       return BuildingType::House;
+    if (model == "building_inn" || model == "inn") return BuildingType::Inn;
+    if (model == "wooden_log")           return BuildingType::WoodenLog;
+    if (model == "log_tower")            return BuildingType::LogTower;
+    return BuildingType::House;
+}
+
+inline EnvironmentType environment_type_from_model(const std::string& model) {
+    if (model == "rock_boulder")  return EnvironmentType::RockBoulder;
+    if (model == "rock_slate")    return EnvironmentType::RockSlate;
+    if (model == "rock_spire")    return EnvironmentType::RockSpire;
+    if (model == "rock_cluster")  return EnvironmentType::RockCluster;
+    if (model == "rock_mossy")    return EnvironmentType::RockMossy;
+    if (model == "tree_oak")      return EnvironmentType::TreeOak;
+    if (model == "tree_pine")     return EnvironmentType::TreePine;
+    if (model == "tree_dead")     return EnvironmentType::TreeDead;
+    return EnvironmentType::RockBoulder;
+}
+
+inline NPCType npc_type_from_model(const std::string& model) {
+    if (model == "npc_enemy")      return NPCType::Monster;
+    if (model == "npc_merchant")   return NPCType::Merchant;
+    if (model == "npc_guard")      return NPCType::Guard;
+    if (model == "npc_blacksmith") return NPCType::Blacksmith;
+    if (model == "npc_innkeeper")  return NPCType::Innkeeper;
+    if (model == "npc_villager")   return NPCType::Villager;
+    return NPCType::Monster;
+}
+
+/// Map entity_type string from world_entities.json → protocol EntityType
+inline mmo::protocol::EntityType entity_type_from_string(const std::string& s) {
+    if (s == "building")    return mmo::protocol::EntityType::Building;
+    if (s == "environment") return mmo::protocol::EntityType::Environment;
+    if (s == "town_npc")    return mmo::protocol::EntityType::TownNPC;
+    if (s == "monster")     return mmo::protocol::EntityType::NPC;
+    return mmo::protocol::EntityType::Environment;
+}
+
+/// Map protocol EntityType → string for save files
+inline const char* entity_type_to_string(mmo::protocol::EntityType type) {
+    switch (type) {
+        case mmo::protocol::EntityType::Building:    return "building";
+        case mmo::protocol::EntityType::Environment: return "environment";
+        case mmo::protocol::EntityType::TownNPC:     return "town_npc";
+        case mmo::protocol::EntityType::NPC:         return "monster";
+        case mmo::protocol::EntityType::Player:      return "player";
+        default:                                     return "environment";
+    }
+}
+
 } // namespace mmo::server::config

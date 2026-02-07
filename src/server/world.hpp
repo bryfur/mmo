@@ -2,9 +2,9 @@
 
 #include "protocol/protocol.hpp"
 #include "server/ecs/game_components.hpp"
-#include "heightmap_generator.hpp"
 #include "game_types.hpp"
 #include "game_config.hpp"
+#include "heightmap_generator.hpp"
 #include "systems/physics_system.hpp"
 #include "spatial_grid.hpp"
 #include <entt/entt.hpp>
@@ -47,10 +47,8 @@ public:
     float get_terrain_height(float x, float z) const { return heightmap_get_world(heightmap_, x, z); }
     
 private:
-    void generate_heightmap();
-    void spawn_town();
-    void spawn_npcs();
-    void spawn_environment();
+    void load_heightmap();
+    bool spawn_from_world_data();
     void setup_collision_callbacks();
     void populate_render_data(mmo::protocol::NetEntityState& state, const ecs::EntityInfo& info, const ecs::Combat& combat) const;
     uint32_t generate_color(PlayerClass player_class);

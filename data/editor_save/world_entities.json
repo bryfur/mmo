@@ -1,0 +1,5124 @@
+[
+  {
+    "color": 4282664191,
+    "entity_type": "monster",
+    "model": "npc_enemy",
+    "name": "Monster_10",
+    "position": [
+      2789.576171875,
+      119.5832748413086,
+      7203.4072265625
+    ],
+    "rotation": 0.0,
+    "target_size": 36.0
+  },
+  {
+    "color": 4282664191,
+    "entity_type": "monster",
+    "model": "npc_enemy",
+    "name": "Monster_9",
+    "position": [
+      1477.0968017578125,
+      -110.10934448242188,
+      3561.672119140625
+    ],
+    "rotation": 0.0,
+    "target_size": 36.0
+  },
+  {
+    "color": 4282664191,
+    "entity_type": "monster",
+    "model": "npc_enemy",
+    "name": "Monster_8",
+    "position": [
+      986.7341918945313,
+      64.29087829589844,
+      2364.829345703125
+    ],
+    "rotation": 0.0,
+    "target_size": 36.0
+  },
+  {
+    "color": 4282664191,
+    "entity_type": "monster",
+    "model": "npc_enemy",
+    "name": "Monster_7",
+    "position": [
+      6890.787109375,
+      58.43222427368164,
+      1818.7716064453125
+    ],
+    "rotation": 0.0,
+    "target_size": 36.0
+  },
+  {
+    "color": 4282664191,
+    "entity_type": "monster",
+    "model": "npc_enemy",
+    "name": "Monster_6",
+    "position": [
+      103.70233154296875,
+      182.17750549316406,
+      1007.5804443359375
+    ],
+    "rotation": 0.0,
+    "target_size": 36.0
+  },
+  {
+    "color": 4282664191,
+    "entity_type": "monster",
+    "model": "npc_enemy",
+    "name": "Monster_5",
+    "position": [
+      1074.88330078125,
+      28.423553466796875,
+      5814.09619140625
+    ],
+    "rotation": 0.0,
+    "target_size": 36.0
+  },
+  {
+    "color": 4282664191,
+    "entity_type": "monster",
+    "model": "npc_enemy",
+    "name": "Monster_4",
+    "position": [
+      7379.73583984375,
+      155.79054260253906,
+      6107.53125
+    ],
+    "rotation": 0.0,
+    "target_size": 36.0
+  },
+  {
+    "color": 4282664191,
+    "entity_type": "monster",
+    "model": "npc_enemy",
+    "name": "Monster_3",
+    "position": [
+      1810.8941650390625,
+      -56.88530731201172,
+      5460.51318359375
+    ],
+    "rotation": 0.0,
+    "target_size": 36.0
+  },
+  {
+    "color": 4282664191,
+    "entity_type": "monster",
+    "model": "npc_enemy",
+    "name": "Monster_2",
+    "position": [
+      5806.6103515625,
+      1.6566625833511353,
+      2524.45849609375
+    ],
+    "rotation": 0.0,
+    "target_size": 36.0
+  },
+  {
+    "color": 4282664191,
+    "entity_type": "monster",
+    "model": "npc_enemy",
+    "name": "Monster_1",
+    "position": [
+      2403.83349609375,
+      -79.24371337890625,
+      5341.42333984375
+    ],
+    "rotation": 0.0,
+    "target_size": 36.0
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4477.47265625,
+      20.918655395507813,
+      2690.619873046875
+    ],
+    "rotation": 2.704805612564087,
+    "target_size": 287.2931213378906
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4635.02001953125,
+      20.769479751586914,
+      2962.373046875
+    ],
+    "rotation": 0.189824640750885,
+    "target_size": 428.09814453125
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4410.6328125,
+      23.107162475585938,
+      2862.11083984375
+    ],
+    "rotation": 0.3206208646297455,
+    "target_size": 360.26385498046875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4609.5546875,
+      25.941274642944336,
+      2772.524658203125
+    ],
+    "rotation": 4.649903297424316,
+    "target_size": 410.56585693359375
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      2443.366943359375,
+      -81.11309051513672,
+      3911.244384765625
+    ],
+    "rotation": 4.245683670043945,
+    "target_size": 296.69183349609375
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      2765.66015625,
+      -67.7857894897461,
+      3765.7529296875
+    ],
+    "rotation": 4.961275100708008,
+    "target_size": 500.2916564941406
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      2807.416015625,
+      -63.96799087524414,
+      3919.23388671875
+    ],
+    "rotation": 3.151498317718506,
+    "target_size": 321.8544006347656
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      2600.47216796875,
+      -63.004295349121094,
+      3927.537353515625
+    ],
+    "rotation": 2.9162797927856445,
+    "target_size": 341.9923095703125
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      2601.6533203125,
+      -66.58152770996094,
+      3770.5966796875
+    ],
+    "rotation": 5.761799335479736,
+    "target_size": 431.9249267578125
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3716.06591796875,
+      21.636829376220703,
+      5122.02099609375
+    ],
+    "rotation": 0.9155598282814026,
+    "target_size": 515.0098876953125
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4066.2236328125,
+      39.17594909667969,
+      5042.88134765625
+    ],
+    "rotation": 5.218173503875732,
+    "target_size": 350.63043212890625
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3974.095458984375,
+      30.388776779174805,
+      5183.51904296875
+    ],
+    "rotation": 0.852514386177063,
+    "target_size": 374.0455017089844
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      3787.90478515625,
+      37.97757339477539,
+      5271.919921875
+    ],
+    "rotation": 3.609274387359619,
+    "target_size": 378.1046447753906
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4905.201171875,
+      137.09007263183594,
+      4332.87060546875
+    ],
+    "rotation": 2.9337122440338135,
+    "target_size": 323.0890808105469
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4923.328125,
+      130.35800170898438,
+      4566.70947265625
+    ],
+    "rotation": 5.655797958374023,
+    "target_size": 513.8018798828125
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      5129.966796875,
+      131.7423553466797,
+      4456.71923828125
+    ],
+    "rotation": 2.5872559547424316,
+    "target_size": 458.47784423828125
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      6373.146484375,
+      141.38446044921875,
+      4796.5185546875
+    ],
+    "rotation": 3.3935866355895996,
+    "target_size": 868.19873046875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      2148.105224609375,
+      -84.09651184082031,
+      3737.473388671875
+    ],
+    "rotation": 0.0866599753499031,
+    "target_size": 531.069091796875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      2557.96240234375,
+      -22.066965103149414,
+      2620.46533203125
+    ],
+    "rotation": 4.353541374206543,
+    "target_size": 785.0430908203125
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      1793.1995849609375,
+      -109.98197174072266,
+      3523.033935546875
+    ],
+    "rotation": 1.0322084426879883,
+    "target_size": 711.1163330078125
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      2171.078125,
+      -123.31449890136719,
+      4617.33837890625
+    ],
+    "rotation": 4.074903964996338,
+    "target_size": 477.7153625488281
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      2742.171630859375,
+      50.66619110107422,
+      1556.2919921875
+    ],
+    "rotation": 0.5037399530410767,
+    "target_size": 861.6362915039063
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      2442.863037109375,
+      -97.39400482177734,
+      5184.828125
+    ],
+    "rotation": 5.774516582489014,
+    "target_size": 474.2510070800781
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      2100.551513671875,
+      -112.86907196044922,
+      5114.83056640625
+    ],
+    "rotation": 0.6226769089698792,
+    "target_size": 750.353759765625
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      5991.07373046875,
+      109.86578369140625,
+      3419.877685546875
+    ],
+    "rotation": 4.215632915496826,
+    "target_size": 607.5029907226563
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4849.6572265625,
+      -20.544307708740234,
+      6428.44970703125
+    ],
+    "rotation": 0.3804933726787567,
+    "target_size": 447.00921630859375
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      3593.597412109375,
+      1.6998103857040405,
+      5887.103515625
+    ],
+    "rotation": 1.3205680847167969,
+    "target_size": 734.2512817382813
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4797.326171875,
+      35.76846694946289,
+      5652.89697265625
+    ],
+    "rotation": 5.871561527252197,
+    "target_size": 828.6009521484375
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4052.95361328125,
+      3.7798547744750977,
+      6539.06787109375
+    ],
+    "rotation": 3.378025770187378,
+    "target_size": 774.9225463867188
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      2770.17919921875,
+      30.23794174194336,
+      2055.670166015625
+    ],
+    "rotation": 2.788957118988037,
+    "target_size": 726.8162841796875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      2707.900146484375,
+      -7.979341983795166,
+      5973.28466796875
+    ],
+    "rotation": 6.172938823699951,
+    "target_size": 704.7006225585938
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      6449.4248046875,
+      129.62014770507813,
+      4488.2509765625
+    ],
+    "rotation": 5.257795333862305,
+    "target_size": 417.27191162109375
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      1921.6993408203125,
+      -111.14323425292969,
+      3974.41015625
+    ],
+    "rotation": 0.7057341933250427,
+    "target_size": 870.0887451171875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      5992.0859375,
+      119.11978912353516,
+      5004.5234375
+    ],
+    "rotation": 1.1803902387619019,
+    "target_size": 463.8321533203125
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4874.06201171875,
+      -5.137487411499023,
+      1949.0589599609375
+    ],
+    "rotation": 4.305501937866211,
+    "target_size": 578.7129516601563
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      6096.41845703125,
+      103.15662384033203,
+      4011.693115234375
+    ],
+    "rotation": 6.079239845275879,
+    "target_size": 865.993896484375
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      3384.385009765625,
+      30.373348236083984,
+      1528.9354248046875
+    ],
+    "rotation": 0.02609122544527054,
+    "target_size": 675.1641235351563
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      2645.26318359375,
+      22.264619827270508,
+      6282.9345703125
+    ],
+    "rotation": 3.4575002193450928,
+    "target_size": 632.6320190429688
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      5930.6591796875,
+      20.393001556396484,
+      5897.294921875
+    ],
+    "rotation": 2.785707950592041,
+    "target_size": 720.1751098632813
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      5333.7373046875,
+      80.35767364501953,
+      5536.103515625
+    ],
+    "rotation": 3.0102007389068604,
+    "target_size": 783.7133178710938
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4164.08544921875,
+      -14.908300399780273,
+      2092.837158203125
+    ],
+    "rotation": 2.7588887214660645,
+    "target_size": 611.08251953125
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      5136.248046875,
+      106.21314239501953,
+      4921.408203125
+    ],
+    "rotation": 1.240649938583374,
+    "target_size": 675.5248413085938
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3016.558349609375,
+      -13.879709243774414,
+      4841.9482421875
+    ],
+    "rotation": 2.9952025413513184,
+    "target_size": 567.5960083007813
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      5470.279296875,
+      133.38389587402344,
+      3276.179443359375
+    ],
+    "rotation": 0.5583373308181763,
+    "target_size": 497.65887451171875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      5479.328125,
+      108.8446273803711,
+      4245.46826171875
+    ],
+    "rotation": 6.083868980407715,
+    "target_size": 452.4870910644531
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      2866.7744140625,
+      -59.69841384887695,
+      3609.583740234375
+    ],
+    "rotation": 3.1180896759033203,
+    "target_size": 327.174072265625
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      5199.25244140625,
+      65.65803527832031,
+      2916.712646484375
+    ],
+    "rotation": 6.123836994171143,
+    "target_size": 639.8756713867188
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      2644.440185546875,
+      -50.989505767822266,
+      3056.45654296875
+    ],
+    "rotation": 5.007894039154053,
+    "target_size": 664.527587890625
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4604.4375,
+      29.38079071044922,
+      2554.990966796875
+    ],
+    "rotation": 5.464227676391602,
+    "target_size": 381.3377380371094
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4056.3466796875,
+      35.75292205810547,
+      2868.88037109375
+    ],
+    "rotation": 5.270463466644287,
+    "target_size": 477.1435546875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      2927.394287109375,
+      -55.81794738769531,
+      3216.325439453125
+    ],
+    "rotation": 1.7589855194091797,
+    "target_size": 705.8698120117188
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4378.2353515625,
+      21.45733642578125,
+      2539.401123046875
+    ],
+    "rotation": 1.9034581184387207,
+    "target_size": 335.47088623046875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3839.320068359375,
+      -36.341026306152344,
+      2345.2099609375
+    ],
+    "rotation": 0.7446146607398987,
+    "target_size": 610.6242065429688
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3035.770751953125,
+      -28.036787033081055,
+      4611.48486328125
+    ],
+    "rotation": 3.4295847415924072,
+    "target_size": 361.6179504394531
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      5155.80810546875,
+      126.96698760986328,
+      3985.760498046875
+    ],
+    "rotation": 5.408231258392334,
+    "target_size": 611.9298706054688
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3838.000732421875,
+      13.970499038696289,
+      2737.899169921875
+    ],
+    "rotation": 0.9153898358345032,
+    "target_size": 674.8046875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3036.7333984375,
+      -22.08637046813965,
+      4307.16748046875
+    ],
+    "rotation": 3.7669613361358643,
+    "target_size": 534.8841552734375
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      2579.527587890625,
+      -95.516357421875,
+      4871.1064453125
+    ],
+    "rotation": 2.9396450519561768,
+    "target_size": 336.0521240234375
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3576.25634765625,
+      4.70111083984375,
+      5584.2890625
+    ],
+    "rotation": 3.677704334259033,
+    "target_size": 593.2306518554688
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      2838.5751953125,
+      -48.57229995727539,
+      4453.93408203125
+    ],
+    "rotation": 5.404081344604492,
+    "target_size": 385.928466796875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3458.053466796875,
+      6.218498706817627,
+      3233.197021484375
+    ],
+    "rotation": 2.035214900970459,
+    "target_size": 670.8198852539063
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      2599.68701171875,
+      -90.89347839355469,
+      4632.77783203125
+    ],
+    "rotation": 2.3799424171447754,
+    "target_size": 700.230712890625
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      3277.8984375,
+      -6.420226573944092,
+      2413.9072265625
+    ],
+    "rotation": 5.519145488739014,
+    "target_size": 637.791015625
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4903.13037109375,
+      77.99313354492188,
+      3537.13720703125
+    ],
+    "rotation": 2.1825480461120605,
+    "target_size": 338.77496337890625
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3884.78857421875,
+      37.79231643676758,
+      5407.24072265625
+    ],
+    "rotation": 3.303969621658325,
+    "target_size": 490.1020812988281
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3155.20849609375,
+      -1.5589911937713623,
+      5062.2841796875
+    ],
+    "rotation": 2.730128288269043,
+    "target_size": 373.2187194824219
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      2485.13671875,
+      -70.71235656738281,
+      3332.946533203125
+    ],
+    "rotation": 5.594662189483643,
+    "target_size": 333.4667053222656
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      5129.2744140625,
+      111.09760284423828,
+      3552.498046875
+    ],
+    "rotation": 1.4991730451583862,
+    "target_size": 541.2805786132813
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4893.38916015625,
+      91.80699920654297,
+      4960.46826171875
+    ],
+    "rotation": 2.3032376766204834,
+    "target_size": 650.2073364257813
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      5415.20361328125,
+      127.79618072509766,
+      4006.616943359375
+    ],
+    "rotation": 1.5142972469329834,
+    "target_size": 521.5576171875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      2806.0966796875,
+      -47.47557830810547,
+      5339.021484375
+    ],
+    "rotation": 1.9600448608398438,
+    "target_size": 416.52191162109375
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      2973.494384765625,
+      -54.37336730957031,
+      3836.97607421875
+    ],
+    "rotation": 5.9685444831848145,
+    "target_size": 423.3540954589844
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4854.90869140625,
+      32.84789276123047,
+      3154.5732421875
+    ],
+    "rotation": 5.433332443237305,
+    "target_size": 711.2776489257813
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      5611.9677734375,
+      113.7728042602539,
+      4795.3603515625
+    ],
+    "rotation": 3.645174503326416,
+    "target_size": 338.5355224609375
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      2448.232421875,
+      -96.46881866455078,
+      4395.59814453125
+    ],
+    "rotation": 4.2590413093566895,
+    "target_size": 497.57391357421875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      5177.19482421875,
+      114.94073486328125,
+      4601.908203125
+    ],
+    "rotation": 4.905678749084473,
+    "target_size": 391.11181640625
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3533.007080078125,
+      19.962440490722656,
+      2938.796875
+    ],
+    "rotation": 6.0168561935424805,
+    "target_size": 538.9500732421875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4858.58642578125,
+      26.641511917114258,
+      2862.734375
+    ],
+    "rotation": 2.8892688751220703,
+    "target_size": 429.47900390625
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4470.01318359375,
+      30.498891830444336,
+      3007.467529296875
+    ],
+    "rotation": 4.430964469909668,
+    "target_size": 477.1275329589844
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3233.60693359375,
+      -2.672872304916382,
+      2666.6865234375
+    ],
+    "rotation": 2.1392107009887695,
+    "target_size": 497.57513427734375
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3505.22509765625,
+      -18.581317901611328,
+      2493.021728515625
+    ],
+    "rotation": 1.0645146369934082,
+    "target_size": 574.6633911132813
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      3906.584716796875,
+      27.1550350189209,
+      5676.92724609375
+    ],
+    "rotation": 6.005037307739258,
+    "target_size": 491.8311767578125
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      3227.872802734375,
+      -32.2484130859375,
+      5589.15380859375
+    ],
+    "rotation": 2.627589225769043,
+    "target_size": 483.7781982421875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4226.5390625,
+      44.095401763916016,
+      5248.70263671875
+    ],
+    "rotation": 0.48196402192115784,
+    "target_size": 598.0751953125
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3062.968017578125,
+      -24.241064071655273,
+      3021.77685546875
+    ],
+    "rotation": 0.15793059766292572,
+    "target_size": 475.7870178222656
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      5135.79443359375,
+      134.55213928222656,
+      4220.77734375
+    ],
+    "rotation": 2.0718894004821777,
+    "target_size": 554.992431640625
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      2675.84716796875,
+      -69.29446411132813,
+      4171.16943359375
+    ],
+    "rotation": 2.4286770820617676,
+    "target_size": 596.670166015625
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4480.59765625,
+      62.38968276977539,
+      5203.23486328125
+    ],
+    "rotation": 1.2700170278549194,
+    "target_size": 361.7737121582031
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      5466.06591796875,
+      111.43281555175781,
+      4527.8447265625
+    ],
+    "rotation": 3.997063398361206,
+    "target_size": 528.2455444335938
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      5270.47216796875,
+      125.39725494384766,
+      3759.322509765625
+    ],
+    "rotation": 1.2465871572494507,
+    "target_size": 570.3255615234375
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3845.70654296875,
+      19.587711334228516,
+      5026.71728515625
+    ],
+    "rotation": 4.847798824310303,
+    "target_size": 647.9078979492188
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      3825.9423828125,
+      39.4671516418457,
+      3119.881103515625
+    ],
+    "rotation": 1.1907482147216797,
+    "target_size": 259.5880432128906
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4511.095703125,
+      11.609232902526855,
+      4171.3349609375
+    ],
+    "rotation": 4.676883697509766,
+    "target_size": 475.51611328125
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      3370.46484375,
+      -0.6887268424034119,
+      3452.4365234375
+    ],
+    "rotation": 3.331019163131714,
+    "target_size": 462.31427001953125
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4329.552734375,
+      7.4960551261901855,
+      3708.662841796875
+    ],
+    "rotation": 2.279505491256714,
+    "target_size": 387.41326904296875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4681.6611328125,
+      37.9288215637207,
+      3579.900146484375
+    ],
+    "rotation": 4.551397800445557,
+    "target_size": 427.6026611328125
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4359.34130859375,
+      5.658245086669922,
+      3541.465087890625
+    ],
+    "rotation": 1.7962626218795776,
+    "target_size": 344.4295654296875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      3440.855224609375,
+      -2.1526131629943848,
+      4222.10400390625
+    ],
+    "rotation": 2.39863920211792,
+    "target_size": 413.17303466796875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      3898.925048828125,
+      6.053456783294678,
+      3577.5224609375
+    ],
+    "rotation": 0.44377997517585754,
+    "target_size": 478.05596923828125
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4124.66162109375,
+      6.084491729736328,
+      4399.94287109375
+    ],
+    "rotation": 3.4417505264282227,
+    "target_size": 488.7215576171875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4282.291015625,
+      25.83505630493164,
+      4640.7490234375
+    ],
+    "rotation": 3.5910260677337646,
+    "target_size": 379.33367919921875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4702.78076171875,
+      65.44377136230469,
+      4316.36669921875
+    ],
+    "rotation": 4.374948978424072,
+    "target_size": 385.3577880859375
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4797.68896484375,
+      70.88237762451172,
+      3946.949462890625
+    ],
+    "rotation": 3.2340545654296875,
+    "target_size": 292.7972717285156
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3713.76318359375,
+      24.143434524536133,
+      3299.669189453125
+    ],
+    "rotation": 3.4100661277770996,
+    "target_size": 240.65972900390625
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4497.16259765625,
+      7.407331466674805,
+      3702.25146484375
+    ],
+    "rotation": 1.128520131111145,
+    "target_size": 422.5247497558594
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3605.399169921875,
+      3.1359996795654297,
+      3547.368408203125
+    ],
+    "rotation": 5.237545490264893,
+    "target_size": 242.41104125976563
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4050.5,
+      5.086453437805176,
+      4628.5654296875
+    ],
+    "rotation": 3.7821567058563232,
+    "target_size": 385.8274230957031
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4500.60888671875,
+      14.990967750549316,
+      4333.20654296875
+    ],
+    "rotation": 3.3509082794189453,
+    "target_size": 418.66009521484375
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      3441.24169921875,
+      1.6297798156738281,
+      4682.12060546875
+    ],
+    "rotation": 6.019535064697266,
+    "target_size": 344.968994140625
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      3924.96142578125,
+      1.923022747039795,
+      4442.37451171875
+    ],
+    "rotation": 4.978808879852295,
+    "target_size": 508.8105163574219
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      4379.431640625,
+      53.342384338378906,
+      4773.75244140625
+    ],
+    "rotation": 4.64254093170166,
+    "target_size": 281.0920104980469
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3657.443115234375,
+      9.354801177978516,
+      4830.35888671875
+    ],
+    "rotation": 0.4426219165325165,
+    "target_size": 543.3269653320313
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      3360.74951171875,
+      -6.2855448722839355,
+      4550.42138671875
+    ],
+    "rotation": 0.8551018834114075,
+    "target_size": 439.1600341796875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4256.38037109375,
+      25.61668586730957,
+      3276.011474609375
+    ],
+    "rotation": 4.696029186248779,
+    "target_size": 436.3987121582031
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      3192.21875,
+      -29.070526123046875,
+      3762.51416015625
+    ],
+    "rotation": 4.206607341766357,
+    "target_size": 324.7050476074219
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4571.31982421875,
+      61.42573928833008,
+      4531.70703125
+    ],
+    "rotation": 2.1719555854797363,
+    "target_size": 439.9132080078125
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4736.07373046875,
+      46.97785186767578,
+      3742.675537109375
+    ],
+    "rotation": 4.164322376251221,
+    "target_size": 551.4869995117188
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4572.24755859375,
+      11.080426216125488,
+      4007.293212890625
+    ],
+    "rotation": 4.3768534660339355,
+    "target_size": 355.1824951171875
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      4437.25,
+      20.308019638061523,
+      3342.852783203125
+    ],
+    "rotation": 2.625605821609497,
+    "target_size": 258.2457580566406
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_pine",
+    "name": "tree_pine",
+    "position": [
+      3840.677001953125,
+      4.576092720031738,
+      4664.12646484375
+    ],
+    "rotation": 0.7919267416000366,
+    "target_size": 524.109619140625
+  },
+  {
+    "color": 4280453154,
+    "entity_type": "environment",
+    "model": "tree_oak",
+    "name": "tree_oak",
+    "position": [
+      3673.45263671875,
+      -0.8117488026618958,
+      4354.0419921875
+    ],
+    "rotation": 0.7440906763076782,
+    "target_size": 528.0604248046875
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      1988.631591796875,
+      -7.736478805541992,
+      5732.177734375
+    ],
+    "rotation": 4.47880744934082,
+    "target_size": 49.47258377075195
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      6762.73486328125,
+      64.97428131103516,
+      2923.035888671875
+    ],
+    "rotation": 3.9709665775299072,
+    "target_size": 49.124637603759766
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      3969.341552734375,
+      -7.147770881652832,
+      6910.796875
+    ],
+    "rotation": 3.834745168685913,
+    "target_size": 98.31261444091797
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      2429.4404296875,
+      17.367826461791992,
+      2049.6162109375
+    ],
+    "rotation": 4.621842861175537,
+    "target_size": 91.87725830078125
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      1928.850830078125,
+      113.75678253173828,
+      1657.339599609375
+    ],
+    "rotation": 4.034833908081055,
+    "target_size": 69.98711395263672
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      2309.285888671875,
+      25.29525375366211,
+      2131.98486328125
+    ],
+    "rotation": 5.421591758728027,
+    "target_size": 52.81991958618164
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      6700.4267578125,
+      61.16514587402344,
+      2124.460693359375
+    ],
+    "rotation": 0.8669394850730896,
+    "target_size": 66.75723266601563
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      826.3453369140625,
+      16.608074188232422,
+      5258.3212890625
+    ],
+    "rotation": 0.1749480664730072,
+    "target_size": 79.69331359863281
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      3153.036865234375,
+      64.72339630126953,
+      934.6906127929688
+    ],
+    "rotation": 3.306501865386963,
+    "target_size": 80.21685791015625
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      4697.98681640625,
+      2.593238115310669,
+      7193.1875
+    ],
+    "rotation": 3.8812904357910156,
+    "target_size": 99.49999237060547
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      4187.791015625,
+      -3.3608856201171875,
+      6585.142578125
+    ],
+    "rotation": 3.269240140914917,
+    "target_size": 80.81612396240234
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      7412.1796875,
+      106.66554260253906,
+      4082.005126953125
+    ],
+    "rotation": 3.112959623336792,
+    "target_size": 42.45806884765625
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      4446.43603515625,
+      -25.74297523498535,
+      6799.01123046875
+    ],
+    "rotation": 0.42543408274650574,
+    "target_size": 82.81622314453125
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      2334.080810546875,
+      53.6927490234375,
+      6375.173828125
+    ],
+    "rotation": 2.9410810470581055,
+    "target_size": 56.60795211791992
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      6347.150390625,
+      53.536563873291016,
+      3063.5576171875
+    ],
+    "rotation": 3.9067189693450928,
+    "target_size": 51.8276252746582
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      6782.09326171875,
+      67.12862396240234,
+      3030.435791015625
+    ],
+    "rotation": 5.339735507965088,
+    "target_size": 70.36431121826172
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      5193.25341796875,
+      0.06849176436662674,
+      6418.0263671875
+    ],
+    "rotation": 2.0771169662475586,
+    "target_size": 57.648067474365234
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      6259.88525390625,
+      34.03621292114258,
+      2473.524169921875
+    ],
+    "rotation": 4.985107898712158,
+    "target_size": 56.550559997558594
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      6449.80322265625,
+      49.85185241699219,
+      2727.68115234375
+    ],
+    "rotation": 1.7765097618103027,
+    "target_size": 86.69212341308594
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      4093.8701171875,
+      -21.404518127441406,
+      6779.375
+    ],
+    "rotation": 1.3732059001922607,
+    "target_size": 80.82230377197266
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      3073.75927734375,
+      50.33488082885742,
+      1462.5738525390625
+    ],
+    "rotation": 4.347321510314941,
+    "target_size": 55.0479621887207
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      6802.1669921875,
+      97.25879669189453,
+      5710.36328125
+    ],
+    "rotation": 2.5847558975219727,
+    "target_size": 58.97728729248047
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      2002.0299072265625,
+      35.057769775390625,
+      2203.441162109375
+    ],
+    "rotation": 3.8250021934509277,
+    "target_size": 96.41136169433594
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      1442.515380859375,
+      -38.658145904541016,
+      5587.13720703125
+    ],
+    "rotation": 4.890174865722656,
+    "target_size": 98.50752258300781
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      5099.4873046875,
+      -59.383750915527344,
+      1594.4329833984375
+    ],
+    "rotation": 0.6275292038917542,
+    "target_size": 50.968196868896484
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      2308.931640625,
+      49.64745330810547,
+      6062.7890625
+    ],
+    "rotation": 4.301122188568115,
+    "target_size": 80.9306411743164
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      6032.08837890625,
+      -5.888580322265625,
+      1216.0262451171875
+    ],
+    "rotation": 1.0613105297088623,
+    "target_size": 58.96298599243164
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      6527.6669921875,
+      49.362945556640625,
+      2451.648681640625
+    ],
+    "rotation": 4.235588550567627,
+    "target_size": 57.912353515625
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      3834.6923828125,
+      43.08197021484375,
+      807.1548461914063
+    ],
+    "rotation": 1.7150533199310303,
+    "target_size": 63.81795883178711
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      3106.348876953125,
+      95.77362060546875,
+      6999.2998046875
+    ],
+    "rotation": 0.13664205372333527,
+    "target_size": 87.91090393066406
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      2803.353271484375,
+      62.865055084228516,
+      6743.44384765625
+    ],
+    "rotation": 1.1741688251495361,
+    "target_size": 90.19458770751953
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      6096.28466796875,
+      22.340595245361328,
+      6443.12890625
+    ],
+    "rotation": 4.3563995361328125,
+    "target_size": 99.96485137939453
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      4891.732421875,
+      -72.98014831542969,
+      1161.4130859375
+    ],
+    "rotation": 3.6510326862335205,
+    "target_size": 69.67298889160156
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      2808.240478515625,
+      71.7940444946289,
+      1357.8458251953125
+    ],
+    "rotation": 3.923737049102783,
+    "target_size": 61.976844787597656
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      5825.302734375,
+      42.671409606933594,
+      5709.70556640625
+    ],
+    "rotation": 3.7546024322509766,
+    "target_size": 67.76669311523438
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      6455.62744140625,
+      55.7755126953125,
+      5628.60693359375
+    ],
+    "rotation": 0.5082330107688904,
+    "target_size": 59.76636505126953
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      4437.97412109375,
+      9.461323738098145,
+      7337.36572265625
+    ],
+    "rotation": 4.732797145843506,
+    "target_size": 55.087066650390625
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      4808.8740234375,
+      -77.20779418945313,
+      1388.4755859375
+    ],
+    "rotation": 3.9848692417144775,
+    "target_size": 80.9254379272461
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      1250.423095703125,
+      18.439678192138672,
+      5987.29150390625
+    ],
+    "rotation": 0.8478672504425049,
+    "target_size": 75.23028564453125
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      1724.7852783203125,
+      -77.11663818359375,
+      5260.0693359375
+    ],
+    "rotation": 3.056929111480713,
+    "target_size": 86.08533477783203
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      1478.142333984375,
+      100.55938720703125,
+      2024.5023193359375
+    ],
+    "rotation": 2.181962728500366,
+    "target_size": 70.24018859863281
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      5531.13818359375,
+      -20.785110473632813,
+      1053.427490234375
+    ],
+    "rotation": 4.970035552978516,
+    "target_size": 51.37152862548828
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      3757.009033203125,
+      19.165184020996094,
+      6924.51806640625
+    ],
+    "rotation": 5.174002647399902,
+    "target_size": 82.68877410888672
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      1513.563720703125,
+      -97.85507202148438,
+      4445.27880859375
+    ],
+    "rotation": 4.60001802444458,
+    "target_size": 83.28395080566406
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      6744.75537109375,
+      85.28390502929688,
+      4877.13330078125
+    ],
+    "rotation": 5.008692741394043,
+    "target_size": 62.07897186279297
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      1760.3505859375,
+      41.67402648925781,
+      2298.753173828125
+    ],
+    "rotation": 3.7616093158721924,
+    "target_size": 84.83198547363281
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      1266.8802490234375,
+      -23.687042236328125,
+      2958.216796875
+    ],
+    "rotation": 0.467332661151886,
+    "target_size": 68.38676452636719
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      3887.798583984375,
+      26.373340606689453,
+      7495.484375
+    ],
+    "rotation": 1.239514708518982,
+    "target_size": 69.70013427734375
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      2571.21484375,
+      130.5320281982422,
+      1021.3677978515625
+    ],
+    "rotation": 2.0553126335144043,
+    "target_size": 65.88721466064453
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      6329.25537109375,
+      33.47105026245117,
+      5785.85302734375
+    ],
+    "rotation": 3.935685396194458,
+    "target_size": 82.72721099853516
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      4625.21240234375,
+      30.645309448242188,
+      5739.998046875
+    ],
+    "rotation": 5.024752616882324,
+    "target_size": 56.60569763183594
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      6016.89013671875,
+      81.01097869873047,
+      3134.591552734375
+    ],
+    "rotation": 1.5329530239105225,
+    "target_size": 47.4693603515625
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      3869.86328125,
+      23.620407104492188,
+      5858.53271484375
+    ],
+    "rotation": 1.232018232345581,
+    "target_size": 34.07188415527344
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      4426.74853515625,
+      -29.50006866455078,
+      1741.8958740234375
+    ],
+    "rotation": 0.866940438747406,
+    "target_size": 53.85805130004883
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      2886.0673828125,
+      22.474239349365234,
+      2190.4697265625
+    ],
+    "rotation": 5.608127117156982,
+    "target_size": 60.11259460449219
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      6045.689453125,
+      129.36228942871094,
+      4445.5595703125
+    ],
+    "rotation": 6.113129615783691,
+    "target_size": 34.2198600769043
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      2403.145751953125,
+      -91.40217590332031,
+      4272.693359375
+    ],
+    "rotation": 0.233391672372818,
+    "target_size": 53.1688346862793
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      3385.8046875,
+      -15.623044967651367,
+      5693.3828125
+    ],
+    "rotation": 2.823683977127075,
+    "target_size": 33.04896926879883
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      3089.55419921875,
+      -48.96006393432617,
+      5967.30908203125
+    ],
+    "rotation": 4.145730495452881,
+    "target_size": 42.72246551513672
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      5076.2734375,
+      97.45028686523438,
+      5111.23291015625
+    ],
+    "rotation": 0.37196221947669983,
+    "target_size": 51.606685638427734
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      3630.88525390625,
+      -5.780837535858154,
+      6241.18115234375
+    ],
+    "rotation": 1.6047992706298828,
+    "target_size": 25.673843383789063
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      3728.08203125,
+      9.552434921264648,
+      6032.91748046875
+    ],
+    "rotation": 1.4773693084716797,
+    "target_size": 34.96900177001953
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      2161.390380859375,
+      -124.97444152832031,
+      4400.302734375
+    ],
+    "rotation": 1.2241815328598022,
+    "target_size": 55.52284240722656
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      2273.950439453125,
+      -4.1007795333862305,
+      2303.275390625
+    ],
+    "rotation": 1.2874559164047241,
+    "target_size": 33.87522506713867
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      3543.7041015625,
+      -16.87913703918457,
+      1887.51904296875
+    ],
+    "rotation": 2.904351234436035,
+    "target_size": 27.742921829223633
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      4910.857421875,
+      41.67472839355469,
+      2577.824462890625
+    ],
+    "rotation": 5.5908427238464355,
+    "target_size": 43.772586822509766
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      1794.751708984375,
+      -119.44351959228516,
+      4298.06884765625
+    ],
+    "rotation": 2.3778748512268066,
+    "target_size": 33.49770736694336
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      5471.7900390625,
+      101.56517028808594,
+      4383.349609375
+    ],
+    "rotation": 3.9806742668151855,
+    "target_size": 47.186859130859375
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      2438.122802734375,
+      -6.849398136138916,
+      5732.52734375
+    ],
+    "rotation": 2.331890821456909,
+    "target_size": 30.149709701538086
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      5310.64892578125,
+      -41.003150939941406,
+      2121.17529296875
+    ],
+    "rotation": 5.139399528503418,
+    "target_size": 40.12398147583008
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      3016.541015625,
+      -2.378404378890991,
+      2552.5703125
+    ],
+    "rotation": 3.5706307888031006,
+    "target_size": 31.722126007080078
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      4307.40234375,
+      30.929643630981445,
+      5841.14990234375
+    ],
+    "rotation": 0.04902083799242973,
+    "target_size": 35.486976623535156
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      5521.548828125,
+      121.93668365478516,
+      3918.995849609375
+    ],
+    "rotation": 4.7881879806518555,
+    "target_size": 49.16857147216797
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      4306.64990234375,
+      -12.043320655822754,
+      2049.869140625
+    ],
+    "rotation": 5.764519691467285,
+    "target_size": 56.76803970336914
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      5644.21826171875,
+      113.34986877441406,
+      5083.58544921875
+    ],
+    "rotation": 0.06401447206735611,
+    "target_size": 32.07480239868164
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      4097.94091796875,
+      -18.695419311523438,
+      2183.1826171875
+    ],
+    "rotation": 5.1511549949646,
+    "target_size": 27.781187057495117
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      2639.1044921875,
+      -52.52080535888672,
+      3069.059326171875
+    ],
+    "rotation": 1.0516613721847534,
+    "target_size": 43.3168830871582
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      5556.67236328125,
+      106.59907531738281,
+      4162.37060546875
+    ],
+    "rotation": 3.2553091049194336,
+    "target_size": 37.562801361083984
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      5213.28564453125,
+      31.882558822631836,
+      6135.1171875
+    ],
+    "rotation": 0.0006738785887137055,
+    "target_size": 59.337039947509766
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      2889.882568359375,
+      -40.06101989746094,
+      5420.705078125
+    ],
+    "rotation": 3.82655930519104,
+    "target_size": 60.331581115722656
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      5660.7734375,
+      -32.82815933227539,
+      2332.70068359375
+    ],
+    "rotation": 4.596005916595459,
+    "target_size": 29.646535873413086
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      5771.74853515625,
+      13.990388870239258,
+      2591.923583984375
+    ],
+    "rotation": 5.846520900726318,
+    "target_size": 35.49958801269531
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      2441.6083984375,
+      -42.70282745361328,
+      2911.845703125
+    ],
+    "rotation": 4.9921746253967285,
+    "target_size": 54.537681579589844
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      2832.728271484375,
+      50.2297477722168,
+      1820.369384765625
+    ],
+    "rotation": 2.5758512020111084,
+    "target_size": 58.55462646484375
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      4320.03662109375,
+      -9.9638032913208,
+      2112.85302734375
+    ],
+    "rotation": 3.7944610118865967,
+    "target_size": 54.49382019042969
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      2290.787109375,
+      -98.717529296875,
+      4210.515625
+    ],
+    "rotation": 5.248344898223877,
+    "target_size": 25.868358612060547
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      5338.31689453125,
+      114.50341033935547,
+      3213.617431640625
+    ],
+    "rotation": 3.640928030014038,
+    "target_size": 52.26365661621094
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      5555.62158203125,
+      125.77528381347656,
+      3287.962646484375
+    ],
+    "rotation": 5.277236461639404,
+    "target_size": 59.176544189453125
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      4241.7177734375,
+      41.51247787475586,
+      5545.65380859375
+    ],
+    "rotation": 1.2479889392852783,
+    "target_size": 41.85934066772461
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      5766.2392578125,
+      -14.350732803344727,
+      2395.5576171875
+    ],
+    "rotation": 5.737438201904297,
+    "target_size": 52.70832061767578
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      4064.39453125,
+      27.043745040893555,
+      5952.93359375
+    ],
+    "rotation": 2.583508253097534,
+    "target_size": 55.72843551635742
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      5553.8369140625,
+      -36.278194427490234,
+      2300.7158203125
+    ],
+    "rotation": 1.9071555137634277,
+    "target_size": 36.60378646850586
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      4874.36474609375,
+      57.65502166748047,
+      5406.39599609375
+    ],
+    "rotation": 1.1140327453613281,
+    "target_size": 61.918025970458984
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      3392.929931640625,
+      -12.475676536560059,
+      5458.1875
+    ],
+    "rotation": 5.525252819061279,
+    "target_size": 49.43781280517578
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      1841.3095703125,
+      -109.7418212890625,
+      4762.43701171875
+    ],
+    "rotation": 1.0379769802093506,
+    "target_size": 28.05299949645996
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      2607.5400390625,
+      -87.05803680419922,
+      4831.18505859375
+    ],
+    "rotation": 4.0444655418396,
+    "target_size": 25.603954315185547
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      1828.0006103515625,
+      -106.28996276855469,
+      3555.845703125
+    ],
+    "rotation": 4.585540294647217,
+    "target_size": 45.71285629272461
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      1815.794677734375,
+      -111.42089080810547,
+      4493.09375
+    ],
+    "rotation": 5.738954067230225,
+    "target_size": 26.190372467041016
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      2599.703857421875,
+      -65.6734390258789,
+      3231.341552734375
+    ],
+    "rotation": 3.0526492595672607,
+    "target_size": 40.12492370605469
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      5820.44775390625,
+      126.3707504272461,
+      3299.605224609375
+    ],
+    "rotation": 4.807334899902344,
+    "target_size": 41.614532470703125
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      2497.489501953125,
+      -59.1715087890625,
+      5420.22998046875
+    ],
+    "rotation": 3.8656868934631348,
+    "target_size": 41.21699142456055
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      6059.44775390625,
+      72.57870483398438,
+      2974.8212890625
+    ],
+    "rotation": 5.916460037231445,
+    "target_size": 45.635189056396484
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      5631.99755859375,
+      9.2150239944458,
+      2551.1162109375
+    ],
+    "rotation": 3.0758728981018066,
+    "target_size": 42.24160385131836
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      6370.5888671875,
+      75.75300598144531,
+      3385.93896484375
+    ],
+    "rotation": 2.16627836227417,
+    "target_size": 51.08901596069336
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      2169.388916015625,
+      -69.81279754638672,
+      3350.87109375
+    ],
+    "rotation": 0.12893617153167725,
+    "target_size": 47.82444763183594
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      3434.479736328125,
+      11.902658462524414,
+      1731.5643310546875
+    ],
+    "rotation": 0.3875805139541626,
+    "target_size": 35.09667205810547
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      5940.8212890625,
+      126.51709747314453,
+      4918.8984375
+    ],
+    "rotation": 3.6544177532196045,
+    "target_size": 38.189971923828125
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      2056.3251953125,
+      -94.75009155273438,
+      3806.084716796875
+    ],
+    "rotation": 0.5229859352111816,
+    "target_size": 52.57365417480469
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      2579.34033203125,
+      -95.19227600097656,
+      4705.5703125
+    ],
+    "rotation": 0.8981500864028931,
+    "target_size": 35.827239990234375
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      4812.1923828125,
+      -6.204097270965576,
+      6291.798828125
+    ],
+    "rotation": 2.0488152503967285,
+    "target_size": 36.780052185058594
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      3154.944580078125,
+      -9.071870803833008,
+      5151.9462890625
+    ],
+    "rotation": 0.26838821172714233,
+    "target_size": 34.02857208251953
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      4742.41015625,
+      43.28728103637695,
+      3533.579833984375
+    ],
+    "rotation": 1.9764766693115234,
+    "target_size": 23.401378631591797
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      5029.60595703125,
+      105.3366470336914,
+      5042.08642578125
+    ],
+    "rotation": 0.6743296980857849,
+    "target_size": 21.43395233154297
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      4106.4609375,
+      39.39060974121094,
+      3099.7802734375
+    ],
+    "rotation": 4.276278495788574,
+    "target_size": 34.545928955078125
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      4426.0927734375,
+      22.879026412963867,
+      2818.912841796875
+    ],
+    "rotation": 1.9662153720855713,
+    "target_size": 16.632686614990234
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      3145.249267578125,
+      -28.069225311279297,
+      4007.260986328125
+    ],
+    "rotation": 0.577443540096283,
+    "target_size": 20.66437530517578
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      3058.449462890625,
+      -10.982519149780273,
+      4903.03515625
+    ],
+    "rotation": 2.308685779571533,
+    "target_size": 31.24079704284668
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      5186.99951171875,
+      117.15612030029297,
+      3575.777099609375
+    ],
+    "rotation": 2.2663278579711914,
+    "target_size": 28.3308048248291
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      3767.232421875,
+      24.898090362548828,
+      2877.254150390625
+    ],
+    "rotation": 5.7497029304504395,
+    "target_size": 26.099754333496094
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      4217.888671875,
+      42.669837951660156,
+      5412.28125
+    ],
+    "rotation": 4.946970462799072,
+    "target_size": 21.124361038208008
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      4155.69580078125,
+      13.719382286071777,
+      2709.396240234375
+    ],
+    "rotation": 3.1662800312042236,
+    "target_size": 23.3662052154541
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      4830.64892578125,
+      47.63179016113281,
+      3298.8310546875
+    ],
+    "rotation": 2.1243133544921875,
+    "target_size": 27.38536834716797
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      3594.658935546875,
+      -19.940017700195313,
+      2575.278076171875
+    ],
+    "rotation": 3.9838809967041016,
+    "target_size": 38.79411697387695
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      3497.58154296875,
+      5.032525062561035,
+      2784.9990234375
+    ],
+    "rotation": 6.135135173797607,
+    "target_size": 34.990169525146484
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      4269.33349609375,
+      30.079368591308594,
+      3108.31591796875
+    ],
+    "rotation": 0.7906857132911682,
+    "target_size": 38.459983825683594
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      3273.619873046875,
+      6.137968063354492,
+      4649.791015625
+    ],
+    "rotation": 2.18111515045166,
+    "target_size": 22.88739776611328
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      3009.581787109375,
+      -21.189342498779297,
+      4981.00244140625
+    ],
+    "rotation": 5.724592685699463,
+    "target_size": 27.33123779296875
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      4649.2294921875,
+      96.56256866455078,
+      4895.75634765625
+    ],
+    "rotation": 4.6365966796875,
+    "target_size": 27.24066734313965
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      2923.431640625,
+      -28.18126678466797,
+      4970.92041015625
+    ],
+    "rotation": 3.829561710357666,
+    "target_size": 22.469276428222656
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      3198.67431640625,
+      -28.750328063964844,
+      3839.56201171875
+    ],
+    "rotation": 5.261403560638428,
+    "target_size": 19.19355583190918
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      2787.11474609375,
+      -69.55056762695313,
+      3541.493408203125
+    ],
+    "rotation": 1.1187400817871094,
+    "target_size": 32.33638381958008
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      3931.71728515625,
+      26.70389175415039,
+      5245.1923828125
+    ],
+    "rotation": 4.770759582519531,
+    "target_size": 26.70264434814453
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_slate",
+    "name": "rock_slate",
+    "position": [
+      3728.068603515625,
+      32.74867630004883,
+      3176.5615234375
+    ],
+    "rotation": 1.3757036924362183,
+    "target_size": 27.12363052368164
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      4402.32763671875,
+      25.9169979095459,
+      3121.472900390625
+    ],
+    "rotation": 2.383496046066284,
+    "target_size": 27.505569458007813
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      3206.468505859375,
+      -8.276941299438477,
+      2814.509033203125
+    ],
+    "rotation": 4.575830936431885,
+    "target_size": 35.299739837646484
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      2582.53759765625,
+      -65.91423034667969,
+      3764.02587890625
+    ],
+    "rotation": 6.12556266784668,
+    "target_size": 29.909149169921875
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      4356.6806640625,
+      27.877134323120117,
+      3264.6669921875
+    ],
+    "rotation": 3.0897395610809326,
+    "target_size": 37.48664855957031
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      5337.22265625,
+      116.68573760986328,
+      4227.75244140625
+    ],
+    "rotation": 4.388686656951904,
+    "target_size": 35.009254455566406
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      3891.2705078125,
+      6.399422645568848,
+      2650.79833984375
+    ],
+    "rotation": 1.0738859176635742,
+    "target_size": 29.919240951538086
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      3823.993896484375,
+      7.133876323699951,
+      2628.36572265625
+    ],
+    "rotation": 2.0002756118774414,
+    "target_size": 39.850364685058594
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      3324.94677734375,
+      13.597304344177246,
+      4775.177734375
+    ],
+    "rotation": 2.762368679046631,
+    "target_size": 32.27369689941406
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      3146.7724609375,
+      -25.74875259399414,
+      2935.34375
+    ],
+    "rotation": 5.848487377166748,
+    "target_size": 32.93634033203125
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_cluster",
+    "name": "rock_cluster",
+    "position": [
+      2616.40185546875,
+      -62.557029724121094,
+      3488.112548828125
+    ],
+    "rotation": 4.547048568725586,
+    "target_size": 35.997982025146484
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      3312.707275390625,
+      -9.650382995605469,
+      2969.143310546875
+    ],
+    "rotation": 5.704660415649414,
+    "target_size": 35.24531555175781
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      3774.533203125,
+      17.2181339263916,
+      4844.9462890625
+    ],
+    "rotation": 1.8768106698989868,
+    "target_size": 24.96860122680664
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      3979.540283203125,
+      -10.140074729919434,
+      2575.50634765625
+    ],
+    "rotation": 0.168324813246727,
+    "target_size": 39.03266906738281
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      5175.09521484375,
+      102.40904998779297,
+      3389.46875
+    ],
+    "rotation": 4.106500625610352,
+    "target_size": 24.34803009033203
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_spire",
+    "name": "rock_spire",
+    "position": [
+      2787.505126953125,
+      -53.62487030029297,
+      3169.914306640625
+    ],
+    "rotation": 2.9023685455322266,
+    "target_size": 39.11286163330078
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_boulder",
+    "name": "rock_boulder",
+    "position": [
+      4913.91357421875,
+      125.5304946899414,
+      4233.181640625
+    ],
+    "rotation": 3.5671212673187256,
+    "target_size": 35.66090393066406
+  },
+  {
+    "color": 4284900966,
+    "entity_type": "environment",
+    "model": "rock_mossy",
+    "name": "rock_mossy",
+    "position": [
+      5286.19873046875,
+      126.97541809082031,
+      3390.959228515625
+    ],
+    "rotation": 0.8212581276893616,
+    "target_size": 22.90938949584961
+  },
+  {
+    "color": 4287137928,
+    "entity_type": "town_npc",
+    "model": "npc_villager",
+    "name": "Wanderer",
+    "position": [
+      3800.0,
+      3.380368709564209,
+      3940.0
+    ],
+    "rotation": 0.0,
+    "target_size": 28.799999237060547
+  },
+  {
+    "color": 4287137928,
+    "entity_type": "town_npc",
+    "model": "npc_villager",
+    "name": "Farmer",
+    "position": [
+      4080.0,
+      6.33806848526001,
+      3900.0
+    ],
+    "rotation": 0.0,
+    "target_size": 28.799999237060547
+  },
+  {
+    "color": 4287137928,
+    "entity_type": "town_npc",
+    "model": "npc_villager",
+    "name": "Peasant",
+    "position": [
+      3940.0,
+      3.870434284210205,
+      4120.0
+    ],
+    "rotation": 0.0,
+    "target_size": 28.799999237060547
+  },
+  {
+    "color": 4283795626,
+    "entity_type": "town_npc",
+    "model": "npc_guard",
+    "name": "Town Guard",
+    "position": [
+      4160.0,
+      7.649129390716553,
+      3840.0
+    ],
+    "rotation": 0.0,
+    "target_size": 28.799999237060547
+  },
+  {
+    "color": 4283795626,
+    "entity_type": "town_npc",
+    "model": "npc_guard",
+    "name": "Guard Captain",
+    "position": [
+      3780.0,
+      0.57576984167099,
+      4120.0
+    ],
+    "rotation": 0.0,
+    "target_size": 28.799999237060547
+  },
+  {
+    "color": 4289366101,
+    "entity_type": "town_npc",
+    "model": "npc_merchant",
+    "name": "Elara the Merchant",
+    "position": [
+      4140.0,
+      5.637353420257568,
+      4100.0
+    ],
+    "rotation": 0.0,
+    "target_size": 28.799999237060547
+  },
+  {
+    "color": 4283782570,
+    "entity_type": "town_npc",
+    "model": "npc_blacksmith",
+    "name": "Grimhammer",
+    "position": [
+      4200.0,
+      7.948786735534668,
+      3960.0
+    ],
+    "rotation": 0.0,
+    "target_size": 28.799999237060547
+  },
+  {
+    "color": 4287146581,
+    "entity_type": "town_npc",
+    "model": "npc_innkeeper",
+    "name": "Barthos the Innkeeper",
+    "position": [
+      3820.0,
+      3.7689192295074463,
+      3900.0
+    ],
+    "rotation": 0.0,
+    "target_size": 28.799999237060547
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      30.242467880249023,
+      4435.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      24.916486740112305,
+      4400.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      19.157039642333984,
+      4365.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      14.62331485748291,
+      4330.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      13.29882526397705,
+      4295.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      12.911253929138184,
+      4260.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      12.364374160766602,
+      4225.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      11.76928424835205,
+      4190.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      11.223021507263184,
+      4155.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      10.817744255065918,
+      4120.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      10.582759857177734,
+      4085.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      10.505855560302734,
+      4050.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      10.696895599365234,
+      3945.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      10.637081146240234,
+      3910.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      10.399044036865234,
+      3875.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      9.972399711608887,
+      3840.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      9.386411666870117,
+      3805.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      8.7034273147583,
+      3770.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      8.007624626159668,
+      3735.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      7.377744674682617,
+      3700.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      7.592587947845459,
+      3665.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      9.669045448303223,
+      3630.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      12.303339004516602,
+      3595.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4500.0,
+      15.035948753356934,
+      3560.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -1.2729178667068481,
+      4435.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -1.2466729879379272,
+      4400.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -1.1538984775543213,
+      4365.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -1.0672296285629272,
+      4330.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -1.169768214225769,
+      4295.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -1.3681315183639526,
+      4260.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -1.561004400253296,
+      4225.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -1.748991847038269,
+      4190.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -1.9205000400543213,
+      4155.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -2.069427251815796,
+      4120.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -2.1762382984161377,
+      4085.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -2.2262871265411377,
+      4050.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -2.2116384506225586,
+      4015.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -2.1115410327911377,
+      3980.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -1.940031886100769,
+      3945.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -1.684906005859375,
+      3910.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -1.3504326343536377,
+      3875.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -0.95553058385849,
+      3840.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -0.5416877865791321,
+      3805.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      -0.11993386596441269,
+      3770.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      0.26825058460235596,
+      3735.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      0.5996699929237366,
+      3700.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      0.9732060432434082,
+      3665.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      1.614072322845459,
+      3630.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      2.361201524734497,
+      3595.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3500.0,
+      3.093017339706421,
+      3560.0
+    ],
+    "rotation": 1.5707963705062866,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4435.0,
+      25.495698928833008,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4400.0,
+      19.465938568115234,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4365.0,
+      13.97998332977295,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4330.0,
+      9.963831901550293,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4295.0,
+      8.425719261169434,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4260.0,
+      7.570620536804199,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4225.0,
+      6.65752649307251,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4190.0,
+      5.790776252746582,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4155.0,
+      5.068727493286133,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4120.0,
+      4.526730537414551,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4085.0,
+      4.142210960388184,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4050.0,
+      3.8529052734375,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3945.0,
+      2.688352108001709,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3910.0,
+      2.034057855606079,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3875.0,
+      1.28936767578125,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3840.0,
+      0.5673202872276306,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3805.0,
+      -0.007628580089658499,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3770.0,
+      -0.36346447467803955,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3735.0,
+      -0.48065185546875,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3700.0,
+      -0.3890993595123291,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3665.0,
+      -0.1852414608001709,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3630.0,
+      0.07537752389907837,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3595.0,
+      0.3195188343524933,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3560.0,
+      0.24322421848773956,
+      4500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4435.0,
+      13.203603744506836,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4400.0,
+      10.032828330993652,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4365.0,
+      7.33012056350708,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4330.0,
+      5.571685791015625,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4295.0,
+      5.349484920501709,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4260.0,
+      5.729732036590576,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4225.0,
+      6.19365119934082,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4190.0,
+      6.630062580108643,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4155.0,
+      6.938900470733643,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4120.0,
+      7.017025470733643,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4085.0,
+      6.910214900970459,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      4050.0,
+      6.657530784606934,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3945.0,
+      5.923275470733643,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3910.0,
+      5.897641181945801,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3875.0,
+      5.943417549133301,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3840.0,
+      5.998959064483643,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3805.0,
+      5.914717197418213,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3770.0,
+      5.649168014526367,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3735.0,
+      5.175534248352051,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3700.0,
+      4.512084484100342,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3665.0,
+      4.139768600463867,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3630.0,
+      4.443112373352051,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3595.0,
+      4.611570835113525,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "wooden_log",
+    "name": "Log",
+    "position": [
+      3560.0,
+      4.529783725738525,
+      3500.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "inn",
+    "name": "The Weary Traveler Inn",
+    "position": [
+      4260.0,
+      8.971644401550293,
+      4020.0
+    ],
+    "rotation": 0.0,
+    "target_size": 150.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "building_house",
+    "name": "Cottage",
+    "position": [
+      3900.0,
+      2.396604061126709,
+      4200.0
+    ],
+    "rotation": 0.0,
+    "target_size": 110.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "building_well",
+    "name": "Town Well",
+    "position": [
+      4000.0,
+      4.234373569488525,
+      4000.0
+    ],
+    "rotation": 0.0,
+    "target_size": 60.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "building_shop",
+    "name": "General Store",
+    "position": [
+      4180.0,
+      6.67334508895874,
+      4180.0
+    ],
+    "rotation": 0.0,
+    "target_size": 100.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "building_tower",
+    "name": "Guard Tower",
+    "position": [
+      3740.0,
+      -0.09317590296268463,
+      4180.0
+    ],
+    "rotation": 0.0,
+    "target_size": 160.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "building_blacksmith",
+    "name": "Iron Forge",
+    "position": [
+      4220.0,
+      7.695492744445801,
+      3840.0
+    ],
+    "rotation": 0.0,
+    "target_size": 120.0
+  },
+  {
+    "color": 4290484599,
+    "entity_type": "building",
+    "model": "building_tavern",
+    "name": "The Golden Flagon",
+    "position": [
+      3820.0,
+      3.809934616088867,
+      3820.0
+    ],
+    "rotation": 0.0,
+    "target_size": 140.0
+  }
+]

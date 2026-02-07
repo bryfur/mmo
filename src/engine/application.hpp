@@ -3,6 +3,7 @@
 #include "engine/input_handler.hpp"
 #include <SDL3/SDL.h>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -66,6 +67,10 @@ protected:
     /** Called once per frame after on_update. */
     virtual void on_render() = 0;
 
+    /** Called for each SDL event before InputHandler processes it.
+     *  Return true to consume the event (prevent InputHandler from seeing it). */
+    virtual bool on_event(const SDL_Event& event) { return false; }
+
     InputHandler& input() { return input_; }
     const InputHandler& input() const { return input_; }
 
@@ -97,6 +102,8 @@ protected:
 
     int screen_width() const;
     int screen_height() const;
+
+    scene::SceneRenderer& scene_renderer() { return *scene_renderer_; }
 
     void set_collect_render_stats(bool enabled);
     const RenderStats& render_stats() const;

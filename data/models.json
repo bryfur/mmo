@@ -1,0 +1,340 @@
+{
+  "models": [
+    {
+      "id": "warrior",
+      "file": "warrior_rigged.glb",
+      "fallback": "warrior.glb",
+      "category": "player",
+      "display_name": "Warrior",
+      "default_size": 30.0,
+      "placeable": false,
+      "prompt": ""
+    },
+    {
+      "id": "mage",
+      "file": "mage_rigged.glb",
+      "fallback": "mage.glb",
+      "category": "player",
+      "display_name": "Mage",
+      "default_size": 30.0,
+      "placeable": false,
+      "prompt": ""
+    },
+    {
+      "id": "paladin",
+      "file": "paladin_rigged.glb",
+      "fallback": "paladin.glb",
+      "category": "player",
+      "display_name": "Paladin",
+      "default_size": 30.0,
+      "placeable": false,
+      "prompt": ""
+    },
+    {
+      "id": "archer",
+      "file": "archer_rigged.glb",
+      "fallback": "archer.glb",
+      "category": "player",
+      "display_name": "Archer",
+      "default_size": 30.0,
+      "placeable": false,
+      "prompt": ""
+    },
+    {
+      "id": "npc_enemy",
+      "file": "npc_enemy.glb",
+      "category": "npc",
+      "display_name": "Enemy",
+      "default_size": 30.0,
+      "placeable": false,
+      "prompt": ""
+    },
+    {
+      "id": "npc_merchant",
+      "file": "npc_merchant.glb",
+      "category": "npc",
+      "display_name": "Merchant",
+      "default_size": 30.0,
+      "placeable": false,
+      "prompt": ""
+    },
+    {
+      "id": "npc_guard",
+      "file": "npc_guard.glb",
+      "category": "npc",
+      "display_name": "Guard",
+      "default_size": 30.0,
+      "placeable": false,
+      "prompt": ""
+    },
+    {
+      "id": "npc_blacksmith",
+      "file": "npc_blacksmith.glb",
+      "category": "npc",
+      "display_name": "Blacksmith NPC",
+      "default_size": 30.0,
+      "placeable": false,
+      "prompt": ""
+    },
+    {
+      "id": "npc_innkeeper",
+      "file": "npc_innkeeper.glb",
+      "category": "npc",
+      "display_name": "Innkeeper",
+      "default_size": 30.0,
+      "placeable": false,
+      "prompt": ""
+    },
+    {
+      "id": "npc_villager",
+      "file": "npc_villager.glb",
+      "category": "npc",
+      "display_name": "Villager",
+      "default_size": 30.0,
+      "placeable": false,
+      "prompt": ""
+    },
+    {
+      "id": "building_tavern",
+      "file": "building_tavern.glb",
+      "category": "building",
+      "display_name": "Tavern",
+      "default_size": 35.0,
+      "default_color": 4290484599,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "building_blacksmith",
+      "file": "building_blacksmith.glb",
+      "category": "building",
+      "display_name": "Blacksmith",
+      "default_size": 30.0,
+      "default_color": 4290484599,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "building_tower",
+      "file": "building_tower.glb",
+      "category": "building",
+      "display_name": "Tower",
+      "default_size": 25.0,
+      "default_color": 4290484599,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "building_shop",
+      "file": "building_shop.glb",
+      "category": "building",
+      "display_name": "Shop",
+      "default_size": 25.0,
+      "default_color": 4290484599,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "building_well",
+      "file": "building_well.glb",
+      "category": "building",
+      "display_name": "Well",
+      "default_size": 8.0,
+      "default_color": 4290484599,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "building_house",
+      "file": "building_house.glb",
+      "category": "building",
+      "display_name": "House",
+      "default_size": 22.0,
+      "default_color": 4290484599,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "building_inn",
+      "file": "inn.glb",
+      "category": "building",
+      "display_name": "Inn",
+      "default_size": 32.0,
+      "default_color": 4290484599,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "wooden_log",
+      "file": "wooden_log.glb",
+      "category": "building",
+      "display_name": "Wooden Log",
+      "default_size": 15.0,
+      "default_color": 4290484599,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "log_tower",
+      "file": "log_tower.glb",
+      "category": "building",
+      "display_name": "Log Tower",
+      "default_size": 20.0,
+      "default_color": 4290484599,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "rock_boulder",
+      "file": "rock_boulder.glb",
+      "category": "rock",
+      "display_name": "Boulder",
+      "default_size": 20.0,
+      "default_color": 4289177511,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "rock_slate",
+      "file": "rock_slate.glb",
+      "category": "rock",
+      "display_name": "Slate",
+      "default_size": 15.0,
+      "default_color": 4289177511,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "rock_spire",
+      "file": "rock_spire.glb",
+      "category": "rock",
+      "display_name": "Spire",
+      "default_size": 25.0,
+      "default_color": 4289177511,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "rock_cluster",
+      "file": "rock_cluster.glb",
+      "category": "rock",
+      "display_name": "Cluster",
+      "default_size": 18.0,
+      "default_color": 4289177511,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "rock_mossy",
+      "file": "rock_mossy.glb",
+      "category": "rock",
+      "display_name": "Mossy Rock",
+      "default_size": 16.0,
+      "default_color": 4289177511,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "tree_oak",
+      "file": "tree_oak.glb",
+      "category": "tree",
+      "display_name": "Oak Tree",
+      "default_size": 50.0,
+      "default_color": 4281387560,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "tree_pine",
+      "file": "tree_pine.glb",
+      "category": "tree",
+      "display_name": "Pine Tree",
+      "default_size": 50.0,
+      "default_color": 4281387560,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "tree_dead",
+      "file": "tree_dead.glb",
+      "category": "tree",
+      "display_name": "Dead Tree",
+      "default_size": 40.0,
+      "default_color": 4281387560,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "weapon_sword",
+      "file": "weapon_sword.glb",
+      "category": "weapon",
+      "display_name": "Sword",
+      "default_size": 5.0,
+      "placeable": false,
+      "prompt": ""
+    },
+    {
+      "id": "spell_fireball",
+      "file": "spell_fireball.glb",
+      "category": "effect",
+      "display_name": "Fireball",
+      "default_size": 5.0,
+      "placeable": false,
+      "prompt": ""
+    },
+    {
+      "id": "spell_bible",
+      "file": "spell_bible.glb",
+      "category": "effect",
+      "display_name": "Bible",
+      "default_size": 5.0,
+      "placeable": false,
+      "prompt": ""
+    },
+    {
+      "id": "ground_grass",
+      "file": "ground_grass.glb",
+      "category": "terrain",
+      "display_name": "Grass Ground",
+      "default_size": 50.0,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "ground_stone",
+      "file": "ground_stone.glb",
+      "category": "terrain",
+      "display_name": "Stone Ground",
+      "default_size": 50.0,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "mountain_small",
+      "file": "mountain_small.glb",
+      "category": "mountain",
+      "display_name": "Small Mountain",
+      "default_size": 100.0,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "mountain_medium",
+      "file": "mountain_medium.glb",
+      "category": "mountain",
+      "display_name": "Medium Mountain",
+      "default_size": 150.0,
+      "placeable": true,
+      "prompt": ""
+    },
+    {
+      "id": "mountain_large",
+      "file": "mountain_large.glb",
+      "category": "mountain",
+      "display_name": "Large Mountain",
+      "default_size": 200.0,
+      "placeable": true,
+      "prompt": ""
+    }
+  ]
+}

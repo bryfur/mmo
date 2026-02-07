@@ -1,3 +1,9 @@
+# When using system SDL, find_package imported targets are directory-scoped
+# so we need to find SDL3 again in this directory scope
+if(NOT VENDORED_SDL)
+    find_package(SDL3 REQUIRED QUIET)
+endif()
+
 # Dear ImGui (with SDL3 GPU backend) - only used by the editor
 FetchContent_Declare(
     imgui

@@ -21,7 +21,7 @@ void EditorCamera::move_up(float amount) {
 }
 
 void EditorCamera::rotate_yaw(float delta) {
-    yaw_ += delta;
+    yaw_ -= delta;
     // Wrap yaw to [-pi, pi]
     while (yaw_ > glm::pi<float>()) yaw_ -= 2.0f * glm::pi<float>();
     while (yaw_ < -glm::pi<float>()) yaw_ += 2.0f * glm::pi<float>();

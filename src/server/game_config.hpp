@@ -14,6 +14,7 @@ namespace mmo::server {
 struct ClassConfig {
     std::string name;
     std::string model;
+    std::string animation;  // Animation config name (e.g. "humanoid")
     float health = 100.0f;
     float damage = 10.0f;
     float attack_range = 50.0f;
@@ -41,6 +42,7 @@ struct MonsterConfig {
     float aggro_range = 300.0f;
     int count = 10;
     std::string model;
+    std::string animation;  // Animation config name (e.g. "humanoid")
     uint32_t color = 0xFF4444FF;
 };
 

@@ -1,0 +1,49 @@
+{
+    "default_state": "Idle",
+    "states": {
+        "Idle": {
+            "clip": "Idle",
+            "loop": true,
+            "transitions": [
+                { "to": "Attack", "conditions": [{"param": "attacking", "op": "is_true"}], "crossfade": 0.2, "priority": 10 },
+                { "to": "Run",    "conditions": [{"param": "speed", "op": "gt", "value": 245}], "crossfade": 0.2, "priority": 1 },
+                { "to": "Walk",   "conditions": [{"param": "speed", "op": "gt", "value": 1}],   "crossfade": 0.2, "priority": 0 }
+            ]
+        },
+        "Walk": {
+            "clip": "Walk",
+            "loop": true,
+            "transitions": [
+                { "to": "Attack", "conditions": [{"param": "attacking", "op": "is_true"}], "crossfade": 0.2, "priority": 10 },
+                { "to": "Run",    "conditions": [{"param": "speed", "op": "gt", "value": 245}], "crossfade": 0.2, "priority": 1 },
+                { "to": "Idle",   "conditions": [{"param": "speed", "op": "lt", "value": 1}],   "crossfade": 0.2, "priority": 0 }
+            ]
+        },
+        "Run": {
+            "clip": "Run",
+            "loop": true,
+            "transitions": [
+                { "to": "Attack", "conditions": [{"param": "attacking", "op": "is_true"}],  "crossfade": 0.2, "priority": 10 },
+                { "to": "Walk",   "conditions": [{"param": "speed", "op": "lt", "value": 245}], "crossfade": 0.2, "priority": 1 },
+                { "to": "Idle",   "conditions": [{"param": "speed", "op": "lt", "value": 1}],   "crossfade": 0.2, "priority": 0 }
+            ]
+        },
+        "Attack": {
+            "clip": "Attack",
+            "loop": false,
+            "transitions": [
+                { "to": "Idle", "conditions": [{"param": "attacking", "op": "is_false"}], "crossfade": 0.2, "priority": 0 }
+            ]
+        }
+    },
+    "procedural": {
+        "foot_ik": true,
+        "lean": true,
+        "forward_lean_factor": 0.015,
+        "forward_lean_max": 0.18,
+        "lateral_lean_factor": 0.06,
+        "lateral_lean_max": 0.15,
+        "attack_tilt_max": 0.4,
+        "attack_tilt_cooldown": 0.5
+    }
+}

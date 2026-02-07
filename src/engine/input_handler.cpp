@@ -222,8 +222,9 @@ bool InputHandler::process_events() {
         current_input_.move_dir_x = 0.0f;
         current_input_.move_dir_y = 0.0f;
         current_input_.attacking = false;
+        current_input_.sprinting = false;
     }
-    
+
     // Check if input changed
     input_changed_ = (current_input_.move_up != last_input_.move_up ||
                       current_input_.move_down != last_input_.move_down ||
@@ -334,6 +335,7 @@ void InputHandler::update_camera_from_mouse() {
     current_input_.attack_dir_y = forward_z;
     
     current_input_.attacking = attacking_;
+    current_input_.sprinting = sprinting_;
 }
 
 void InputHandler::update_input_from_controller() {

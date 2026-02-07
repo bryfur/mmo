@@ -9,6 +9,7 @@
 #include "engine/scene/camera_state.hpp"
 #include "engine/systems/camera_controller.hpp"
 #include "client/effect_loader.hpp"
+#include "client/animation_loader.hpp"
 #include "game_state.hpp"
 #include "menu_system.hpp"
 #include <glm/glm.hpp>
@@ -96,6 +97,9 @@ private:
 
     // Effect registry (loads effect definitions from JSON)
     EffectRegistry effect_registry_;
+
+    // Animation registry (loads state machines + tuning from JSON)
+    AnimationRegistry animation_registry_;
 
     std::unordered_map<uint32_t, bool> prev_attacking_;
 

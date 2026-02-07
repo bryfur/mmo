@@ -17,8 +17,9 @@ struct InputState {
     float move_dir_x = 0.0f;
     float move_dir_y = 0.0f;
 
-    // Attack state
+    // Action state
     bool attacking = false;
+    bool sprinting = false;
     float attack_dir_x = 0.0f;
     float attack_dir_y = 1.0f;
 };

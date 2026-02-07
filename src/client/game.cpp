@@ -6,6 +6,8 @@
 #include "engine/scene/ui_scene.hpp"
 #include "engine/systems/camera_controller.hpp"
 #include "engine/model_loader.hpp"
+#include "engine/animation/animation_state_machine.hpp"
+#include "engine/animation/ik_solver.hpp"
 #include "engine/render_constants.hpp"
 #include "engine/heightmap.hpp"
 #include "entt/entity/fwd.hpp"
@@ -129,6 +131,16 @@ bool Game::on_init() {
         if (!effect_registry_.load_effects_directory(effects_path)) {
             effects_path = "../../data/effects";
             effect_registry_.load_effects_directory(effects_path);
+        }
+    }
+
+    // Load animation configs
+    std::string anims_path = "data/animations";
+    if (!animation_registry_.load_directory(anims_path)) {
+        anims_path = "../data/animations";
+        if (!animation_registry_.load_directory(anims_path)) {
+            anims_path = "../../data/animations";
+            animation_registry_.load_directory(anims_path);
         }
     }
 
@@ -341,6 +353,7 @@ void Game::update_playing(float dt) {
         net_input.move_dir_x = eng_input.move_dir_x;
         net_input.move_dir_y = eng_input.move_dir_y;
         net_input.attacking = eng_input.attacking;
+        net_input.sprinting = eng_input.sprinting;
         net_input.attack_dir_x = eng_input.attack_dir_x;
         net_input.attack_dir_y = eng_input.attack_dir_y;
         network_.send_input(net_input);
@@ -364,33 +377,136 @@ void Game::update_playing(float dt) {
         }
     }
 
-    // Set animations on entities before render
-    auto view = registry_.view<ecs::NetworkId, ecs::Transform, ecs::Velocity, ecs::EntityInfo, ecs::Combat>();
-    for (auto entity : view) {
-        auto& info = registry_.get<ecs::EntityInfo>(entity);
-        auto& vel = registry_.get<ecs::Velocity>(entity);
-        auto& combat = registry_.get<ecs::Combat>(entity);
+    // Update rotation smoothing (before animation so lean reads fresh turn_rate)
+    {
+        auto rot_view = registry_.view<ecs::EntityInfo, ecs::SmoothRotation>();
+        for (auto entity : rot_view) {
+            auto& info = rot_view.get<ecs::EntityInfo>(entity);
+            if (info.type == EntityType::Building || info.type == EntityType::Environment) continue;
 
-        if (info.model_name.empty()) continue;
-        Model* model = models().get_model(info.model_name);
-        if (!model || !model->has_skeleton) continue;
+            auto& smooth = rot_view.get<ecs::SmoothRotation>(entity);
+            bool has_target = false;
+            float target_rotation = 0.0f;
 
-        std::string anim_name;
-        if (combat.is_attacking) {
-            anim_name = "Attack";
-        } else if (std::abs(vel.x) > 1.0f || std::abs(vel.z) > 1.0f) {
-            anim_name = "Walk";
-        } else {
-            anim_name = "Idle";
+            if (info.type == EntityType::Player) {
+                if (auto* attack_dir = registry_.try_get<ecs::AttackDirection>(entity)) {
+                    target_rotation = std::atan2(attack_dir->x, attack_dir->y);
+                    has_target = true;
+                }
+            } else if (auto* vel = registry_.try_get<ecs::Velocity>(entity)) {
+                if (vel->x != 0.0f || vel->z != 0.0f) {
+                    target_rotation = std::atan2(vel->x, vel->z);
+                    has_target = true;
+                }
+            }
+
+            if (has_target) {
+                smooth.smooth_toward(target_rotation, dt);
+            } else {
+                smooth.decay_turn_rate();
+            }
         }
+    }
 
-        AnimationState* state = models().get_animation_state(info.model_name);
-        if (state) {
-            int clip_idx = model->find_animation(anim_name);
-            if (clip_idx >= 0 && clip_idx != state->current_clip) {
-                state->current_clip = clip_idx;
-                state->time = 0.0f;
-                state->playing = true;
+    // Update per-entity animations via state machine
+    {
+        namespace anim = mmo::engine::animation;
+        auto anim_view = registry_.view<ecs::Velocity, ecs::EntityInfo, ecs::Combat, ecs::AnimationInstance>();
+        for (auto entity : anim_view) {
+            auto& info = registry_.get<ecs::EntityInfo>(entity);
+            auto& vel = registry_.get<ecs::Velocity>(entity);
+            auto& combat = registry_.get<ecs::Combat>(entity);
+            auto& inst = registry_.get<ecs::AnimationInstance>(entity);
+
+            if (info.model_name.empty()) continue;
+            Model* model = models().get_model(info.model_name);
+            if (!model || !model->has_skeleton) continue;
+
+            // Lazy-init: load state machine from entity's animation config
+            if (!inst.bound) {
+                if (!info.animation.empty()) {
+                    const auto* config = animation_registry_.get_config(info.animation);
+                    if (config) {
+                        inst.state_machine = config->state_machine;
+                        inst.procedural = config->procedural;
+                    }
+                }
+                inst.state_machine.bind_clips(model->animations);
+                inst.bound = true;
+            }
+
+            // Feed game parameters into the state machine
+            float speed_sq = vel.x * vel.x + vel.z * vel.z;
+            inst.state_machine.set_float("speed", std::sqrt(speed_sq));
+            inst.state_machine.set_bool("attacking", combat.is_attacking || combat.current_cooldown > 0.0f);
+
+            // State machine evaluates transitions, drives crossfades
+            inst.state_machine.update(inst.player);
+
+            // Tick the player: advance time, compute bone matrices
+            inst.player.update(model->skeleton, model->animations, dt);
+
+            // --- Post-animation procedural pass ---
+            // Attack tilt
+            inst.attack_tilt = 0.0f;
+            if (combat.is_attacking && combat.current_cooldown > 0.0f) {
+                float progress = std::min(combat.current_cooldown / inst.procedural.attack_tilt_cooldown, 1.0f);
+                inst.attack_tilt = std::sin(progress * 3.14159f) * inst.procedural.attack_tilt_max;
+            }
+
+            // Build model matrix for IK world-space queries
+            auto& transform = registry_.get<ecs::Transform>(entity);
+            float target_size = info.target_size;
+            float model_size = model->max_dimension();
+            float scale = (target_size * 1.5f) / model_size;
+
+            auto* smooth = registry_.try_get<ecs::SmoothRotation>(entity);
+            float rotation = smooth ? smooth->current : transform.rotation;
+
+            glm::vec3 position(transform.x, transform.y, transform.z);
+            glm::mat4 model_mat = glm::translate(glm::mat4(1.0f), position);
+            model_mat = glm::rotate(model_mat, rotation, glm::vec3(0.0f, 1.0f, 0.0f));
+            if (inst.attack_tilt != 0.0f) {
+                model_mat = glm::rotate(model_mat, inst.attack_tilt, glm::vec3(1.0f, 0.0f, 0.0f));
+            }
+            model_mat = glm::scale(model_mat, glm::vec3(scale));
+            float cx = (model->min_x + model->max_x) / 2.0f;
+            float cy = model->min_y;
+            float cz = (model->min_z + model->max_z) / 2.0f;
+            model_mat = model_mat * glm::translate(glm::mat4(1.0f), glm::vec3(-cx, -cy, -cz));
+
+            // Foot IK: use terrain slope relative to entity base (not absolute)
+            // so ankle height doesn't cause constant sinking
+            if (model->foot_ik.valid && inst.procedural.foot_ik) {
+                const auto& ik = model->foot_ik;
+                auto foot_world_pos = [&](int bone_idx) -> glm::vec3 {
+                    return glm::vec3(model_mat * glm::vec4(glm::vec3(inst.player.world_transforms[bone_idx][3]), 1.0f));
+                };
+                glm::vec3 lf = foot_world_pos(ik.left_foot);
+                glm::vec3 rf = foot_world_pos(ik.right_foot);
+                float base_terrain = get_terrain_height(transform.x, transform.z);
+                float left_offset = get_terrain_height(lf.x, lf.z) - base_terrain;
+                float right_offset = get_terrain_height(rf.x, rf.z) - base_terrain;
+
+                anim::apply_foot_ik(inst.player.bone_matrices, inst.player.world_transforms,
+                                    model->skeleton, ik, model_mat, scale, left_offset, right_offset);
+            }
+
+            // Body lean
+            if (model->foot_ik.valid && model->foot_ik.spine >= 0 && inst.procedural.lean) {
+                float forward_lean = 0.0f;
+                float lateral_lean = 0.0f;
+                float speed_sq = vel.x * vel.x + vel.z * vel.z;
+                if (speed_sq > 1.0f) {
+                    forward_lean = std::min(std::sqrt(speed_sq) * inst.procedural.forward_lean_factor,
+                                            inst.procedural.forward_lean_max);
+                }
+                if (smooth) {
+                    lateral_lean = glm::clamp(-smooth->turn_rate * inst.procedural.lateral_lean_factor,
+                                              -inst.procedural.lateral_lean_max, inst.procedural.lateral_lean_max);
+                }
+                anim::apply_body_lean(inst.player.bone_matrices, inst.player.world_transforms,
+                                      model->skeleton, model->foot_ik.spine, forward_lean, lateral_lean);
             }
         }
     }
@@ -496,48 +612,32 @@ void Game::add_entity_to_scene(entt::entity entity, bool is_local) {
     Model* model = models().get_model(info.model_name);
     if (!model) return;
 
-    // Compute rotation
-    float rotation = 0.0f;
-    if (info.type == EntityType::Building || info.type == EntityType::Environment) {
-        rotation = transform.rotation;
-    } else if (info.type == EntityType::Player) {
-        if (auto* attack_dir = registry_.try_get<ecs::AttackDirection>(entity)) {
-            rotation = std::atan2(attack_dir->x, attack_dir->y);
-        }
-    } else {
-        if (auto* vel = registry_.try_get<ecs::Velocity>(entity)) {
-            if (vel->x != 0.0f || vel->z != 0.0f) {
-                rotation = std::atan2(vel->x, vel->z);
-            }
+    // Read rotation (already smoothed in update_playing)
+    float rotation = transform.rotation;
+    if (info.type != EntityType::Building && info.type != EntityType::Environment) {
+        if (auto* smooth = registry_.try_get<ecs::SmoothRotation>(entity)) {
+            rotation = smooth->current;
         }
     }
 
-    // Compute scale
+    // Read attack tilt (already computed in update_playing)
+    float attack_tilt = 0.0f;
+    auto* anim_inst = registry_.try_get<ecs::AnimationInstance>(entity);
+    if (anim_inst) attack_tilt = anim_inst->attack_tilt;
+
+    // Build transform matrix
     float target_size = info.target_size;
     float model_size = model->max_dimension();
     float scale = (target_size * 1.5f) / model_size;
 
-    // Compute attack tilt
-    float attack_tilt = 0.0f;
-    if (auto* combat = registry_.try_get<ecs::Combat>(entity)) {
-        if (combat->is_attacking && combat->current_cooldown > 0.0f) {
-            float max_cooldown = 0.5f;
-            float progress = std::min(combat->current_cooldown / max_cooldown, 1.0f);
-            attack_tilt = std::sin(progress * 3.14159f) * 0.4f;
-        }
-    }
-
-    // Build transform matrix
     glm::vec3 position(transform.x, transform.y, transform.z);
-    glm::mat4 model_mat = glm::mat4(1.0f);
-    model_mat = glm::translate(model_mat, position);
+    glm::mat4 model_mat = glm::translate(glm::mat4(1.0f), position);
     model_mat = glm::rotate(model_mat, rotation, glm::vec3(0.0f, 1.0f, 0.0f));
     if (attack_tilt != 0.0f) {
         model_mat = glm::rotate(model_mat, attack_tilt, glm::vec3(1.0f, 0.0f, 0.0f));
     }
     model_mat = glm::scale(model_mat, glm::vec3(scale));
 
-    // Center the model on its base
     float cx = (model->min_x + model->max_x) / 2.0f;
     float cy = model->min_y;
     float cz = (model->min_z + model->max_z) / 2.0f;
@@ -545,21 +645,18 @@ void Game::add_entity_to_scene(entt::entity entity, bool is_local) {
 
     glm::vec4 tint(1.0f);
 
-    // Add model command to scene
-    if (model->has_skeleton) {
-        AnimationState* anim_state = models().get_animation_state(info.model_name);
-        std::array<glm::mat4, 64> bones;
-        if (anim_state) {
-            bones = anim_state->bone_matrices;
-        } else {
-            bones.fill(glm::mat4(1.0f));
-        }
-        render_scene_.add_skinned_model(info.model_name, model_mat, bones, tint);
+    // Submit draw command (bone matrices already have IK/lean applied from update_playing)
+    if (model->has_skeleton && anim_inst && anim_inst->bound) {
+        render_scene_.add_skinned_model(info.model_name, model_mat, anim_inst->player.bone_matrices, tint);
+    } else if (model->has_skeleton) {
+        std::array<glm::mat4, 64> identity_bones;
+        identity_bones.fill(glm::mat4(1.0f));
+        render_scene_.add_skinned_model(info.model_name, model_mat, identity_bones, tint);
     } else {
         render_scene_.add_model(info.model_name, model_mat, tint, attack_tilt);
     }
 
-    // Add enemy health bar via UI scene
+    // Health bar
     bool show_health_bar = (info.type != EntityType::Building &&
                             info.type != EntityType::Environment &&
                             info.type != EntityType::TownNPC);
@@ -727,6 +824,8 @@ entt::entity Game::find_or_create_entity(uint32_t network_id) {
     registry_.emplace<ecs::Name>(entity);
     registry_.emplace<ecs::Combat>(entity);
     registry_.emplace<ecs::Interpolation>(entity);
+    registry_.emplace<ecs::SmoothRotation>(entity);
+    registry_.emplace<ecs::AnimationInstance>(entity);
 
     network_to_entity_[network_id] = entity;
     return entity;
@@ -766,6 +865,7 @@ void Game::update_entity_from_state(entt::entity entity, const NetEntityState& s
     info.model_name = state.model_name;
     info.target_size = state.target_size;
     info.effect_type = state.effect_type;
+    info.animation = state.animation;
     info.cone_angle = state.cone_angle;
     info.shows_reticle = state.shows_reticle;
 
@@ -934,8 +1034,13 @@ void Game::build_class_select_ui(UIScene& ui) {
     if (num_classes == 0) return;
 
     ui.add_filled_rect(0, 0, static_cast<float>(screen_width()), 100, ui_colors::TITLE_BG);
-    ui.add_text("SELECT YOUR CLASS", center_x - 150.0f, 30.0f, 2.0f, ui_colors::WHITE);
-    ui.add_text("Use A/D to select, SPACE to confirm", center_x - 160.0f, 70.0f, 1.0f, ui_colors::TEXT_DIM);
+    // Center title text based on estimated character width (~8px per char)
+    const char* title = "SELECT YOUR CLASS";
+    float title_width = static_cast<float>(strlen(title)) * 8.0f * 2.0f;
+    ui.add_text(title, center_x - title_width / 2.0f, 30.0f, 2.0f, ui_colors::WHITE);
+    const char* subtitle = "Use A/D to select, SPACE to confirm";
+    float subtitle_width = static_cast<float>(strlen(subtitle)) * 8.0f * 1.0f;
+    ui.add_text(subtitle, center_x - subtitle_width / 2.0f, 70.0f, 1.0f, ui_colors::TEXT_DIM);
 
     float box_size = 120.0f;
     float spacing = 150.0f;
@@ -961,19 +1066,26 @@ void Game::build_class_select_ui(UIScene& ui) {
         ui.add_rect_outline(x - half, box_y - half, box_size, box_size, ui_colors::WHITE, 2.0f);
 
         uint32_t text_color = selected ? ui_colors::WHITE : ui_colors::TEXT_DIM;
-        float name_x = x - 40.0f;
-        ui.add_text(cls.name, name_x, box_y + box_size/2 + 15.0f, 1.0f, text_color);
-        ui.add_text(cls.short_desc, x - 55.0f, box_y + box_size/2 + 40.0f, 0.8f, ui_colors::TEXT_DIM);
+        // Center text based on estimated character width (~8px at scale 1.0)
+        float name_width = static_cast<float>(strlen(cls.name)) * 8.0f * 1.0f;
+        float desc_width = static_cast<float>(strlen(cls.short_desc)) * 8.0f * 0.8f;
+        ui.add_text(cls.name, x - name_width / 2.0f, box_y + box_size/2 + 15.0f, 1.0f, text_color);
+        ui.add_text(cls.short_desc, x - desc_width / 2.0f, box_y + box_size/2 + 40.0f, 0.8f, ui_colors::TEXT_DIM);
     }
 
     const auto& sel = available_classes_[selected_class_index_];
     ui.add_filled_rect(center_x - 200, screen_height() - 120, 400, 80, ui_colors::PANEL_BG);
     ui.add_rect_outline(center_x - 200, screen_height() - 120, 400, 80, sel.select_color, 2.0f);
 
-    ui.add_text(sel.desc_line1, center_x - 180.0f, screen_height() - 105.0f, 0.9f, ui_colors::WHITE);
-    ui.add_text(sel.desc_line2, center_x - 180.0f, screen_height() - 80.0f, 0.9f, ui_colors::WHITE);
+    // Center description lines based on estimated character width
+    float desc1_width = static_cast<float>(strlen(sel.desc_line1)) * 8.0f * 0.9f;
+    float desc2_width = static_cast<float>(strlen(sel.desc_line2)) * 8.0f * 0.9f;
+    ui.add_text(sel.desc_line1, center_x - desc1_width / 2.0f, screen_height() - 105.0f, 0.9f, ui_colors::WHITE);
+    ui.add_text(sel.desc_line2, center_x - desc2_width / 2.0f, screen_height() - 80.0f, 0.9f, ui_colors::WHITE);
 
-    ui.add_text("Press ESC anytime to open Settings Menu", center_x - 150.0f, screen_height() - 25.0f, 0.8f, ui_colors::TEXT_HINT);
+    const char* hint = "Press ESC anytime to open Settings Menu";
+    float hint_width = static_cast<float>(strlen(hint)) * 8.0f * 0.8f;
+    ui.add_text(hint, center_x - hint_width / 2.0f, screen_height() - 25.0f, 0.8f, ui_colors::TEXT_HINT);
 }
 
 void Game::build_connecting_ui(UIScene& ui) {
@@ -1091,6 +1203,8 @@ void Game::build_playing_ui(UIScene& ui) {
 // ============================================================================
 
 void Game::on_entity_enter(const std::vector<uint8_t>& payload) {
+    if (payload.size() < NetEntityState::serialized_size()) return;
+
     // Deserialize full entity state
     NetEntityState state;
     state.deserialize(payload);

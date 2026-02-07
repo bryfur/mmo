@@ -128,21 +128,27 @@ void update_combat(entt::registry& registry, float dt, const GameConfig& config)
 
         if (combat.current_cooldown > 0) {
             combat.current_cooldown -= dt;
+            if (combat.current_cooldown <= 0.0f) {
+                combat.current_cooldown = 0.0f;
+                combat.is_attacking = false;
+            }
         }
-
-        combat.is_attacking = false;
     }
 
     // Process player attacks - use mouse direction for 360-degree attacks
     auto player_view = registry.view<ecs::PlayerTag, ecs::Combat, ecs::InputState, ecs::Health, ecs::EntityInfo>();
     for (auto entity : player_view) {
         auto& combat = player_view.get<ecs::Combat>(entity);
-        const auto& input_state = player_view.get<ecs::InputState>(entity);
-        const auto& input = input_state.input;
+        auto& input_state = player_view.get<ecs::InputState>(entity);
+        auto& input = input_state.input;
         const auto& health = player_view.get<ecs::Health>(entity);
         const auto& info = player_view.get<ecs::EntityInfo>(entity);
 
-        if (!health.is_alive() || !input.attacking || !combat.can_attack()) continue;
+        // Consume the latched attack flag so it doesn't fire again next tick
+        bool wants_attack = input.attacking;
+        input.attacking = false;
+
+        if (!health.is_alive() || !wants_attack || !combat.can_attack()) continue;
 
         // Trigger attack regardless of target - visual effect will play
         combat.is_attacking = true;

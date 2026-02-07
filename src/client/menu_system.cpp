@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <functional>
 #include <string>
 #include <utility>
@@ -353,7 +354,9 @@ void MenuSystem::build_ui(UIScene& ui, float screen_w, float screen_h) {
         case MenuPage::Controls: title = "CONTROLS"; break;
         case MenuPage::Graphics: title = "GRAPHICS"; break;
     }
-    ui.add_text(title, panel_x + panel_w / 2.0f - 60.0f, panel_y + 15.0f, 1.5f, ui_colors::WHITE);
+    // Center title based on estimated character width (~8px per char)
+    float title_width = static_cast<float>(strlen(title)) * 8.0f * 1.5f;
+    ui.add_text(title, panel_x + panel_w / 2.0f - title_width / 2.0f, panel_y + 15.0f, 1.5f, ui_colors::WHITE);
 
     float item_y = panel_y + 70.0f;
     for (size_t i = 0; i < menu_items_.size(); ++i) {
@@ -370,7 +373,9 @@ void MenuSystem::build_ui(UIScene& ui, float screen_w, float screen_h) {
         if (item.type == MenuItemType::Toggle && item.toggle_value) {
             std::string value_str = *item.toggle_value ? "ON" : "OFF";
             uint32_t value_color = *item.toggle_value ? ui_colors::VALUE_ON : ui_colors::VALUE_OFF;
-            ui.add_text(value_str, panel_x + panel_w - 80.0f, item_y + 10.0f, 1.0f, value_color);
+            // Right-align toggle value (~8px per char)
+            float value_width = static_cast<float>(value_str.length()) * 8.0f;
+            ui.add_text(value_str, panel_x + panel_w - 30.0f - value_width, item_y + 10.0f, 1.0f, value_color);
         } else if (item.type == MenuItemType::Slider && item.slider_value) {
             std::string value_str;
             int idx = *item.slider_value - item.slider_min;
@@ -383,7 +388,9 @@ void MenuSystem::build_ui(UIScene& ui, float screen_w, float screen_h) {
             }
 
             std::string display = "< " + value_str + " >";
-            ui.add_text(display, panel_x + panel_w - 120.0f, item_y + 10.0f, 1.0f, ui_colors::VALUE_SLIDER);
+            // Right-align slider value based on text width (~8px per char)
+            float display_width = static_cast<float>(display.length()) * 8.0f;
+            ui.add_text(display, panel_x + panel_w - 30.0f - display_width, item_y + 10.0f, 1.0f, ui_colors::VALUE_SLIDER);
         } else if (item.type == MenuItemType::FloatSlider && item.float_value) {
             float slider_x = panel_x + panel_w - 200.0f;
             float slider_w = 120.0f;

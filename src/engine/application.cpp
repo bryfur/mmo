@@ -49,10 +49,23 @@ void Application::run() {
             fps_timer_ = current_time;
         }
 
-        // Process input
-        if (!input_.process_events()) {
-            running_ = false;
-            break;
+        // Process input - poll events, let subclass see them first
+        {
+            input_.reset_camera_deltas();
+            input_.clear_menu_inputs();
+            SDL_Event event;
+            while (SDL_PollEvent(&event)) {
+                if (event.type == SDL_EVENT_QUIT) {
+                    running_ = false;
+                    break;
+                }
+                // Let subclass consume the event (e.g. for ImGui)
+                if (!on_event(event)) {
+                    input_.process_event(event);
+                }
+            }
+            if (!running_) break;
+            input_.post_process_events();
         }
 
         on_update(dt);

@@ -29,7 +29,6 @@ bool GameConfig::load(const std::string& data_dir) {
     ok = load_network(data_dir + "/network.json") && ok;
     ok = load_classes(data_dir + "/classes.json") && ok;
     ok = load_monsters(data_dir + "/monsters.json") && ok;
-    ok = load_environment(data_dir + "/environment.json") && ok;
     ok = load_town(data_dir + "/town.json") && ok;
     return ok;
 }
@@ -155,48 +154,6 @@ bool GameConfig::load_monsters(const std::string& path) {
     }
 }
 
-bool GameConfig::load_environment(const std::string& path) {
-    std::ifstream f(path);
-    if (!f.is_open()) {
-        std::cerr << "[GameConfig] Failed to open " << path << std::endl;
-        return false;
-    }
-    try {
-        json j = json::parse(f);
-
-        env_types_.clear();
-        if (j.contains("types")) {
-            for (auto& [key, val] : j["types"].items()) {
-                EnvironmentTypeConfig etc;
-                etc.model = val.value("model", key);
-                etc.target_scale = val.value("target_scale", 25.0f);
-                etc.is_tree = val.value("is_tree", false);
-                env_types_[key] = std::move(etc);
-            }
-        }
-
-        rock_types_.clear();
-        if (j.contains("rock_types")) {
-            for (const auto& r : j["rock_types"]) {
-                rock_types_.push_back(r.get<std::string>());
-            }
-        }
-
-        tree_types_.clear();
-        if (j.contains("tree_types")) {
-            for (const auto& t : j["tree_types"]) {
-                tree_types_.push_back(t.get<std::string>());
-            }
-        }
-
-        std::cout << "[GameConfig] Loaded " << env_types_.size() << " environment types" << std::endl;
-        return true;
-    } catch (const json::exception& e) {
-        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << std::endl;
-        return false;
-    }
-}
-
 bool GameConfig::load_town(const std::string& path) {
     std::ifstream f(path);
     if (!f.is_open()) {
@@ -268,15 +225,6 @@ const ClassConfig& GameConfig::get_class(int index) const {
         return classes_[index];
     }
     return default_class;
-}
-
-const EnvironmentTypeConfig& GameConfig::get_env_type(const std::string& name) const {
-    static EnvironmentTypeConfig default_env;
-    auto it = env_types_.find(name);
-    if (it != env_types_.end()) {
-        return it->second;
-    }
-    return default_env;
 }
 
 ClassInfo GameConfig::build_class_info(int index) const {

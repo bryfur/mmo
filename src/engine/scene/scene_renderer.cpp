@@ -450,6 +450,11 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
     }
     end_ui();
 
+    // Post-UI callback (e.g. ImGui render pass)
+    if (post_ui_callback_) {
+        post_ui_callback_(context_->current_command_buffer(), current_swapchain_);
+    }
+
     end_frame();
 }
 

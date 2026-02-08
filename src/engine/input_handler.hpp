@@ -14,6 +14,13 @@ public:
     
     // Process SDL events, returns false if quit requested
     bool process_events();
+
+    // Process a single SDL event (for when Application polls events itself)
+    void process_event(const SDL_Event& event);
+
+    // Per-frame finalization (keyboard/controller state, change detection).
+    // Call after all events have been processed via process_event().
+    void post_process_events();
     
     // Get current input state
     const engine::InputState& get_input() const { return current_input_; }

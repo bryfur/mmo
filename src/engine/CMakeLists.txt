@@ -9,10 +9,10 @@ find_package(SDL3_ttf ${SDL3_TTF_REQUIRED_VERSION} QUIET)
 find_package(SDL3_image ${SDL3_IMAGE_REQUIRED_VERSION} QUIET)
 
 if(SDL3_FOUND AND SDL3_ttf_FOUND AND SDL3_image_FOUND)
-    set(VENDORED_SDL OFF)
+    set(VENDORED_SDL OFF CACHE INTERNAL "Whether SDL is vendored from source")
     message(STATUS "Using system SDL3 (${SDL3_VERSION}), SDL3_ttf (${SDL3_ttf_VERSION}), SDL3_image (${SDL3_image_VERSION})")
 else()
-    set(VENDORED_SDL ON)
+    set(VENDORED_SDL ON CACHE INTERNAL "Whether SDL is vendored from source")
     message(STATUS "System SDL3 libs not found or wrong version, vendoring from source")
 
     # SDL3

@@ -5,7 +5,6 @@
 #include <algorithm>
 #include <string>
 #include <vector>
-#include <unordered_map>
 #include <cstdint>
 
 namespace mmo::server {
@@ -64,12 +63,6 @@ struct BuildingConfig {
     std::string name;
     float rotation = 0.0f;
     float target_size = 100.0f;
-};
-
-struct EnvironmentTypeConfig {
-    std::string model;
-    float target_scale = 25.0f;
-    bool is_tree = false;
 };
 
 struct WallConfig {
@@ -152,11 +145,6 @@ public:
     // Buildings
     const std::vector<BuildingConfig>& buildings() const { return buildings_; }
 
-    // Environment
-    const EnvironmentTypeConfig& get_env_type(const std::string& name) const;
-    const std::vector<std::string>& rock_types() const { return rock_types_; }
-    const std::vector<std::string>& tree_types() const { return tree_types_; }
-
     // Town
     const WallConfig& wall() const { return wall_; }
     const TowerConfig& corner_towers() const { return corner_towers_; }
@@ -171,7 +159,6 @@ private:
     bool load_network(const std::string& path);
     bool load_classes(const std::string& path);
     bool load_monsters(const std::string& path);
-    bool load_environment(const std::string& path);
     bool load_town(const std::string& path);
 
     static uint32_t parse_color(const std::string& s);
@@ -183,9 +170,6 @@ private:
     MonsterConfig monster_;
     std::vector<TownNPCConfig> town_npcs_;
     std::vector<BuildingConfig> buildings_;
-    std::unordered_map<std::string, EnvironmentTypeConfig> env_types_;
-    std::vector<std::string> rock_types_;
-    std::vector<std::string> tree_types_;
     WallConfig wall_;
     TowerConfig corner_towers_;
     float safe_zone_radius_ = 400.0f;

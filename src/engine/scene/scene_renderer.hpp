@@ -21,6 +21,7 @@
 #include "engine/heightmap.hpp"
 #include "engine/systems/effect_system.hpp"
 #include <glm/glm.hpp>
+#include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -80,10 +81,16 @@ public:
 
     // ========== Accessors ==========
 
+    render::RenderContext* context() { return context_; }
     render::TerrainRenderer& terrain() { return terrain_; }
     ModelManager& models() { return *model_manager_; }
     render::GrassRenderer* grass() { return grass_renderer_.get(); }
     float get_terrain_height(float x, float z) { return terrain_.get_height(x, z); }
+
+    // Post-UI callback: called after UI rendering, before end_frame.
+    // Receives (command_buffer, swapchain_texture) for additional render passes (e.g. ImGui).
+    using PostUICallback = std::function<void(SDL_GPUCommandBuffer*, SDL_GPUTexture*)>;
+    void set_post_ui_callback(PostUICallback cb) { post_ui_callback_ = std::move(cb); }
 
 private:
     // Frame lifecycle
@@ -163,6 +170,9 @@ private:
     // ========== Debug Stats ==========
     bool collect_stats_ = false;
     engine::RenderStats render_stats_;
+
+    // ========== Post-UI Callback ==========
+    PostUICallback post_ui_callback_;
 };
 
 } // namespace mmo::engine::scene

@@ -121,12 +121,6 @@ void MenuSystem::init_graphics_menu() {
     skybox.toggle_value = &graphics_settings_.skybox_enabled;
     menu_items_.push_back(skybox);
 
-    MenuItem mountains;
-    mountains.label = "Mountains";
-    mountains.type = MenuItemType::Toggle;
-    mountains.toggle_value = &graphics_settings_.mountains_enabled;
-    menu_items_.push_back(mountains);
-
     MenuItem trees;
     trees.label = "Trees";
     trees.type = MenuItemType::Toggle;

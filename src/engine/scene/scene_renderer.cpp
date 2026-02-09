@@ -581,12 +581,6 @@ void SceneRenderer::render_3d_scene(const RenderScene& scene, const CameraState&
         camera.projection,
         camera.position
     );
-
-    if (scene.should_draw_mountains() && gfx.mountains_enabled) {
-        bind_shadow_data(main_render_pass_, cmd, 1);
-        world_.render_mountains(main_render_pass_, cmd, camera.view, camera.projection,
-                                camera.position, light_dir_, frustum);
-    }
 }
 
 // ============================================================================

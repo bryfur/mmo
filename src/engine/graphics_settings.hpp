@@ -6,7 +6,6 @@ struct GraphicsSettings {
     bool fog_enabled = true;
     bool grass_enabled = true;
     bool skybox_enabled = true;
-    bool mountains_enabled = true;
     bool trees_enabled = true;
     bool rocks_enabled = true;
     bool show_fps = false;

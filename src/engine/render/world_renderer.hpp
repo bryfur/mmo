@@ -18,11 +18,10 @@ namespace gpu = mmo::engine::gpu;
 /**
  * WorldRenderer handles environmental world rendering:
  * - Skybox
- * - Mountains
  * - Grid
- * 
+ *
  * Note: Rocks and trees are now rendered as server-side entities
- * 
+ *
  * SDL3 GPU Migration: This class now uses SDL3 GPU API instead of OpenGL.
  * - VAO/VBO replaced with GPUBuffer
  * - GL shaders replaced with PipelineRegistry
@@ -69,17 +68,7 @@ public:
      */
     void render_skybox(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                        const glm::mat4& view, const glm::mat4& projection);
-    
-    /**
-     * Render distant mountains.
-     * @param pass Active render pass
-     * @param cmd Command buffer for uniform uploads
-     */
-    void render_mountains(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                          const glm::mat4& view, const glm::mat4& projection,
-                          const glm::vec3& camera_pos, const glm::vec3& light_dir,
-                          const scene::Frustum& frustum);
-    
+
     /**
      * Render debug grid.
      * @param pass Active render pass
@@ -88,23 +77,11 @@ public:
     void render_grid(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                      const glm::mat4& view, const glm::mat4& projection);
     
-    /**
-     * Get mountain positions for rendering.
-     */
-    struct MountainPosition {
-        float x, y, z;
-        float rotation;
-        float scale;
-        int size_type;
-    };
-    const std::vector<MountainPosition>& get_mountain_positions() const { return mountain_positions_; }
-    
     // Accessors
     const glm::vec3& sun_direction() const { return sun_direction_; }
     const glm::vec3& light_dir() const { return light_dir_; }
     
 private:
-    void generate_mountain_positions();
     void create_skybox_mesh();
     void create_grid_mesh();
     
@@ -129,10 +106,7 @@ private:
     // Lighting
     glm::vec3 sun_direction_ = glm::normalize(glm::vec3(0.5f, 0.8f, 0.3f));
     glm::vec3 light_dir_ = glm::vec3(-0.5f, -0.8f, -0.3f);
-    
-    // World object positions
-    std::vector<MountainPosition> mountain_positions_;
-    
+
     // Fog settings
     glm::vec3 fog_color_ = glm::vec3(0.35f, 0.45f, 0.6f);
     float fog_start_ = 800.0f;

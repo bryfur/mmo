@@ -152,20 +152,18 @@ public:
     // ========== World Element Flags ==========
 
     void set_draw_skybox(bool draw) { draw_skybox_ = draw; }
-    void set_draw_mountains(bool draw) { draw_mountains_ = draw; }
     void set_draw_rocks(bool draw) { draw_rocks_ = draw; }
     void set_draw_trees(bool draw) { draw_trees_ = draw; }
     void set_draw_ground(bool draw) { draw_ground_ = draw; }
     void set_draw_grass(bool draw) { draw_grass_ = draw; }
     bool should_draw_skybox() const { return draw_skybox_; }
-    bool should_draw_mountains() const { return draw_mountains_; }
     bool should_draw_rocks() const { return draw_rocks_; }
     bool should_draw_trees() const { return draw_trees_; }
     bool should_draw_ground() const { return draw_ground_; }
     bool should_draw_grass() const { return draw_grass_; }
 
     bool has_3d_content() const {
-        return draw_skybox_ || draw_ground_ || draw_grass_ || draw_mountains_ ||
+        return draw_skybox_ || draw_ground_ || draw_grass_ ||
                !commands_.empty();
     }
 
@@ -180,7 +178,6 @@ private:
     std::vector<ParticleEffectSpawnCommand> particle_effect_spawns_;
 
     bool draw_skybox_ = false;
-    bool draw_mountains_ = false;
     bool draw_rocks_ = false;
     bool draw_trees_ = false;
     bool draw_ground_ = false;

@@ -272,7 +272,6 @@ void Game::render_class_select() {
 
     render_scene_.clear();
     render_scene_.set_draw_skybox(false);
-    render_scene_.set_draw_mountains(false);
     render_scene_.set_draw_ground(false);
     render_scene_.set_draw_grass(false);
     ui_scene_.clear();
@@ -319,7 +318,6 @@ void Game::render_connecting() {
 
     render_scene_.clear();
     render_scene_.set_draw_skybox(false);
-    render_scene_.set_draw_mountains(false);
     render_scene_.set_draw_ground(false);
     render_scene_.set_draw_grass(false);
     ui_scene_.clear();
@@ -556,7 +554,6 @@ void Game::render_playing() {
 
     const auto& gfx = menu_system_->graphics_settings();
     render_scene_.set_draw_skybox(gfx.skybox_enabled);
-    render_scene_.set_draw_mountains(gfx.mountains_enabled);
     render_scene_.set_draw_rocks(gfx.rocks_enabled);
     render_scene_.set_draw_trees(gfx.trees_enabled);
     render_scene_.set_draw_ground(true);

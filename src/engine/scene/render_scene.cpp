@@ -17,7 +17,6 @@ void RenderScene::clear() {
 
     // Reset world element flags to defaults
     draw_skybox_ = true;
-    draw_mountains_ = true;
     draw_rocks_ = true;
     draw_trees_ = true;
     draw_ground_ = true;

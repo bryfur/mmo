@@ -20,11 +20,12 @@ struct TerrainVertex {
     glm::vec3 position;  // POSITION
     glm::vec2 texCoord;  // TEXCOORD0
     glm::vec4 color;     // COLOR0
+    glm::vec3 normal;    // NORMAL
 };
 
 // Verify TerrainVertex is tightly packed as expected by pipeline_registry
-static_assert(sizeof(TerrainVertex) == sizeof(float) * 9,
-    "TerrainVertex must be 9 floats (36 bytes) to match pipeline vertex stride");
+static_assert(sizeof(TerrainVertex) == sizeof(float) * 12,
+    "TerrainVertex must be 12 floats (48 bytes) to match pipeline vertex stride");
 
 /**
  * Terrain transform uniforms - matches terrain.vert.hlsl cbuffer
@@ -43,7 +44,8 @@ struct alignas(16) TerrainLightingUniforms {
     glm::vec3 fogColor;    // offset 0
     float fogStart;        // offset 12
     float fogEnd;          // offset 16
-    float _padding0[3];    // offset 20 — pad to 32 so lightDir aligns to 16-byte boundary
+    float world_size;      // offset 20
+    float _padding0[2];    // offset 24 — pad to 32 so lightDir aligns to 16-byte boundary
     glm::vec3 lightDir;    // offset 32
     float _padding1;       // offset 44
 };
@@ -75,7 +77,14 @@ public:
      * Set heightmap from server data. Uploads to GPU texture.
      */
     void set_heightmap(const engine::Heightmap& heightmap);
-    
+
+    /**
+     * Update splatmap texture from CPU data.
+     * @param data RGBA pixel data (must be splatmap_resolution^2 * 4 bytes)
+     * @param resolution Splatmap resolution (width and height)
+     */
+    void update_splatmap(const uint8_t* data, uint32_t resolution);
+
     /**
      * Clean up terrain resources.
      */
@@ -119,7 +128,7 @@ public:
     float world_height() const { return world_height_; }
     bool has_heightmap() const { return heightmap_ != nullptr; }
     gpu::GPUTexture* heightmap_texture() { return heightmap_texture_.get(); }
-    gpu::GPUTexture* grass_texture() { return grass_texture_.get(); }
+    gpu::GPUTexture* material_array_texture() { return material_array_texture_.get(); }
     
     // Settings
     void set_fog_color(const glm::vec3& color) { fog_color_ = color; }
@@ -133,7 +142,7 @@ public:
     
 private:
     void generate_terrain_mesh();
-    void load_grass_texture();
+    void load_terrain_textures();
     void upload_heightmap_texture();
     
     gpu::GPUDevice* device_ = nullptr;
@@ -147,8 +156,12 @@ private:
     
     // GPU resources
     std::unique_ptr<gpu::GPUTexture> heightmap_texture_;
-    std::unique_ptr<gpu::GPUTexture> grass_texture_;
-    std::unique_ptr<gpu::GPUSampler> grass_sampler_;
+
+    // Terrain material textures (using Texture2DArray to reduce sampler count)
+    std::unique_ptr<gpu::GPUTexture> material_array_texture_;  // 4 layers: grass, dirt, rock, sand
+    std::unique_ptr<gpu::GPUTexture> splatmap_texture_;
+
+    std::unique_ptr<gpu::GPUSampler> material_sampler_;
     std::unique_ptr<gpu::GPUBuffer> vertex_buffer_;
     std::unique_ptr<gpu::GPUBuffer> index_buffer_;
     uint32_t index_count_ = 0;

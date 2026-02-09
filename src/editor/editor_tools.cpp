@@ -55,18 +55,31 @@ bool TerrainBrushTool::on_scroll(float delta, bool shift_held, EditorApplication
 }
 
 bool TerrainBrushTool::on_key_down(int scancode, EditorApplication& app) {
-    switch (scancode) {
-        case SDL_SCANCODE_Q: mode_ = BrushMode::Raise; return true;
-        case SDL_SCANCODE_W: mode_ = BrushMode::Lower; return true;
-        case SDL_SCANCODE_E: mode_ = BrushMode::Smooth; return true;
-        case SDL_SCANCODE_R: mode_ = BrushMode::Flatten; return true;
+    if (paint_mode_ == PaintMode::Height) {
+        switch (scancode) {
+            case SDL_SCANCODE_Q: mode_ = BrushMode::Raise; return true;
+            case SDL_SCANCODE_W: mode_ = BrushMode::Lower; return true;
+            case SDL_SCANCODE_E: mode_ = BrushMode::Smooth; return true;
+            case SDL_SCANCODE_R: mode_ = BrushMode::Flatten; return true;
+        }
+    } else {
+        switch (scancode) {
+            case SDL_SCANCODE_Q: splat_channel_ = SplatChannel::Grass; return true;
+            case SDL_SCANCODE_W: splat_channel_ = SplatChannel::Dirt; return true;
+            case SDL_SCANCODE_E: splat_channel_ = SplatChannel::Rock; return true;
+            case SDL_SCANCODE_R: splat_channel_ = SplatChannel::Sand; return true;
+        }
     }
     return false;
 }
 
 void TerrainBrushTool::update(float dt, EditorApplication& app) {
     if (painting_ && app.cursor_on_terrain()) {
-        apply_brush(app.cursor_world_pos(), dt, app);
+        if (paint_mode_ == PaintMode::Height) {
+            apply_brush(app.cursor_world_pos(), dt, app);
+        } else {
+            apply_splatmap_brush(app.cursor_world_pos(), dt, app);
+        }
     }
 }
 
@@ -140,23 +153,125 @@ void TerrainBrushTool::apply_brush(const glm::vec3& center, float dt, EditorAppl
     }
 }
 
+void TerrainBrushTool::apply_splatmap_brush(const glm::vec3& center, float dt, EditorApplication& app) {
+    auto& splatmap = app.splatmap_data();
+    uint32_t resolution = app.splatmap_resolution();
+
+    if (splatmap.empty()) {
+        // Initialize splatmap if not already created
+        splatmap.resize(resolution * resolution * 4, 0);
+        // Default to all grass (R channel = 255)
+        for (uint32_t i = 0; i < resolution * resolution; ++i) {
+            splatmap[i * 4 + 0] = 255; // R = Grass
+            splatmap[i * 4 + 1] = 0;   // G = Dirt
+            splatmap[i * 4 + 2] = 0;   // B = Rock
+            splatmap[i * 4 + 3] = 0;   // A = Sand
+        }
+    }
+
+    // Map world position to splatmap UV
+    auto& hm = app.heightmap();
+    float world_size = hm.world_size;
+    float world_origin_x = hm.world_origin_x;
+    float world_origin_z = hm.world_origin_z;
+
+    float texel_size = world_size / static_cast<float>(resolution - 1);
+    int radius_texels = static_cast<int>(radius_ / texel_size) + 1;
+
+    int center_tx = static_cast<int>((center.x - world_origin_x) / world_size * (resolution - 1));
+    int center_tz = static_cast<int>((center.z - world_origin_z) / world_size * (resolution - 1));
+
+    // Determine which channel to paint based on splat_channel_
+    int target_channel = static_cast<int>(splat_channel_);
+
+    bool modified = false;
+    for (int tz = center_tz - radius_texels; tz <= center_tz + radius_texels; ++tz) {
+        for (int tx = center_tx - radius_texels; tx <= center_tx + radius_texels; ++tx) {
+            if (tx < 0 || tx >= (int)resolution || tz < 0 || tz >= (int)resolution) continue;
+
+            float wx = world_origin_x + (float(tx) / (resolution - 1)) * world_size;
+            float wz = world_origin_z + (float(tz) / (resolution - 1)) * world_size;
+            float dist = std::sqrt((wx - center.x) * (wx - center.x) + (wz - center.z) * (wz - center.z));
+            if (dist > radius_) continue;
+
+            float falloff = 0.5f * (1.0f + std::cos(3.14159f * dist / radius_));
+            float paint_strength = strength_ * 0.01f * falloff * dt; // Scale strength for painting
+
+            int pixel_index = (tz * resolution + tx) * 4;
+
+            // Read current RGBA values
+            float r = splatmap[pixel_index + 0] / 255.0f;
+            float g = splatmap[pixel_index + 1] / 255.0f;
+            float b = splatmap[pixel_index + 2] / 255.0f;
+            float a = splatmap[pixel_index + 3] / 255.0f;
+
+            // Increase target channel, decrease others proportionally
+            float channels[4] = {r, g, b, a};
+            channels[target_channel] = std::clamp(channels[target_channel] + paint_strength, 0.0f, 1.0f);
+
+            // Renormalize so all channels sum to 1.0
+            float sum = channels[0] + channels[1] + channels[2] + channels[3];
+            if (sum > 0.001f) {
+                channels[0] /= sum;
+                channels[1] /= sum;
+                channels[2] /= sum;
+                channels[3] /= sum;
+            }
+
+            // Write back
+            splatmap[pixel_index + 0] = static_cast<uint8_t>(channels[0] * 255.0f);
+            splatmap[pixel_index + 1] = static_cast<uint8_t>(channels[1] * 255.0f);
+            splatmap[pixel_index + 2] = static_cast<uint8_t>(channels[2] * 255.0f);
+            splatmap[pixel_index + 3] = static_cast<uint8_t>(channels[3] * 255.0f);
+
+            modified = true;
+        }
+    }
+
+    if (modified) {
+        app.mark_splatmap_dirty();
+    }
+}
+
 void TerrainBrushTool::build_imgui(EditorApplication& app) {
     ImGui::Text("Terrain Brush");
     ImGui::Separator();
 
-    int mode_i = static_cast<int>(mode_);
-    ImGui::RadioButton("Raise (Q)", &mode_i, 0); ImGui::SameLine();
-    ImGui::RadioButton("Lower (W)", &mode_i, 1);
-    ImGui::RadioButton("Smooth (E)", &mode_i, 2); ImGui::SameLine();
-    ImGui::RadioButton("Flatten (R)", &mode_i, 3);
-    mode_ = static_cast<BrushMode>(mode_i);
+    // Paint mode selection
+    int paint_mode_i = static_cast<int>(paint_mode_);
+    ImGui::RadioButton("Height", &paint_mode_i, 0); ImGui::SameLine();
+    ImGui::RadioButton("Splatmap", &paint_mode_i, 1);
+    paint_mode_ = static_cast<PaintMode>(paint_mode_i);
 
+    ImGui::Separator();
+
+    if (paint_mode_ == PaintMode::Height) {
+        // Height brush modes
+        int mode_i = static_cast<int>(mode_);
+        ImGui::RadioButton("Raise (Q)", &mode_i, 0); ImGui::SameLine();
+        ImGui::RadioButton("Lower (W)", &mode_i, 1);
+        ImGui::RadioButton("Smooth (E)", &mode_i, 2); ImGui::SameLine();
+        ImGui::RadioButton("Flatten (R)", &mode_i, 3);
+        mode_ = static_cast<BrushMode>(mode_i);
+
+        if (mode_ == BrushMode::Flatten) {
+            ImGui::Text("Target: %.1f (click to set)", flatten_target_);
+        }
+    } else {
+        // Splatmap channel selection
+        int channel_i = static_cast<int>(splat_channel_);
+        ImGui::RadioButton("Grass (Q)", &channel_i, 0); ImGui::SameLine();
+        ImGui::RadioButton("Dirt (W)", &channel_i, 1);
+        ImGui::RadioButton("Rock (E)", &channel_i, 2); ImGui::SameLine();
+        ImGui::RadioButton("Sand (R)", &channel_i, 3);
+        splat_channel_ = static_cast<SplatChannel>(channel_i);
+
+        ImGui::Text("Paint material onto terrain");
+    }
+
+    ImGui::Separator();
     ImGui::SliderFloat("Radius", &radius_, 50.0f, 500.0f, "%.0f");
     ImGui::SliderFloat("Strength", &strength_, 10.0f, 300.0f, "%.0f");
-
-    if (mode_ == BrushMode::Flatten) {
-        ImGui::Text("Target: %.1f (click to set)", flatten_target_);
-    }
 }
 
 void TerrainBrushTool::render_overlay(engine::scene::RenderScene& scene,
@@ -172,11 +287,22 @@ void TerrainBrushTool::render_overlay(engine::scene::RenderScene& scene,
     // Draw brush circle by projecting terrain points to screen
     const int segments = 48;
     uint32_t color;
-    switch (mode_) {
-        case BrushMode::Raise:   color = 0xFF00FF00; break; // green
-        case BrushMode::Lower:   color = 0xFFFF4444; break; // red
-        case BrushMode::Smooth:  color = 0xFF44AAFF; break; // blue
-        case BrushMode::Flatten: color = 0xFFFFFF44; break; // yellow
+
+    if (paint_mode_ == PaintMode::Height) {
+        switch (mode_) {
+            case BrushMode::Raise:   color = 0xFF00FF00; break; // green
+            case BrushMode::Lower:   color = 0xFFFF4444; break; // red
+            case BrushMode::Smooth:  color = 0xFF44AAFF; break; // blue
+            case BrushMode::Flatten: color = 0xFFFFFF44; break; // yellow
+        }
+    } else {
+        // Splatmap painting colors
+        switch (splat_channel_) {
+            case SplatChannel::Grass: color = 0xFF00FF00; break; // green
+            case SplatChannel::Dirt:  color = 0xFFAA5522; break; // brown
+            case SplatChannel::Rock:  color = 0xFF888888; break; // gray
+            case SplatChannel::Sand:  color = 0xFFFFDD88; break; // tan/yellow
+        }
     }
 
     for (int i = 0; i < segments; ++i) {

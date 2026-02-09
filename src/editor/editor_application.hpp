@@ -37,6 +37,11 @@ public:
 
     void mark_heightmap_dirty() { heightmap_dirty_ = true; }
 
+    // Splatmap accessors
+    std::vector<uint8_t>& splatmap_data() { return splatmap_data_; }
+    uint32_t splatmap_resolution() const { return splatmap_resolution_; }
+    void mark_splatmap_dirty() { splatmap_dirty_ = true; }
+
     entt::entity selected_entity() const;
 
     // Re-expose protected Application methods for tool access
@@ -95,6 +100,11 @@ private:
     engine::Heightmap heightmap_;
     bool heightmap_dirty_ = false;
     float heightmap_update_timer_ = 0.0f;
+
+    // Splatmap (RGBA texture for terrain material painting)
+    std::vector<uint8_t> splatmap_data_;  // RGBA pixels
+    uint32_t splatmap_resolution_ = 1024;  // 1024x1024 splatmap
+    bool splatmap_dirty_ = false;
 
     // Camera
     EditorCamera camera_;

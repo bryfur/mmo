@@ -17,6 +17,7 @@
 #include <memory>
 #include <vector>
 #include <SDL3/SDL_log.h>
+#include <SDL3_image/SDL_image.h>
 
 namespace mmo::engine::render {
 
@@ -36,13 +37,13 @@ bool TerrainRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeli
     world_height_ = world_height;
     
     // Create grass sampler with linear filtering and repeat addressing
-    grass_sampler_ = gpu::GPUSampler::create(device, gpu::SamplerConfig::anisotropic(8.0f));
-    if (!grass_sampler_) {
+    material_sampler_ = gpu::GPUSampler::create(device, gpu::SamplerConfig::anisotropic(8.0f));
+    if (!material_sampler_) {
         SDL_Log("TerrainRenderer::init: Failed to create grass sampler");
         return false;
     }
     
-    load_grass_texture();
+    load_terrain_textures();
     // Note: terrain mesh will be generated when heightmap is received
     // For now, generate a flat placeholder
     generate_terrain_mesh();
@@ -53,12 +54,29 @@ bool TerrainRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeli
 void TerrainRenderer::set_heightmap(const engine::Heightmap& heightmap) {
     // Store CPU-side copy for height queries
     heightmap_ = std::make_unique<engine::Heightmap>(heightmap);
-    
+
     // Upload to GPU texture
     upload_heightmap_texture();
-    
+
     // Regenerate terrain mesh using new heightmap
     generate_terrain_mesh();
+}
+
+void TerrainRenderer::update_splatmap(const uint8_t* data, uint32_t resolution) {
+    if (!device_ || !data) return;
+
+    // Recreate splatmap texture with new data
+    splatmap_texture_ = gpu::GPUTexture::create_2d(
+        *device_,
+        resolution, resolution,
+        gpu::TextureFormat::RGBA8,
+        data,
+        false  // No mipmaps for splatmap
+    );
+
+    if (!splatmap_texture_) {
+        SDL_Log("TerrainRenderer::update_splatmap: Failed to update splatmap texture");
+    }
 }
 
 void TerrainRenderer::upload_heightmap_texture() {
@@ -85,8 +103,12 @@ void TerrainRenderer::upload_heightmap_texture() {
 void TerrainRenderer::shutdown() {
     vertex_buffer_.reset();
     index_buffer_.reset();
-    grass_texture_.reset();
-    grass_sampler_.reset();
+
+    // Release terrain textures
+    material_array_texture_.reset();
+    splatmap_texture_.reset();
+
+    material_sampler_.reset();
     heightmap_texture_.reset();
     heightmap_.reset();
     device_ = nullptr;
@@ -94,17 +116,90 @@ void TerrainRenderer::shutdown() {
     index_count_ = 0;
 }
 
-void TerrainRenderer::load_grass_texture() {
+void TerrainRenderer::load_terrain_textures() {
     if (!device_) return;
-    
-    grass_texture_ = gpu::GPUTexture::load_from_file(
-        *device_,
+
+    // Load individual material textures using SDL_image
+    const char* texture_paths[4] = {
         "assets/textures/grass_seamless.png",
-        false  // No mipmaps until GPUTexture implements mipmap generation
+        "assets/textures/dirt_seamless.png",
+        "assets/textures/rock_seamless.png",
+        "assets/textures/sand_seamless.png"
+    };
+
+    SDL_Surface* loaded_surfaces[4] = {nullptr, nullptr, nullptr, nullptr};
+    SDL_Surface* converted_surfaces[4] = {nullptr, nullptr, nullptr, nullptr};
+    const void* layer_data[4] = {nullptr, nullptr, nullptr, nullptr};
+    int tex_width = 0, tex_height = 0;
+
+    // Load all textures and convert to RGBA8
+    bool all_loaded = true;
+    for (int i = 0; i < 4; ++i) {
+        loaded_surfaces[i] = IMG_Load(texture_paths[i]);
+        if (!loaded_surfaces[i]) {
+            SDL_Log("TerrainRenderer::load_terrain_textures: Failed to load %s: %s",
+                    texture_paths[i], SDL_GetError());
+            all_loaded = false;
+            break;
+        }
+
+        // Convert to RGBA8 format
+        converted_surfaces[i] = SDL_ConvertSurface(loaded_surfaces[i], SDL_PIXELFORMAT_RGBA32);
+        if (!converted_surfaces[i]) {
+            SDL_Log("TerrainRenderer::load_terrain_textures: Failed to convert %s to RGBA8: %s",
+                    texture_paths[i], SDL_GetError());
+            all_loaded = false;
+            break;
+        }
+
+        // Verify all textures have the same dimensions
+        if (i == 0) {
+            tex_width = converted_surfaces[i]->w;
+            tex_height = converted_surfaces[i]->h;
+        } else if (converted_surfaces[i]->w != tex_width || converted_surfaces[i]->h != tex_height) {
+            SDL_Log("TerrainRenderer::load_terrain_textures: Texture size mismatch for %s",
+                    texture_paths[i]);
+            all_loaded = false;
+            break;
+        }
+
+        layer_data[i] = converted_surfaces[i]->pixels;
+    }
+
+    // Create Texture2DArray with all 4 material layers
+    if (all_loaded && tex_width > 0 && tex_height > 0) {
+        material_array_texture_ = gpu::GPUTexture::create_2d_array(
+            *device_,
+            tex_width, tex_height,
+            4,  // 4 layers: grass, dirt, rock, sand
+            gpu::TextureFormat::RGBA8,
+            layer_data
+        );
+
+        if (!material_array_texture_) {
+            SDL_Log("TerrainRenderer::load_terrain_textures: Failed to create material array texture");
+        }
+    }
+
+    // Clean up surfaces
+    for (int i = 0; i < 4; ++i) {
+        if (converted_surfaces[i]) {
+            SDL_DestroySurface(converted_surfaces[i]);
+        }
+        if (loaded_surfaces[i]) {
+            SDL_DestroySurface(loaded_surfaces[i]);
+        }
+    }
+
+    // Load splatmap texture
+    splatmap_texture_ = gpu::GPUTexture::load_from_file(
+        *device_,
+        "assets/textures/terrain_splatmap.png",
+        false
     );
-    
-    if (!grass_texture_) {
-        SDL_Log("TerrainRenderer::load_grass_texture: Failed to load grass texture");
+
+    if (!splatmap_texture_) {
+        SDL_Log("TerrainRenderer::load_terrain_textures: Failed to load splatmap texture");
     }
 }
 
@@ -119,7 +214,7 @@ float TerrainRenderer::get_height(float x, float z) const {
 
 glm::vec3 TerrainRenderer::get_normal(float x, float z) const {
     if (heightmap_) {
-        float nx, ny, nz;
+        float nx = 0.0f, ny = 1.0f, nz = 0.0f;
         heightmap_->get_normal_world(x, z, nx, ny, nz);
         return glm::vec3(nx, ny, nz);
     }
@@ -135,8 +230,8 @@ void TerrainRenderer::generate_terrain_mesh() {
     float start_z = -margin;
     float end_x = world_width_ + margin;
     float end_z = world_height_ + margin;
-    
-    float cell_size = 25.0f;
+
+    float cell_size = 25.0f;  // ORIGINAL VALUE - reverting all changes to test shadows
     int cells_x = static_cast<int>((end_x - start_x) / cell_size);
     int cells_z = static_cast<int>((end_z - start_z) / cell_size);
     
@@ -155,23 +250,26 @@ void TerrainRenderer::generate_terrain_mesh() {
             TerrainVertex vertex;
             vertex.position = glm::vec3(x, y, z);
             vertex.texCoord = glm::vec2(x * tex_scale, z * tex_scale);
-            
+
+            // Calculate normal from heightmap
+            vertex.normal = get_normal(x, z);
+
             // Color tint based on position
             float world_center_x = world_width_ / 2.0f;
             float world_center_z = world_height_ / 2.0f;
             float dx = x - world_center_x;
             float dz = z - world_center_z;
             float dist = std::sqrt(dx * dx + dz * dz);
-            
+
             float dist_factor = std::min(dist / 3000.0f, 1.0f);
             float height_factor = std::min(std::max(y / 100.0f, 0.0f), 1.0f);
-            
+
             float r = 0.95f + dist_factor * 0.05f;
             float g = 1.0f - dist_factor * 0.05f - height_factor * 0.05f;
             float b = 0.9f + dist_factor * 0.05f;
-            
+
             vertex.color = glm::vec4(r, g, b, 1.0f);
-            
+
             vertices.push_back(vertex);
         }
     }
@@ -231,8 +329,8 @@ void TerrainRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
                              int shadow_binding_count) {
     // Skip rendering if required resources aren't available
     if (!pipeline_registry_ || !vertex_buffer_ || !index_buffer_ || !pass || !cmd) return;
-    if (!grass_texture_ || !grass_sampler_) {
-        SDL_Log("TerrainRenderer::render: Grass texture/sampler not ready, skipping");
+    if (!material_array_texture_ || !splatmap_texture_ || !material_sampler_) {
+        SDL_Log("TerrainRenderer::render: Terrain textures/sampler not ready, skipping");
         return;
     }
     
@@ -260,20 +358,27 @@ void TerrainRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
     lighting_uniforms.fogColor = fog_color_;
     lighting_uniforms.fogStart = fog_start_;
     lighting_uniforms.fogEnd = fog_end_;
+    lighting_uniforms.world_size = world_width_;  // Assumes square terrain
     lighting_uniforms.lightDir = light_dir;
     lighting_uniforms._padding1 = 0.0f;
     
     SDL_PushGPUFragmentUniformData(cmd, 0, &lighting_uniforms, sizeof(lighting_uniforms));
 
-    // Bind grass texture
-    SDL_GPUTextureSamplerBinding tex_binding = {};
-    tex_binding.texture = grass_texture_->handle();
-    tex_binding.sampler = grass_sampler_->handle();
-    SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
+    // Bind material texture array at slot 0 (4 layers: grass, dirt, rock, sand)
+    SDL_GPUTextureSamplerBinding material_binding = {
+        material_array_texture_->handle(), material_sampler_->handle()
+    };
+    SDL_BindGPUFragmentSamplers(pass, 0, &material_binding, 1);
 
-    // Bind shadow cascade textures (slots 1-4)
+    // Bind splatmap texture at slot 1
+    SDL_GPUTextureSamplerBinding splatmap_binding = {
+        splatmap_texture_->handle(), material_sampler_->handle()
+    };
+    SDL_BindGPUFragmentSamplers(pass, 1, &splatmap_binding, 1);
+
+    // Bind shadow cascade textures at slots 2-5
     if (shadow_bindings && shadow_binding_count > 0) {
-        SDL_BindGPUFragmentSamplers(pass, 1, shadow_bindings, shadow_binding_count);
+        SDL_BindGPUFragmentSamplers(pass, 2, shadow_bindings, shadow_binding_count);
     }
 
     // Bind vertex buffer
@@ -303,8 +408,8 @@ void TerrainRenderer::set_anisotropic_filter(float level) {
     level = std::max(1.0f, std::min(16.0f, level));
     
     // Recreate grass sampler with new anisotropy level
-    grass_sampler_ = gpu::GPUSampler::create(*device_, gpu::SamplerConfig::anisotropic(level));
-    if (!grass_sampler_) {
+    material_sampler_ = gpu::GPUSampler::create(*device_, gpu::SamplerConfig::anisotropic(level));
+    if (!material_sampler_) {
         SDL_Log("TerrainRenderer::set_anisotropic_filter: Failed to recreate grass sampler with level %.1f", level);
     }
 }

@@ -116,6 +116,21 @@ public:
     static std::unique_ptr<GPUTexture> create_depth_array(GPUDevice& device, int width, int height, int layers);
 
     /**
+     * @brief Create a 2D array texture (e.g., for terrain material layers)
+     *
+     * @param device The GPU device
+     * @param width Texture width
+     * @param height Texture height
+     * @param layers Number of array layers
+     * @param format Pixel format
+     * @param layer_data Array of pointers to pixel data for each layer (can be nullptr)
+     * @return Unique pointer to the texture, or nullptr on failure
+     */
+    static std::unique_ptr<GPUTexture> create_2d_array(GPUDevice& device, int width, int height,
+                                                         int layers, TextureFormat format,
+                                                         const void** layer_data = nullptr);
+
+    /**
      * @brief Get the number of array layers (1 for non-array textures)
      */
     int layers() const { return layers_; }

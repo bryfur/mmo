@@ -9,6 +9,7 @@ struct VSInput {
     [[vk::location(0)]] float3 position : POSITION;
     [[vk::location(1)]] float2 texCoord : TEXCOORD0;
     [[vk::location(2)]] float4 color : COLOR0;
+    [[vk::location(3)]] float3 normal : NORMAL;
 };
 
 // Vertex output / Fragment input
@@ -39,9 +40,8 @@ VSOutput VSMain(VSInput input) {
     output.vertexColor = input.color;
     output.fogDistance = length(input.position - cameraPos);
 
-    // Calculate normal from height differences (approximation for terrain)
-    // For a proper implementation, normals should come from vertex data
-    output.normal = float3(0.0, 1.0, 0.0);
+    // Use vertex normal calculated from heightmap
+    output.normal = normalize(input.normal);
 
     float4 viewPos = mul(view, float4(input.position, 1.0));
     output.viewDepth = -viewPos.z;

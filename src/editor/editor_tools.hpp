@@ -17,6 +17,8 @@ class EditorApplication;
 
 enum class ToolType { Select, Terrain, Place };
 enum class BrushMode { Raise, Lower, Smooth, Flatten };
+enum class PaintMode { Height, Splatmap };
+enum class SplatChannel { Grass, Dirt, Rock, Sand };
 
 // ============================================================================
 // Base tool interface
@@ -70,8 +72,11 @@ public:
 
 private:
     void apply_brush(const glm::vec3& center, float dt, EditorApplication& app);
+    void apply_splatmap_brush(const glm::vec3& center, float dt, EditorApplication& app);
 
+    PaintMode paint_mode_ = PaintMode::Height;
     BrushMode mode_ = BrushMode::Raise;
+    SplatChannel splat_channel_ = SplatChannel::Grass;
     float radius_ = 200.0f;
     float strength_ = 80.0f;
     float flatten_target_ = 0.0f;

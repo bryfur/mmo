@@ -16,6 +16,7 @@
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_scancode.h>
 #include <SDL3/SDL_mouse.h>
+#include <SDL3_image/SDL_image.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <nlohmann/json.hpp>
 #include <fstream>
@@ -364,6 +365,49 @@ void EditorApplication::on_update(float dt) {
             heightmap_dirty_ = false;
             heightmap_update_timer_ = 0.0f;
         }
+    }
+
+    // Save splatmap when dirty (immediate save to file)
+    if (splatmap_dirty_) {
+        // Save splatmap to PNG file
+        std::string splatmap_path = "assets/textures/terrain_splatmap.png";
+
+        // Verify data is valid
+        size_t expected_size = splatmap_resolution_ * splatmap_resolution_ * 4;
+        if (splatmap_data_.size() != expected_size) {
+            std::cerr << "Splatmap data size mismatch: " << splatmap_data_.size()
+                     << " (expected " << expected_size << ")\n";
+            splatmap_dirty_ = false;
+            return;
+        }
+
+        // Update GPU texture immediately for visual feedback
+        scene_renderer().terrain().update_splatmap(splatmap_data_.data(), splatmap_resolution_);
+
+        // Create SDL_Surface from splatmap data (RGBA format)
+        SDL_Surface* surface = SDL_CreateSurfaceFrom(
+            splatmap_resolution_, splatmap_resolution_,
+            SDL_PIXELFORMAT_RGBA32,
+            splatmap_data_.data(),
+            splatmap_resolution_ * 4  // pitch: width * bytes_per_pixel
+        );
+
+        if (surface) {
+            // Save to PNG using SDL_image
+            bool success = IMG_SavePNG(surface, splatmap_path.c_str());
+            if (!success) {
+                const char* err = SDL_GetError();
+                std::cerr << "Failed to save splatmap to " << splatmap_path << ": "
+                         << (err && err[0] ? err : "Unknown error") << '\n';
+            } else {
+                std::cout << "Splatmap saved to " << splatmap_path << '\n';
+            }
+            SDL_DestroySurface(surface);
+        } else {
+            std::cerr << "Failed to create surface for splatmap: " << SDL_GetError() << '\n';
+        }
+
+        splatmap_dirty_ = false;
     }
 
     // Hot-reload check (~2Hz)

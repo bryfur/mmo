@@ -331,6 +331,102 @@ std::unique_ptr<GPUTexture> GPUTexture::create_depth_array(GPUDevice& device, in
     return texture;
 }
 
+std::unique_ptr<GPUTexture> GPUTexture::create_2d_array(GPUDevice& device, int width, int height,
+                                                          int layers, TextureFormat format,
+                                                          const void** layer_data) {
+    auto texture = std::unique_ptr<GPUTexture>(new GPUTexture());
+    texture->device_ = &device;
+    texture->width_ = width;
+    texture->height_ = height;
+    texture->layers_ = layers;
+    texture->format_ = to_sdl_format(format);
+    texture->is_depth_ = false;
+    texture->is_render_target_ = false;
+    texture->mip_levels_ = 1;
+
+    SDL_GPUTextureCreateInfo tex_info = {};
+    tex_info.type = SDL_GPU_TEXTURETYPE_2D_ARRAY;
+    tex_info.format = texture->format_;
+    tex_info.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    tex_info.width = static_cast<Uint32>(width);
+    tex_info.height = static_cast<Uint32>(height);
+    tex_info.layer_count_or_depth = static_cast<Uint32>(layers);
+    tex_info.num_levels = 1;
+
+    texture->texture_ = device.create_texture(tex_info);
+    if (!texture->texture_) {
+        SDL_Log("GPUTexture::create_2d_array: Failed to create texture: %s", SDL_GetError());
+        return nullptr;
+    }
+
+    // Upload data to each layer if provided
+    if (layer_data) {
+        size_t bytes_per_pixel = get_bytes_per_pixel(texture->format_);
+        size_t layer_size = static_cast<size_t>(width) * height * bytes_per_pixel;
+
+        for (int layer = 0; layer < layers; ++layer) {
+            if (layer_data[layer]) {
+                // Create transfer buffer for this layer
+                SDL_GPUTransferBufferCreateInfo transfer_info = {};
+                transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+                transfer_info.size = static_cast<Uint32>(layer_size);
+
+                SDL_GPUTransferBuffer* transfer = device.create_transfer_buffer(transfer_info);
+                if (!transfer) {
+                    SDL_Log("GPUTexture::create_2d_array: Failed to create transfer buffer");
+                    continue;
+                }
+
+                // Copy data to transfer buffer
+                void* mapped = device.map_transfer_buffer(transfer, false);
+                if (!mapped) {
+                    SDL_Log("GPUTexture::create_2d_array: Failed to map transfer buffer");
+                    device.release_transfer_buffer(transfer);
+                    continue;
+                }
+
+                std::memcpy(mapped, layer_data[layer], layer_size);
+                device.unmap_transfer_buffer(transfer);
+
+                // Upload to GPU
+                SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device.handle());
+                if (!cmd) {
+                    SDL_Log("GPUTexture::create_2d_array: Failed to acquire command buffer");
+                    device.release_transfer_buffer(transfer);
+                    continue;
+                }
+
+                SDL_GPUCopyPass* copy_pass = SDL_BeginGPUCopyPass(cmd);
+                if (!copy_pass) {
+                    SDL_Log("GPUTexture::create_2d_array: Failed to begin copy pass");
+                    device.release_transfer_buffer(transfer);
+                    continue;
+                }
+
+                SDL_GPUTextureTransferInfo src = {};
+                src.transfer_buffer = transfer;
+                src.offset = 0;
+
+                SDL_GPUTextureRegion dst = {};
+                dst.texture = texture->texture_;
+                dst.w = static_cast<Uint32>(width);
+                dst.h = static_cast<Uint32>(height);
+                dst.d = 1;
+                dst.mip_level = 0;
+                dst.layer = static_cast<Uint32>(layer);
+
+                SDL_UploadToGPUTexture(copy_pass, &src, &dst, false);
+                SDL_EndGPUCopyPass(copy_pass);
+                SDL_SubmitGPUCommandBuffer(cmd);
+
+                device.release_transfer_buffer(transfer);
+            }
+        }
+    }
+
+    return texture;
+}
+
 std::unique_ptr<GPUTexture> GPUTexture::create_depth_stencil(GPUDevice& device,
                                                                int width, int height) {
     auto texture = std::unique_ptr<GPUTexture>(new GPUTexture());

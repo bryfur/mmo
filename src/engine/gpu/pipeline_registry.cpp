@@ -292,7 +292,7 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_terrain_pipeline() {
 
     ShaderResources fs_resources;
     fs_resources.num_uniform_buffers = 2;  // lighting + shadow data
-    fs_resources.num_samplers = 5;  // grassTexture + 4 shadow cascade maps
+    fs_resources.num_samplers = 6;  // material array + splatmap + 4 shadow cascade maps
 
     auto* vs = shader_manager_->get(shader_path_ + "terrain.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
@@ -301,14 +301,14 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_terrain_pipeline() {
 
     if (!vs || !fs) return nullptr;
 
-    // Custom terrain vertex format: position(3), texcoord(2), color(4)
+    // Custom terrain vertex format: position(3), texcoord(2), color(4), normal(3)
     PipelineConfig config;
     config.vertex_shader = vs->handle();
     config.fragment_shader = fs->handle();
 
     config.vertex_buffers = {{
         .slot = 0,
-        .pitch = sizeof(float) * 9,  // 3 + 2 + 4 floats
+        .pitch = sizeof(float) * 12,  // 3 + 2 + 4 + 3 floats
         .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
         .instance_step_rate = 0
     }};
@@ -317,6 +317,7 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_terrain_pipeline() {
         { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, 0 },                    // position
         { 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, sizeof(float) * 3 },    // texcoord
         { 2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, sizeof(float) * 5 },    // color
+        { 3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, sizeof(float) * 9 },    // normal
     };
 
     config.opaque();
@@ -590,14 +591,14 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_shadow_terrain_pipeline() 
 
     if (!vs || !fs) return nullptr;
 
-    // Terrain vertex format: position(3), texcoord(2), color(4)
+    // Terrain vertex format: position(3), texcoord(2), color(4), normal(3)
     PipelineConfig config;
     config.vertex_shader = vs->handle();
     config.fragment_shader = fs->handle();
 
     config.vertex_buffers = {{
         .slot = 0,
-        .pitch = sizeof(float) * 9,
+        .pitch = sizeof(float) * 12,
         .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
         .instance_step_rate = 0
     }};
@@ -606,6 +607,7 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_shadow_terrain_pipeline() 
         { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, 0 },
         { 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, sizeof(float) * 3 },
         { 2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, sizeof(float) * 5 },
+        { 3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, sizeof(float) * 9 },
     };
 
     // Terrain is single-sided (upward-facing only), so no_cull is needed

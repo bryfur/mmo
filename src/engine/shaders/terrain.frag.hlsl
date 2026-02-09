@@ -19,7 +19,8 @@ cbuffer LightingUniforms {
     float3 fogColor;
     float fogStart;
     float fogEnd;
-    float _padding0[3];
+    float worldSize;  // Size of the terrain world (assumes square)
+    float _padding0[2];
     float3 lightDir;
     float _padding1;
 };
@@ -34,31 +35,37 @@ cbuffer ShadowUniforms {
     float _shadowPad0;
 };
 
-// Grass texture - sampler slot 0
+// Material texture array - sampler slot 0 (4 layers: grass, dirt, rock, sand)
 [[vk::combinedImageSampler]][[vk::binding(0, 2)]]
-Texture2D grassTexture;
+Texture2DArray materialTextures;
 [[vk::combinedImageSampler]][[vk::binding(0, 2)]]
-SamplerState grassSampler;
+SamplerState materialSampler;
 
-// Shadow cascade textures - sampler slots 1-4
+// Splatmap texture - sampler slot 1
 [[vk::combinedImageSampler]][[vk::binding(1, 2)]]
+Texture2D splatmapTexture;
+[[vk::combinedImageSampler]][[vk::binding(1, 2)]]
+SamplerState splatmapSampler;
+
+// Shadow cascade textures - sampler slots 2-5 (shifted from 1-4)
+[[vk::combinedImageSampler]][[vk::binding(2, 2)]]
 Texture2D shadowMap0;
-[[vk::combinedImageSampler]][[vk::binding(1, 2)]]
+[[vk::combinedImageSampler]][[vk::binding(2, 2)]]
 SamplerState shadowSampler0;
 
-[[vk::combinedImageSampler]][[vk::binding(2, 2)]]
+[[vk::combinedImageSampler]][[vk::binding(3, 2)]]
 Texture2D shadowMap1;
-[[vk::combinedImageSampler]][[vk::binding(2, 2)]]
+[[vk::combinedImageSampler]][[vk::binding(3, 2)]]
 SamplerState shadowSampler1;
 
-[[vk::combinedImageSampler]][[vk::binding(3, 2)]]
+[[vk::combinedImageSampler]][[vk::binding(4, 2)]]
 Texture2D shadowMap2;
-[[vk::combinedImageSampler]][[vk::binding(3, 2)]]
+[[vk::combinedImageSampler]][[vk::binding(4, 2)]]
 SamplerState shadowSampler2;
 
-[[vk::combinedImageSampler]][[vk::binding(4, 2)]]
+[[vk::combinedImageSampler]][[vk::binding(5, 2)]]
 Texture2D shadowMap3;
-[[vk::combinedImageSampler]][[vk::binding(4, 2)]]
+[[vk::combinedImageSampler]][[vk::binding(5, 2)]]
 SamplerState shadowSampler3;
 
 static const float2 poissonDisk[16] = {
@@ -71,6 +78,24 @@ static const float2 poissonDisk[16] = {
     float2(-0.24188840,  0.99706507), float2(-0.81409955,  0.91437590),
     float2(0.19984126,  0.78641367),  float2(0.14383161, -0.14100790)
 };
+
+// Triplanar texture sampling for Texture2DArray - eliminates stretching on steep slopes
+float3 SampleTriplanarArray(Texture2DArray texArray, SamplerState samp, float3 worldPos, float3 worldNormal, float textureScale, int layer) {
+    // Calculate blend weights based on normal direction
+    float3 blendWeights = abs(worldNormal);
+    blendWeights = pow(blendWeights, 4.0); // Sharper transitions between projections
+    blendWeights /= (blendWeights.x + blendWeights.y + blendWeights.z); // Normalize
+
+    // Sample from three planar projections
+    float3 xProjection = texArray.Sample(samp, float3(worldPos.yz * textureScale, layer)).rgb;
+    float3 yProjection = texArray.Sample(samp, float3(worldPos.xz * textureScale, layer)).rgb;
+    float3 zProjection = texArray.Sample(samp, float3(worldPos.xy * textureScale, layer)).rgb;
+
+    // Blend based on surface orientation
+    return xProjection * blendWeights.x +
+           yProjection * blendWeights.y +
+           zProjection * blendWeights.z;
+}
 
 float sampleShadowMap(int cascade, float2 uv) {
     if (cascade == 0) return shadowMap0.SampleLevel(shadowSampler0, uv, 0).r;
@@ -149,9 +174,33 @@ float calcShadow(float3 worldPos, float depth) {
 }
 
 float4 PSMain(PSInput input) : SV_Target {
-    float4 texColor = grassTexture.Sample(grassSampler, input.texCoord);
-    float3 color = texColor.rgb * lerp(float3(1.0, 1.0, 1.0), input.vertexColor.rgb, 0.3);
+    float3 worldPos = input.fragPos;
+    float3 worldNormal = normalize(input.normal);
 
+    // Sample splatmap to get material weights (R=grass, G=dirt, B=rock, A=sand)
+    // Map world position to 0-1 UV range
+    float2 splatmapUV = worldPos.xz / worldSize;
+    float4 splatWeights = splatmapTexture.Sample(splatmapSampler, splatmapUV);
+
+    // Sample all 4 materials from the texture array using triplanar mapping
+    float textureScale = 0.01; // Scale for material textures
+    float3 grassColor = SampleTriplanarArray(materialTextures, materialSampler, worldPos, worldNormal, textureScale, 0);
+    float3 dirtColor = SampleTriplanarArray(materialTextures, materialSampler, worldPos, worldNormal, textureScale, 1);
+    float3 rockColor = SampleTriplanarArray(materialTextures, materialSampler, worldPos, worldNormal, textureScale, 2);
+    float3 sandColor = SampleTriplanarArray(materialTextures, materialSampler, worldPos, worldNormal, textureScale, 3);
+
+    // Blend materials based on splatmap weights
+    float3 terrainColor = grassColor * splatWeights.r +
+                          dirtColor * splatWeights.g +
+                          rockColor * splatWeights.b +
+                          sandColor * splatWeights.a;
+
+    // Apply vertex color tint
+    float3 color = terrainColor * input.vertexColor.rgb;
+
+    // ===================================================================
+    // LIGHTING AND SHADOWS
+    // ===================================================================
     float3 lightDirection = normalize(-lightDir);
     float3 norm = normalize(input.normal);
     float diff = max(dot(norm, lightDirection), 0.0);
@@ -162,6 +211,9 @@ float4 PSMain(PSInput input) : SV_Target {
     float3 lighting = ambient * lerp(0.5, 1.0, shadow) + diff * float3(1.0, 0.95, 0.9) * shadow;
     color *= lighting;
 
+    // ===================================================================
+    // FOG
+    // ===================================================================
     float fogFactor = saturate((input.fogDistance - fogStart) / (fogEnd - fogStart));
     color = lerp(color, fogColor, fogFactor);
 

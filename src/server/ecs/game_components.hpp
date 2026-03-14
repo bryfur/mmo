@@ -172,4 +172,279 @@ struct SafeZone {
     float radius = 0.0f;
 };
 
+// ============================================================================
+// Progression Components
+// ============================================================================
+
+struct PlayerLevel {
+    int level = 1;
+    int xp = 0;
+    int gold = 0;
+
+    // Mana for skills
+    float mana = 100.0f;
+    float max_mana = 100.0f;
+    float mana_regen = 5.0f;  // per second
+};
+
+// ============================================================================
+// Inventory Components
+// ============================================================================
+
+struct InventoryItem {
+    std::string item_id;
+    int count = 1;
+};
+
+struct Inventory {
+    static constexpr int MAX_SLOTS = 20;
+    InventoryItem slots[MAX_SLOTS] = {};
+    int used_slots = 0;
+
+    bool add_item(const std::string& id, int count = 1) {
+        // Stack with existing
+        for (int i = 0; i < used_slots; ++i) {
+            if (slots[i].item_id == id) {
+                slots[i].count += count;
+                return true;
+            }
+        }
+        // New slot
+        if (used_slots < MAX_SLOTS) {
+            slots[used_slots].item_id = id;
+            slots[used_slots].count = count;
+            ++used_slots;
+            return true;
+        }
+        return false; // Full
+    }
+
+    bool remove_item(const std::string& id, int count = 1) {
+        for (int i = 0; i < used_slots; ++i) {
+            if (slots[i].item_id == id && slots[i].count >= count) {
+                slots[i].count -= count;
+                if (slots[i].count <= 0) {
+                    // Compact
+                    for (int j = i; j < used_slots - 1; ++j)
+                        slots[j] = slots[j + 1];
+                    slots[used_slots - 1] = {};
+                    --used_slots;
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
+    int count_item(const std::string& id) const {
+        for (int i = 0; i < used_slots; ++i)
+            if (slots[i].item_id == id) return slots[i].count;
+        return 0;
+    }
+};
+
+// Equipped items (one per slot)
+struct Equipment {
+    std::string weapon_id;
+    std::string armor_id;
+
+    // Computed bonuses from equipment
+    float damage_bonus = 0.0f;
+    float health_bonus = 0.0f;
+    float speed_bonus = 0.0f;
+    float defense = 0.0f;
+};
+
+// ============================================================================
+// Quest Components
+// ============================================================================
+
+struct QuestObjectiveProgress {
+    std::string type;       // "kill", "visit", "gather" - copied from config
+    std::string target;     // target id - copied from config
+    int current = 0;
+    int required = 0;
+    bool complete = false;
+};
+
+struct ActiveQuest {
+    std::string quest_id;
+    std::vector<QuestObjectiveProgress> objectives;
+    bool all_complete = false;
+};
+
+struct QuestState {
+    std::vector<ActiveQuest> active_quests;
+    std::vector<std::string> completed_quests;
+
+    bool has_completed(const std::string& id) const {
+        for (const auto& q : completed_quests)
+            if (q == id) return true;
+        return false;
+    }
+
+    bool has_active(const std::string& id) const {
+        for (const auto& q : active_quests)
+            if (q.quest_id == id) return true;
+        return false;
+    }
+
+    ActiveQuest* get_active(const std::string& id) {
+        for (auto& q : active_quests)
+            if (q.quest_id == id) return &q;
+        return nullptr;
+    }
+};
+
+// ============================================================================
+// Skill Components
+// ============================================================================
+
+struct SkillCooldown {
+    std::string skill_id;
+    float remaining = 0.0f;
+};
+
+struct SkillState {
+    std::vector<SkillCooldown> cooldowns;
+
+    float get_cooldown(const std::string& id) const {
+        for (const auto& cd : cooldowns)
+            if (cd.skill_id == id) return cd.remaining;
+        return 0.0f;
+    }
+
+    void set_cooldown(const std::string& id, float time) {
+        for (auto& cd : cooldowns) {
+            if (cd.skill_id == id) { cd.remaining = time; return; }
+        }
+        cooldowns.push_back({id, time});
+    }
+
+    void update(float dt) {
+        for (auto& cd : cooldowns)
+            if (cd.remaining > 0.0f) cd.remaining -= dt;
+    }
+};
+
+// ============================================================================
+// Talent Components
+// ============================================================================
+
+struct TalentState {
+    std::vector<std::string> unlocked_talents;
+    int talent_points = 0;
+
+    bool has_talent(const std::string& id) const {
+        for (const auto& t : unlocked_talents)
+            if (t == id) return true;
+        return false;
+    }
+};
+
+// ============================================================================
+// Monster Type Tag (links to monster_types.json by id)
+// ============================================================================
+
+struct MonsterTypeId {
+    std::string type_id;  // e.g. "goblin_scout"
+    int level = 1;
+    int xp_reward = 25;
+    int gold_reward = 5;
+};
+
+// ============================================================================
+// Zone Tag (which zone an entity is in)
+// ============================================================================
+
+struct ZoneInfo {
+    std::string zone_id;
+};
+
+// ============================================================================
+// Buff/Debuff Components
+// ============================================================================
+
+struct StatusEffect {
+    enum class Type : uint8_t {
+        Stun,        // Cannot move or attack
+        Slow,        // Reduced movement speed
+        Root,        // Cannot move but can attack
+        Freeze,      // Cannot move or attack (ice visual)
+        Burn,        // Damage over time
+        Poison,      // Damage over time (weaker but longer)
+        Heal,        // Heal over time
+        Shield,      // Damage absorption
+        SpeedBoost,  // Increased movement speed
+        DamageBoost, // Increased damage
+        DefenseBoost,// Reduced damage taken
+        Lifesteal,   // Heal on hit
+        Invulnerable // Cannot take damage
+    };
+
+    Type type;
+    float duration;      // seconds remaining
+    float tick_timer;    // for DoT/HoT effects
+    float tick_interval; // how often DoT/HoT ticks
+    float value;         // effect magnitude (damage per tick, slow %, etc.)
+    uint32_t source_id;  // who applied this
+};
+
+struct BuffState {
+    std::vector<StatusEffect> effects;
+
+    void add(StatusEffect effect) { effects.push_back(effect); }
+
+    bool has(StatusEffect::Type type) const {
+        for (auto& e : effects) if (e.type == type) return true;
+        return false;
+    }
+
+    bool is_stunned() const { return has(StatusEffect::Type::Stun) || has(StatusEffect::Type::Freeze); }
+    bool is_rooted() const { return has(StatusEffect::Type::Root) || is_stunned(); }
+
+    float get_speed_multiplier() const {
+        float mult = 1.0f;
+        for (auto& e : effects) {
+            if (e.type == StatusEffect::Type::Slow) mult *= (1.0f - e.value);
+            if (e.type == StatusEffect::Type::SpeedBoost) mult *= (1.0f + e.value);
+        }
+        return mult;
+    }
+
+    float get_damage_multiplier() const {
+        float mult = 1.0f;
+        for (auto& e : effects) {
+            if (e.type == StatusEffect::Type::DamageBoost) mult *= (1.0f + e.value);
+        }
+        return mult;
+    }
+
+    float get_defense_multiplier() const {
+        float mult = 1.0f;
+        for (auto& e : effects) {
+            if (e.type == StatusEffect::Type::DefenseBoost) mult *= (1.0f - e.value);
+        }
+        return mult;
+    }
+
+    bool is_invulnerable() const { return has(StatusEffect::Type::Invulnerable); }
+
+    float get_lifesteal() const {
+        float total = 0.0f;
+        for (auto& e : effects) {
+            if (e.type == StatusEffect::Type::Lifesteal) total += e.value;
+        }
+        return total;
+    }
+
+    float get_shield_value() const {
+        float total = 0.0f;
+        for (auto& e : effects) {
+            if (e.type == StatusEffect::Type::Shield) total += e.value;
+        }
+        return total;
+    }
+};
+
 } // namespace mmo::server::ecs

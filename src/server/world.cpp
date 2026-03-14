@@ -10,6 +10,7 @@
 #include "systems/movement_system.hpp"
 #include "systems/combat_system.hpp"
 #include "systems/ai_system.hpp"
+#include "systems/buff_system.hpp"
 #include "systems/physics_system.hpp"
 #include "entity_config.hpp"
 #include <nlohmann/json.hpp>
@@ -146,7 +147,8 @@ uint32_t World::add_player(const std::string& name, PlayerClass player_class) {
     registry_.emplace<ecs::PlayerTag>(entity);
     registry_.emplace<ecs::InputState>(entity);
     registry_.emplace<ecs::Scale>(entity);  // Default scale = 1.0
-    
+    registry_.emplace<ecs::BuffState>(entity);  // Empty buff state for status effects
+
     // Add physics collider for player (dynamic body for collision response)
     // Size matches visual scale from client rendering
     float player_target_size = config::get_character_target_size(EntityType::Player);
@@ -217,6 +219,9 @@ void World::update(float dt) {
     systems::update_movement(registry_, dt, *config_);
     systems::update_ai(registry_, dt, *config_);
     systems::update_combat(registry_, dt, *config_);
+
+    // Update buff/debuff system (tick durations, apply DoT/HoT, remove expired)
+    systems::update_buffs(registry_, dt);
 
     // Update physics (handles collision detection and response)
     physics_.update(registry_, dt);
@@ -649,6 +654,7 @@ bool World::spawn_from_world_data() {
                 registry_.emplace<ecs::NPCTag>(entity);
                 registry_.emplace<ecs::AIState>(entity);
                 registry_.emplace<ecs::Scale>(entity);
+                registry_.emplace<ecs::BuffState>(entity);  // Empty buff state for status effects
 
                 float npc_target_size = config::get_character_target_size(EntityType::NPC);
                 ecs::Collider collider;

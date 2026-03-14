@@ -21,9 +21,29 @@ void update_movement(entt::registry& registry, float dt, const GameConfig& confi
         const auto& input_state = player_view.get<ecs::InputState>(entity);
         const auto& input = input_state.input;
         const auto& info = player_view.get<ecs::EntityInfo>(entity);
+
+        // Check for movement-impairing effects
+        if (registry.all_of<ecs::BuffState>(entity)) {
+            const auto& buffs = registry.get<ecs::BuffState>(entity);
+            if (buffs.is_rooted()) {
+                velocity.x = 0.0f;
+                velocity.z = 0.0f;
+                // Skip transform update below for non-physics entities too
+                if (!registry.all_of<ecs::PhysicsBody>(entity)) {
+                    // No movement allowed
+                }
+                continue;
+            }
+        }
+
         float speed = config.get_class(info.player_class).speed;
         if (input.sprinting) {
             speed *= 1.6f;
+        }
+
+        // Apply buff speed multiplier (slow/speed boost)
+        if (registry.all_of<ecs::BuffState>(entity)) {
+            speed *= registry.get<ecs::BuffState>(entity).get_speed_multiplier();
         }
 
         // Use continuous movement direction for smooth camera-relative movement

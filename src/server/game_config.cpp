@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <iostream>
+#include <cmath>
 #include <cstring>
 #include <string>
 #include <utility>
@@ -30,6 +31,15 @@ bool GameConfig::load(const std::string& data_dir) {
     ok = load_classes(data_dir + "/classes.json") && ok;
     ok = load_monsters(data_dir + "/monsters.json") && ok;
     ok = load_town(data_dir + "/town.json") && ok;
+    // New gameplay configs (non-fatal if missing)
+    load_monster_types(data_dir + "/monster_types.json");
+    load_zones(data_dir + "/zones.json");
+    load_items(data_dir + "/items.json");
+    load_loot_tables(data_dir + "/loot_tables.json");
+    load_leveling(data_dir + "/leveling.json");
+    load_skills(data_dir + "/skills.json");
+    load_talents(data_dir + "/talents.json");
+    load_quests(data_dir + "/quests.json");
     return ok;
 }
 
@@ -58,8 +68,8 @@ bool GameConfig::load_world(const std::string& path) {
     }
     try {
         json j = json::parse(f);
-        world_.width = j.value("width", 8000.0f);
-        world_.height = j.value("height", 8000.0f);
+        world_.width = j.value("width", 32000.0f);
+        world_.height = j.value("height", 32000.0f);
         return true;
     } catch (const json::exception& e) {
         std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << std::endl;
@@ -240,6 +250,430 @@ ClassInfo GameConfig::build_class_info(int index) const {
     info.ui_color = cls.ui_color;
     info.shows_reticle = cls.shows_reticle;
     return info;
+}
+
+// ============================================================================
+// New Gameplay Config Loaders
+// ============================================================================
+
+bool GameConfig::load_monster_types(const std::string& path) {
+    std::ifstream f(path);
+    if (!f.is_open()) return false;
+    try {
+        json j = json::parse(f);
+        monster_types_.clear();
+        for (const auto& m : j["monster_types"]) {
+            MonsterTypeConfig mt;
+            mt.id = m.value("id", "");
+            mt.name = m.value("name", "Monster");
+            mt.model = m.value("model", "npc_enemy");
+            mt.animation = m.value("animation", "humanoid");
+            mt.color = parse_color(m.value("color", "0xFF4444FF"));
+            mt.health = m.value("health", 100.0f);
+            mt.damage = m.value("damage", 15.0f);
+            mt.attack_range = m.value("attack_range", 50.0f);
+            mt.attack_cooldown = m.value("attack_cooldown", 1.2f);
+            mt.aggro_range = m.value("aggro_range", 300.0f);
+            mt.speed = m.value("speed", 100.0f);
+            mt.size = m.value("size", 36.0f);
+            mt.xp_reward = m.value("xp_reward", 25);
+            mt.gold_reward = m.value("gold_reward", 5);
+            mt.level = m.value("level", 1);
+            mt.description = m.value("description", "");
+            monster_types_.push_back(std::move(mt));
+        }
+        std::cout << "[GameConfig] Loaded " << monster_types_.size() << " monster types\n";
+        return true;
+    } catch (const json::exception& e) {
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << "\n";
+        return false;
+    }
+}
+
+bool GameConfig::load_zones(const std::string& path) {
+    std::ifstream f(path);
+    if (!f.is_open()) return false;
+    try {
+        json j = json::parse(f);
+        zones_.clear();
+        for (const auto& z : j["zones"]) {
+            ZoneConfig zc;
+            zc.id = z.value("id", "");
+            zc.name = z.value("name", "Unknown Zone");
+            zc.center_x = z.value("center_x", 0.0f);
+            zc.center_z = z.value("center_z", 0.0f);
+            zc.radius = z.value("radius", 1000.0f);
+            zc.level_min = z.value("level_min", 1);
+            zc.level_max = z.value("level_max", 5);
+            zc.monster_density = z.value("monster_density", 0.5f);
+            if (z.contains("monster_types")) {
+                for (const auto& mt : z["monster_types"]) {
+                    zc.monster_types.push_back(mt.get<std::string>());
+                }
+            }
+            zc.description = z.value("description", "");
+            zones_.push_back(std::move(zc));
+        }
+        std::cout << "[GameConfig] Loaded " << zones_.size() << " zones\n";
+        return true;
+    } catch (const json::exception& e) {
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << "\n";
+        return false;
+    }
+}
+
+bool GameConfig::load_items(const std::string& path) {
+    std::ifstream f(path);
+    if (!f.is_open()) return false;
+    try {
+        json j = json::parse(f);
+        items_.clear();
+        for (const auto& i : j["items"]) {
+            ItemConfig item;
+            item.id = i.value("id", "");
+            item.name = i.value("name", "Item");
+            item.type = i.value("type", "material");
+            item.subtype = i.value("subtype", "");
+            item.rarity = i.value("rarity", "common");
+            item.level_req = i.value("level_req", 1);
+            if (i.contains("classes")) {
+                for (const auto& c : i["classes"]) {
+                    item.classes.push_back(c.get<std::string>());
+                }
+            }
+            if (i.contains("stats")) {
+                const auto& s = i["stats"];
+                item.stats.damage_bonus = s.value("damage_bonus", 0.0f);
+                item.stats.attack_speed_bonus = s.value("attack_speed_bonus", 0.0f);
+                item.stats.health_bonus = s.value("health_bonus", 0.0f);
+                item.stats.defense = s.value("defense", 0.0f);
+                item.stats.speed_bonus = s.value("speed_bonus", 0.0f);
+                item.stats.heal_amount = s.value("heal_amount", 0.0f);
+                item.stats.buff_duration = s.value("buff_duration", 0.0f);
+                item.stats.buff_multiplier = s.value("buff_multiplier", 0.0f);
+            }
+            item.description = i.value("description", "");
+            item.sell_value = i.value("sell_value", 0);
+            item.stack_size = i.value("stack_size", 1);
+            items_.push_back(std::move(item));
+        }
+        std::cout << "[GameConfig] Loaded " << items_.size() << " items\n";
+        return true;
+    } catch (const json::exception& e) {
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << "\n";
+        return false;
+    }
+}
+
+bool GameConfig::load_loot_tables(const std::string& path) {
+    std::ifstream f(path);
+    if (!f.is_open()) return false;
+    try {
+        json j = json::parse(f);
+        loot_tables_.clear();
+        for (const auto& lt : j["loot_tables"]) {
+            LootTableConfig table;
+            table.id = lt.value("id", "");
+            table.monster_type = lt.value("monster_type", "");
+            table.gold_min = lt.value("gold_min", 0);
+            table.gold_max = lt.value("gold_max", 10);
+            if (lt.contains("drops")) {
+                for (const auto& d : lt["drops"]) {
+                    LootDropConfig drop;
+                    drop.item_id = d.value("item_id", "");
+                    drop.chance = d.value("chance", 0.1f);
+                    drop.count_min = d.value("count_min", 1);
+                    drop.count_max = d.value("count_max", 1);
+                    table.drops.push_back(std::move(drop));
+                }
+            }
+            loot_tables_.push_back(std::move(table));
+        }
+        std::cout << "[GameConfig] Loaded " << loot_tables_.size() << " loot tables\n";
+        return true;
+    } catch (const json::exception& e) {
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << "\n";
+        return false;
+    }
+}
+
+bool GameConfig::load_leveling(const std::string& path) {
+    std::ifstream f(path);
+    if (!f.is_open()) return false;
+    try {
+        json j = json::parse(f);
+        leveling_.max_level = j.value("max_level", 20);
+        leveling_.xp_curve.clear();
+        if (j.contains("xp_curve")) {
+            for (const auto& xp : j["xp_curve"]) {
+                leveling_.xp_curve.push_back(xp.get<int>());
+            }
+        }
+        if (j.contains("death_penalty")) {
+            leveling_.death_xp_loss_percent = j["death_penalty"].value("xp_loss_percent", 5.0f);
+        }
+        // Load class growth
+        leveling_.class_growth.resize(4); // 4 classes
+        if (j.contains("stat_growth_per_level")) {
+            const auto& sg = j["stat_growth_per_level"];
+            auto load_growth = [&](const std::string& name, int idx) {
+                if (sg.contains(name)) {
+                    const auto& g = sg[name];
+                    leveling_.class_growth[idx].health = g.value("health", 0.0f);
+                    leveling_.class_growth[idx].damage = g.value("damage", 0.0f);
+                    leveling_.class_growth[idx].speed = g.value("speed", 0.0f);
+                    leveling_.class_growth[idx].attack_range = g.value("attack_range", 0.0f);
+                    leveling_.class_growth[idx].attack_cooldown_reduction = g.value("attack_cooldown_reduction", 0.0f);
+                }
+            };
+            load_growth("warrior", 0);
+            load_growth("mage", 1);
+            load_growth("paladin", 2);
+            load_growth("archer", 3);
+        }
+        std::cout << "[GameConfig] Loaded leveling config: " << leveling_.max_level << " levels\n";
+        return true;
+    } catch (const json::exception& e) {
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << "\n";
+        return false;
+    }
+}
+
+bool GameConfig::load_skills(const std::string& path) {
+    std::ifstream f(path);
+    if (!f.is_open()) return false;
+    try {
+        json j = json::parse(f);
+        skills_.clear();
+        for (const auto& s : j["skills"]) {
+            SkillConfig sk;
+            sk.id = s.value("id", "");
+            sk.name = s.value("name", "Skill");
+            sk.class_name = s.value("class", "");
+            sk.unlock_level = s.value("unlock_level", 1);
+            sk.cooldown = s.value("cooldown", 10.0f);
+            sk.description = s.value("description", "");
+            sk.effect_type = s.value("effect_type", "");
+            sk.damage_multiplier = s.value("damage_multiplier", 1.0f);
+            sk.range = s.value("range", 100.0f);
+            sk.mana_cost = s.value("mana_cost", 20.0f);
+            sk.cone_angle = s.value("cone_angle", 0.5f);
+            sk.heal_percent = s.value("heal_percent", 0.0f);
+            sk.duration = s.value("duration", 0.0f);
+
+            // Status effect fields
+            sk.stun_duration = s.value("stun_duration", 0.0f);
+            sk.slow_percent = s.value("slow_percent", 0.0f);
+            sk.slow_duration = s.value("slow_duration", 0.0f);
+            sk.freeze_duration = s.value("freeze_duration", 0.0f);
+            sk.burn_duration = s.value("burn_duration", 0.0f);
+            sk.burn_damage = s.value("burn_damage", 0.0f);
+            sk.root_duration = s.value("root_duration", 0.0f);
+            sk.buff_duration = s.value("buff_duration", 0.0f);
+            sk.damage_reduction = s.value("damage_reduction", 0.0f);
+            sk.invulnerable_duration = s.value("invulnerable_duration", 0.0f);
+            sk.speed_boost = s.value("speed_boost", 0.0f);
+            sk.speed_boost_duration = s.value("speed_boost_duration", 0.0f);
+            sk.lifesteal_percent = s.value("lifesteal_percent", 0.0f);
+            sk.enemy_damage_reduction = s.value("enemy_damage_reduction", 0.0f);
+            sk.debuff_duration = s.value("debuff_duration", 0.0f);
+            skills_.push_back(std::move(sk));
+        }
+        std::cout << "[GameConfig] Loaded " << skills_.size() << " skills\n";
+        return true;
+    } catch (const json::exception& e) {
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << "\n";
+        return false;
+    }
+}
+
+bool GameConfig::load_talents(const std::string& path) {
+    std::ifstream f(path);
+    if (!f.is_open()) return false;
+    try {
+        json j = json::parse(f);
+        talent_trees_.clear();
+        for (const auto& tree : j["talent_trees"]) {
+            TalentTreeConfig ttc;
+            ttc.class_name = tree.value("class", "");
+            if (tree.contains("branches")) {
+                for (const auto& branch : tree["branches"]) {
+                    TalentBranch tb;
+                    tb.name = branch.value("name", "");
+                    tb.description = branch.value("description", "");
+                    if (branch.contains("talents")) {
+                        for (const auto& t : branch["talents"]) {
+                            TalentConfig tc;
+                            tc.id = t.value("id", "");
+                            tc.name = t.value("name", "");
+                            tc.tier = t.value("tier", 1);
+                            tc.description = t.value("description", "");
+                            tc.prerequisite = t.value("requires", "");
+                            if (t.contains("effect")) {
+                                const auto& e = t["effect"];
+                                tc.effect.damage_mult = e.value("damage_mult", 1.0f);
+                                tc.effect.speed_mult = e.value("speed_mult", 1.0f);
+                                tc.effect.health_mult = e.value("health_mult", 1.0f);
+                                tc.effect.crit_chance = e.value("crit_chance", 0.0f);
+                                tc.effect.kill_heal_pct = e.value("kill_heal_pct", 0.0f);
+                                tc.effect.defense_mult = e.value("defense_mult", 1.0f);
+                                tc.effect.mana_mult = e.value("mana_mult", 1.0f);
+                                tc.effect.cooldown_mult = e.value("cooldown_mult", 1.0f);
+                            }
+                            tb.talents.push_back(std::move(tc));
+                        }
+                    }
+                    ttc.branches.push_back(std::move(tb));
+                }
+            }
+            talent_trees_.push_back(std::move(ttc));
+        }
+        std::cout << "[GameConfig] Loaded " << talent_trees_.size() << " talent trees\n";
+        return true;
+    } catch (const json::exception& e) {
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << "\n";
+        return false;
+    }
+}
+
+bool GameConfig::load_quests(const std::string& path) {
+    std::ifstream f(path);
+    if (!f.is_open()) return false;
+    try {
+        json j = json::parse(f);
+        quests_.clear();
+        for (const auto& q : j["quests"]) {
+            QuestConfig qc;
+            qc.id = q.value("id", "");
+            qc.name = q.value("name", "Quest");
+            qc.description = q.value("description", "");
+            qc.giver_npc = q.value("giver_npc", "");
+            qc.giver_type = q.value("giver_type", "");
+            qc.type = q.value("type", "kill");
+            if (q.contains("requirements")) {
+                const auto& r = q["requirements"];
+                qc.min_level = r.value("min_level", 1);
+                if (r.contains("prerequisite_quest") && !r["prerequisite_quest"].is_null()) {
+                    qc.prerequisite_quest = r["prerequisite_quest"].get<std::string>();
+                }
+            }
+            if (q.contains("objectives")) {
+                for (const auto& o : q["objectives"]) {
+                    QuestObjectiveConfig obj;
+                    obj.type = o.value("type", "kill");
+                    obj.target = o.value("target", "");
+                    obj.count = o.value("count", 1);
+                    obj.description = o.value("description", "");
+                    if (o.contains("location") && o["location"].is_array() && o["location"].size() >= 2) {
+                        obj.location_x = o["location"][0].get<float>();
+                        obj.location_z = o["location"][1].get<float>();
+                    }
+                    obj.radius = o.value("radius", 100.0f);
+                    qc.objectives.push_back(std::move(obj));
+                }
+            }
+            if (q.contains("rewards")) {
+                const auto& r = q["rewards"];
+                qc.rewards.xp = r.value("xp", 0);
+                qc.rewards.gold = r.value("gold", 0);
+                qc.rewards.item_reward = r.value("item_reward", "");
+            }
+            if (q.contains("dialogue")) {
+                const auto& d = q["dialogue"];
+                qc.dialogue.offer = d.value("offer", "");
+                qc.dialogue.progress = d.value("progress", "");
+                qc.dialogue.complete = d.value("complete", "");
+            }
+            qc.repeatable = q.value("repeatable", false);
+            quests_.push_back(std::move(qc));
+        }
+        std::cout << "[GameConfig] Loaded " << quests_.size() << " quests\n";
+        return true;
+    } catch (const json::exception& e) {
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << "\n";
+        return false;
+    }
+}
+
+// ============================================================================
+// Lookup helpers
+// ============================================================================
+
+const MonsterTypeConfig* GameConfig::find_monster_type(const std::string& id) const {
+    for (const auto& mt : monster_types_) {
+        if (mt.id == id) return &mt;
+    }
+    return nullptr;
+}
+
+const ZoneConfig* GameConfig::find_zone_at(float x, float z) const {
+    const ZoneConfig* best = nullptr;
+    float best_dist = 1e9f;
+    for (const auto& zone : zones_) {
+        float dx = x - zone.center_x;
+        float dz = z - zone.center_z;
+        float dist = std::sqrt(dx * dx + dz * dz);
+        if (dist < zone.radius && dist < best_dist) {
+            best_dist = dist;
+            best = &zone;
+        }
+    }
+    return best;
+}
+
+const ItemConfig* GameConfig::find_item(const std::string& id) const {
+    for (const auto& item : items_) {
+        if (item.id == id) return &item;
+    }
+    return nullptr;
+}
+
+const LootTableConfig* GameConfig::find_loot_table(const std::string& monster_type) const {
+    for (const auto& lt : loot_tables_) {
+        if (lt.monster_type == monster_type) return &lt;
+    }
+    return nullptr;
+}
+
+std::vector<const SkillConfig*> GameConfig::skills_for_class(const std::string& class_name) const {
+    std::vector<const SkillConfig*> result;
+    for (const auto& sk : skills_) {
+        if (sk.class_name == class_name) result.push_back(&sk);
+    }
+    return result;
+}
+
+const SkillConfig* GameConfig::find_skill(const std::string& id) const {
+    for (const auto& sk : skills_) {
+        if (sk.id == id) return &sk;
+    }
+    return nullptr;
+}
+
+const TalentConfig* GameConfig::find_talent(const std::string& id) const {
+    for (const auto& tree : talent_trees_) {
+        for (const auto& branch : tree.branches) {
+            for (const auto& talent : branch.talents) {
+                if (talent.id == id) return &talent;
+            }
+        }
+    }
+    return nullptr;
+}
+
+const QuestConfig* GameConfig::find_quest(const std::string& id) const {
+    for (const auto& q : quests_) {
+        if (q.id == id) return &q;
+    }
+    return nullptr;
+}
+
+std::vector<const QuestConfig*> GameConfig::quests_for_npc(const std::string& npc_type) const {
+    std::vector<const QuestConfig*> result;
+    for (const auto& q : quests_) {
+        if (q.giver_type == npc_type) result.push_back(&q);
+    }
+    return result;
 }
 
 } // namespace mmo::server

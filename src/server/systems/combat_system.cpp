@@ -52,17 +52,58 @@ entt::entity find_nearest_target(entt::registry& registry, entt::entity attacker
 }
 
 void apply_damage(entt::registry& registry, entt::entity target, float damage,
-                   float world_width, float world_height) {
+                   float world_width, float world_height,
+                   entt::entity attacker = entt::null) {
     if (target == entt::null) return;
+
+    // Check target invulnerability and defense
+    if (registry.all_of<ecs::BuffState>(target)) {
+        auto& target_buffs = registry.get<ecs::BuffState>(target);
+        if (target_buffs.is_invulnerable()) {
+            return; // No damage
+        }
+        damage *= target_buffs.get_defense_multiplier();
+
+        // Absorb damage with shield
+        float shield = target_buffs.get_shield_value();
+        if (shield > 0.0f && damage > 0.0f) {
+            float absorbed = std::min(shield, damage);
+            damage -= absorbed;
+            for (auto& e : target_buffs.effects) {
+                if (e.type == ecs::StatusEffect::Type::Shield) {
+                    float to_absorb = std::min(e.value, absorbed);
+                    e.value -= to_absorb;
+                    absorbed -= to_absorb;
+                    if (e.value <= 0.0f) e.duration = 0.0f;
+                    if (absorbed <= 0.0f) break;
+                }
+            }
+        }
+    }
 
     auto& health = registry.get<ecs::Health>(target);
     health.current = std::max(0.0f, health.current - damage);
+
+    // Apply lifesteal to attacker
+    if (attacker != entt::null && damage > 0.0f && registry.all_of<ecs::BuffState>(attacker)) {
+        float lifesteal = registry.get<ecs::BuffState>(attacker).get_lifesteal();
+        if (lifesteal > 0.0f && registry.all_of<ecs::Health>(attacker)) {
+            auto& attacker_health = registry.get<ecs::Health>(attacker);
+            attacker_health.current = std::min(attacker_health.max,
+                attacker_health.current + damage * lifesteal);
+        }
+    }
 
     // Respawn NPCs
     if (!health.is_alive() && registry.all_of<ecs::NPCTag>(target)) {
         static std::mt19937 rng(std::random_device{}());
         std::uniform_real_distribution<float> dist_x(100.0f, world_width - 100.0f);
         std::uniform_real_distribution<float> dist_z(100.0f, world_height - 100.0f);
+
+        // Clear all status effects on death
+        if (registry.all_of<ecs::BuffState>(target)) {
+            registry.get<ecs::BuffState>(target).effects.clear();
+        }
 
         health.current = health.max;
         auto& transform = registry.get<ecs::Transform>(target);
@@ -150,6 +191,11 @@ void update_combat(entt::registry& registry, float dt, const GameConfig& config)
 
         if (!health.is_alive() || !wants_attack || !combat.can_attack()) continue;
 
+        // Cannot attack while stunned or frozen
+        if (registry.all_of<ecs::BuffState>(entity)) {
+            if (registry.get<ecs::BuffState>(entity).is_stunned()) continue;
+        }
+
         // Trigger attack regardless of target - visual effect will play
         combat.is_attacking = true;
         combat.current_cooldown = combat.attack_cooldown;
@@ -165,13 +211,19 @@ void update_combat(entt::registry& registry, float dt, const GameConfig& config)
         // Determine attack cone from class config
         float cone_angle = config.get_class(info.player_class).cone_angle;
 
+        // Apply damage multiplier from buffs
+        float effective_damage = combat.damage;
+        if (registry.all_of<ecs::BuffState>(entity)) {
+            effective_damage *= registry.get<ecs::BuffState>(entity).get_damage_multiplier();
+        }
+
         // Find and damage all targets in attack cone
         auto targets = find_targets_in_direction(registry, entity, EntityType::NPC,
                                                   combat.attack_range,
                                                   input.attack_dir_x, input.attack_dir_y,
                                                   cone_angle);
         for (auto target : targets) {
-            apply_damage(registry, target, combat.damage, config.world().width, config.world().height);
+            apply_damage(registry, target, effective_damage, config.world().width, config.world().height, entity);
         }
     }
 
@@ -184,11 +236,22 @@ void update_combat(entt::registry& registry, float dt, const GameConfig& config)
 
         if (!health.is_alive() || ai.target_id == 0 || !combat.can_attack()) continue;
 
+        // Cannot attack while stunned or frozen
+        if (registry.all_of<ecs::BuffState>(entity)) {
+            if (registry.get<ecs::BuffState>(entity).is_stunned()) continue;
+        }
+
         auto target = find_nearest_target(registry, entity, EntityType::Player, combat.attack_range);
         if (target != entt::null) {
             combat.is_attacking = true;
             combat.current_cooldown = combat.attack_cooldown;
-            apply_damage(registry, target, combat.damage, config.world().width, config.world().height);
+
+            float effective_damage = combat.damage;
+            if (registry.all_of<ecs::BuffState>(entity)) {
+                effective_damage *= registry.get<ecs::BuffState>(entity).get_damage_multiplier();
+            }
+
+            apply_damage(registry, target, effective_damage, config.world().width, config.world().height, entity);
         }
     }
 }

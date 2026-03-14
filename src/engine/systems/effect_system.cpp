@@ -56,7 +56,7 @@ int EffectSystem::spawn_effect(
     return static_cast<int>(effects_.size() - 1);
 }
 
-void EffectSystem::update(float dt, std::function<float(float, float)> get_terrain_height) {
+void EffectSystem::update(float dt, const std::function<float(float, float)>& get_terrain_height) {
     // Update all effects
     for (auto& effect : effects_) {
         effect.age += dt;
@@ -78,7 +78,7 @@ void EffectSystem::update(float dt, std::function<float(float, float)> get_terra
 void EffectSystem::update_emitter(
     EmitterInstance& emitter,
     float dt,
-    std::function<float(float, float)> get_terrain_height
+    const std::function<float(float, float)>& get_terrain_height
 ) {
     if (!emitter.definition) return;
 

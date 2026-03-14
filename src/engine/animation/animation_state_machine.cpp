@@ -30,6 +30,11 @@ bool TransitionCondition::evaluate(const std::unordered_map<std::string, ParamVa
 
 void AnimationStateMachine::add_state(AnimState state) {
     std::string name = state.name;
+    // Pre-sort transitions by priority (highest first) so update() doesn't need to sort
+    std::sort(state.transitions.begin(), state.transitions.end(),
+              [](const StateTransition& a, const StateTransition& b) {
+                  return a.priority > b.priority;
+              });
     states_[name] = std::move(state);
 }
 
@@ -108,18 +113,9 @@ void AnimationStateMachine::update(AnimationPlayer& player) {
     // For non-looping states that have finished playing, force transition out
     bool clip_ended = !state.loop && !player.playing;
 
-    // Collect and sort transitions by priority (highest first)
-    std::vector<const StateTransition*> sorted;
-    sorted.reserve(state.transitions.size());
-    for (const auto& t : state.transitions) {
-        sorted.push_back(&t);
-    }
-    std::sort(sorted.begin(), sorted.end(),
-              [](const StateTransition* a, const StateTransition* b) {
-                  return a->priority > b->priority;
-              });
-
-    for (const auto* transition : sorted) {
+    // Transitions are pre-sorted by priority at add_state() time
+    for (const auto& transition_ref : state.transitions) {
+        const auto* transition = &transition_ref;
         // If clip ended, accept any transition (ignore conditions)
         bool all_pass = clip_ended;
         if (!all_pass) {

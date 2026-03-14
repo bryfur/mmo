@@ -506,14 +506,18 @@ void PhysicsSystem::update(entt::registry& registry, float dt) {
 
         auto it = impl_->network_to_body.find(network_id.id);
         if (it != impl_->network_to_body.end()) {
+            // Skip if body is already inactive and velocity is zero
+            if (velocity.x == 0.0f && velocity.y == 0.0f && velocity.z == 0.0f) {
+                if (!body_interface.IsActive(it->second)) continue;
+                // Body is still active — zero it out so it stops
+                body_interface.SetLinearVelocity(it->second, JPH::Vec3::sZero());
+                continue;
+            }
+
             // Both ECS and Jolt use Y-up, no swapping needed
             JPH::Vec3 phys_vel(velocity.x, velocity.y, velocity.z);
             body_interface.SetLinearVelocity(it->second, phys_vel);
-            
-            // Activate the body if it has velocity
-            if (velocity.x != 0.0f || velocity.y != 0.0f || velocity.z != 0.0f) {
-                body_interface.ActivateBody(it->second);
-            }
+            body_interface.ActivateBody(it->second);
         }
     }
 

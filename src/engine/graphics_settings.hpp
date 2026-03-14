@@ -12,7 +12,7 @@ struct GraphicsSettings {
     bool show_debug_hud = false;
 
     // Culling settings
-    int draw_distance = 3;    // 0=500, 1=1000, 2=2000, 3=4000, 4=8000
+    int draw_distance = 3;    // 0=500, 1=1000, 2=2000, 3=4000, 4=8000, 5=16000, 6=32000
     bool frustum_culling = true;
 
     // Quality settings
@@ -26,7 +26,7 @@ struct GraphicsSettings {
     int resolution_index = 0; // index into available native display modes
 
     float get_draw_distance() const {
-        constexpr float distances[] = {500.0f, 1000.0f, 2000.0f, 4000.0f, 8000.0f};
+        constexpr float distances[] = {500.0f, 1000.0f, 2000.0f, 4000.0f, 8000.0f, 16000.0f, 32000.0f};
         return distances[draw_distance];
     }
 };

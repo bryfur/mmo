@@ -105,14 +105,14 @@ public:
     /**
      * Add a static 3D model to the scene
      */
-    void add_model(const std::string& model_name, const glm::mat4& transform,
+    void add_model(std::string model_name, const glm::mat4& transform,
                    const glm::vec4& tint = {1.0f, 1.0f, 1.0f, 1.0f},
                    float attack_tilt = 0.0f, bool no_fog = false);
 
     /**
      * Add a skinned/animated model to the scene
      */
-    void add_skinned_model(const std::string& model_name, const glm::mat4& transform,
+    void add_skinned_model(std::string model_name, const glm::mat4& transform,
                            const std::array<glm::mat4, 64>& bone_matrices,
                            const glm::vec4& tint = {1.0f, 1.0f, 1.0f, 1.0f});
 

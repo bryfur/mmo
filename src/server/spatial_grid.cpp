@@ -24,6 +24,9 @@ std::vector<GridCell> SpatialGrid::get_cells_in_radius(float center_x, float cen
     int min_cell_y = static_cast<int>(std::floor((center_y - radius) / cell_size_));
     int max_cell_y = static_cast<int>(std::floor((center_y + radius) / cell_size_));
 
+    int cell_count = (max_cell_x - min_cell_x + 1) * (max_cell_y - min_cell_y + 1);
+    cells.reserve(cell_count);
+
     // Add all cells in bounding box
     for (int cx = min_cell_x; cx <= max_cell_x; ++cx) {
         for (int cy = min_cell_y; cy <= max_cell_y; ++cy) {

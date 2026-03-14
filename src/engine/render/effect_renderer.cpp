@@ -84,13 +84,7 @@ void EffectRenderer::draw_model_effect(SDL_GPURenderPass* pass, SDL_GPUCommandBu
         ModelLoader::upload_to_gpu(*device_, *model);
     }
     
-    // Use model pipeline for effect meshes (SDL3 GPU migration stage)
-    auto* pipeline = pipeline_registry_->get_pipeline(gpu::PipelineType::Model);
-    if (!pipeline) {
-        std::cerr << "EffectRenderer: Model pipeline not available" << std::endl;
-        return;
-    }
-    pipeline->bind(pass);
+    // Pipeline is already bound by draw_particle_effects() or the caller
     
     // Set up vertex uniforms
     gpu::ModelTransformUniforms vertex_uniforms = {};
@@ -113,6 +107,7 @@ void EffectRenderer::draw_model_effect(SDL_GPURenderPass* pass, SDL_GPUCommandBu
     frag_uniforms.fogEnd = fog::END;
     frag_uniforms.hasTexture = 0;
     frag_uniforms.fogEnabled = 0;
+    frag_uniforms.cameraPos = camera_pos;
 
     // Draw each mesh
     for (auto& mesh : model->meshes) {
@@ -148,7 +143,7 @@ void EffectRenderer::draw_model_effect(SDL_GPURenderPass* pass, SDL_GPUCommandBu
         SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
         
         // Draw
-        SDL_DrawGPUIndexedPrimitives(pass, static_cast<uint32_t>(mesh.indices.size()), 1, 0, 0, 0);
+        SDL_DrawGPUIndexedPrimitives(pass, mesh.index_count(), 1, 0, 0, 0);
     }
 }
 
@@ -157,6 +152,11 @@ void EffectRenderer::draw_particle_effects(SDL_GPURenderPass* pass, SDL_GPUComma
                                             const glm::mat4& view, const glm::mat4& projection,
                                             const glm::vec3& camera_pos) {
     if (!pass || !cmd || !device_ || !pipeline_registry_) return;
+
+    // Bind pipeline once for all particles instead of per-particle
+    auto* pipeline = pipeline_registry_->get_pipeline(gpu::PipelineType::Model);
+    if (!pipeline) return;
+    pipeline->bind(pass);
 
     // Render all particles from all effects
     for (const auto& effect : effect_system.get_effects()) {

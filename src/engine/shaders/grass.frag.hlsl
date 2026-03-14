@@ -23,6 +23,8 @@ cbuffer GrassLightingUniforms {
     int _padding0;
     int _padding1;
     int _padding2;
+    float3 lightDir;
+    float _padding3;
 };
 
 [[vk::binding(1, 3)]]
@@ -145,8 +147,8 @@ float4 PSMain(PSInput input) : SV_Target {
     float3 color = input.color.rgb;
 
     float3 norm = normalize(input.normal);
-    float3 lightDir = normalize(float3(0.3, -1.0, 0.5));
-    float diff = max(dot(norm, -lightDir), 0.0);
+    float3 ld = normalize(lightDir);
+    float diff = max(dot(norm, -ld), 0.0);
 
     float shadow = calcShadow(input.worldPos, input.viewDepth);
 

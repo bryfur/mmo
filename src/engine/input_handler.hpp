@@ -66,13 +66,29 @@ public:
     bool menu_left_pressed() const { return menu_left_pressed_; }
     bool menu_right_pressed() const { return menu_right_pressed_; }
     bool menu_select_pressed() const { return menu_select_pressed_; }
-    void clear_menu_inputs() { 
-        menu_toggle_pressed_ = false; 
-        menu_up_pressed_ = false; 
+    void clear_menu_inputs() {
+        menu_toggle_pressed_ = false;
+        menu_up_pressed_ = false;
         menu_down_pressed_ = false;
         menu_left_pressed_ = false;
         menu_right_pressed_ = false;
         menu_select_pressed_ = false;
+    }
+
+    // Gameplay UI key presses
+    bool inventory_pressed() const { return inventory_pressed_; }
+    bool quest_log_pressed() const { return quest_log_pressed_; }
+    bool talent_tree_pressed() const { return talent_tree_pressed_; }
+    bool interact_pressed() const { return interact_pressed_; }
+    bool map_pressed() const { return map_pressed_; }
+    int skill_pressed() const { return skill_pressed_; }  // 0 = none, 1-5 = skill key
+    void clear_gameplay_inputs() {
+        inventory_pressed_ = false;
+        quest_log_pressed_ = false;
+        talent_tree_pressed_ = false;
+        interact_pressed_ = false;
+        map_pressed_ = false;
+        skill_pressed_ = 0;
     }
     
     // Enable/disable game input (for menu mode)
@@ -142,7 +158,15 @@ private:
     bool menu_right_pressed_ = false;
     bool menu_select_pressed_ = false;
     bool game_input_enabled_ = true;
-    
+
+    // Gameplay UI input state
+    bool inventory_pressed_ = false;
+    bool quest_log_pressed_ = false;
+    bool talent_tree_pressed_ = false;
+    bool interact_pressed_ = false;
+    bool map_pressed_ = false;
+    int skill_pressed_ = 0;  // 0=none, 1-5=skill
+
     // Sensitivity settings (configurable)
     float mouse_sensitivity_ = 0.35f;
     float controller_sensitivity_ = 2.5f;

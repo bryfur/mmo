@@ -10,6 +10,9 @@ class AnimationPlayer {
 public:
     AnimationPlayer() { reset(); }
 
+    AnimationPlayer(AnimationPlayer&&) noexcept = default;
+    AnimationPlayer& operator=(AnimationPlayer&&) noexcept = default;
+
     // Advance time, manage crossfade, compute bone matrices
     void update(const Skeleton& skeleton,
                 const std::vector<AnimationClip>& clips,
@@ -43,6 +46,13 @@ public:
 private:
     void compute_bone_matrices(const Skeleton& skeleton,
                                const std::vector<AnimationClip>& clips);
+
+    // Reusable buffers to avoid per-frame allocations
+    std::vector<const AnimationChannel*> channel_lookup_;  // indexed by bone
+    std::vector<const AnimationChannel*> prev_channel_lookup_;
+    std::vector<glm::mat4> local_transforms_;
+    int cached_clip_index_ = -1;
+    int cached_prev_clip_index_ = -1;
 };
 
 } // namespace mmo::engine::animation

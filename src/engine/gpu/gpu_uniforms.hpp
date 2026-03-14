@@ -37,6 +37,8 @@ struct alignas(16) ModelLightingUniforms {
     int hasTexture;
     int fogEnabled;
     float _padding3 = 0.0f;
+    glm::vec3 cameraPos;
+    float _padding4 = 0.0f;
 };
 
 /**
@@ -44,8 +46,8 @@ struct alignas(16) ModelLightingUniforms {
  */
 struct alignas(16) SkyboxFragmentUniforms {
     glm::mat4 invViewProjection;
-    float time;
     glm::vec3 sunDirection;
+    float time;
 };
 
 /**
@@ -98,6 +100,8 @@ struct alignas(16) InstancedLightingUniforms {
     int hasTexture;
     int fogEnabled;
     float _padding3 = 0.0f;
+    glm::vec3 cameraPos;
+    float _padding4 = 0.0f;
 };
 
 /**

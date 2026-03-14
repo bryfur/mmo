@@ -61,6 +61,7 @@ bool TerrainBrushTool::on_key_down(int scancode, EditorApplication& app) {
             case SDL_SCANCODE_W: mode_ = BrushMode::Lower; return true;
             case SDL_SCANCODE_E: mode_ = BrushMode::Smooth; return true;
             case SDL_SCANCODE_R: mode_ = BrushMode::Flatten; return true;
+            case SDL_SCANCODE_T: mode_ = BrushMode::SetMax; return true;
         }
     } else {
         switch (scancode) {
@@ -138,6 +139,9 @@ void TerrainBrushTool::apply_brush(const glm::vec3& center, float dt, EditorAppl
                     break;
                 case BrushMode::Flatten:
                     new_height += (flatten_target_ - current) * falloff * dt * 3.0f;
+                    break;
+                case BrushMode::SetMax:
+                    new_height = hm.max_height;
                     break;
             }
 
@@ -251,7 +255,8 @@ void TerrainBrushTool::build_imgui(EditorApplication& app) {
         ImGui::RadioButton("Raise (Q)", &mode_i, 0); ImGui::SameLine();
         ImGui::RadioButton("Lower (W)", &mode_i, 1);
         ImGui::RadioButton("Smooth (E)", &mode_i, 2); ImGui::SameLine();
-        ImGui::RadioButton("Flatten (R)", &mode_i, 3);
+        ImGui::RadioButton("Flatten (R)", &mode_i, 3); ImGui::SameLine();
+        ImGui::RadioButton("SetMax (T)", &mode_i, 4);
         mode_ = static_cast<BrushMode>(mode_i);
 
         if (mode_ == BrushMode::Flatten) {
@@ -294,6 +299,7 @@ void TerrainBrushTool::render_overlay(engine::scene::RenderScene& scene,
             case BrushMode::Lower:   color = 0xFFFF4444; break; // red
             case BrushMode::Smooth:  color = 0xFF44AAFF; break; // blue
             case BrushMode::Flatten: color = 0xFFFFFF44; break; // yellow
+            case BrushMode::SetMax:  color = 0xFFFFFFFF; break; // white
         }
     } else {
         // Splatmap painting colors

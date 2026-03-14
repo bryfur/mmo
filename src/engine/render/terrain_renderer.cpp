@@ -239,7 +239,12 @@ void TerrainRenderer::generate_terrain_mesh() {
     
     std::vector<TerrainVertex> vertices;
     std::vector<uint32_t> indices;
-    
+
+    int vertex_count = (cells_x + 1) * (cells_z + 1);
+    int index_count = cells_x * cells_z * 6;
+    vertices.reserve(vertex_count);
+    indices.reserve(index_count);
+
     // Generate vertices
     for (int iz = 0; iz <= cells_z; ++iz) {
         for (int ix = 0; ix <= cells_x; ++ix) {

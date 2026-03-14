@@ -53,7 +53,11 @@ struct alignas(16) GrassLightingUniforms {
     glm::vec3 fog_color;
     float fog_end;
     int32_t fog_enabled;
-    int32_t _padding[3];
+    int32_t _padding0;
+    int32_t _padding1;
+    int32_t _padding2;
+    glm::vec3 light_dir;
+    float _padding3;
 };
 
 /**

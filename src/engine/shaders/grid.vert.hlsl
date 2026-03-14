@@ -4,12 +4,10 @@
  * Simple vertex transformation for debug grid lines.
  */
 
-// Vertex input - locations match get_vertex3d_attributes() in gpu_types.hpp
+// Vertex input - custom grid format: position(3) + color(4)
 struct VSInput {
     [[vk::location(0)]] float3 position : POSITION;
-    [[vk::location(1)]] float3 normal : NORMAL;
-    [[vk::location(2)]] float2 texcoord : TEXCOORD0;
-    [[vk::location(3)]] float4 color : COLOR0;
+    [[vk::location(1)]] float4 color : COLOR0;
 };
 
 struct VSOutput {

@@ -382,7 +382,20 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_grid_pipeline() {
     PipelineConfig config;
     config.vertex_shader = vs->handle();
     config.fragment_shader = fs->handle();
-    config.with_vertex3d().alpha_blended().no_cull();
+
+    // Custom grid vertex format: position(3) + color(4) = 28 bytes
+    config.vertex_buffers = {{
+        .slot = 0,
+        .pitch = sizeof(float) * 7,
+        .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+        .instance_step_rate = 0
+    }};
+    config.vertex_attributes = {
+        { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, 0 },                    // position
+        { 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, sizeof(float) * 3 },    // color
+    };
+
+    config.alpha_blended().no_cull();
     config.color_format = swapchain_format_;
     config.depth_format = depth_format_;
     config.primitive_type = SDL_GPU_PRIMITIVETYPE_LINELIST;

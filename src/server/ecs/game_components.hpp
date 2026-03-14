@@ -2,6 +2,7 @@
 
 #include "protocol/protocol.hpp"
 #include <string>
+#include <vector>
 #include <cstdint>
 
 namespace mmo::server::ecs {
@@ -170,6 +171,195 @@ struct SafeZone {
     float center_x = 0.0f;
     float center_z = 0.0f;
     float radius = 0.0f;
+};
+
+// ============================================================================
+// Progression Components
+// ============================================================================
+
+struct PlayerLevel {
+    int level = 1;
+    int xp = 0;
+    int gold = 0;
+
+    // Mana for skills
+    float mana = 100.0f;
+    float max_mana = 100.0f;
+    float mana_regen = 5.0f;  // per second
+};
+
+// ============================================================================
+// Inventory Components
+// ============================================================================
+
+struct InventoryItem {
+    std::string item_id;
+    int count = 1;
+};
+
+struct Inventory {
+    static constexpr int MAX_SLOTS = 20;
+    InventoryItem slots[MAX_SLOTS] = {};
+    int used_slots = 0;
+
+    bool add_item(const std::string& id, int count = 1) {
+        // Stack with existing
+        for (int i = 0; i < used_slots; ++i) {
+            if (slots[i].item_id == id) {
+                slots[i].count += count;
+                return true;
+            }
+        }
+        // New slot
+        if (used_slots < MAX_SLOTS) {
+            slots[used_slots].item_id = id;
+            slots[used_slots].count = count;
+            ++used_slots;
+            return true;
+        }
+        return false; // Full
+    }
+
+    bool remove_item(const std::string& id, int count = 1) {
+        for (int i = 0; i < used_slots; ++i) {
+            if (slots[i].item_id == id && slots[i].count >= count) {
+                slots[i].count -= count;
+                if (slots[i].count <= 0) {
+                    // Compact
+                    for (int j = i; j < used_slots - 1; ++j)
+                        slots[j] = slots[j + 1];
+                    slots[used_slots - 1] = {};
+                    --used_slots;
+                }
+                return true;
+            }
+        }
+        return false;
+    }
+
+    int count_item(const std::string& id) const {
+        for (int i = 0; i < used_slots; ++i)
+            if (slots[i].item_id == id) return slots[i].count;
+        return 0;
+    }
+};
+
+// Equipped items (one per slot)
+struct Equipment {
+    std::string weapon_id;
+    std::string armor_id;
+
+    // Computed bonuses from equipment
+    float damage_bonus = 0.0f;
+    float health_bonus = 0.0f;
+    float speed_bonus = 0.0f;
+    float defense = 0.0f;
+};
+
+// ============================================================================
+// Quest Components
+// ============================================================================
+
+struct QuestObjectiveProgress {
+    std::string type;       // "kill", "visit", "gather" - copied from config
+    std::string target;     // target id - copied from config
+    int current = 0;
+    int required = 0;
+    bool complete = false;
+};
+
+struct ActiveQuest {
+    std::string quest_id;
+    std::vector<QuestObjectiveProgress> objectives;
+    bool all_complete = false;
+};
+
+struct QuestState {
+    std::vector<ActiveQuest> active_quests;
+    std::vector<std::string> completed_quests;
+
+    bool has_completed(const std::string& id) const {
+        for (const auto& q : completed_quests)
+            if (q == id) return true;
+        return false;
+    }
+
+    bool has_active(const std::string& id) const {
+        for (const auto& q : active_quests)
+            if (q.quest_id == id) return true;
+        return false;
+    }
+
+    ActiveQuest* get_active(const std::string& id) {
+        for (auto& q : active_quests)
+            if (q.quest_id == id) return &q;
+        return nullptr;
+    }
+};
+
+// ============================================================================
+// Skill Components
+// ============================================================================
+
+struct SkillCooldown {
+    std::string skill_id;
+    float remaining = 0.0f;
+};
+
+struct SkillState {
+    std::vector<SkillCooldown> cooldowns;
+
+    float get_cooldown(const std::string& id) const {
+        for (const auto& cd : cooldowns)
+            if (cd.skill_id == id) return cd.remaining;
+        return 0.0f;
+    }
+
+    void set_cooldown(const std::string& id, float time) {
+        for (auto& cd : cooldowns) {
+            if (cd.skill_id == id) { cd.remaining = time; return; }
+        }
+        cooldowns.push_back({id, time});
+    }
+
+    void update(float dt) {
+        for (auto& cd : cooldowns)
+            if (cd.remaining > 0.0f) cd.remaining -= dt;
+    }
+};
+
+// ============================================================================
+// Talent Components
+// ============================================================================
+
+struct TalentState {
+    std::vector<std::string> unlocked_talents;
+    int talent_points = 0;
+
+    bool has_talent(const std::string& id) const {
+        for (const auto& t : unlocked_talents)
+            if (t == id) return true;
+        return false;
+    }
+};
+
+// ============================================================================
+// Monster Type Tag (links to monster_types.json by id)
+// ============================================================================
+
+struct MonsterTypeId {
+    std::string type_id;  // e.g. "goblin_scout"
+    int level = 1;
+    int xp_reward = 25;
+    int gold_reward = 5;
+};
+
+// ============================================================================
+// Zone Tag (which zone an entity is in)
+// ============================================================================
+
+struct ZoneInfo {
+    std::string zone_id;
 };
 
 } // namespace mmo::server::ecs

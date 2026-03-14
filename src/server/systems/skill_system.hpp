@@ -1,0 +1,33 @@
+#pragma once
+
+#include "server/ecs/game_components.hpp"
+#include "server/game_config.hpp"
+#include <entt/entt.hpp>
+#include <string>
+
+namespace mmo::server::systems {
+
+namespace ecs = mmo::server::ecs;
+
+/// Try to use a skill. Returns true if skill was activated.
+bool use_skill(entt::registry& registry, entt::entity player, const std::string& skill_id,
+               float dir_x, float dir_z, const GameConfig& config);
+
+/// Update skill cooldowns for all players
+void update_skill_cooldowns(entt::registry& registry, float dt);
+
+/// Get unlocked skills for a player based on their class and level
+std::vector<const SkillConfig*> get_unlocked_skills(entt::registry& registry, entt::entity player,
+                                                     const GameConfig& config);
+
+/// Try to unlock a talent for a player. Returns true if successful.
+bool unlock_talent(entt::registry& registry, entt::entity player, const std::string& talent_id,
+                   const GameConfig& config);
+
+/// Compute aggregate talent effects for a player
+TalentEffect compute_talent_effects(entt::registry& registry, entt::entity player, const GameConfig& config);
+
+/// Apply talent effects to a player's stats (call after talent changes or level up)
+void apply_talent_effects(entt::registry& registry, entt::entity player, const GameConfig& config);
+
+} // namespace mmo::server::systems

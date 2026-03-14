@@ -1,8 +1,10 @@
 #pragma once
 
-#include <string>
-#include <vector>
+#include <algorithm>
 #include <cmath>
+#include <string>
+#include <type_traits>
+#include <vector>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
 
@@ -112,23 +114,22 @@ struct ProceduralConfig {
 // Helper to interpolate between keyframes (linear for vec3, slerp for quat)
 template<typename T>
 T interpolate_keyframes(const std::vector<float>& times, const std::vector<T>& values, float t) {
-    if (times.empty() || values.empty()) return T();
-    if (times.size() == 1) return values[0];
-
-    if (t <= times.front()) return values.front();
+    if (times.empty() || values.empty()) return T{};
+    if (times.size() == 1 || t <= times.front()) return values.front();
     if (t >= times.back()) return values.back();
 
-    for (size_t i = 0; i < times.size() - 1; i++) {
-        if (t >= times[i] && t <= times[i + 1]) {
-            float factor = (t - times[i]) / (times[i + 1] - times[i]);
-            if constexpr (std::is_same_v<T, glm::quat>) {
-                return glm::slerp(values[i], values[i + 1], factor);
-            } else {
-                return glm::mix(values[i], values[i + 1], factor);
-            }
-        }
+    // Binary search for the interval containing t
+    auto it = std::upper_bound(times.begin(), times.end(), t);
+    size_t i = static_cast<size_t>(std::distance(times.begin(), it)) - 1;
+
+    float t0 = times[i], t1 = times[i + 1];
+    float f = (t - t0) / (t1 - t0);
+
+    if constexpr (std::is_same_v<T, glm::quat>) {
+        return glm::slerp(values[i], values[i + 1], f);
+    } else {
+        return glm::mix(values[i], values[i + 1], f);
     }
-    return values.back();
 }
 
 } // namespace mmo::engine::animation

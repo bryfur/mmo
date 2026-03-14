@@ -1,0 +1,124 @@
+{
+    "zones": [
+        {
+            "id": "town_safe_zone",
+            "name": "Thornwall",
+            "center_x": 4000,
+            "center_z": 4000,
+            "radius": 800,
+            "level_min": 0,
+            "level_max": 0,
+            "monster_density": 0.0,
+            "monster_types": [],
+            "description": "The fortified town and its immediate surroundings, safe from monsters"
+        },
+        {
+            "id": "starting_meadows",
+            "name": "Greenhollow Meadows",
+            "center_x": 5500,
+            "center_z": 5500,
+            "radius": 2500,
+            "level_min": 1,
+            "level_max": 2,
+            "monster_density": 0.4,
+            "monster_types": ["goblin_scout", "forest_imp"],
+            "description": "Gentle rolling hills dotted with wildflowers, a safe place to learn combat"
+        },
+        {
+            "id": "whispering_woods",
+            "name": "Whispering Woods",
+            "center_x": 2000,
+            "center_z": 6000,
+            "radius": 2500,
+            "level_min": 2,
+            "level_max": 3,
+            "monster_density": 0.5,
+            "monster_types": ["forest_imp", "bandit"],
+            "description": "Dense forest where the canopy blocks out sunlight and bandits lurk behind every tree"
+        },
+        {
+            "id": "bandit_flats",
+            "name": "Dustwind Flats",
+            "center_x": 7500,
+            "center_z": 4000,
+            "radius": 2800,
+            "level_min": 3,
+            "level_max": 4,
+            "monster_density": 0.5,
+            "monster_types": ["bandit", "dire_wolf"],
+            "description": "Arid scrublands where bandit camps dot the cracked earth and wolves hunt in packs"
+        },
+        {
+            "id": "ironpeak_foothills",
+            "name": "Ironpeak Foothills",
+            "center_x": 4000,
+            "center_z": 10000,
+            "radius": 3000,
+            "level_min": 4,
+            "level_max": 6,
+            "monster_density": 0.6,
+            "monster_types": ["dire_wolf", "stone_golem", "shadow_stalker"],
+            "description": "Rocky highlands rising toward distant mountains, home to golems and lurking predators"
+        },
+        {
+            "id": "shadewood_marsh",
+            "name": "Shadewood Marsh",
+            "center_x": 12000,
+            "center_z": 7000,
+            "radius": 3500,
+            "level_min": 5,
+            "level_max": 7,
+            "monster_density": 0.6,
+            "monster_types": ["stone_golem", "shadow_stalker"],
+            "description": "A fog-choked swamp where the ground shifts beneath your feet and shadows move on their own"
+        },
+        {
+            "id": "fallen_citadel",
+            "name": "The Fallen Citadel",
+            "center_x": 16000,
+            "center_z": 4000,
+            "radius": 3500,
+            "level_min": 6,
+            "level_max": 9,
+            "monster_density": 0.7,
+            "monster_types": ["shadow_stalker", "corrupted_knight"],
+            "description": "Ruins of an ancient fortress, now patrolled by corrupted knights bound to their eternal watch"
+        },
+        {
+            "id": "ashen_wastes",
+            "name": "Ashen Wastes",
+            "center_x": 22000,
+            "center_z": 10000,
+            "radius": 4500,
+            "level_min": 8,
+            "level_max": 11,
+            "monster_density": 0.7,
+            "monster_types": ["corrupted_knight", "ancient_warden"],
+            "description": "Scorched plains where an ancient cataclysm left the land scarred and wardens still guard what remains"
+        },
+        {
+            "id": "void_rift",
+            "name": "The Void Rift",
+            "center_x": 26000,
+            "center_z": 20000,
+            "radius": 4000,
+            "level_min": 10,
+            "level_max": 13,
+            "monster_density": 0.8,
+            "monster_types": ["ancient_warden", "void_wraith"],
+            "description": "A tear in reality at the edge of the world, leaking otherworldly creatures into the land"
+        },
+        {
+            "id": "dragons_reach",
+            "name": "Dragon's Reach",
+            "center_x": 28000,
+            "center_z": 28000,
+            "radius": 4500,
+            "level_min": 12,
+            "level_max": 15,
+            "monster_density": 0.8,
+            "monster_types": ["void_wraith", "dragon_whelp"],
+            "description": "The scorched nesting grounds at the far corner of the world where young dragons claim territory"
+        }
+    ]
+}

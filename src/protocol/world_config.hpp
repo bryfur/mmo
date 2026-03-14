@@ -6,8 +6,8 @@ namespace mmo::protocol {
 
 // World configuration sent from server to client on connect
 struct NetWorldConfig : Serializable<NetWorldConfig> {
-    float world_width = 8000.0f;
-    float world_height = 8000.0f;
+    float world_width = 32000.0f;
+    float world_height = 32000.0f;
     float tick_rate = 60.0f;
 
     static constexpr size_t serialized_size() {

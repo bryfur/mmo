@@ -32,6 +32,9 @@ void update_ai(entt::registry& registry, float dt, const GameConfig& config) {
     auto npc_view = registry.view<ecs::NPCTag, ecs::Transform, ecs::Velocity,
                                    ecs::Combat, ecs::AIState, ecs::Health>();
 
+    // Hoist player view outside the NPC loop to avoid recreating it per-NPC
+    auto player_view = registry.view<ecs::PlayerTag, ecs::Transform, ecs::Health>();
+
     for (auto entity : npc_view) {
         auto& health = npc_view.get<ecs::Health>(entity);
         if (!health.is_alive()) continue;
@@ -44,8 +47,6 @@ void update_ai(entt::registry& registry, float dt, const GameConfig& config) {
         // Find nearest player target (not in safe zone)
         entt::entity nearest_player = entt::null;
         float nearest_dist = ai.aggro_range;
-
-        auto player_view = registry.view<ecs::PlayerTag, ecs::Transform, ecs::Health>();
         for (auto player : player_view) {
             const auto& player_health = player_view.get<ecs::Health>(player);
             if (!player_health.is_alive()) continue;

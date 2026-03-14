@@ -31,6 +31,8 @@ cbuffer LightingUniforms {
     int hasTexture;
     int fogEnabled;
     float _padding3;
+    float3 cameraPos;
+    float _padding4;
 };
 
 [[vk::binding(1, 3)]]
@@ -175,7 +177,7 @@ float4 PSMain(PSInput input) : SV_Target {
 
     float3 result = lighting * baseColor.rgb;
 
-    float3 viewDir = normalize(-input.fragPos);
+    float3 viewDir = normalize(cameraPos - input.fragPos);
     float rim = 1.0 - max(dot(viewDir, norm), 0.0);
     rim = smoothstep(0.6, 1.0, rim);
     result += rim * 0.3 * baseColor.rgb;

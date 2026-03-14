@@ -23,11 +23,11 @@ void RenderScene::clear() {
     draw_grass_ = true;
 }
 
-void RenderScene::add_model(const std::string& model_name, const glm::mat4& transform,
+void RenderScene::add_model(std::string model_name, const glm::mat4& transform,
                             const glm::vec4& tint, float attack_tilt, bool no_fog) {
     RenderCommand cmd;
     ModelCommand model_cmd;
-    model_cmd.model_name = model_name;
+    model_cmd.model_name = std::move(model_name);
     model_cmd.transform = transform;
     model_cmd.tint = tint;
     model_cmd.attack_tilt = attack_tilt;
@@ -36,12 +36,12 @@ void RenderScene::add_model(const std::string& model_name, const glm::mat4& tran
     commands_.push_back(std::move(cmd));
 }
 
-void RenderScene::add_skinned_model(const std::string& model_name, const glm::mat4& transform,
+void RenderScene::add_skinned_model(std::string model_name, const glm::mat4& transform,
                                     const std::array<glm::mat4, 64>& bone_matrices,
                                     const glm::vec4& tint) {
     RenderCommand cmd;
     SkinnedModelCommand skinned_cmd;
-    skinned_cmd.model_name = model_name;
+    skinned_cmd.model_name = std::move(model_name);
     skinned_cmd.transform = transform;
     skinned_cmd.bone_matrices = bone_matrices;
     skinned_cmd.tint = tint;

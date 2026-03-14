@@ -14,8 +14,8 @@ struct PSInput {
 [[vk::binding(0, 3)]]
 cbuffer SkyUniforms {
     float4x4 invViewProjection;
-    float time;
     float3 sunDirection;  // Direction TO sun (normalized)
+    float time;
 };
 
 float4 PSMain(PSInput input) : SV_Target {

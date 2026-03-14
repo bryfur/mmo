@@ -51,29 +51,14 @@ entt::entity find_nearest_target(entt::registry& registry, entt::entity attacker
     return nearest;
 }
 
-void apply_damage(entt::registry& registry, entt::entity target, float damage,
-                   float world_width, float world_height) {
-    if (target == entt::null) return;
+// Apply damage and return whether the target died from this hit
+bool apply_damage(entt::registry& registry, entt::entity target, float damage) {
+    if (target == entt::null) return false;
 
     auto& health = registry.get<ecs::Health>(target);
+    bool was_alive = health.is_alive();
     health.current = std::max(0.0f, health.current - damage);
-
-    // Respawn NPCs
-    if (!health.is_alive() && registry.all_of<ecs::NPCTag>(target)) {
-        static std::mt19937 rng(std::random_device{}());
-        std::uniform_real_distribution<float> dist_x(100.0f, world_width - 100.0f);
-        std::uniform_real_distribution<float> dist_z(100.0f, world_height - 100.0f);
-
-        health.current = health.max;
-        auto& transform = registry.get<ecs::Transform>(target);
-        transform.x = dist_x(rng);
-        transform.z = dist_z(rng);
-
-        // Mark physics body for teleport to new position
-        if (registry.all_of<ecs::PhysicsBody>(target)) {
-            registry.get<ecs::PhysicsBody>(target).needs_teleport = true;
-        }
-    }
+    return was_alive && !health.is_alive();
 }
 
 // Find targets in a cone/area based on attack direction
@@ -117,7 +102,9 @@ std::vector<entt::entity> find_targets_in_direction(entt::registry& registry, en
 
 } // anonymous namespace
 
-void update_combat(entt::registry& registry, float dt, const GameConfig& config) {
+std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const GameConfig& config) {
+    std::vector<CombatHit> hits;
+
     auto view = registry.view<ecs::Combat, ecs::Health>();
 
     for (auto entity : view) {
@@ -171,7 +158,13 @@ void update_combat(entt::registry& registry, float dt, const GameConfig& config)
                                                   input.attack_dir_x, input.attack_dir_y,
                                                   cone_angle);
         for (auto target : targets) {
-            apply_damage(registry, target, combat.damage, config.world().width, config.world().height);
+            bool died = apply_damage(registry, target, combat.damage);
+            CombatHit hit;
+            hit.attacker = entity;
+            hit.target = target;
+            hit.damage = combat.damage;
+            hit.target_died = died;
+            hits.push_back(hit);
         }
     }
 
@@ -188,9 +181,17 @@ void update_combat(entt::registry& registry, float dt, const GameConfig& config)
         if (target != entt::null) {
             combat.is_attacking = true;
             combat.current_cooldown = combat.attack_cooldown;
-            apply_damage(registry, target, combat.damage, config.world().width, config.world().height);
+            bool died = apply_damage(registry, target, combat.damage);
+            CombatHit hit;
+            hit.attacker = entity;
+            hit.target = target;
+            hit.damage = combat.damage;
+            hit.target_died = died;
+            hits.push_back(hit);
         }
     }
+
+    return hits;
 }
 
 } // namespace mmo::server::systems

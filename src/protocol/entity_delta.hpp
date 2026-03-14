@@ -16,6 +16,7 @@ struct EntityDeltaUpdate : Serializable<EntityDeltaUpdate> {
     uint8_t is_attacking = 0;
     float attack_dir_x = 0.0f, attack_dir_y = 0.0f;
     float rotation = 0.0f;
+    float mana = 0.0f;
 
     static constexpr uint8_t FLAG_POSITION = 0x01;
     static constexpr uint8_t FLAG_VELOCITY = 0x02;
@@ -23,6 +24,7 @@ struct EntityDeltaUpdate : Serializable<EntityDeltaUpdate> {
     static constexpr uint8_t FLAG_ATTACKING = 0x08;
     static constexpr uint8_t FLAG_ATTACK_DIR = 0x10;
     static constexpr uint8_t FLAG_ROTATION = 0x20;
+    static constexpr uint8_t FLAG_MANA = 0x40;
 
     // Variable size based on flags
     static size_t serialized_size(uint8_t flags) {
@@ -33,6 +35,7 @@ struct EntityDeltaUpdate : Serializable<EntityDeltaUpdate> {
         if (flags & FLAG_ATTACKING) size += sizeof(uint8_t);
         if (flags & FLAG_ATTACK_DIR) size += sizeof(float) * 2;
         if (flags & FLAG_ROTATION) size += sizeof(float);
+        if (flags & FLAG_MANA) size += sizeof(float);
         return size;
     }
 
@@ -48,6 +51,7 @@ struct EntityDeltaUpdate : Serializable<EntityDeltaUpdate> {
         if (flags & FLAG_ATTACKING) { w.write(is_attacking); }
         if (flags & FLAG_ATTACK_DIR) { w.write(attack_dir_x); w.write(attack_dir_y); }
         if (flags & FLAG_ROTATION) { w.write(rotation); }
+        if (flags & FLAG_MANA) { w.write(mana); }
     }
 
     void deserialize_impl(BufferReader& r) {
@@ -60,6 +64,7 @@ struct EntityDeltaUpdate : Serializable<EntityDeltaUpdate> {
         if (flags & FLAG_ATTACKING) { is_attacking = r.read<uint8_t>(); }
         if (flags & FLAG_ATTACK_DIR) { attack_dir_x = r.read<float>(); attack_dir_y = r.read<float>(); }
         if (flags & FLAG_ROTATION) { rotation = r.read<float>(); }
+        if (flags & FLAG_MANA) { mana = r.read<float>(); }
     }
 
     // Bounds-checked deserialize via span — reader throws on overrun

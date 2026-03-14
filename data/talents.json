@@ -1,0 +1,375 @@
+{
+    "talent_points_per_level": 1,
+    "first_talent_point_level": 3,
+    "max_talent_points": 18,
+    "talent_trees": [
+        {
+            "class": "warrior",
+            "branches": [
+                {
+                    "name": "Berserker",
+                    "description": "Overwhelming offensive power at the cost of defense",
+                    "talents": [
+                        {
+                            "id": "w_ber_1",
+                            "name": "Sharpened Steel",
+                            "tier": 1,
+                            "description": "+10% damage",
+                            "effect": { "damage_mult": 1.1 }
+                        },
+                        {
+                            "id": "w_ber_2",
+                            "name": "Brutal Strikes",
+                            "tier": 2,
+                            "description": "+15% damage, but -5% max health",
+                            "effect": { "damage_mult": 1.15, "health_mult": 0.95 },
+                            "requires": "w_ber_1"
+                        },
+                        {
+                            "id": "w_ber_3",
+                            "name": "Bloodlust",
+                            "tier": 3,
+                            "description": "Kills restore 15% max HP. +10% attack speed",
+                            "effect": { "kill_heal_percent": 0.15, "attack_speed_mult": 1.1 },
+                            "requires": "w_ber_2"
+                        }
+                    ]
+                },
+                {
+                    "name": "Ironclad",
+                    "description": "Endurance and survivability in prolonged fights",
+                    "talents": [
+                        {
+                            "id": "w_irn_1",
+                            "name": "Thick Skin",
+                            "tier": 1,
+                            "description": "+15% max health",
+                            "effect": { "health_mult": 1.15 }
+                        },
+                        {
+                            "id": "w_irn_2",
+                            "name": "Second Wind",
+                            "tier": 2,
+                            "description": "Regenerate 1% max HP per second when below 40% health",
+                            "effect": { "low_health_regen_percent": 0.01, "low_health_threshold": 0.4 },
+                            "requires": "w_irn_1"
+                        },
+                        {
+                            "id": "w_irn_3",
+                            "name": "Unbreakable",
+                            "tier": 3,
+                            "description": "Once per 60s, survive a killing blow with 10% HP. -10% damage",
+                            "effect": { "cheat_death_cooldown": 60.0, "cheat_death_health": 0.1, "damage_mult": 0.9 },
+                            "requires": "w_irn_2"
+                        }
+                    ]
+                },
+                {
+                    "name": "Warlord",
+                    "description": "Crowd control and battlefield dominance",
+                    "talents": [
+                        {
+                            "id": "w_war_1",
+                            "name": "Menacing Presence",
+                            "tier": 1,
+                            "description": "Enemies within melee range deal 8% less damage",
+                            "effect": { "nearby_enemy_damage_reduction": 0.08, "presence_range": 100 }
+                        },
+                        {
+                            "id": "w_war_2",
+                            "name": "Staggering Blows",
+                            "tier": 2,
+                            "description": "Basic attacks have a 20% chance to slow target by 30% for 2s",
+                            "effect": { "slow_chance": 0.2, "slow_percent": 0.3, "slow_duration": 2.0 },
+                            "requires": "w_war_1"
+                        },
+                        {
+                            "id": "w_war_3",
+                            "name": "Conqueror",
+                            "tier": 3,
+                            "description": "+20% damage and +10% speed for 6s after killing an enemy",
+                            "effect": { "kill_damage_mult": 1.2, "kill_speed_mult": 1.1, "kill_buff_duration": 6.0 },
+                            "requires": "w_war_2"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "class": "mage",
+            "branches": [
+                {
+                    "name": "Pyromancer",
+                    "description": "Maximum burst damage and area destruction",
+                    "talents": [
+                        {
+                            "id": "m_pyr_1",
+                            "name": "Ignite",
+                            "tier": 1,
+                            "description": "Attacks apply a burn dealing 3% of hit damage per second for 4s",
+                            "effect": { "burn_damage_percent": 0.03, "burn_duration": 4.0 }
+                        },
+                        {
+                            "id": "m_pyr_2",
+                            "name": "Combustion",
+                            "tier": 2,
+                            "description": "+20% skill damage, but +15% mana costs",
+                            "effect": { "skill_damage_mult": 1.2, "mana_cost_mult": 1.15 },
+                            "requires": "m_pyr_1"
+                        },
+                        {
+                            "id": "m_pyr_3",
+                            "name": "Inferno",
+                            "tier": 3,
+                            "description": "Kills cause the target to explode, dealing 50% of its max HP as damage in a small area",
+                            "effect": { "kill_explosion_percent": 0.5, "kill_explosion_radius": 100 },
+                            "requires": "m_pyr_2"
+                        }
+                    ]
+                },
+                {
+                    "name": "Frostweaver",
+                    "description": "Control and safety through slows and barriers",
+                    "talents": [
+                        {
+                            "id": "m_fro_1",
+                            "name": "Chilling Touch",
+                            "tier": 1,
+                            "description": "Basic attacks slow targets by 15% for 2s",
+                            "effect": { "attack_slow_percent": 0.15, "attack_slow_duration": 2.0 }
+                        },
+                        {
+                            "id": "m_fro_2",
+                            "name": "Ice Barrier",
+                            "tier": 2,
+                            "description": "Gain a shield equal to 10% max HP every 15s. -5% damage",
+                            "effect": { "shield_percent": 0.1, "shield_cooldown": 15.0, "damage_mult": 0.95 },
+                            "requires": "m_fro_1"
+                        },
+                        {
+                            "id": "m_fro_3",
+                            "name": "Frozen Heart",
+                            "tier": 3,
+                            "description": "When hit below 25% HP, freeze all enemies within 120 range for 3s (60s cooldown)",
+                            "effect": { "panic_freeze_radius": 120, "panic_freeze_duration": 3.0, "panic_freeze_cooldown": 60.0, "panic_freeze_threshold": 0.25 },
+                            "requires": "m_fro_2"
+                        }
+                    ]
+                },
+                {
+                    "name": "Arcanist",
+                    "description": "Mana efficiency and sustained casting",
+                    "talents": [
+                        {
+                            "id": "m_arc_1",
+                            "name": "Arcane Efficiency",
+                            "tier": 1,
+                            "description": "-15% mana costs",
+                            "effect": { "mana_cost_mult": 0.85 }
+                        },
+                        {
+                            "id": "m_arc_2",
+                            "name": "Mana Siphon",
+                            "tier": 2,
+                            "description": "Basic attacks restore 5% of max mana. +10% attack speed",
+                            "effect": { "attack_mana_restore_percent": 0.05, "attack_speed_mult": 1.1 },
+                            "requires": "m_arc_1"
+                        },
+                        {
+                            "id": "m_arc_3",
+                            "name": "Arcane Surge",
+                            "tier": 3,
+                            "description": "While above 80% mana, deal 25% more damage. While below 20% mana, regen mana 3x faster",
+                            "effect": { "high_mana_damage_mult": 1.25, "high_mana_threshold": 0.8, "low_mana_regen_mult": 3.0, "low_mana_threshold": 0.2 },
+                            "requires": "m_arc_2"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "class": "paladin",
+            "branches": [
+                {
+                    "name": "Templar",
+                    "description": "Holy damage and smiting power",
+                    "talents": [
+                        {
+                            "id": "p_tmp_1",
+                            "name": "Righteous Fury",
+                            "tier": 1,
+                            "description": "+12% damage",
+                            "effect": { "damage_mult": 1.12 }
+                        },
+                        {
+                            "id": "p_tmp_2",
+                            "name": "Searing Light",
+                            "tier": 2,
+                            "description": "Attacks deal 20% bonus damage to enemies above 70% HP",
+                            "effect": { "high_hp_bonus_damage": 0.2, "high_hp_threshold": 0.7 },
+                            "requires": "p_tmp_1"
+                        },
+                        {
+                            "id": "p_tmp_3",
+                            "name": "Wrath of Heaven",
+                            "tier": 3,
+                            "description": "Every 5th attack deals 200% damage and stuns for 1s",
+                            "effect": { "empowered_attack_every": 5, "empowered_damage_mult": 2.0, "empowered_stun_duration": 1.0 },
+                            "requires": "p_tmp_2"
+                        }
+                    ]
+                },
+                {
+                    "name": "Guardian",
+                    "description": "Healing and protective support",
+                    "talents": [
+                        {
+                            "id": "p_grd_1",
+                            "name": "Blessed Resolve",
+                            "tier": 1,
+                            "description": "+12% max health and +15% healing received",
+                            "effect": { "health_mult": 1.12, "healing_received_mult": 1.15 }
+                        },
+                        {
+                            "id": "p_grd_2",
+                            "name": "Holy Ground",
+                            "tier": 2,
+                            "description": "Standing still for 2s creates a sanctified area that heals 2% max HP/s. Moving breaks it",
+                            "effect": { "stationary_heal_percent": 0.02, "stationary_delay": 2.0, "sanctified_radius": 100 },
+                            "requires": "p_grd_1"
+                        },
+                        {
+                            "id": "p_grd_3",
+                            "name": "Martyr",
+                            "tier": 3,
+                            "description": "Take 15% of nearby allies' damage. Gain 10% damage for each ally within range (max 30%)",
+                            "effect": { "damage_share_percent": 0.15, "ally_damage_bonus": 0.1, "max_ally_damage_bonus": 0.3, "share_radius": 200 },
+                            "requires": "p_grd_2"
+                        }
+                    ]
+                },
+                {
+                    "name": "Crusader",
+                    "description": "Area denial and persistent zone control",
+                    "talents": [
+                        {
+                            "id": "p_cru_1",
+                            "name": "Radiant Aura",
+                            "tier": 1,
+                            "description": "Passively deal 3% of your damage per second to all enemies within 100 range",
+                            "effect": { "aura_damage_percent": 0.03, "aura_range": 100 }
+                        },
+                        {
+                            "id": "p_cru_2",
+                            "name": "Hallowed Ground",
+                            "tier": 2,
+                            "description": "Consecrate slows enemies by 30% and lasts 2s longer",
+                            "effect": { "consecrate_slow": 0.3, "consecrate_duration_bonus": 2.0 },
+                            "requires": "p_cru_1"
+                        },
+                        {
+                            "id": "p_cru_3",
+                            "name": "Divine Retribution",
+                            "tier": 3,
+                            "description": "When you take damage, deal 25% of that damage back to the attacker. +8% attack range",
+                            "effect": { "reflect_damage_percent": 0.25, "attack_range_mult": 1.08 },
+                            "requires": "p_cru_2"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "class": "archer",
+            "branches": [
+                {
+                    "name": "Sharpshooter",
+                    "description": "Precision and critical strike power",
+                    "talents": [
+                        {
+                            "id": "a_shp_1",
+                            "name": "Keen Eye",
+                            "tier": 1,
+                            "description": "+10% damage and +50 attack range",
+                            "effect": { "damage_mult": 1.1, "attack_range_bonus": 50 }
+                        },
+                        {
+                            "id": "a_shp_2",
+                            "name": "Headshot",
+                            "tier": 2,
+                            "description": "15% chance for attacks to critically strike for 200% damage",
+                            "effect": { "crit_chance": 0.15, "crit_damage_mult": 2.0 },
+                            "requires": "a_shp_1"
+                        },
+                        {
+                            "id": "a_shp_3",
+                            "name": "Deadeye",
+                            "tier": 3,
+                            "description": "Standing still for 1.5s grants +30% damage and +10% crit chance until you move",
+                            "effect": { "stationary_damage_mult": 1.3, "stationary_crit_bonus": 0.1, "stationary_delay": 1.5 },
+                            "requires": "a_shp_2"
+                        }
+                    ]
+                },
+                {
+                    "name": "Ranger",
+                    "description": "Mobility, speed, and kiting",
+                    "talents": [
+                        {
+                            "id": "a_rng_1",
+                            "name": "Fleet Footed",
+                            "tier": 1,
+                            "description": "+8% movement speed",
+                            "effect": { "speed_mult": 1.08 }
+                        },
+                        {
+                            "id": "a_rng_2",
+                            "name": "Hit and Run",
+                            "tier": 2,
+                            "description": "Gain 15% speed for 2s after hitting an enemy. Attacks while moving deal full damage",
+                            "effect": { "hit_speed_bonus": 0.15, "hit_speed_duration": 2.0, "no_moving_penalty": true },
+                            "requires": "a_rng_1"
+                        },
+                        {
+                            "id": "a_rng_3",
+                            "name": "Wind Walker",
+                            "tier": 3,
+                            "description": "+15% attack speed. Evasive Roll cooldown reduced by 3s",
+                            "effect": { "attack_speed_mult": 1.15, "evasive_roll_cdr": 3.0 },
+                            "requires": "a_rng_2"
+                        }
+                    ]
+                },
+                {
+                    "name": "Trapper",
+                    "description": "Traps, area control, and damage over time",
+                    "talents": [
+                        {
+                            "id": "a_trp_1",
+                            "name": "Poison Tips",
+                            "tier": 1,
+                            "description": "Attacks apply poison dealing 4% of hit damage per second for 5s",
+                            "effect": { "poison_damage_percent": 0.04, "poison_duration": 5.0 }
+                        },
+                        {
+                            "id": "a_trp_2",
+                            "name": "Prepared Ground",
+                            "tier": 2,
+                            "description": "Can place 2 traps at once. Traps last 60s and have +30% trigger radius",
+                            "effect": { "max_traps": 2, "trap_lifetime_mult": 2.0, "trap_radius_mult": 1.3 },
+                            "requires": "a_trp_1"
+                        },
+                        {
+                            "id": "a_trp_3",
+                            "name": "Master Trapper",
+                            "tier": 3,
+                            "description": "Trapped enemies take 40% more damage from all sources for 4s. Trap cooldown reduced by 6s",
+                            "effect": { "trap_vulnerability": 0.4, "trap_vulnerability_duration": 4.0, "trap_cdr": 6.0 },
+                            "requires": "a_trp_2"
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

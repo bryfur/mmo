@@ -2423,7 +2423,8 @@ void Game::build_skill_bar_ui(UIScene& ui) {
     // Background bar
     ui.add_filled_rect(start_x - 5, y - 5, bar_width + 10, slot_size + 10, 0x80000000);
 
-    for (int i = 0; i < HUDState::MAX_SKILL_SLOTS; ++i) {
+    constexpr int NUM_SKILL_SLOTS = 5;
+    for (int i = 0; i < NUM_SKILL_SLOTS; ++i) {
         float x = start_x + i * (slot_size + slot_gap);
         const auto& slot = hud_state_.skill_slots[i];
 

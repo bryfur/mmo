@@ -1,0 +1,126 @@
+#include "buff_system.hpp"
+#include "server/ecs/game_components.hpp"
+#include <algorithm>
+#include <cmath>
+
+namespace mmo::server::systems {
+
+void update_buffs(entt::registry& registry, float dt) {
+    auto view = registry.view<ecs::BuffState>();
+
+    for (auto entity : view) {
+        auto& buff_state = view.get<ecs::BuffState>(entity);
+
+        // Process each effect
+        for (auto& effect : buff_state.effects) {
+            // Decrement duration
+            effect.duration -= dt;
+
+            // Tick DoT/HoT effects
+            if (effect.type == ecs::StatusEffect::Type::Burn ||
+                effect.type == ecs::StatusEffect::Type::Poison) {
+                effect.tick_timer -= dt;
+                if (effect.tick_timer <= 0.0f) {
+                    effect.tick_timer += effect.tick_interval;
+                    // Apply damage
+                    if (registry.all_of<ecs::Health>(entity)) {
+                        auto& health = registry.get<ecs::Health>(entity);
+                        health.current = std::max(0.0f, health.current - effect.value);
+                    }
+                }
+            }
+
+            if (effect.type == ecs::StatusEffect::Type::Heal) {
+                effect.tick_timer -= dt;
+                if (effect.tick_timer <= 0.0f) {
+                    effect.tick_timer += effect.tick_interval;
+                    // Apply healing
+                    if (registry.all_of<ecs::Health>(entity)) {
+                        auto& health = registry.get<ecs::Health>(entity);
+                        health.current = std::min(health.max, health.current + effect.value);
+                    }
+                }
+            }
+        }
+
+        // Remove expired effects
+        buff_state.effects.erase(
+            std::remove_if(buff_state.effects.begin(), buff_state.effects.end(),
+                [](const ecs::StatusEffect& e) { return e.duration <= 0.0f; }),
+            buff_state.effects.end()
+        );
+
+        // Remove BuffState component if no effects remain
+        if (buff_state.effects.empty()) {
+            registry.remove<ecs::BuffState>(entity);
+        }
+    }
+}
+
+void apply_effect(entt::registry& registry, entt::entity target, ecs::StatusEffect effect) {
+    if (!registry.valid(target)) return;
+
+    if (!registry.all_of<ecs::BuffState>(target)) {
+        registry.emplace<ecs::BuffState>(target);
+    }
+
+    auto& buff_state = registry.get<ecs::BuffState>(target);
+
+    // For CC effects (Stun, Root, Freeze, Slow), replace existing effect of same type
+    // if new one has longer duration. For buffs/DoTs, just stack.
+    switch (effect.type) {
+        case ecs::StatusEffect::Type::Stun:
+        case ecs::StatusEffect::Type::Root:
+        case ecs::StatusEffect::Type::Freeze:
+        case ecs::StatusEffect::Type::Slow:
+        case ecs::StatusEffect::Type::SpeedBoost:
+        case ecs::StatusEffect::Type::DamageBoost:
+        case ecs::StatusEffect::Type::DefenseBoost:
+        case ecs::StatusEffect::Type::Invulnerable:
+        case ecs::StatusEffect::Type::Lifesteal: {
+            // Replace if same type exists and new has longer duration
+            for (auto& e : buff_state.effects) {
+                if (e.type == effect.type) {
+                    if (effect.duration > e.duration) {
+                        e = effect;
+                    }
+                    return;
+                }
+            }
+            buff_state.add(effect);
+            break;
+        }
+        case ecs::StatusEffect::Type::Burn:
+        case ecs::StatusEffect::Type::Poison:
+        case ecs::StatusEffect::Type::Heal:
+        case ecs::StatusEffect::Type::Shield:
+            // These can stack
+            buff_state.add(effect);
+            break;
+    }
+}
+
+void remove_effect(entt::registry& registry, entt::entity target, ecs::StatusEffect::Type type) {
+    if (!registry.valid(target)) return;
+    if (!registry.all_of<ecs::BuffState>(target)) return;
+
+    auto& buff_state = registry.get<ecs::BuffState>(target);
+    buff_state.effects.erase(
+        std::remove_if(buff_state.effects.begin(), buff_state.effects.end(),
+            [type](const ecs::StatusEffect& e) { return e.type == type; }),
+        buff_state.effects.end()
+    );
+
+    if (buff_state.effects.empty()) {
+        registry.remove<ecs::BuffState>(target);
+    }
+}
+
+void clear_effects(entt::registry& registry, entt::entity target) {
+    if (!registry.valid(target)) return;
+    if (registry.all_of<ecs::BuffState>(target)) {
+        registry.remove<ecs::BuffState>(target);
+    }
+}
+
+} // namespace mmo::server::systems

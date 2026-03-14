@@ -202,13 +202,25 @@ struct SkillConfig {
     float range = 100.0f;
     float mana_cost = 20.0f;
     float cone_angle = 0.5f;
+    float heal_percent = 0.0f;
+    float duration = 0.0f;
+
+    // Status effect fields
     float stun_duration = 0.0f;
     float slow_percent = 0.0f;
     float slow_duration = 0.0f;
+    float freeze_duration = 0.0f;
+    float burn_duration = 0.0f;
+    float burn_damage = 0.0f;
+    float root_duration = 0.0f;
     float buff_duration = 0.0f;
     float damage_reduction = 0.0f;
-    float heal_percent = 0.0f;
-    float duration = 0.0f;
+    float invulnerable_duration = 0.0f;
+    float speed_boost = 0.0f;
+    float speed_boost_duration = 0.0f;
+    float lifesteal_percent = 0.0f;
+    float enemy_damage_reduction = 0.0f;
+    float debuff_duration = 0.0f;
 };
 
 // ============================================================================

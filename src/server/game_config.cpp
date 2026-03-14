@@ -5,6 +5,7 @@
 #include <nlohmann/json.hpp>
 #include <fstream>
 #include <iostream>
+#include <cmath>
 #include <cstring>
 #include <string>
 #include <utility>
@@ -457,13 +458,25 @@ bool GameConfig::load_skills(const std::string& path) {
             sk.range = s.value("range", 100.0f);
             sk.mana_cost = s.value("mana_cost", 20.0f);
             sk.cone_angle = s.value("cone_angle", 0.5f);
+            sk.heal_percent = s.value("heal_percent", 0.0f);
+            sk.duration = s.value("duration", 0.0f);
+
+            // Status effect fields
             sk.stun_duration = s.value("stun_duration", 0.0f);
             sk.slow_percent = s.value("slow_percent", 0.0f);
             sk.slow_duration = s.value("slow_duration", 0.0f);
+            sk.freeze_duration = s.value("freeze_duration", 0.0f);
+            sk.burn_duration = s.value("burn_duration", 0.0f);
+            sk.burn_damage = s.value("burn_damage", 0.0f);
+            sk.root_duration = s.value("root_duration", 0.0f);
             sk.buff_duration = s.value("buff_duration", 0.0f);
             sk.damage_reduction = s.value("damage_reduction", 0.0f);
-            sk.heal_percent = s.value("heal_percent", 0.0f);
-            sk.duration = s.value("duration", 0.0f);
+            sk.invulnerable_duration = s.value("invulnerable_duration", 0.0f);
+            sk.speed_boost = s.value("speed_boost", 0.0f);
+            sk.speed_boost_duration = s.value("speed_boost_duration", 0.0f);
+            sk.lifesteal_percent = s.value("lifesteal_percent", 0.0f);
+            sk.enemy_damage_reduction = s.value("enemy_damage_reduction", 0.0f);
+            sk.debuff_duration = s.value("debuff_duration", 0.0f);
             skills_.push_back(std::move(sk));
         }
         std::cout << "[GameConfig] Loaded " << skills_.size() << " skills\n";

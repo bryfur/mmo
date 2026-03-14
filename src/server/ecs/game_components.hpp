@@ -362,4 +362,89 @@ struct ZoneInfo {
     std::string zone_id;
 };
 
+// ============================================================================
+// Buff/Debuff Components
+// ============================================================================
+
+struct StatusEffect {
+    enum class Type : uint8_t {
+        Stun,        // Cannot move or attack
+        Slow,        // Reduced movement speed
+        Root,        // Cannot move but can attack
+        Freeze,      // Cannot move or attack (ice visual)
+        Burn,        // Damage over time
+        Poison,      // Damage over time (weaker but longer)
+        Heal,        // Heal over time
+        Shield,      // Damage absorption
+        SpeedBoost,  // Increased movement speed
+        DamageBoost, // Increased damage
+        DefenseBoost,// Reduced damage taken
+        Lifesteal,   // Heal on hit
+        Invulnerable // Cannot take damage
+    };
+
+    Type type;
+    float duration;      // seconds remaining
+    float tick_timer;    // for DoT/HoT effects
+    float tick_interval; // how often DoT/HoT ticks
+    float value;         // effect magnitude (damage per tick, slow %, etc.)
+    uint32_t source_id;  // who applied this
+};
+
+struct BuffState {
+    std::vector<StatusEffect> effects;
+
+    void add(StatusEffect effect) { effects.push_back(effect); }
+
+    bool has(StatusEffect::Type type) const {
+        for (auto& e : effects) if (e.type == type) return true;
+        return false;
+    }
+
+    bool is_stunned() const { return has(StatusEffect::Type::Stun) || has(StatusEffect::Type::Freeze); }
+    bool is_rooted() const { return has(StatusEffect::Type::Root) || is_stunned(); }
+
+    float get_speed_multiplier() const {
+        float mult = 1.0f;
+        for (auto& e : effects) {
+            if (e.type == StatusEffect::Type::Slow) mult *= (1.0f - e.value);
+            if (e.type == StatusEffect::Type::SpeedBoost) mult *= (1.0f + e.value);
+        }
+        return mult;
+    }
+
+    float get_damage_multiplier() const {
+        float mult = 1.0f;
+        for (auto& e : effects) {
+            if (e.type == StatusEffect::Type::DamageBoost) mult *= (1.0f + e.value);
+        }
+        return mult;
+    }
+
+    float get_defense_multiplier() const {
+        float mult = 1.0f;
+        for (auto& e : effects) {
+            if (e.type == StatusEffect::Type::DefenseBoost) mult *= (1.0f - e.value);
+        }
+        return mult;
+    }
+
+    bool is_invulnerable() const { return has(StatusEffect::Type::Invulnerable); }
+
+    float get_lifesteal() const {
+        float total = 0.0f;
+        for (auto& e : effects) {
+            if (e.type == StatusEffect::Type::Lifesteal) total += e.value;
+        }
+        return total;
+    }
+
+    float get_shield_value() const {
+        float total = 0.0f;
+        for (auto& e : effects) {
+            if (e.type == StatusEffect::Type::Shield) total += e.value;
+        }
+        return total;
+    }
+};
 } // namespace mmo::server::ecs

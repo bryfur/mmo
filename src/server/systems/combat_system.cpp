@@ -52,13 +52,57 @@ entt::entity find_nearest_target(entt::registry& registry, entt::entity attacker
 }
 
 // Apply damage and return whether the target died from this hit
-bool apply_damage(entt::registry& registry, entt::entity target, float damage) {
+bool apply_damage(entt::registry& registry, entt::entity target, float damage,
+                   entt::entity attacker = entt::null) {
     if (target == entt::null) return false;
+
+    // Check target invulnerability and defense
+    if (registry.all_of<ecs::BuffState>(target)) {
+        auto& target_buffs = registry.get<ecs::BuffState>(target);
+        if (target_buffs.is_invulnerable()) {
+            return false; // No damage
+        }
+        damage *= target_buffs.get_defense_multiplier();
+
+        // Absorb damage with shield
+        float shield = target_buffs.get_shield_value();
+        if (shield > 0.0f && damage > 0.0f) {
+            float absorbed = std::min(shield, damage);
+            damage -= absorbed;
+            for (auto& e : target_buffs.effects) {
+                if (e.type == ecs::StatusEffect::Type::Shield) {
+                    float to_absorb = std::min(e.value, absorbed);
+                    e.value -= to_absorb;
+                    absorbed -= to_absorb;
+                    if (e.value <= 0.0f) e.duration = 0.0f;
+                    if (absorbed <= 0.0f) break;
+                }
+            }
+        }
+    }
 
     auto& health = registry.get<ecs::Health>(target);
     bool was_alive = health.is_alive();
     health.current = std::max(0.0f, health.current - damage);
-    return was_alive && !health.is_alive();
+
+    // Apply lifesteal to attacker
+    if (attacker != entt::null && damage > 0.0f && registry.all_of<ecs::BuffState>(attacker)) {
+        float lifesteal = registry.get<ecs::BuffState>(attacker).get_lifesteal();
+        if (lifesteal > 0.0f && registry.all_of<ecs::Health>(attacker)) {
+            auto& attacker_health = registry.get<ecs::Health>(attacker);
+            attacker_health.current = std::min(attacker_health.max,
+                attacker_health.current + damage * lifesteal);
+        }
+    }
+
+    bool died = was_alive && !health.is_alive();
+
+    // Clear all status effects on death
+    if (died && registry.all_of<ecs::BuffState>(target)) {
+        registry.get<ecs::BuffState>(target).effects.clear();
+    }
+
+    return died;
 }
 
 // Find targets in a cone/area based on attack direction
@@ -137,6 +181,11 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
 
         if (!health.is_alive() || !wants_attack || !combat.can_attack()) continue;
 
+        // Cannot attack while stunned or frozen
+        if (registry.all_of<ecs::BuffState>(entity)) {
+            if (registry.get<ecs::BuffState>(entity).is_stunned()) continue;
+        }
+
         // Trigger attack regardless of target - visual effect will play
         combat.is_attacking = true;
         combat.current_cooldown = combat.attack_cooldown;
@@ -152,17 +201,23 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
         // Determine attack cone from class config
         float cone_angle = config.get_class(info.player_class).cone_angle;
 
+        // Apply damage multiplier from buffs
+        float effective_damage = combat.damage;
+        if (registry.all_of<ecs::BuffState>(entity)) {
+            effective_damage *= registry.get<ecs::BuffState>(entity).get_damage_multiplier();
+        }
+
         // Find and damage all targets in attack cone
         auto targets = find_targets_in_direction(registry, entity, EntityType::NPC,
                                                   combat.attack_range,
                                                   input.attack_dir_x, input.attack_dir_y,
                                                   cone_angle);
         for (auto target : targets) {
-            bool died = apply_damage(registry, target, combat.damage);
+            bool died = apply_damage(registry, target, effective_damage, entity);
             CombatHit hit;
             hit.attacker = entity;
             hit.target = target;
-            hit.damage = combat.damage;
+            hit.damage = effective_damage;
             hit.target_died = died;
             hits.push_back(hit);
         }
@@ -177,15 +232,26 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
 
         if (!health.is_alive() || ai.target_id == 0 || !combat.can_attack()) continue;
 
+        // Cannot attack while stunned or frozen
+        if (registry.all_of<ecs::BuffState>(entity)) {
+            if (registry.get<ecs::BuffState>(entity).is_stunned()) continue;
+        }
+
         auto target = find_nearest_target(registry, entity, EntityType::Player, combat.attack_range);
         if (target != entt::null) {
             combat.is_attacking = true;
             combat.current_cooldown = combat.attack_cooldown;
-            bool died = apply_damage(registry, target, combat.damage);
+
+            float effective_damage = combat.damage;
+            if (registry.all_of<ecs::BuffState>(entity)) {
+                effective_damage *= registry.get<ecs::BuffState>(entity).get_damage_multiplier();
+            }
+
+            bool died = apply_damage(registry, target, effective_damage, entity);
             CombatHit hit;
             hit.attacker = entity;
             hit.target = target;
-            hit.damage = combat.damage;
+            hit.damage = effective_damage;
             hit.target_died = died;
             hits.push_back(hit);
         }

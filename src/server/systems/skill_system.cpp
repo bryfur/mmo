@@ -1,4 +1,5 @@
 #include "skill_system.hpp"
+#include "buff_system.hpp"
 #include "leveling_system.hpp"
 #include "protocol/protocol.hpp"
 #include "server/ecs/game_components.hpp"
@@ -59,11 +60,22 @@ bool use_skill(entt::registry& registry, entt::entity player, const std::string&
     // Set cooldown
     skill_state.set_cooldown(skill_id, skill->cooldown);
 
-    // Apply skill effects
+    // Get player's network ID for status effect source tracking
+    uint32_t player_net_id = 0;
+    if (registry.all_of<ecs::NetworkId>(player)) {
+        player_net_id = registry.get<ecs::NetworkId>(player).id;
+    }
 
-    // Damage effect: find nearby enemies in range and deal damage
-    if (skill->damage_multiplier > 0.0f) {
+    // Apply skill effects - damage and status effects on enemies in range
+    if (skill->damage_multiplier > 0.0f || skill->stun_duration > 0.0f ||
+        skill->slow_duration > 0.0f || skill->freeze_duration > 0.0f) {
+
         float total_damage = combat.damage * skill->damage_multiplier;
+
+        // Apply attacker's damage boost from buffs
+        if (registry.all_of<ecs::BuffState>(player)) {
+            total_damage *= registry.get<ecs::BuffState>(player).get_damage_multiplier();
+        }
 
         auto view = registry.view<ecs::Transform, ecs::Health, ecs::EntityInfo>();
         for (auto entity : view) {
@@ -90,18 +102,173 @@ bool use_skill(entt::registry& registry, entt::entity player, const std::string&
                 if (dot < std::cos(skill->cone_angle)) continue;
             }
 
-            target_health.current = std::max(0.0f, target_health.current - total_damage);
+            // Apply damage (respect invulnerability and defense)
+            float actual_damage = total_damage;
+            if (registry.all_of<ecs::BuffState>(entity)) {
+                auto& target_buffs = registry.get<ecs::BuffState>(entity);
+                if (target_buffs.is_invulnerable()) {
+                    actual_damage = 0.0f;
+                } else {
+                    actual_damage *= target_buffs.get_defense_multiplier();
+
+                    // Absorb damage with shield
+                    float shield = target_buffs.get_shield_value();
+                    if (shield > 0.0f && actual_damage > 0.0f) {
+                        float absorbed = std::min(shield, actual_damage);
+                        actual_damage -= absorbed;
+                        // Reduce shield value in the first shield effect found
+                        for (auto& e : target_buffs.effects) {
+                            if (e.type == ecs::StatusEffect::Type::Shield) {
+                                float to_absorb = std::min(e.value, absorbed);
+                                e.value -= to_absorb;
+                                absorbed -= to_absorb;
+                                if (e.value <= 0.0f) e.duration = 0.0f;
+                                if (absorbed <= 0.0f) break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            target_health.current = std::max(0.0f, target_health.current - actual_damage);
+
+            // Lifesteal: heal attacker
+            if (actual_damage > 0.0f && registry.all_of<ecs::BuffState>(player)) {
+                float lifesteal = registry.get<ecs::BuffState>(player).get_lifesteal();
+                if (lifesteal > 0.0f) {
+                    health.current = std::min(health.max, health.current + actual_damage * lifesteal);
+                }
+            }
+
+            // Apply stun
+            if (skill->stun_duration > 0.0f) {
+                ecs::StatusEffect stun;
+                stun.type = ecs::StatusEffect::Type::Stun;
+                stun.duration = skill->stun_duration;
+                stun.tick_timer = 0.0f;
+                stun.tick_interval = 0.0f;
+                stun.value = 0.0f;
+                stun.source_id = player_net_id;
+                apply_effect(registry, entity, stun);
+            }
+
+            // Apply slow
+            if (skill->slow_duration > 0.0f && skill->slow_percent > 0.0f) {
+                ecs::StatusEffect slow;
+                slow.type = ecs::StatusEffect::Type::Slow;
+                slow.duration = skill->slow_duration;
+                slow.tick_timer = 0.0f;
+                slow.tick_interval = 0.0f;
+                slow.value = skill->slow_percent;
+                slow.source_id = player_net_id;
+                apply_effect(registry, entity, slow);
+            }
+
+            // Apply freeze
+            if (skill->freeze_duration > 0.0f) {
+                ecs::StatusEffect freeze;
+                freeze.type = ecs::StatusEffect::Type::Freeze;
+                freeze.duration = skill->freeze_duration;
+                freeze.tick_timer = 0.0f;
+                freeze.tick_interval = 0.0f;
+                freeze.value = 0.0f;
+                freeze.source_id = player_net_id;
+                apply_effect(registry, entity, freeze);
+            }
+
+            // Apply burn (DoT from fire skills)
+            if (skill->burn_duration > 0.0f && skill->burn_damage > 0.0f) {
+                ecs::StatusEffect burn;
+                burn.type = ecs::StatusEffect::Type::Burn;
+                burn.duration = skill->burn_duration;
+                burn.tick_timer = 1.0f;
+                burn.tick_interval = 1.0f;
+                burn.value = skill->burn_damage;
+                burn.source_id = player_net_id;
+                apply_effect(registry, entity, burn);
+            }
+
+            // Apply root
+            if (skill->root_duration > 0.0f) {
+                ecs::StatusEffect root;
+                root.type = ecs::StatusEffect::Type::Root;
+                root.duration = skill->root_duration;
+                root.tick_timer = 0.0f;
+                root.tick_interval = 0.0f;
+                root.value = 0.0f;
+                root.source_id = player_net_id;
+                apply_effect(registry, entity, root);
+            }
+
+            // Apply enemy damage reduction debuff
+            if (skill->debuff_duration > 0.0f && skill->enemy_damage_reduction > 0.0f) {
+                ecs::StatusEffect debuff;
+                debuff.type = ecs::StatusEffect::Type::DefenseBoost;
+                debuff.duration = skill->debuff_duration;
+                debuff.tick_timer = 0.0f;
+                debuff.tick_interval = 0.0f;
+                debuff.value = skill->enemy_damage_reduction;
+                debuff.source_id = player_net_id;
+                apply_effect(registry, entity, debuff);
+            }
         }
     }
 
-    // Heal effect
+    // Heal effect (self)
     if (skill->heal_percent > 0.0f) {
         float heal_amount = health.max * skill->heal_percent;
         health.current = std::min(health.max, health.current + heal_amount);
     }
 
-    // Damage reduction buff (logged for now, future buff system will handle)
-    // if (skill->damage_reduction > 0.0f) { /* TODO: buff system */ }
+    // Self-buff: damage reduction
+    if (skill->buff_duration > 0.0f && skill->damage_reduction > 0.0f) {
+        ecs::StatusEffect def_buff;
+        def_buff.type = ecs::StatusEffect::Type::DefenseBoost;
+        def_buff.duration = skill->buff_duration;
+        def_buff.tick_timer = 0.0f;
+        def_buff.tick_interval = 0.0f;
+        def_buff.value = skill->damage_reduction;
+        def_buff.source_id = player_net_id;
+        apply_effect(registry, player, def_buff);
+    }
+
+    // Self-buff: invulnerability
+    if (skill->invulnerable_duration > 0.0f) {
+        ecs::StatusEffect invuln;
+        invuln.type = ecs::StatusEffect::Type::Invulnerable;
+        invuln.duration = skill->invulnerable_duration;
+        invuln.tick_timer = 0.0f;
+        invuln.tick_interval = 0.0f;
+        invuln.value = 0.0f;
+        invuln.source_id = player_net_id;
+        apply_effect(registry, player, invuln);
+    }
+
+    // Self-buff: speed boost
+    if (skill->speed_boost_duration > 0.0f && skill->speed_boost > 0.0f) {
+        ecs::StatusEffect speed;
+        speed.type = ecs::StatusEffect::Type::SpeedBoost;
+        speed.duration = skill->speed_boost_duration;
+        speed.tick_timer = 0.0f;
+        speed.tick_interval = 0.0f;
+        speed.value = skill->speed_boost;
+        speed.source_id = player_net_id;
+        apply_effect(registry, player, speed);
+    }
+
+    // Self-buff: lifesteal
+    if (skill->lifesteal_percent > 0.0f) {
+        // Lifesteal lasts for the skill's buff_duration or a default of 5s
+        float ls_duration = skill->buff_duration > 0.0f ? skill->buff_duration : 5.0f;
+        ecs::StatusEffect ls;
+        ls.type = ecs::StatusEffect::Type::Lifesteal;
+        ls.duration = ls_duration;
+        ls.tick_timer = 0.0f;
+        ls.tick_interval = 0.0f;
+        ls.value = skill->lifesteal_percent;
+        ls.source_id = player_net_id;
+        apply_effect(registry, player, ls);
+    }
 
     // Set attacking flag for visual feedback
     combat.is_attacking = true;

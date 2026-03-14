@@ -44,6 +44,18 @@ void update_ai(entt::registry& registry, float dt, const GameConfig& config) {
         auto& combat = npc_view.get<ecs::Combat>(entity);
         auto& ai = npc_view.get<ecs::AIState>(entity);
 
+        // Check for crowd control effects
+        if (registry.all_of<ecs::BuffState>(entity)) {
+            const auto& buffs = registry.get<ecs::BuffState>(entity);
+            // Stunned/frozen: cannot move or attack
+            if (buffs.is_stunned()) {
+                velocity.x = 0;
+                velocity.z = 0;
+                continue;
+            }
+            // Rooted: cannot move but can still target/attack (handled below)
+        }
+
         // Find nearest player target (not in safe zone)
         entt::entity nearest_player = entt::null;
         float nearest_dist = ai.aggro_range;
@@ -70,17 +82,27 @@ void update_ai(entt::registry& registry, float dt, const GameConfig& config) {
             const auto& target_net_id = registry.get<ecs::NetworkId>(nearest_player);
             ai.target_id = target_net_id.id;
 
+            // Check if rooted (can target but not move)
+            bool rooted = false;
+            float speed_mult = 1.0f;
+            if (registry.all_of<ecs::BuffState>(entity)) {
+                const auto& buffs = registry.get<ecs::BuffState>(entity);
+                rooted = buffs.is_rooted();
+                speed_mult = buffs.get_speed_multiplier();
+            }
+
             float dx = target_transform.x - transform.x;
             float dz = target_transform.z - transform.z;
             float dist = distance(transform.x, transform.z,
                                  target_transform.x, target_transform.z);
 
-            if (dist > combat.attack_range) {
-                velocity.x = (dx / dist) * config.monster().speed;
-                velocity.z = (dz / dist) * config.monster().speed;
-            } else {
+            if (rooted || dist <= combat.attack_range) {
                 velocity.x = 0;
                 velocity.z = 0;
+            } else {
+                float speed = config.monster().speed * speed_mult;
+                velocity.x = (dx / dist) * speed;
+                velocity.z = (dz / dist) * speed;
             }
         } else {
             ai.target_id = 0;

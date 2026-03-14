@@ -206,9 +206,6 @@ private:
     // Reusable buffers for network message processing (avoids per-frame allocations)
     std::vector<uint32_t> to_remove_buffer_;
 
-    // Gameplay state
-    HUDState hud_state_;
-    PanelState panel_state_;
     bool player_dead_ = false;
 };
 

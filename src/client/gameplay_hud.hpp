@@ -141,12 +141,14 @@ struct SkillSlot {
 };
 
 struct QuestTrackerEntry {
+    std::string quest_id;
     std::string quest_name;
     struct Objective {
         std::string description;
         int current = 0;
         int required = 0;
         bool complete = false;
+        bool is_complete() const { return complete; }
     };
     std::vector<Objective> objectives;
 };

@@ -123,7 +123,7 @@ void Session::handle_packet() {
             if (current_header_.payload_size >= NPCInteractMsg::serialized_size() && player_id_ != 0) {
                 NPCInteractMsg msg;
                 msg.deserialize(payload_buffer_);
-                server_.on_npc_interact(shared_from_this(), player_id_, msg.npc_network_id);
+                server_.on_npc_interact(shared_from_this(), player_id_, msg.npc_id);
             }
             break;
         }

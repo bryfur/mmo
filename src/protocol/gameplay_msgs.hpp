@@ -317,56 +317,59 @@ struct QuestOfferMsg : Serializable<QuestOfferMsg> {
 };
 
 struct QuestProgressMsg : Serializable<QuestProgressMsg> {
-    uint16_t quest_id = 0;
+    char quest_id[32] = {};
     uint8_t objective_index = 0;
-    uint16_t current_count = 0;
-    uint16_t required_count = 0;
+    int32_t current = 0;
+    int32_t required = 0;
+    uint8_t complete = 0;
 
     static constexpr size_t serialized_size() {
-        return sizeof(uint16_t) * 3 + sizeof(uint8_t);
+        return 32 + sizeof(uint8_t) + 2 * sizeof(int32_t) + sizeof(uint8_t);
     }
 
     void serialize_impl(BufferWriter& w) const {
-        w.write(quest_id);
+        w.write_bytes(quest_id, 32);
         w.write(objective_index);
-        w.write(current_count);
-        w.write(required_count);
+        w.write(current);
+        w.write(required);
+        w.write(complete);
     }
 
     void deserialize_impl(BufferReader& r) {
-        quest_id = r.read<uint16_t>();
+        r.read_bytes(quest_id, 32);
         objective_index = r.read<uint8_t>();
-        current_count = r.read<uint16_t>();
-        required_count = r.read<uint16_t>();
+        current = r.read<int32_t>();
+        required = r.read<int32_t>();
+        complete = r.read<uint8_t>();
     }
 };
 
 struct QuestCompleteMsg : Serializable<QuestCompleteMsg> {
-    uint16_t quest_id = 0;
+    char quest_id[32] = {};
     char quest_name[32] = {};
 
     static constexpr size_t serialized_size() {
-        return sizeof(uint16_t) + 32;
+        return 32 + 32;
     }
 
     void serialize_impl(BufferWriter& w) const {
-        w.write(quest_id);
+        w.write_bytes(quest_id, 32);
         w.write_bytes(quest_name, 32);
     }
 
     void deserialize_impl(BufferReader& r) {
-        quest_id = r.read<uint16_t>();
+        r.read_bytes(quest_id, 32);
         r.read_bytes(quest_name, 32);
     }
 };
 
 struct QuestAcceptMsg : Serializable<QuestAcceptMsg> {
-    uint16_t quest_id = 0;
+    char quest_id[32] = {};
 
-    static constexpr size_t serialized_size() { return sizeof(uint16_t); }
+    static constexpr size_t serialized_size() { return 32; }
 
-    void serialize_impl(BufferWriter& w) const { w.write(quest_id); }
-    void deserialize_impl(BufferReader& r) { quest_id = r.read<uint16_t>(); }
+    void serialize_impl(BufferWriter& w) const { w.write_bytes(quest_id, 32); }
+    void deserialize_impl(BufferReader& r) { r.read_bytes(quest_id, 32); }
 };
 
 // Client -> Server: turn in a completed quest to NPC
@@ -389,12 +392,41 @@ struct QuestTurnInMsg : Serializable<QuestTurnInMsg> {
 // ============================================================================
 
 struct SkillUseMsg : Serializable<SkillUseMsg> {
-    uint16_t skill_id = 0;
+    char skill_id[32] = {};
+    float dir_x = 0.0f;
+    float dir_z = 0.0f;
 
-    static constexpr size_t serialized_size() { return sizeof(uint16_t); }
+    static constexpr size_t serialized_size() { return 32 + sizeof(float) * 2; }
 
-    void serialize_impl(BufferWriter& w) const { w.write(skill_id); }
-    void deserialize_impl(BufferReader& r) { skill_id = r.read<uint16_t>(); }
+    void serialize_impl(BufferWriter& w) const {
+        w.write_bytes(skill_id, 32);
+        w.write(dir_x);
+        w.write(dir_z);
+    }
+    void deserialize_impl(BufferReader& r) {
+        r.read_bytes(skill_id, 32);
+        dir_x = r.read<float>();
+        dir_z = r.read<float>();
+    }
+};
+
+struct SkillResultMsg : Serializable<SkillResultMsg> {
+    char skill_id[32] = {};
+    float cooldown = 0.0f;
+    uint8_t success = 0;
+
+    static constexpr size_t serialized_size() { return 32 + sizeof(float) + sizeof(uint8_t); }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write_bytes(skill_id, 32);
+        w.write(cooldown);
+        w.write(success);
+    }
+    void deserialize_impl(BufferReader& r) {
+        r.read_bytes(skill_id, 32);
+        cooldown = r.read<float>();
+        success = r.read<uint8_t>();
+    }
 };
 
 struct SkillCooldownMsg : Serializable<SkillCooldownMsg> {
@@ -465,29 +497,29 @@ struct SkillUnlockMsg : Serializable<SkillUnlockMsg> {
 // ============================================================================
 
 struct TalentUnlockMsg : Serializable<TalentUnlockMsg> {
-    uint16_t talent_id = 0;
+    char talent_id[32] = {};
 
-    static constexpr size_t serialized_size() { return sizeof(uint16_t); }
+    static constexpr size_t serialized_size() { return 32; }
 
-    void serialize_impl(BufferWriter& w) const { w.write(talent_id); }
-    void deserialize_impl(BufferReader& r) { talent_id = r.read<uint16_t>(); }
+    void serialize_impl(BufferWriter& w) const { w.write_bytes(talent_id, 32); }
+    void deserialize_impl(BufferReader& r) { r.read_bytes(talent_id, 32); }
 };
 
 struct TalentSyncMsg : Serializable<TalentSyncMsg> {
-    static constexpr int MAX_TALENTS = 16;
+    static constexpr int MAX_TALENTS = 28;
     uint8_t talent_points = 0;
     uint8_t unlocked_count = 0;
-    uint16_t unlocked_talents[MAX_TALENTS] = {};
+    char unlocked_ids[MAX_TALENTS][32] = {};
 
     static constexpr size_t serialized_size() {
-        return sizeof(uint8_t) * 2 + MAX_TALENTS * sizeof(uint16_t);
+        return sizeof(uint8_t) * 2 + MAX_TALENTS * 32;
     }
 
     void serialize_impl(BufferWriter& w) const {
         w.write(talent_points);
         w.write(unlocked_count);
         for (int i = 0; i < MAX_TALENTS; ++i) {
-            w.write(unlocked_talents[i]);
+            w.write_bytes(unlocked_ids[i], 32);
         }
     }
 
@@ -495,7 +527,7 @@ struct TalentSyncMsg : Serializable<TalentSyncMsg> {
         talent_points = r.read<uint8_t>();
         unlocked_count = r.read<uint8_t>();
         for (int i = 0; i < MAX_TALENTS; ++i) {
-            unlocked_talents[i] = r.read<uint16_t>();
+            r.read_bytes(unlocked_ids[i], 32);
         }
     }
 };

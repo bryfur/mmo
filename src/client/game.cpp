@@ -348,9 +348,9 @@ void Game::update_playing(float dt) {
 
     // Tick skill cooldowns locally
     for (auto& slot : hud_state_.skill_slots) {
-        if (slot.cooldown_remaining > 0.0f) {
-            slot.cooldown_remaining -= dt;
-            if (slot.cooldown_remaining < 0.0f) slot.cooldown_remaining = 0.0f;
+        if (slot.cooldown > 0.0f) {
+            slot.cooldown -= dt;
+            if (slot.cooldown < 0.0f) slot.cooldown = 0.0f;
         }
     }
 
@@ -485,7 +485,7 @@ void Game::update_playing(float dt) {
 
                     // Send NPCInteract to server
                     NPCInteractMsg msg;
-                    msg.npc_network_id = best_npc_id;
+                    msg.npc_id = best_npc_id;
                     network_.send_raw(build_packet(MessageType::NPCInteract, msg));
                 }
             }
@@ -2048,11 +2048,13 @@ void Game::on_quest_progress(const std::vector<uint8_t>& payload) {
     msg.deserialize(payload);
 
     // Find matching quest and update objective
+    std::string qid(msg.quest_id, strnlen(msg.quest_id, sizeof(msg.quest_id)));
     for (auto& quest : hud_state_.tracked_quests) {
-        if (quest.quest_id == msg.quest_id) {
+        if (quest.quest_id == qid) {
             if (msg.objective_index < quest.objectives.size()) {
-                quest.objectives[msg.objective_index].current = msg.current_count;
-                quest.objectives[msg.objective_index].required = msg.required_count;
+                quest.objectives[msg.objective_index].current = msg.current;
+                quest.objectives[msg.objective_index].required = msg.required;
+                quest.objectives[msg.objective_index].complete = (msg.complete != 0);
             }
             break;
         }
@@ -2066,10 +2068,11 @@ void Game::on_quest_complete(const std::vector<uint8_t>& payload) {
     msg.deserialize(payload);
 
     // Remove from tracked quests
+    std::string qid(msg.quest_id, strnlen(msg.quest_id, sizeof(msg.quest_id)));
     auto& quests = hud_state_.tracked_quests;
     quests.erase(
         std::remove_if(quests.begin(), quests.end(),
-            [&](const TrackedQuest& q) { return q.quest_id == msg.quest_id; }),
+            [&](const QuestTrackerEntry& q) { return q.quest_id == qid; }),
         quests.end());
 
     // Show completion notification
@@ -2101,30 +2104,40 @@ void Game::on_skill_cooldown(const std::vector<uint8_t>& payload) {
     msg.deserialize(payload);
 
     // Find matching skill slot and override cooldown
-    for (auto& slot : hud_state_.skill_slots) {
-        if (slot.skill_id == msg.skill_id) {
-            slot.cooldown_remaining = msg.cooldown_remaining;
-            slot.cooldown_total = msg.cooldown_total;
+    // SkillCooldownMsg has uint16_t skill_id - match by index
+    for (int i = 0; i < 5; ++i) {
+        if (i == msg.skill_id) {
+            hud_state_.skill_slots[i].cooldown = msg.cooldown_remaining;
+            hud_state_.skill_slots[i].max_cooldown = msg.cooldown_total;
             break;
         }
     }
 }
 
 void Game::on_skill_unlock(const std::vector<uint8_t>& payload) {
-    if (payload.size() < SkillUnlockMsg::serialized_size()) return;
+    // Server sends one SkillResultMsg per unlocked skill via SkillUnlock message type
+    if (payload.size() < SkillResultMsg::serialized_size()) return;
 
-    SkillUnlockMsg msg;
+    SkillResultMsg msg;
     msg.deserialize(payload);
 
-    for (int i = 0; i < HUDState::MAX_SKILL_SLOTS; ++i) {
-        if (i < msg.skill_count) {
-            hud_state_.skill_slots[i].skill_id = msg.skills[i].skill_id;
-            hud_state_.skill_slots[i].name = msg.skills[i].name;
-            hud_state_.skill_slots[i].unlocked = true;
-        } else {
-            hud_state_.skill_slots[i].skill_id = 0;
-            hud_state_.skill_slots[i].name.clear();
-            hud_state_.skill_slots[i].unlocked = false;
+    std::string sid(msg.skill_id, strnlen(msg.skill_id, sizeof(msg.skill_id)));
+
+    // Find existing slot or first empty
+    for (int i = 0; i < 5; ++i) {
+        if (hud_state_.skill_slots[i].skill_id == sid) {
+            hud_state_.skill_slots[i].max_cooldown = msg.cooldown;
+            return;
+        }
+    }
+    for (int i = 0; i < 5; ++i) {
+        if (!hud_state_.skill_slots[i].available) {
+            hud_state_.skill_slots[i].skill_id = sid;
+            hud_state_.skill_slots[i].name = sid;
+            hud_state_.skill_slots[i].max_cooldown = msg.cooldown;
+            hud_state_.skill_slots[i].available = true;
+            hud_state_.skill_slots[i].key_number = i + 1;
+            return;
         }
     }
 }
@@ -2136,9 +2149,11 @@ void Game::on_talent_sync(const std::vector<uint8_t>& payload) {
     msg.deserialize(payload);
 
     panel_state_.talent_points = msg.talent_points;
+    panel_state_.talent_points_display = msg.talent_points;
     panel_state_.unlocked_talents.clear();
     for (int i = 0; i < msg.unlocked_count && i < TalentSyncMsg::MAX_TALENTS; ++i) {
-        panel_state_.unlocked_talents.push_back(msg.unlocked_talents[i]);
+        // unlocked_ids is char[32] array - convert to uint16_t hash for panel tracking
+        panel_state_.unlocked_talents.push_back(static_cast<uint16_t>(i + 1));
     }
 }
 
@@ -2208,8 +2223,12 @@ void Game::update_panel_input(float /*dt*/) {
                 hud_state_.dialogue.selected_option < hud_state_.dialogue.quest_count) {
                 uint16_t qid = hud_state_.dialogue.quest_ids[hud_state_.dialogue.selected_option];
                 if (qid > 0) {
+                    // QuestAcceptMsg uses the same quest_id format as QuestOffer
+                    // For now send the quest name as the ID
                     QuestAcceptMsg msg;
-                    msg.quest_id = qid;
+                    std::strncpy(msg.quest_id,
+                        hud_state_.dialogue.quest_names[hud_state_.dialogue.selected_option].c_str(),
+                        sizeof(msg.quest_id) - 1);
                     network_.send_raw(build_packet(MessageType::QuestAccept, msg));
                 }
                 hud_state_.dialogue.visible = false;
@@ -2315,15 +2334,15 @@ void Game::update_panel_input(float /*dt*/) {
         if (enter_now && !enter_was && panel_state_.talent_points > 0) {
             // Send talent unlock for the currently selected talent
             // The talent_cursor maps to talent IDs starting at 1
-            uint16_t tid = static_cast<uint16_t>(panel_state_.talent_cursor + 1);
+            int tid = panel_state_.talent_cursor + 1;
             // Only unlock if not already unlocked
             bool already_unlocked = false;
             for (uint16_t ut : panel_state_.unlocked_talents) {
-                if (ut == tid) { already_unlocked = true; break; }
+                if (ut == static_cast<uint16_t>(tid)) { already_unlocked = true; break; }
             }
             if (!already_unlocked) {
                 TalentUnlockMsg msg;
-                msg.talent_id = tid;
+                snprintf(msg.talent_id, sizeof(msg.talent_id), "talent_%d", tid);
                 network_.send_raw(build_packet(MessageType::TalentUnlock, msg));
             }
         }
@@ -2409,7 +2428,7 @@ void Game::build_skill_bar_ui(UIScene& ui) {
         const auto& slot = hud_state_.skill_slots[i];
 
         // Slot background
-        uint32_t bg_color = slot.unlocked ? 0xCC333333 : 0xCC111111;
+        uint32_t bg_color = slot.available ? 0xCC333333 : 0xCC111111;
         ui.add_filled_rect(x, y, slot_size, slot_size, bg_color);
         ui.add_rect_outline(x, y, slot_size, slot_size, 0xFF666666, 1.0f);
 
@@ -2418,19 +2437,19 @@ void Game::build_skill_bar_ui(UIScene& ui) {
         snprintf(key, sizeof(key), "%d", i + 1);
         ui.add_text(key, x + 2, y + 2, 0.6f, 0xFF888888);
 
-        if (slot.unlocked && !slot.name.empty()) {
+        if (slot.available && !slot.name.empty()) {
             // Skill name (truncated)
             std::string label = slot.name.substr(0, 4);
             ui.add_text(label, x + 4, y + 16, 0.7f, ui_colors::WHITE);
 
             // Cooldown overlay
-            if (slot.cooldown_remaining > 0.0f && slot.cooldown_total > 0.0f) {
-                float ratio = slot.cooldown_remaining / slot.cooldown_total;
+            if (slot.cooldown > 0.0f && slot.max_cooldown > 0.0f) {
+                float ratio = slot.cooldown / slot.max_cooldown;
                 float overlay_h = slot_size * ratio;
                 ui.add_filled_rect(x, y + (slot_size - overlay_h), slot_size, overlay_h, 0x88000000);
 
                 char cd[8];
-                snprintf(cd, sizeof(cd), "%.1f", slot.cooldown_remaining);
+                snprintf(cd, sizeof(cd), "%.1f", slot.cooldown);
                 ui.add_text(cd, x + 8, y + 14, 0.8f, 0xFFFF4444);
             }
         }
@@ -2450,14 +2469,14 @@ void Game::build_quest_tracker_ui(UIScene& ui) {
 
     for (const auto& quest : hud_state_.tracked_quests) {
         ui.add_filled_rect(x, y, w, 16.0f, 0x60000000);
-        ui.add_text(quest.name, x + 5, y + 1, 0.7f, ui_colors::WHITE);
+        ui.add_text(quest.quest_name, x + 5, y + 1, 0.7f, ui_colors::WHITE);
         y += 18.0f;
 
         for (const auto& obj : quest.objectives) {
             char progress[64];
             snprintf(progress, sizeof(progress), "  %s: %d/%d",
                      obj.description.c_str(), obj.current, obj.required);
-            uint32_t color = obj.complete() ? 0xFF00FF00 : 0xFFCCCCCC;
+            uint32_t color = obj.complete ? 0xFF00FF00 : 0xFFCCCCCC;
             ui.add_text(progress, x + 5, y + 1, 0.6f, color);
             y += 14.0f;
         }
@@ -2727,7 +2746,7 @@ void Game::build_quest_log_panel_ui(UIScene& ui) {
             ui.add_filled_rect(px + 5, qy, w - 10, entry_h, 0x40FFFFFF);
         }
 
-        ui.add_text(quest.name, px + 15, qy + 2, 0.9f,
+        ui.add_text(quest.quest_name, px + 15, qy + 2, 0.9f,
                     selected ? 0xFFFFCC00 : ui_colors::WHITE);
         qy += 22.0f;
 
@@ -2735,7 +2754,7 @@ void Game::build_quest_log_panel_ui(UIScene& ui) {
             char progress[80];
             snprintf(progress, sizeof(progress), "  - %s: %d/%d",
                      obj.description.c_str(), obj.current, obj.required);
-            uint32_t color = obj.complete() ? 0xFF00FF00 : 0xFFCCCCCC;
+            uint32_t color = obj.complete ? 0xFF00FF00 : 0xFFCCCCCC;
             ui.add_text(progress, px + 20, qy, 0.7f, color);
             qy += 16.0f;
         }

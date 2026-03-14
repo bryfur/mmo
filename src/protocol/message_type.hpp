@@ -47,31 +47,32 @@ enum class MessageType : uint8_t {
     GoldChange = 52,          // Gold amount changed
 
     // Inventory messages
-    InventoryUpdate = 55,     // Full inventory sync
+    InventoryUpdate = 55,     // Server -> client: full inventory sync
     LootDrop = 56,            // Item(s) dropped from monster kill
-    ItemEquip = 57,           // Client equips an item
-    ItemUnequip = 58,         // Client unequips an item
+    ItemEquip = 57,           // Client -> server: equip item
+    ItemUnequip = 58,         // Client -> server: unequip item
+    ItemUse = 59,             // Client -> server: use consumable
 
     // Quest messages
     QuestOffer = 60,          // Server offers a quest to client
-    QuestAccept = 61,         // Client accepts a quest
-    QuestProgress = 62,       // Server updates quest objective progress
-    QuestComplete = 63,       // Server notifies quest completion
+    QuestAccept = 61,         // Client -> server: accept quest
+    QuestProgress = 62,       // Server -> client: objective progress
+    QuestComplete = 63,       // Server -> client: quest completed
     QuestTurnIn = 64,         // Client turns in completed quest
     QuestList = 65,           // Server sends available quests for an NPC
 
     // Skill messages
-    SkillUse = 70,            // Client requests skill use
-    SkillCooldown = 71,       // Server sends cooldown update
-    SkillUnlock = 72,         // Server notifies skill unlock
+    SkillUse = 70,            // Client -> server: use skill
+    SkillCooldown = 71,       // Server -> client: skill cooldown update
+    SkillUnlock = 72,         // Server -> client: unlocked skills sync
 
     // Talent messages
-    TalentUnlock = 75,        // Client requests talent unlock
-    TalentSync = 76,          // Server sends talent state
+    TalentUnlock = 75,        // Client -> server: unlock talent
+    TalentSync = 76,          // Server -> client: talent state sync
 
     // NPC interaction
-    NPCInteract = 80,        // Client interacts with NPC
-    NPCDialogue = 81,        // Server sends NPC dialogue
+    NPCInteract = 80,         // Client -> server: interact with NPC
+    NPCDialogue = 81,         // Server -> client: NPC dialogue data
 
     // World events
     ZoneChange = 85,          // Player entered a new zone

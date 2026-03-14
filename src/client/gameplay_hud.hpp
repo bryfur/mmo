@@ -2,6 +2,7 @@
 
 #include "engine/scene/ui_scene.hpp"
 #include "engine/render_constants.hpp"
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <algorithm>
@@ -65,7 +66,69 @@ namespace hud_colors {
 }
 
 // ============================================================================
-// Data structures
+// Data structures (client branch - compact types for network messages)
+// ============================================================================
+
+// Tracked quest objective for the HUD quest tracker
+struct QuestObjective {
+    std::string description;
+    uint16_t current = 0;
+    uint16_t required = 0;
+    bool complete() const { return current >= required; }
+};
+
+// Tracked quest for HUD display
+struct TrackedQuest {
+    uint16_t quest_id = 0;
+    std::string name;
+    std::vector<QuestObjective> objectives;
+};
+
+// Skill bar slot
+struct SkillBarSlot {
+    uint16_t skill_id = 0;
+    std::string name;
+    float cooldown_remaining = 0.0f;
+    float cooldown_total = 0.0f;
+    bool unlocked = false;
+};
+
+// Floating damage number
+struct DamageNumber {
+    float x = 0.0f;
+    float y = 0.0f;
+    float z = 0.0f;
+    float damage = 0.0f;
+    float timer = 0.0f;
+    bool is_heal = false;
+
+    static constexpr float DURATION = 1.5f;
+    float alpha() const { return timer > 0.0f ? timer / DURATION : 0.0f; }
+};
+
+// Notification popup (level-up, quest complete, etc.)
+struct Notification {
+    std::string text;
+    float timer = 0.0f;
+    uint32_t color = 0xFFFFFFFF;
+
+    static constexpr float DURATION = 3.0f;
+};
+
+// NPC dialogue state
+struct NPCDialogueState {
+    bool visible = false;
+    uint32_t npc_id = 0;
+    std::string npc_name;
+    std::string dialogue;
+    uint8_t quest_count = 0;
+    uint16_t quest_ids[4] = {};
+    std::string quest_names[4];
+    int selected_option = 0;
+};
+
+// ============================================================================
+// Data structures (server branch - for HUD rendering)
 // ============================================================================
 
 struct SkillSlot {
@@ -100,14 +163,32 @@ struct HUDState {
     int xp = 0;
     int xp_to_next_level = 100;
     int gold = 0;
+    float health = 100.0f;
+    float max_health = 100.0f;
     float mana = 100.0f;
     float max_mana = 100.0f;
 
-    // Skills
+    // Skills (server branch)
     SkillSlot skill_slots[5] = {};
 
-    // Quest tracker
+    // Skill bar (client branch - up to 8 slots)
+    static constexpr int MAX_SKILL_SLOTS = 8;
+    SkillBarSlot skill_bar_slots[MAX_SKILL_SLOTS] = {};
+
+    // Quest tracker (server branch)
     std::vector<QuestTrackerEntry> tracked_quests;
+
+    // Quest tracker (client branch)
+    std::vector<TrackedQuest> client_tracked_quests;
+
+    // Floating damage numbers
+    std::vector<DamageNumber> damage_numbers;
+
+    // Notifications
+    std::vector<Notification> notifications;
+
+    // NPC dialogue
+    NPCDialogueState dialogue;
 
     // Minimap
     struct MinimapState {
@@ -135,7 +216,7 @@ struct HUDState {
     std::string current_zone = "";
     float zone_display_timer = 0.0f;
 
-    // Notifications
+    // Notifications (server branch)
     float level_up_timer = 0.0f;
     int level_up_level = 0;
 
@@ -617,5 +698,4 @@ inline void build_gameplay_hud(UIScene& ui, const HUDState& hud, float screen_w,
     build_level_up_notification(ui, hud, screen_w, screen_h);
     build_loot_feed(ui, hud, screen_w, screen_h);
 }
-
 } // namespace mmo::client

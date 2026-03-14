@@ -1,12 +1,71 @@
 #pragma once
 
 #include "serializable.hpp"
-
 #include <cstdint>
+#include <cstring>
 
 namespace mmo::protocol {
 
-// Server → Client: XP gained from an action
+// ============================================================================
+// Combat
+// ============================================================================
+
+struct CombatEventMsg : Serializable<CombatEventMsg> {
+    uint32_t attacker_id = 0;
+    uint32_t target_id = 0;
+    float damage = 0.0f;
+    uint8_t is_heal = 0;     // 1 = heal, 0 = damage
+    float target_x = 0.0f;
+    float target_y = 0.0f;
+    float target_z = 0.0f;
+
+    static constexpr size_t serialized_size() {
+        return sizeof(uint32_t) * 2 + sizeof(float) * 4 + sizeof(uint8_t);
+    }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write(attacker_id);
+        w.write(target_id);
+        w.write(damage);
+        w.write(is_heal);
+        w.write(target_x);
+        w.write(target_y);
+        w.write(target_z);
+    }
+
+    void deserialize_impl(BufferReader& r) {
+        attacker_id = r.read<uint32_t>();
+        target_id = r.read<uint32_t>();
+        damage = r.read<float>();
+        is_heal = r.read<uint8_t>();
+        target_x = r.read<float>();
+        target_y = r.read<float>();
+        target_z = r.read<float>();
+    }
+};
+
+struct EntityDeathMsg : Serializable<EntityDeathMsg> {
+    uint32_t entity_id = 0;
+    uint32_t killer_id = 0;
+
+    static constexpr size_t serialized_size() { return sizeof(uint32_t) * 2; }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write(entity_id);
+        w.write(killer_id);
+    }
+
+    void deserialize_impl(BufferReader& r) {
+        entity_id = r.read<uint32_t>();
+        killer_id = r.read<uint32_t>();
+    }
+};
+
+// ============================================================================
+// Progression (server -> client)
+// ============================================================================
+
+// Server -> Client: XP gained from an action
 struct XPGainMsg : Serializable<XPGainMsg> {
     int32_t xp_gained = 0;
     int32_t total_xp = 0;
@@ -32,7 +91,7 @@ struct XPGainMsg : Serializable<XPGainMsg> {
     }
 };
 
-// Server → Client: player leveled up
+// Server -> Client: player leveled up
 struct LevelUpMsg : Serializable<LevelUpMsg> {
     int32_t new_level = 0;
     float new_max_health = 0;
@@ -55,7 +114,7 @@ struct LevelUpMsg : Serializable<LevelUpMsg> {
     }
 };
 
-// Server → Client: gold amount changed
+// Server -> Client: gold amount changed
 struct GoldChangeMsg : Serializable<GoldChangeMsg> {
     int32_t gold_change = 0;  // +/- amount
     int32_t total_gold = 0;
@@ -75,7 +134,7 @@ struct GoldChangeMsg : Serializable<GoldChangeMsg> {
     }
 };
 
-// Server → Client: loot dropped from a kill
+// Server -> Client: loot dropped from a kill
 struct LootDropMsg : Serializable<LootDropMsg> {
     int32_t gold = 0;
     uint8_t item_count = 0;
@@ -113,7 +172,90 @@ struct LootDropMsg : Serializable<LootDropMsg> {
     }
 };
 
-// Server → Client: NPC offers a quest
+// ============================================================================
+// Inventory
+// ============================================================================
+
+struct InventorySlot : Serializable<InventorySlot> {
+    uint16_t item_id = 0;
+    uint16_t count = 0;
+
+    static constexpr size_t serialized_size() { return sizeof(uint16_t) * 2; }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write(item_id);
+        w.write(count);
+    }
+
+    void deserialize_impl(BufferReader& r) {
+        item_id = r.read<uint16_t>();
+        count = r.read<uint16_t>();
+    }
+};
+
+struct InventoryUpdateMsg : Serializable<InventoryUpdateMsg> {
+    static constexpr int MAX_SLOTS = 20;
+    InventorySlot slots[MAX_SLOTS] = {};
+    uint8_t slot_count = 0;
+    uint16_t equipped_weapon = 0;
+    uint16_t equipped_armor = 0;
+
+    static constexpr size_t serialized_size() {
+        return sizeof(uint8_t) + MAX_SLOTS * InventorySlot::serialized_size() +
+               sizeof(uint16_t) * 2;
+    }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write(slot_count);
+        for (int i = 0; i < MAX_SLOTS; ++i) {
+            slots[i].serialize(w);
+        }
+        w.write(equipped_weapon);
+        w.write(equipped_armor);
+    }
+
+    void deserialize_impl(BufferReader& r) {
+        slot_count = r.read<uint8_t>();
+        for (int i = 0; i < MAX_SLOTS; ++i) {
+            slots[i].deserialize(r);
+        }
+        equipped_weapon = r.read<uint16_t>();
+        equipped_armor = r.read<uint16_t>();
+    }
+};
+
+struct ItemEquipMsg : Serializable<ItemEquipMsg> {
+    uint8_t slot_index = 0;  // Inventory slot to equip from
+
+    static constexpr size_t serialized_size() { return sizeof(uint8_t); }
+
+    void serialize_impl(BufferWriter& w) const { w.write(slot_index); }
+    void deserialize_impl(BufferReader& r) { slot_index = r.read<uint8_t>(); }
+};
+
+struct ItemUnequipMsg : Serializable<ItemUnequipMsg> {
+    uint8_t equip_slot = 0;  // 0 = weapon, 1 = armor
+
+    static constexpr size_t serialized_size() { return sizeof(uint8_t); }
+
+    void serialize_impl(BufferWriter& w) const { w.write(equip_slot); }
+    void deserialize_impl(BufferReader& r) { equip_slot = r.read<uint8_t>(); }
+};
+
+struct ItemUseMsg : Serializable<ItemUseMsg> {
+    uint8_t slot_index = 0;
+
+    static constexpr size_t serialized_size() { return sizeof(uint8_t); }
+
+    void serialize_impl(BufferWriter& w) const { w.write(slot_index); }
+    void deserialize_impl(BufferReader& r) { slot_index = r.read<uint8_t>(); }
+};
+
+// ============================================================================
+// Quests
+// ============================================================================
+
+// Server -> Client: NPC offers a quest
 struct QuestOfferMsg : Serializable<QuestOfferMsg> {
     char quest_id[32] = {};
     char quest_name[64] = {};
@@ -174,69 +316,60 @@ struct QuestOfferMsg : Serializable<QuestOfferMsg> {
     }
 };
 
-// Client → Server: accept a quest
-struct QuestAcceptMsg : Serializable<QuestAcceptMsg> {
-    char quest_id[32] = {};
-
-    static constexpr size_t serialized_size() { return 32; }
-
-    void serialize_impl(BufferWriter& w) const {
-        w.write_bytes(quest_id, 32);
-    }
-
-    void deserialize_impl(BufferReader& r) {
-        r.read_bytes(quest_id, 32);
-    }
-};
-
-// Server → Client: quest objective progress update
 struct QuestProgressMsg : Serializable<QuestProgressMsg> {
-    char quest_id[32] = {};
+    uint16_t quest_id = 0;
     uint8_t objective_index = 0;
-    int32_t current = 0;
-    int32_t required = 0;
-    uint8_t complete = 0;
+    uint16_t current_count = 0;
+    uint16_t required_count = 0;
 
     static constexpr size_t serialized_size() {
-        return 32 + sizeof(uint8_t) + 2 * sizeof(int32_t) + sizeof(uint8_t);
+        return sizeof(uint16_t) * 3 + sizeof(uint8_t);
     }
 
     void serialize_impl(BufferWriter& w) const {
-        w.write_bytes(quest_id, 32);
+        w.write(quest_id);
         w.write(objective_index);
-        w.write(current);
-        w.write(required);
-        w.write(complete);
+        w.write(current_count);
+        w.write(required_count);
     }
 
     void deserialize_impl(BufferReader& r) {
-        r.read_bytes(quest_id, 32);
+        quest_id = r.read<uint16_t>();
         objective_index = r.read<uint8_t>();
-        current = r.read<int32_t>();
-        required = r.read<int32_t>();
-        complete = r.read<uint8_t>();
+        current_count = r.read<uint16_t>();
+        required_count = r.read<uint16_t>();
     }
 };
 
-// Server → Client: quest completed notification
 struct QuestCompleteMsg : Serializable<QuestCompleteMsg> {
-    char quest_id[32] = {};
-    char quest_name[64] = {};
+    uint16_t quest_id = 0;
+    char quest_name[32] = {};
 
-    static constexpr size_t serialized_size() { return 32 + 64; }
+    static constexpr size_t serialized_size() {
+        return sizeof(uint16_t) + 32;
+    }
 
     void serialize_impl(BufferWriter& w) const {
-        w.write_bytes(quest_id, 32);
-        w.write_bytes(quest_name, 64);
+        w.write(quest_id);
+        w.write_bytes(quest_name, 32);
     }
 
     void deserialize_impl(BufferReader& r) {
-        r.read_bytes(quest_id, 32);
-        r.read_bytes(quest_name, 64);
+        quest_id = r.read<uint16_t>();
+        r.read_bytes(quest_name, 32);
     }
 };
 
-// Client → Server: turn in a completed quest to NPC
+struct QuestAcceptMsg : Serializable<QuestAcceptMsg> {
+    uint16_t quest_id = 0;
+
+    static constexpr size_t serialized_size() { return sizeof(uint16_t); }
+
+    void serialize_impl(BufferWriter& w) const { w.write(quest_id); }
+    void deserialize_impl(BufferReader& r) { quest_id = r.read<uint16_t>(); }
+};
+
+// Client -> Server: turn in a completed quest to NPC
 struct QuestTurnInMsg : Serializable<QuestTurnInMsg> {
     char quest_id[32] = {};
 
@@ -251,137 +384,180 @@ struct QuestTurnInMsg : Serializable<QuestTurnInMsg> {
     }
 };
 
-// Client → Server: interact with an NPC
-struct NPCInteractMsg : Serializable<NPCInteractMsg> {
-    uint32_t npc_network_id = 0;
+// ============================================================================
+// Skills
+// ============================================================================
 
-    static constexpr size_t serialized_size() { return sizeof(uint32_t); }
-
-    void serialize_impl(BufferWriter& w) const {
-        w.write(npc_network_id);
-    }
-
-    void deserialize_impl(BufferReader& r) {
-        npc_network_id = r.read<uint32_t>();
-    }
-};
-
-// Server → Client: NPC dialogue response
-struct NPCDialogueMsg : Serializable<NPCDialogueMsg> {
-    uint32_t npc_id = 0;
-    char npc_name[32] = {};
-    char dialogue[256] = {};
-    uint8_t quest_count = 0;  // number of available quests (sent as QuestOfferMsgs)
-
-    static constexpr size_t serialized_size() {
-        return sizeof(uint32_t) + 32 + 256 + sizeof(uint8_t);
-    }
-
-    void serialize_impl(BufferWriter& w) const {
-        w.write(npc_id);
-        w.write_bytes(npc_name, 32);
-        w.write_bytes(dialogue, 256);
-        w.write(quest_count);
-    }
-
-    void deserialize_impl(BufferReader& r) {
-        npc_id = r.read<uint32_t>();
-        r.read_bytes(npc_name, 32);
-        r.read_bytes(dialogue, 256);
-        quest_count = r.read<uint8_t>();
-    }
-};
-
-// Client → Server: use a skill
 struct SkillUseMsg : Serializable<SkillUseMsg> {
-    char skill_id[32] = {};
-    float dir_x = 0;
-    float dir_z = 0;
+    uint16_t skill_id = 0;
+
+    static constexpr size_t serialized_size() { return sizeof(uint16_t); }
+
+    void serialize_impl(BufferWriter& w) const { w.write(skill_id); }
+    void deserialize_impl(BufferReader& r) { skill_id = r.read<uint16_t>(); }
+};
+
+struct SkillCooldownMsg : Serializable<SkillCooldownMsg> {
+    uint16_t skill_id = 0;
+    float cooldown_remaining = 0.0f;
+    float cooldown_total = 0.0f;
 
     static constexpr size_t serialized_size() {
-        return 32 + 2 * sizeof(float);
+        return sizeof(uint16_t) + sizeof(float) * 2;
     }
 
     void serialize_impl(BufferWriter& w) const {
-        w.write_bytes(skill_id, 32);
-        w.write(dir_x);
-        w.write(dir_z);
+        w.write(skill_id);
+        w.write(cooldown_remaining);
+        w.write(cooldown_total);
     }
 
     void deserialize_impl(BufferReader& r) {
-        r.read_bytes(skill_id, 32);
-        dir_x = r.read<float>();
-        dir_z = r.read<float>();
+        skill_id = r.read<uint16_t>();
+        cooldown_remaining = r.read<float>();
+        cooldown_total = r.read<float>();
     }
 };
 
-// Server → Client: skill cooldown/result update
-struct SkillResultMsg : Serializable<SkillResultMsg> {
-    char skill_id[32] = {};
-    float cooldown = 0;
-    uint8_t success = 0;
+struct SkillSlotInfo : Serializable<SkillSlotInfo> {
+    uint16_t skill_id = 0;
+    char name[16] = {};
+
+    static constexpr size_t serialized_size() { return sizeof(uint16_t) + 16; }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write(skill_id);
+        w.write_bytes(name, 16);
+    }
+
+    void deserialize_impl(BufferReader& r) {
+        skill_id = r.read<uint16_t>();
+        r.read_bytes(name, 16);
+    }
+};
+
+struct SkillUnlockMsg : Serializable<SkillUnlockMsg> {
+    static constexpr int MAX_SKILLS = 8;
+    uint8_t skill_count = 0;
+    SkillSlotInfo skills[MAX_SKILLS] = {};
 
     static constexpr size_t serialized_size() {
-        return 32 + sizeof(float) + sizeof(uint8_t);
+        return sizeof(uint8_t) + MAX_SKILLS * SkillSlotInfo::serialized_size();
     }
 
     void serialize_impl(BufferWriter& w) const {
-        w.write_bytes(skill_id, 32);
-        w.write(cooldown);
-        w.write(success);
+        w.write(skill_count);
+        for (int i = 0; i < MAX_SKILLS; ++i) {
+            skills[i].serialize(w);
+        }
     }
 
     void deserialize_impl(BufferReader& r) {
-        r.read_bytes(skill_id, 32);
-        cooldown = r.read<float>();
-        success = r.read<uint8_t>();
+        skill_count = r.read<uint8_t>();
+        for (int i = 0; i < MAX_SKILLS; ++i) {
+            skills[i].deserialize(r);
+        }
     }
 };
 
-// Client → Server: unlock a talent
+// ============================================================================
+// Talents
+// ============================================================================
+
 struct TalentUnlockMsg : Serializable<TalentUnlockMsg> {
-    char talent_id[32] = {};
+    uint16_t talent_id = 0;
 
-    static constexpr size_t serialized_size() { return 32; }
+    static constexpr size_t serialized_size() { return sizeof(uint16_t); }
 
-    void serialize_impl(BufferWriter& w) const {
-        w.write_bytes(talent_id, 32);
-    }
-
-    void deserialize_impl(BufferReader& r) {
-        r.read_bytes(talent_id, 32);
-    }
+    void serialize_impl(BufferWriter& w) const { w.write(talent_id); }
+    void deserialize_impl(BufferReader& r) { talent_id = r.read<uint16_t>(); }
 };
 
-// Server → Client: full talent state sync
 struct TalentSyncMsg : Serializable<TalentSyncMsg> {
-    int32_t talent_points = 0;
+    static constexpr int MAX_TALENTS = 16;
+    uint8_t talent_points = 0;
     uint8_t unlocked_count = 0;
-    static constexpr int MAX_TALENTS = 18;
-    char unlocked_ids[MAX_TALENTS][32] = {};
+    uint16_t unlocked_talents[MAX_TALENTS] = {};
 
     static constexpr size_t serialized_size() {
-        return sizeof(int32_t) + sizeof(uint8_t) + MAX_TALENTS * 32;
+        return sizeof(uint8_t) * 2 + MAX_TALENTS * sizeof(uint16_t);
     }
 
     void serialize_impl(BufferWriter& w) const {
         w.write(talent_points);
         w.write(unlocked_count);
         for (int i = 0; i < MAX_TALENTS; ++i) {
-            w.write_bytes(unlocked_ids[i], 32);
+            w.write(unlocked_talents[i]);
         }
     }
 
     void deserialize_impl(BufferReader& r) {
-        talent_points = r.read<int32_t>();
+        talent_points = r.read<uint8_t>();
         unlocked_count = r.read<uint8_t>();
         for (int i = 0; i < MAX_TALENTS; ++i) {
-            r.read_bytes(unlocked_ids[i], 32);
+            unlocked_talents[i] = r.read<uint16_t>();
         }
     }
 };
 
-// Server → Client: player entered a new zone
+// ============================================================================
+// NPC Dialogue
+// ============================================================================
+
+struct NPCInteractMsg : Serializable<NPCInteractMsg> {
+    uint32_t npc_id = 0;
+
+    static constexpr size_t serialized_size() { return sizeof(uint32_t); }
+
+    void serialize_impl(BufferWriter& w) const { w.write(npc_id); }
+    void deserialize_impl(BufferReader& r) { npc_id = r.read<uint32_t>(); }
+};
+
+struct NPCDialogueMsg : Serializable<NPCDialogueMsg> {
+    uint32_t npc_id = 0;
+    char npc_name[32] = {};
+    char dialogue[128] = {};
+    uint8_t quest_count = 0;       // Number of quests this NPC offers
+    uint16_t quest_ids[4] = {};    // Up to 4 quest IDs offered
+    char quest_names[4][32] = {};  // Quest names
+
+    static constexpr size_t serialized_size() {
+        return sizeof(uint32_t) + 32 + 128 + sizeof(uint8_t) +
+               4 * sizeof(uint16_t) + 4 * 32;
+    }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write(npc_id);
+        w.write_bytes(npc_name, 32);
+        w.write_bytes(dialogue, 128);
+        w.write(quest_count);
+        for (int i = 0; i < 4; ++i) {
+            w.write(quest_ids[i]);
+        }
+        for (int i = 0; i < 4; ++i) {
+            w.write_bytes(quest_names[i], 32);
+        }
+    }
+
+    void deserialize_impl(BufferReader& r) {
+        npc_id = r.read<uint32_t>();
+        r.read_bytes(npc_name, 32);
+        r.read_bytes(dialogue, 128);
+        quest_count = r.read<uint8_t>();
+        for (int i = 0; i < 4; ++i) {
+            quest_ids[i] = r.read<uint16_t>();
+        }
+        for (int i = 0; i < 4; ++i) {
+            r.read_bytes(quest_names[i], 32);
+        }
+    }
+};
+
+// ============================================================================
+// Zone
+// ============================================================================
+
+// Server -> Client: player entered a new zone
 struct ZoneChangeMsg : Serializable<ZoneChangeMsg> {
     char zone_name[64] = {};
 

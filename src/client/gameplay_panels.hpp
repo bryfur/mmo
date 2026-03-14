@@ -2,6 +2,7 @@
 
 #include "engine/scene/ui_scene.hpp"
 #include "engine/render_constants.hpp"
+#include <cstdint>
 #include <string>
 #include <vector>
 #include <cstdio>
@@ -10,7 +11,54 @@
 namespace mmo::client {
 
 // ============================================================================
-// Data structures
+// Data structures (client branch - compact types for network/panel state)
+// ============================================================================
+
+// Item data for inventory display
+struct ItemSlot {
+    uint16_t item_id = 0;
+    uint16_t count = 0;
+    bool empty() const { return item_id == 0; }
+};
+
+// Simple item name lookup (client-side, by item_id)
+inline const char* item_name(uint16_t id) {
+    switch (id) {
+        case 1: return "Iron Sword";
+        case 2: return "Steel Sword";
+        case 3: return "Leather Armor";
+        case 4: return "Chain Mail";
+        case 5: return "Health Potion";
+        case 6: return "Mana Potion";
+        case 7: return "Wolf Pelt";
+        case 8: return "Boar Tusk";
+        case 9: return "Spider Silk";
+        case 10: return "Goblin Ear";
+        default: return "Unknown Item";
+    }
+}
+
+// Which panel is currently open (only one at a time)
+enum class ActivePanel : uint8_t {
+    None = 0,
+    Inventory,
+    Talents,
+    QuestLog,
+};
+
+// Talent node for display
+struct TalentNode {
+    uint16_t talent_id = 0;
+    std::string name;
+    std::string description;
+    bool unlocked = false;
+    bool available = false;   // Has prerequisites met
+    int row = 0;
+    int col = 0;
+};
+
+// ============================================================================
+// Data structures (server branch - for panel rendering)
 // ============================================================================
 
 struct InventorySlotDisplay {
@@ -59,7 +107,12 @@ struct MapQuestMarker {
     bool complete = false;
 };
 
+// Panel state for all gameplay panels (combined from both branches)
 struct PanelState {
+    // Client branch panel switching
+    ActivePanel active_panel = ActivePanel::None;
+
+    // Server branch panel toggles
     bool inventory_open = false;
     bool quest_log_open = false;
     bool talent_tree_open = false;
@@ -69,24 +122,48 @@ struct PanelState {
     int quest_log_selected = 0;
     int talent_selected = -1;
 
-    // Inventory data
-    std::vector<InventorySlotDisplay> inventory_slots;
-    InventorySlotDisplay equipped_weapon;
-    InventorySlotDisplay equipped_armor;
+    // Inventory data (server branch - string-based)
+    std::vector<InventorySlotDisplay> inventory_slots_display;
+    InventorySlotDisplay equipped_weapon_display;
+    InventorySlotDisplay equipped_armor_display;
     int gold = 0;
 
-    // Quest data
+    // Inventory data (client branch - compact)
+    static constexpr int MAX_INVENTORY_SLOTS = 20;
+    ItemSlot inventory_slots[MAX_INVENTORY_SLOTS] = {};
+    uint16_t equipped_weapon = 0;
+    uint16_t equipped_armor = 0;
+    int inventory_cursor = 0;
+
+    // Quest data (server branch)
     std::vector<QuestLogEntry> quest_entries;
 
-    // Talent data
+    // Talent data (server branch)
     std::vector<TalentBranchDisplay> talent_branches;
-    int talent_points = 0;
+    int talent_points_display = 0;
+
+    // Talent data (client branch)
+    uint8_t talent_points = 0;
+    std::vector<uint16_t> unlocked_talents;
+    int talent_cursor = 0;
+
+    // Quest log cursor (client branch)
+    int quest_cursor = 0;
 
     // World map data
     std::vector<MapQuestMarker> map_quest_markers;
     float player_x = 0, player_z = 0;
 
-    bool any_panel_open() const { return inventory_open || quest_log_open || talent_tree_open || world_map_open; }
+    bool any_panel_open() const { return inventory_open || quest_log_open || talent_tree_open || world_map_open || active_panel != ActivePanel::None; }
+    bool is_panel_open() const { return active_panel != ActivePanel::None || any_panel_open(); }
+
+    void toggle_panel(ActivePanel panel) {
+        if (active_panel == panel) {
+            active_panel = ActivePanel::None;
+        } else {
+            active_panel = panel;
+        }
+    }
 
     void toggle_inventory() {
         inventory_open = !inventory_open;
@@ -104,7 +181,7 @@ struct PanelState {
         world_map_open = !world_map_open;
         if (world_map_open) { inventory_open = false; quest_log_open = false; talent_tree_open = false; }
     }
-    void close_all() { inventory_open = false; quest_log_open = false; talent_tree_open = false; world_map_open = false; }
+    void close_all() { inventory_open = false; quest_log_open = false; talent_tree_open = false; world_map_open = false; active_panel = ActivePanel::None; }
 };
 
 // ============================================================================
@@ -158,8 +235,8 @@ inline void build_inventory_panel(engine::scene::UIScene& ui, const PanelState& 
             // Slot background
             ui.add_filled_rect(sx, sy, SLOT, SLOT, 0xCC111111);
 
-            if (idx < static_cast<int>(state.inventory_slots.size())) {
-                const auto& slot = state.inventory_slots[idx];
+            if (idx < static_cast<int>(state.inventory_slots_display.size())) {
+                const auto& slot = state.inventory_slots_display[idx];
                 if (!slot.item_id.empty()) {
                     // Rarity border
                     ui.add_rect_outline(sx, sy, SLOT, SLOT, rarity_color(slot.rarity), 2.0f);
@@ -199,10 +276,10 @@ inline void build_inventory_panel(engine::scene::UIScene& ui, const PanelState& 
     // Weapon slot
     ui.add_text("Weapon", px + 20.0f, eq_label_y, 0.7f, TEXT_DIM);
     ui.add_filled_rect(px + 20.0f, eq_slot_y, EQ_SLOT_W, EQ_SLOT_H, 0xCC111111);
-    if (!state.equipped_weapon.item_id.empty()) {
+    if (!state.equipped_weapon_display.item_id.empty()) {
         ui.add_rect_outline(px + 20.0f, eq_slot_y, EQ_SLOT_W, EQ_SLOT_H,
-                            rarity_color(state.equipped_weapon.rarity), 2.0f);
-        ui.add_text(state.equipped_weapon.item_name, px + 28.0f, eq_slot_y + 12.0f, 0.7f, WHITE);
+                            rarity_color(state.equipped_weapon_display.rarity), 2.0f);
+        ui.add_text(state.equipped_weapon_display.item_name, px + 28.0f, eq_slot_y + 12.0f, 0.7f, WHITE);
     } else {
         ui.add_rect_outline(px + 20.0f, eq_slot_y, EQ_SLOT_W, EQ_SLOT_H, 0xFF333333, 1.0f);
         ui.add_text("Empty", px + 70.0f, eq_slot_y + 12.0f, 0.7f, TEXT_HINT);
@@ -212,10 +289,10 @@ inline void build_inventory_panel(engine::scene::UIScene& ui, const PanelState& 
     const float armor_x = px + PW - 20.0f - EQ_SLOT_W;
     ui.add_text("Armor", armor_x, eq_label_y, 0.7f, TEXT_DIM);
     ui.add_filled_rect(armor_x, eq_slot_y, EQ_SLOT_W, EQ_SLOT_H, 0xCC111111);
-    if (!state.equipped_armor.item_id.empty()) {
+    if (!state.equipped_armor_display.item_id.empty()) {
         ui.add_rect_outline(armor_x, eq_slot_y, EQ_SLOT_W, EQ_SLOT_H,
-                            rarity_color(state.equipped_armor.rarity), 2.0f);
-        ui.add_text(state.equipped_armor.item_name, armor_x + 8.0f, eq_slot_y + 12.0f, 0.7f, WHITE);
+                            rarity_color(state.equipped_armor_display.rarity), 2.0f);
+        ui.add_text(state.equipped_armor_display.item_name, armor_x + 8.0f, eq_slot_y + 12.0f, 0.7f, WHITE);
     } else {
         ui.add_rect_outline(armor_x, eq_slot_y, EQ_SLOT_W, EQ_SLOT_H, 0xFF333333, 1.0f);
         ui.add_text("Empty", armor_x + 50.0f, eq_slot_y + 12.0f, 0.7f, TEXT_HINT);
@@ -318,9 +395,9 @@ inline void build_talent_tree_panel(engine::scene::UIScene& ui, const PanelState
 
     // Available points
     char pts_buf[64];
-    snprintf(pts_buf, sizeof(pts_buf), "Points: %d", state.talent_points);
+    snprintf(pts_buf, sizeof(pts_buf), "Points: %d", state.talent_points_display);
     ui.add_text(pts_buf, px + PW - 110.0f, py + 10.0f, 0.8f,
-                state.talent_points > 0 ? 0xFF00FF00 : TEXT_DIM);
+                state.talent_points_display > 0 ? 0xFF00FF00 : TEXT_DIM);
 
     // Columns
     const int num_branches = static_cast<int>(state.talent_branches.size());
@@ -587,5 +664,4 @@ inline void build_gameplay_panels(engine::scene::UIScene& ui, const PanelState& 
     if (state.talent_tree_open) build_talent_tree_panel(ui, state, screen_w, screen_h);
     if (state.world_map_open)   build_world_map_panel(ui, state, screen_w, screen_h);
 }
-
 } // namespace mmo::client

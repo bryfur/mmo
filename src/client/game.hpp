@@ -12,6 +12,8 @@
 #include "client/animation_loader.hpp"
 #include "game_state.hpp"
 #include "menu_system.hpp"
+#include "gameplay_hud.hpp"
+#include "gameplay_panels.hpp"
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
 #include <string>
@@ -62,6 +64,32 @@ private:
     void on_entity_update(const std::vector<uint8_t>& payload);
     void on_entity_exit(const std::vector<uint8_t>& payload);
     void apply_delta_to_entity(entt::entity entity, const mmo::protocol::EntityDeltaUpdate& delta);
+
+    // Gameplay message handlers
+    void on_combat_event(const std::vector<uint8_t>& payload);
+    void on_entity_death(const std::vector<uint8_t>& payload);
+    void on_quest_progress(const std::vector<uint8_t>& payload);
+    void on_quest_complete(const std::vector<uint8_t>& payload);
+    void on_inventory_update(const std::vector<uint8_t>& payload);
+    void on_skill_cooldown(const std::vector<uint8_t>& payload);
+    void on_skill_unlock(const std::vector<uint8_t>& payload);
+    void on_talent_sync(const std::vector<uint8_t>& payload);
+    void on_npc_dialogue(const std::vector<uint8_t>& payload);
+
+    // Panel interaction
+    void update_panel_input(float dt);
+    void update_damage_numbers(float dt);
+    void update_notifications(float dt);
+
+    // Panel UI rendering
+    void build_skill_bar_ui(engine::scene::UIScene& ui);
+    void build_quest_tracker_ui(engine::scene::UIScene& ui);
+    void build_notifications_ui(engine::scene::UIScene& ui);
+    void build_damage_numbers_ui(engine::scene::UIScene& ui);
+    void build_dialogue_ui(engine::scene::UIScene& ui);
+    void build_inventory_panel_ui(engine::scene::UIScene& ui);
+    void build_talent_panel_ui(engine::scene::UIScene& ui);
+    void build_quest_log_panel_ui(engine::scene::UIScene& ui);
 
     entt::entity find_or_create_entity(uint32_t network_id);
     void update_entity_from_state(entt::entity entity, const mmo::protocol::NetEntityState& state);
@@ -137,6 +165,11 @@ private:
 
     // Reusable buffers for network message processing (avoids per-frame allocations)
     std::vector<uint32_t> to_remove_buffer_;
+
+    // Gameplay state
+    HUDState hud_state_;
+    PanelState panel_state_;
+    bool player_dead_ = false;
 };
 
 } // namespace mmo::client

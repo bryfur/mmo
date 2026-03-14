@@ -109,7 +109,7 @@ void NetworkClient::disconnect() {
 
 void NetworkClient::send_input(const PlayerInput& input) {
     if (!connected_) return;
-    
+
     auto data = build_packet(MessageType::PlayerInput, input);
     {
         std::lock_guard<std::mutex> lock(write_mutex_);
@@ -118,6 +118,17 @@ void NetworkClient::send_input(const PlayerInput& input) {
             writing_ = true;
             do_write();
         }
+    }
+}
+
+void NetworkClient::send_raw(const std::vector<uint8_t>& packet_data) {
+    if (!connected_) return;
+
+    std::lock_guard<std::mutex> lock(write_mutex_);
+    write_queue_.push(packet_data);
+    if (!writing_) {
+        writing_ = true;
+        do_write();
     }
 }
 

@@ -11,6 +11,8 @@ void update_buffs(entt::registry& registry, float dt) {
     for (auto entity : view) {
         auto& buff_state = view.get<ecs::BuffState>(entity);
 
+        if (buff_state.effects.empty()) continue;
+
         // Process each effect
         for (auto& effect : buff_state.effects) {
             // Decrement duration
@@ -50,10 +52,9 @@ void update_buffs(entt::registry& registry, float dt) {
             buff_state.effects.end()
         );
 
-        // Remove BuffState component if no effects remain
-        if (buff_state.effects.empty()) {
-            registry.remove<ecs::BuffState>(entity);
-        }
+        // Don't remove BuffState component - it's a permanent component on all
+        // entities that can receive effects. Removing it while iterating
+        // invalidates the view iterator.
     }
 }
 
@@ -110,16 +111,12 @@ void remove_effect(entt::registry& registry, entt::entity target, ecs::StatusEff
             [type](const ecs::StatusEffect& e) { return e.type == type; }),
         buff_state.effects.end()
     );
-
-    if (buff_state.effects.empty()) {
-        registry.remove<ecs::BuffState>(target);
-    }
 }
 
 void clear_effects(entt::registry& registry, entt::entity target) {
     if (!registry.valid(target)) return;
     if (registry.all_of<ecs::BuffState>(target)) {
-        registry.remove<ecs::BuffState>(target);
+        registry.get<ecs::BuffState>(target).effects.clear();
     }
 }
 

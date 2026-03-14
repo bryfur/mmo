@@ -1,0 +1,1595 @@
+{
+  "quests": [
+    {
+      "id": "welcome_to_town",
+      "name": "Welcome to Thornwall",
+      "description": "Barthos wants you to get acquainted with the town by visiting the key establishments.",
+      "giver_npc": "Barthos the Innkeeper",
+      "giver_type": "innkeeper",
+      "type": "explore",
+      "requirements": {
+        "min_level": 1,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "visit",
+          "target": "Iron Forge",
+          "location": [4200, 3960],
+          "radius": 80,
+          "count": 1,
+          "description": "Visit the Iron Forge"
+        },
+        {
+          "type": "visit",
+          "target": "General Store",
+          "location": [4140, 4100],
+          "radius": 80,
+          "count": 1,
+          "description": "Visit the General Store"
+        },
+        {
+          "type": "visit",
+          "target": "Guard Tower",
+          "location": [3780, 4120],
+          "radius": 80,
+          "count": 1,
+          "description": "Visit the Guard Tower"
+        }
+      ],
+      "rewards": {
+        "xp": 50,
+        "gold": 25
+      },
+      "dialogue": {
+        "offer": "Welcome, traveler! You look like you just crawled out of the wilds. Let me point you around Thornwall before you get yourself killed. Visit the forge, the general store, and the guard tower -- you will need friends in all three before long.",
+        "progress": "Still finding your way? The town is not that big. Keep looking around.",
+        "complete": "Good, now you know where everything is. Thornwall is small, but it is the only safe place for leagues. You will want to remember that."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "first_blood",
+      "name": "First Blood",
+      "description": "Barthos suggests you prove you can handle yourself in a fight by slaying a few creatures near town.",
+      "giver_npc": "Barthos the Innkeeper",
+      "giver_type": "innkeeper",
+      "type": "kill",
+      "requirements": {
+        "min_level": 1,
+        "prerequisite_quest": "welcome_to_town"
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 3,
+          "description": "Slay 3 creatures outside the safe zone"
+        }
+      ],
+      "rewards": {
+        "xp": 100,
+        "gold": 40
+      },
+      "dialogue": {
+        "offer": "Now that you know your way around, let me give you some honest advice. The wilds beyond our walls are crawling with things that want to eat you. Go out there and put down three of them. If you come back alive, I will know you are worth talking to.",
+        "progress": "Still breathing? Good. Keep at it -- three kills, no fewer.",
+        "complete": "Ha! You have got some fight in you after all. Here, you have earned a drink on the house. Well, not on the house exactly -- here is some coin instead."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "thin_the_herd",
+      "name": "Thin the Herd",
+      "description": "The Guard Captain needs the creature population around town kept under control.",
+      "giver_npc": "Guard Captain",
+      "giver_type": "guard",
+      "type": "kill",
+      "requirements": {
+        "min_level": 1,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 5,
+          "description": "Slay 5 creatures"
+        }
+      ],
+      "rewards": {
+        "xp": 150,
+        "gold": 60
+      },
+      "dialogue": {
+        "offer": "The creatures beyond the walls have been breeding again. My guards can hold the perimeter, but we need someone to push them back. Kill five of them and report back to me.",
+        "progress": "The job is not done yet, soldier. Five kills. I do not accept half-measures.",
+        "complete": "Efficient work. The patrols will have an easier time tonight thanks to you. Take this -- standard bounty for pest control."
+      },
+      "repeatable": true
+    },
+    {
+      "id": "western_menace",
+      "name": "The Western Menace",
+      "description": "Creatures have been spotted dangerously close to town from the west. Investigate and eliminate them.",
+      "giver_npc": "Guard Captain",
+      "giver_type": "guard",
+      "type": "kill",
+      "requirements": {
+        "min_level": 2,
+        "prerequisite_quest": "thin_the_herd"
+      },
+      "objectives": [
+        {
+          "type": "kill_in_area",
+          "target": "npc_enemy",
+          "location": [1500, 3500],
+          "radius": 1500,
+          "count": 3,
+          "description": "Slay 3 creatures in the western wilderness"
+        }
+      ],
+      "rewards": {
+        "xp": 250,
+        "gold": 100
+      },
+      "dialogue": {
+        "offer": "Our western scouts have not reported back in two days. Something is stirring out past the tree line, near the old stone pillars. I need you to head west and clear out whatever is lurking there. The coordinates are roughly 1500 paces west of here.",
+        "progress": "The western threat still stands. Do not come back until you have dealt with it.",
+        "complete": "The scouts finally reported in -- said they saw you carving through those things like a professional. Whatever was rallying them out west has been scattered. Well done."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "northern_expedition",
+      "name": "Northern Expedition",
+      "description": "Reports of dangerous creatures in the far north. The Guard Captain needs a capable fighter to investigate.",
+      "giver_npc": "Guard Captain",
+      "giver_type": "guard",
+      "type": "kill",
+      "requirements": {
+        "min_level": 3,
+        "prerequisite_quest": "western_menace"
+      },
+      "objectives": [
+        {
+          "type": "kill_in_area",
+          "target": "npc_enemy",
+          "location": [6900, 1800],
+          "radius": 2000,
+          "count": 4,
+          "description": "Slay 4 creatures in the northern reaches"
+        },
+        {
+          "type": "explore",
+          "target": "Northern Ridge",
+          "location": [6900, 1800],
+          "radius": 500,
+          "count": 1,
+          "description": "Reach the Northern Ridge"
+        }
+      ],
+      "rewards": {
+        "xp": 400,
+        "gold": 150
+      },
+      "dialogue": {
+        "offer": "There is something far to the north and east that has my veterans spooked. They talk about a ridge where the rocks jut up like broken teeth. I need someone who is not afraid of a long march and a hard fight. Clear the area and get me eyes on that ridge.",
+        "progress": "The north is a long walk. I hope you packed supplies.",
+        "complete": "You made it to the ridge and back. My veterans will stop their grumbling now. What you described up there... it concerns me. But that is a problem for another day. Take your pay."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "the_deep_wild",
+      "name": "Into the Deep Wild",
+      "description": "The Guard Captain suspects something is organizing the creatures. Venture into the far reaches and eliminate the threat.",
+      "giver_npc": "Guard Captain",
+      "giver_type": "guard",
+      "type": "kill",
+      "requirements": {
+        "min_level": 5,
+        "prerequisite_quest": "northern_expedition"
+      },
+      "objectives": [
+        {
+          "type": "kill_in_area",
+          "target": "npc_enemy",
+          "location": [7400, 6100],
+          "radius": 2000,
+          "count": 5,
+          "description": "Slay 5 creatures in the deep eastern wilderness"
+        },
+        {
+          "type": "kill_in_area",
+          "target": "npc_enemy",
+          "location": [2800, 7200],
+          "radius": 2000,
+          "count": 3,
+          "description": "Slay 3 creatures in the southern marshes"
+        }
+      ],
+      "rewards": {
+        "xp": 750,
+        "gold": 300
+      },
+      "dialogue": {
+        "offer": "I have been piecing together the patrol reports, and I do not like the picture. The creatures are not just wandering -- they are converging on two points. One far to the east, another deep south in the marshes. I need you to hit both locations hard. This is the most dangerous mission I have given anyone. Are you ready?",
+        "progress": "Both locations need to be cleared. Do not leave the job half done.",
+        "complete": "Both nests cleared. You have done what a full patrol could not. Whatever is drawing those creatures together, you have set it back. Thornwall owes you a real debt. Take this -- you have earned every coin."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "merchant_samples",
+      "name": "Field Samples",
+      "description": "Elara needs someone to scout several locations for trade route viability.",
+      "giver_npc": "Elara the Merchant",
+      "giver_type": "merchant",
+      "type": "explore",
+      "requirements": {
+        "min_level": 1,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "explore",
+          "target": "Southern Tree Line",
+          "location": [3800, 4850],
+          "radius": 400,
+          "count": 1,
+          "description": "Scout the southern tree line"
+        },
+        {
+          "type": "explore",
+          "target": "Eastern Rock Formation",
+          "location": [5200, 3400],
+          "radius": 400,
+          "count": 1,
+          "description": "Scout the eastern rock formation"
+        }
+      ],
+      "rewards": {
+        "xp": 120,
+        "gold": 75
+      },
+      "dialogue": {
+        "offer": "I have been thinking about expanding my supply lines, but I need to know what is out there. Would you scout a couple of locations for me? I need to know if the southern tree line is passable for carts, and whether the eastern rock formations have anything worth mining. I will pay well for good information.",
+        "progress": "Have you scouted both locations yet? I need the full picture before I can plan my routes.",
+        "complete": "Excellent report. The southern route is promising, and those eastern rocks -- if there is ore in those formations, it could change everything for Thornwall. Here is your payment, and you have my gratitude."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "rare_materials",
+      "name": "Rare Materials",
+      "description": "Elara has heard rumors of valuable resources in the far corners of the world.",
+      "giver_npc": "Elara the Merchant",
+      "giver_type": "merchant",
+      "type": "explore",
+      "requirements": {
+        "min_level": 3,
+        "prerequisite_quest": "merchant_samples"
+      },
+      "objectives": [
+        {
+          "type": "explore",
+          "target": "Crystal Cavern Entrance",
+          "location": [1000, 5800],
+          "radius": 600,
+          "count": 1,
+          "description": "Find the Crystal Cavern entrance in the far southwest"
+        },
+        {
+          "type": "explore",
+          "target": "Ancient Quarry",
+          "location": [5800, 2500],
+          "radius": 600,
+          "count": 1,
+          "description": "Locate the Ancient Quarry to the northeast"
+        },
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 3,
+          "description": "Clear 3 creatures guarding the routes"
+        }
+      ],
+      "rewards": {
+        "xp": 350,
+        "gold": 200
+      },
+      "dialogue": {
+        "offer": "Your scouting work was excellent. Now I have something bigger. Old maps mention a crystal cavern far to the southwest, and a quarry to the northeast where the ancients cut stone for their cities. If either of those still exists, the trade possibilities are enormous. But those areas are deep in the wilds -- you will need to fight your way there.",
+        "progress": "Both sites need to be confirmed. I cannot invest in rumors alone.",
+        "complete": "They are real. Both of them, still intact after all these years. This changes everything, my friend. When the trade routes open, Thornwall will become a proper city. You will be remembered for this. Here -- a generous finder's fee."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "supply_run",
+      "name": "Supply Run",
+      "description": "Elara needs someone to check on a supply cache she left outside town.",
+      "giver_npc": "Elara the Merchant",
+      "giver_type": "merchant",
+      "type": "explore",
+      "requirements": {
+        "min_level": 1,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "explore",
+          "target": "Supply Cache",
+          "location": [4900, 4200],
+          "radius": 300,
+          "count": 1,
+          "description": "Check the supply cache east of town"
+        },
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 2,
+          "description": "Clear any creatures near the cache"
+        }
+      ],
+      "rewards": {
+        "xp": 100,
+        "gold": 50
+      },
+      "dialogue": {
+        "offer": "I left a supply cache east of town near a large boulder. I need someone to check on it -- last time I sent the Farmer he came running back screaming about monsters. Clear anything nasty away from the area and make sure the cache is still intact.",
+        "progress": "Is the cache still there? Please tell me nothing ate my inventory.",
+        "complete": "Cache is intact and the area is clear? Perfect. Those supplies will keep my shelves stocked for another week. Thank you -- take a little something for your trouble."
+      },
+      "repeatable": true
+    },
+    {
+      "id": "arms_and_armor",
+      "name": "Arms and Armor",
+      "description": "Grimhammer needs field-tested materials to improve his smithing.",
+      "giver_npc": "Grimhammer",
+      "giver_type": "blacksmith",
+      "type": "gather",
+      "requirements": {
+        "min_level": 2,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 5,
+          "description": "Collect hides from 5 slain creatures"
+        },
+        {
+          "type": "explore",
+          "target": "Mossy Stone Deposit",
+          "location": [3980, 2575],
+          "radius": 400,
+          "count": 1,
+          "description": "Gather stone samples from the mossy deposit south of town"
+        }
+      ],
+      "rewards": {
+        "xp": 200,
+        "gold": 80
+      },
+      "dialogue": {
+        "offer": "Bah! The materials in this backwater are barely fit for horseshoes. I need creature hides for leather working and stone samples from a deposit I spotted south of here -- mossy rocks, hard to miss. Bring me both and I will make it worth your while. And do not bring me anything chewed on.",
+        "progress": "I need those hides AND the stone samples. One without the other is useless to me.",
+        "complete": "Now THIS is something I can work with. The hide quality is decent, and this stone... it has a good grain to it. Proper smithing requires proper materials. You have done well. Here is your pay."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "the_old_anvil",
+      "name": "The Old Anvil",
+      "description": "Grimhammer has heard of an ancient forge site in the wilderness and wants it investigated.",
+      "giver_npc": "Grimhammer",
+      "giver_type": "blacksmith",
+      "type": "explore",
+      "requirements": {
+        "min_level": 3,
+        "prerequisite_quest": "arms_and_armor"
+      },
+      "objectives": [
+        {
+          "type": "explore",
+          "target": "Ancient Forge Ruins",
+          "location": [3300, 2970],
+          "radius": 500,
+          "count": 1,
+          "description": "Find the ruins of the ancient forge among the stone spires"
+        },
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 4,
+          "description": "Clear 4 creatures nesting in the ruins"
+        }
+      ],
+      "rewards": {
+        "xp": 350,
+        "gold": 175
+      },
+      "dialogue": {
+        "offer": "Listen, I have been studying the markings on that stone you brought me. It was cut, not broken. Someone was forging out there long before Thornwall existed. The old maps show stone spires to the southwest -- I think there was a forge there once. Find it for me. And whatever moved in since the smiths left, put it down.",
+        "progress": "Have you found the old forge yet? Those stone spires should be hard to miss.",
+        "complete": "You found it! And the foundation stones are still intact? Incredible. The ancients knew how to build. The techniques etched into those stones... I have never seen anything like it. This will take my craft to a new level. Worth every coin."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "masterwork_materials",
+      "name": "Masterwork Materials",
+      "description": "Grimhammer needs rare materials from dangerous locations to attempt a masterwork creation.",
+      "giver_npc": "Grimhammer",
+      "giver_type": "blacksmith",
+      "type": "gather",
+      "requirements": {
+        "min_level": 5,
+        "prerequisite_quest": "the_old_anvil"
+      },
+      "objectives": [
+        {
+          "type": "explore",
+          "target": "Iron Vein",
+          "location": [2600, 3490],
+          "radius": 400,
+          "count": 1,
+          "description": "Collect ore from the iron vein in the western rock clusters"
+        },
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 8,
+          "description": "Slay 8 creatures for their hardened bone"
+        },
+        {
+          "type": "explore",
+          "target": "Ember Pool",
+          "location": [100, 1000],
+          "radius": 600,
+          "count": 1,
+          "description": "Collect water from the Ember Pool in the far northwest"
+        }
+      ],
+      "rewards": {
+        "xp": 600,
+        "gold": 350
+      },
+      "dialogue": {
+        "offer": "The techniques from the old forge -- I have been studying them day and night. I can make something extraordinary, but I need extraordinary materials. Raw iron from the western veins. Hardened bone from eight creatures -- the older ones, the tougher ones. And water from a thermal pool the ancients called the Ember Pool, far to the northwest. This will be dangerous. But the blade I forge from these materials will be legendary.",
+        "progress": "I need all three components. Iron, bone, and Ember Pool water. No shortcuts in masterwork smithing.",
+        "complete": "Everything, in perfect condition. You are either very skilled or very lucky, and I suspect it is the former. Stand back -- when I begin this forging, the hammer strikes will ring for a day and a night. You have given me the chance to create something that will outlast us both. Here is your reward, and my respect."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "whispers_in_stone",
+      "name": "Whispers in Stone",
+      "description": "The Wanderer speaks of strange markings on rocks that predate all known settlements.",
+      "giver_npc": "Wanderer",
+      "giver_type": "villager",
+      "type": "explore",
+      "requirements": {
+        "min_level": 2,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "explore",
+          "target": "First Marker Stone",
+          "location": [5175, 3390],
+          "radius": 300,
+          "count": 1,
+          "description": "Examine the mossy rocks east of town"
+        },
+        {
+          "type": "explore",
+          "target": "Second Marker Stone",
+          "location": [2788, 3170],
+          "radius": 300,
+          "count": 1,
+          "description": "Examine the stone spire to the west"
+        }
+      ],
+      "rewards": {
+        "xp": 200,
+        "gold": 100
+      },
+      "dialogue": {
+        "offer": "You have the look of someone who asks questions. Good -- I have too many questions and not enough answers. There are stones in the wilds with markings on them. Not natural cracks, mind you -- deliberate carvings. Someone was here before any of us. I have seen two such stones but I am too old and too slow to study them properly. Will you go look?",
+        "progress": "The stones are not going anywhere, but my patience is. Have you examined them both?",
+        "complete": "You saw them too, then. The spiral pattern, the counting marks... these are not decorative. Someone was keeping records -- or leaving warnings. I need to think on this. Here, take this for your time. I suspect this is only the beginning."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "the_old_roads",
+      "name": "The Old Roads",
+      "description": "The Wanderer believes the marker stones trace a path to something important.",
+      "giver_npc": "Wanderer",
+      "giver_type": "villager",
+      "type": "explore",
+      "requirements": {
+        "min_level": 3,
+        "prerequisite_quest": "whispers_in_stone"
+      },
+      "objectives": [
+        {
+          "type": "explore",
+          "target": "Third Marker",
+          "location": [1477, 3562],
+          "radius": 500,
+          "count": 1,
+          "description": "Find the third marker stone in the far west"
+        },
+        {
+          "type": "explore",
+          "target": "Fourth Marker",
+          "location": [2404, 5341],
+          "radius": 500,
+          "count": 1,
+          "description": "Find the fourth marker stone to the south"
+        },
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 3,
+          "description": "Defeat 3 creatures guarding the marker sites"
+        }
+      ],
+      "rewards": {
+        "xp": 400,
+        "gold": 175
+      },
+      "dialogue": {
+        "offer": "I have been mapping the two stones you found, and the spiral patterns -- they point directions. Like a road made of landmarks. I believe there are at least two more stones further out. One should be far to the west, another to the south. If I am right, these markers trace a path to something the ancients wanted found. Or wanted hidden.",
+        "progress": "The path has more stones. Keep searching -- this is too important to abandon.",
+        "complete": "Four stones, and the pattern is unmistakable now. They form a diamond shape, and at the center... nothing. Yet. But the counting marks increase on each stone. They are counting toward something. Or counting down. I need to study my maps further. This discovery is remarkable -- take this reward and know that you have uncovered something that may change what we know about this land."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "heart_of_the_wilds",
+      "name": "Heart of the Wilds",
+      "description": "The Wanderer has calculated the center point of the ancient markers. Something waits there.",
+      "giver_npc": "Wanderer",
+      "giver_type": "villager",
+      "type": "explore",
+      "requirements": {
+        "min_level": 5,
+        "prerequisite_quest": "the_old_roads"
+      },
+      "objectives": [
+        {
+          "type": "explore",
+          "target": "The Convergence Point",
+          "location": [2800, 4200],
+          "radius": 400,
+          "count": 1,
+          "description": "Reach the convergence point of the ancient markers"
+        },
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 5,
+          "description": "Defeat the creatures drawn to the convergence"
+        }
+      ],
+      "rewards": {
+        "xp": 800,
+        "gold": 400
+      },
+      "dialogue": {
+        "offer": "I have done it. Four markers, four directions, and they all point to one place -- a convergence point west-southwest of town. The counting marks on the stones are definitely a countdown. Whatever the ancients left there, they wanted someone to find it. They also wanted to make sure only someone determined enough would reach it. The wilds around the convergence will be thick with creatures. Are you determined enough?",
+        "progress": "The convergence awaits. I know it is dangerous, but we have come too far to turn back now.",
+        "complete": "You found it. The foundation stones, the circle of carved pillars... this was a meeting place. Maybe a place of power. The ancients gathered here, possibly from settlements we have not yet found. This means Thornwall is not alone -- or at least, it was not always alone. You have rewritten history today, my friend. I do not have enough gold to truly repay you, but take what I have. The knowledge is the real treasure."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "patrol_duty",
+      "name": "Patrol Duty",
+      "description": "Help the Guard Captain maintain the town perimeter by eliminating nearby threats.",
+      "giver_npc": "Guard Captain",
+      "giver_type": "guard",
+      "type": "kill",
+      "requirements": {
+        "min_level": 2,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 8,
+          "description": "Slay 8 creatures"
+        }
+      ],
+      "rewards": {
+        "xp": 200,
+        "gold": 100
+      },
+      "dialogue": {
+        "offer": "I am short on guards today and the perimeter needs sweeping. Eight creatures, no particular direction -- just make the area around Thornwall safer. Standard patrol bounty applies.",
+        "progress": "Eight kills, not seven, not six. I keep count, and so should you.",
+        "complete": "Full patrol complete. The perimeter is holding thanks to you. Same time tomorrow if you are interested -- there is always more work."
+      },
+      "repeatable": true
+    },
+    {
+      "id": "farmers_worry",
+      "name": "The Farmer's Worry",
+      "description": "The Farmer is concerned about creatures threatening the fields outside town.",
+      "giver_npc": "Farmer",
+      "giver_type": "villager",
+      "type": "kill",
+      "requirements": {
+        "min_level": 1,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 3,
+          "description": "Slay 3 creatures near the farmlands"
+        }
+      ],
+      "rewards": {
+        "xp": 80,
+        "gold": 35
+      },
+      "dialogue": {
+        "offer": "I have been trying to work the fields south of the walls, but those blasted creatures keep getting closer. I cannot plant with one hand on a pitchfork. Could you clear a few of them out? I am not asking for miracles -- just three of the beasts gone so I can get a crop in the ground.",
+        "progress": "Are they gone yet? I have seeds that need planting before the season turns.",
+        "complete": "Bless you, friend. I can finally work without looking over my shoulder every ten seconds. It is not much, but take these coins -- a farmer always pays his debts."
+      },
+      "repeatable": true
+    },
+    {
+      "id": "lost_and_found",
+      "name": "Lost and Found",
+      "description": "The Peasant has lost a family heirloom somewhere outside the town walls.",
+      "giver_npc": "Peasant",
+      "giver_type": "villager",
+      "type": "explore",
+      "requirements": {
+        "min_level": 1,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "explore",
+          "target": "Old Campsite",
+          "location": [4500, 4500],
+          "radius": 400,
+          "count": 1,
+          "description": "Search the old campsite southeast of town"
+        }
+      ],
+      "rewards": {
+        "xp": 75,
+        "gold": 30
+      },
+      "dialogue": {
+        "offer": "Please, I need help. My grandmother's pendant -- I dropped it when I fled from a creature last week. I was camped southeast of town, not too far out. I would go myself but... well, you have seen what is out there. Could you search the campsite for me?",
+        "progress": "Did you find the campsite? It should be southeast of the walls, near some scattered trees.",
+        "complete": "You found it! Oh, thank the stars. My grandmother would have haunted me if I had lost this for good. I do not have much, but please take what I can offer. You are a good soul."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "the_distant_spires",
+      "name": "The Distant Spires",
+      "description": "The Wanderer wants to know what lies at the very edges of the known world.",
+      "giver_npc": "Wanderer",
+      "giver_type": "villager",
+      "type": "explore",
+      "requirements": {
+        "min_level": 4,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "explore",
+          "target": "Northwestern Reach",
+          "location": [500, 500],
+          "radius": 800,
+          "count": 1,
+          "description": "Explore the far northwestern corner of the world"
+        },
+        {
+          "type": "explore",
+          "target": "Southeastern Reach",
+          "location": [7500, 7500],
+          "radius": 800,
+          "count": 1,
+          "description": "Explore the far southeastern corner of the world"
+        }
+      ],
+      "rewards": {
+        "xp": 500,
+        "gold": 250
+      },
+      "dialogue": {
+        "offer": "I have wandered far, but never to the very edges. The northwestern wastes and the southeastern reaches -- those are places even I have avoided. But someone should know what is out there. Will you be the first to map the extremes? It is a long journey with no guarantee of safety, but think of the stories you will tell.",
+        "progress": "Both corners of the world, remember. I want the full picture.",
+        "complete": "Both edges of the world, seen by living eyes and returned to tell the tale. Remarkable. What you describe -- the terrain, the silence, the sense of something vast and sleeping -- it matches the old legends perfectly. The world is larger and stranger than any of us knew. Your name belongs on the maps now."
+      },
+      "repeatable": false
+    },
+
+    {
+      "id": "skeleton_scourge",
+      "name": "The Skeleton Scourge",
+      "description": "Undead have been rising in the Whispering Woods. The Guard Captain wants them put down permanently.",
+      "giver_npc": "Guard Captain",
+      "giver_type": "guard",
+      "type": "kill",
+      "requirements": {
+        "min_level": 3,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "skeleton_warrior",
+          "count": 6,
+          "description": "Destroy 6 Skeleton Warriors"
+        }
+      ],
+      "rewards": {
+        "xp": 300,
+        "gold": 120
+      },
+      "dialogue": {
+        "offer": "The dead are walking in the Whispering Woods. I do not know what raised them, but I know they need to be put back down. Skeletons in armor, carrying old weapons -- these were soldiers once. Destroy six of them and bring me peace of mind.",
+        "progress": "Six skeletons, not five. I need to know the threat is contained.",
+        "complete": "Six down. But they keep coming back. We will deal with the source eventually, but for now, you have bought us time. Good work."
+      },
+      "repeatable": true
+    },
+    {
+      "id": "spider_infestation",
+      "name": "Spider Infestation",
+      "description": "Giant spiders have overrun the eastern passages. Farmers cannot reach their outer fields.",
+      "giver_npc": "Farmer",
+      "giver_type": "villager",
+      "type": "kill",
+      "requirements": {
+        "min_level": 4,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "giant_spider",
+          "count": 5,
+          "description": "Slay 5 Giant Spiders"
+        }
+      ],
+      "rewards": {
+        "xp": 350,
+        "gold": 140
+      },
+      "dialogue": {
+        "offer": "The spiders have gotten out of control. My eastern fields are covered in webs thick as rope. I sent my son to check on the crops and he barely made it back -- said the spiders were as big as dogs. Five of them dead should clear a path. Please, my family depends on those fields.",
+        "progress": "Five spiders. My fields are still covered in webs until then.",
+        "complete": "Five down? I can already see the webs thinning. My son is already heading back to check the crops. Thank you -- you have saved my livelihood."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "troll_trouble",
+      "name": "Troll Trouble",
+      "description": "A troll has been spotted near the trade roads. It must be dealt with before it blocks commerce.",
+      "giver_npc": "Elara the Merchant",
+      "giver_type": "merchant",
+      "type": "kill",
+      "requirements": {
+        "min_level": 7,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "troll",
+          "count": 3,
+          "description": "Slay 3 Trolls"
+        }
+      ],
+      "rewards": {
+        "xp": 600,
+        "gold": 275
+      },
+      "dialogue": {
+        "offer": "My caravan drivers refuse to take the marsh route anymore. Three trolls have set up camp right on the road. They are enormous, they regenerate, and they eat horses. I need someone strong enough to put them down. The trade guild will compensate you generously.",
+        "progress": "Three trolls still blocking the road? My business is hemorrhaging gold every day they are there.",
+        "complete": "All three? Outstanding. I will have wagons rolling by morning. The trade guild thanks you, and so does my ledger. Here is your payment -- you have earned every coin."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "golem_cores",
+      "name": "Golem Core Collection",
+      "description": "Grimhammer wants golem cores for his experimental smithing techniques.",
+      "giver_npc": "Grimhammer",
+      "giver_type": "blacksmith",
+      "type": "gather",
+      "requirements": {
+        "min_level": 5,
+        "prerequisite_quest": "arms_and_armor"
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "stone_golem",
+          "count": 4,
+          "description": "Collect cores from 4 Stone Golems"
+        }
+      ],
+      "rewards": {
+        "xp": 450,
+        "gold": 200
+      },
+      "dialogue": {
+        "offer": "I have been studying those golem cores -- the magical stones that animate them. If I can harness that energy in my smithing, I could forge weapons that practically swing themselves. I need four cores. Fresh ones, mind you. The magic fades if they sit too long.",
+        "progress": "Four cores. I cannot start my experiments with fewer.",
+        "complete": "Four cores, still warm with residual magic. Perfect. I can already feel the energy pulsing through them. Give me a few days with these and I will revolutionize weaponsmithing. Here is your payment."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "enchanted_forest_expedition",
+      "name": "Into the Enchanted Forest",
+      "description": "The Wanderer has heard tales of a forest where the trees themselves glow with inner light.",
+      "giver_npc": "Wanderer",
+      "giver_type": "villager",
+      "type": "explore",
+      "requirements": {
+        "min_level": 5,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "explore",
+          "target": "Heart of the Enchanted Forest",
+          "location": [2000, 12000],
+          "radius": 800,
+          "count": 1,
+          "description": "Reach the heart of the Enchanted Forest"
+        },
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 4,
+          "description": "Survive the forest's guardians by slaying 4 creatures"
+        }
+      ],
+      "rewards": {
+        "xp": 500,
+        "gold": 225
+      },
+      "dialogue": {
+        "offer": "There are stories of a forest far to the south where the trees glow like lanterns and the air tastes of honey and iron. Old magic, they say -- the kind that was here before people. I want to know if it is real. Will you find it for me? Be warned: old magic attracts old creatures.",
+        "progress": "The Enchanted Forest is far south. Keep searching.",
+        "complete": "Glowing trees, you say? And the air -- you felt it too? This is genuine old magic, untouched and alive. Whatever force shaped this world left a piece of itself in that forest. Remarkable. Absolutely remarkable."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "crystal_caves_discovery",
+      "name": "The Crystal Caves",
+      "description": "Rumors speak of vast underground caverns filled with living crystals.",
+      "giver_npc": "Elara the Merchant",
+      "giver_type": "merchant",
+      "type": "explore",
+      "requirements": {
+        "min_level": 7,
+        "prerequisite_quest": "rare_materials"
+      },
+      "objectives": [
+        {
+          "type": "explore",
+          "target": "Crystal Cave Entrance",
+          "location": [10000, 14000],
+          "radius": 800,
+          "count": 1,
+          "description": "Locate the entrance to the Crystal Caves"
+        },
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 5,
+          "description": "Clear 5 creatures guarding the cave entrance"
+        }
+      ],
+      "rewards": {
+        "xp": 650,
+        "gold": 300
+      },
+      "dialogue": {
+        "offer": "The old trade maps mention crystal caves far to the southeast of the Ironpeak Foothills. If those caves contain what I think they do, we could supply enchanters across the continent. Find the entrance and clear a path. This could be the biggest trade opportunity in Thornwall's history.",
+        "progress": "The caves must be out there somewhere. Keep looking.",
+        "complete": "You found them. And the crystals -- they grow naturally? This is beyond anything I imagined. We will need to establish a permanent mining operation. The wealth in those caves could fund Thornwall's expansion for generations."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "frozen_north",
+      "name": "The Frozen North",
+      "description": "Something stirs in the frozen tundra beyond the mountains. The Guard Captain wants intelligence.",
+      "giver_npc": "Guard Captain",
+      "giver_type": "guard",
+      "type": "explore",
+      "requirements": {
+        "min_level": 8,
+        "prerequisite_quest": "the_deep_wild"
+      },
+      "objectives": [
+        {
+          "type": "explore",
+          "target": "Frozen Outpost Ruins",
+          "location": [6000, 16000],
+          "radius": 1000,
+          "count": 1,
+          "description": "Find the ruins of the old northern outpost"
+        },
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 6,
+          "description": "Eliminate 6 creatures in the Frozen Tundra"
+        }
+      ],
+      "rewards": {
+        "xp": 900,
+        "gold": 400
+      },
+      "dialogue": {
+        "offer": "My scouts report movement far beyond the mountains -- in the frozen wastes we thought were empty. There was an outpost there once, decades ago, abandoned when the cold became unbearable. I need you to find what remains of it and report on what is moving in those frozen lands. Dress warm.",
+        "progress": "The tundra is vast. Find the old outpost and report back.",
+        "complete": "Trolls and ogres in the ruins? And dire wolves hunting in organized packs? This is worse than I feared. The cold kept them dormant, but something has woken them up. We need to prepare. Your intelligence is invaluable."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "fire_within",
+      "name": "The Fire Within",
+      "description": "Grimhammer seeks fire elemental cores for his ultimate creation.",
+      "giver_npc": "Grimhammer",
+      "giver_type": "blacksmith",
+      "type": "gather",
+      "requirements": {
+        "min_level": 9,
+        "prerequisite_quest": "masterwork_materials"
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "fire_elemental",
+          "count": 5,
+          "description": "Collect elemental cores from 5 Fire Elementals"
+        }
+      ],
+      "rewards": {
+        "xp": 1000,
+        "gold": 500
+      },
+      "dialogue": {
+        "offer": "I have pushed my craft as far as conventional materials allow. But those elemental cores -- the ones from fire elementals -- they contain pure creative energy. The same force that shapes mountains and melts glaciers. I need five of them. Warning: fire elementals do not part with their cores willingly.",
+        "progress": "Five elemental cores. The fire within each one is the key to my ultimate creation.",
+        "complete": "Five cores, blazing with power. I can feel the heat through the tongs. With these, I will forge something that has never existed before -- a weapon that carries the fury of the earth itself. You are a true champion, and I am honored to know you."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "void_incursion",
+      "name": "The Void Incursion",
+      "description": "Void wraiths are spilling into the world through a tear in reality.",
+      "giver_npc": "Guard Captain",
+      "giver_type": "guard",
+      "type": "kill",
+      "requirements": {
+        "min_level": 10,
+        "prerequisite_quest": "frozen_north"
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "void_wraith",
+          "count": 5,
+          "description": "Destroy 5 Void Wraiths"
+        },
+        {
+          "type": "explore",
+          "target": "The Void Rift",
+          "location": [26000, 20000],
+          "radius": 1500,
+          "count": 1,
+          "description": "Investigate the Void Rift"
+        }
+      ],
+      "rewards": {
+        "xp": 1500,
+        "gold": 700
+      },
+      "dialogue": {
+        "offer": "Reports are coming in that reality itself is tearing apart at the far eastern reaches. Creatures from beyond our world -- void wraiths -- are pouring through. If we do not stem the tide, they will eventually reach Thornwall. I need you to go to the Void Rift, destroy five of those abominations, and report on the state of the breach.",
+        "progress": "The void wraiths must be stopped. Five of them, and I need your eyes on the rift itself.",
+        "complete": "A tear in reality itself. I was afraid of this. The void wraiths are not invading -- they are leaking through. Whatever sealed that rift before is failing. We need to find a way to close it permanently, but for now, your work has bought us time."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "hunt_the_basilisk",
+      "name": "The Basilisk's Gaze",
+      "description": "A basilisk has petrified several travelers. Someone needs to end its reign of terror.",
+      "giver_npc": "Guard Captain",
+      "giver_type": "guard",
+      "type": "kill",
+      "requirements": {
+        "min_level": 11,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "basilisk",
+          "count": 3,
+          "description": "Slay 3 Basilisks"
+        }
+      ],
+      "rewards": {
+        "xp": 1200,
+        "gold": 550
+      },
+      "dialogue": {
+        "offer": "Three travelers turned to stone on the Sunken Ruins road. A basilisk -- maybe more than one. Its gaze slows the blood until the victim cannot move, then cannot breathe. Take polished metal, a mirror, anything reflective. And do not look it in the eyes. Kill three of them and the road will be safe again.",
+        "progress": "Three basilisks. Remember, do not meet their gaze directly.",
+        "complete": "Three basilisks dead. The petrified travelers -- they cannot be saved, but at least no one else will join them. You have made the roads safer for everyone. Well done."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "dark_sorcery",
+      "name": "Dark Sorcery",
+      "description": "Dark sorcerers have been spotted performing rituals in the Sunken Ruins.",
+      "giver_npc": "Wanderer",
+      "giver_type": "villager",
+      "type": "kill",
+      "requirements": {
+        "min_level": 11,
+        "prerequisite_quest": "heart_of_the_wilds"
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "dark_sorcerer",
+          "count": 4,
+          "description": "Eliminate 4 Dark Sorcerers"
+        },
+        {
+          "type": "explore",
+          "target": "Ritual Site",
+          "location": [18000, 16000],
+          "radius": 1000,
+          "count": 1,
+          "description": "Investigate their ritual site in the Sunken Ruins"
+        }
+      ],
+      "rewards": {
+        "xp": 1400,
+        "gold": 600
+      },
+      "dialogue": {
+        "offer": "The ancient markers I asked you to find -- someone else is looking for them too. Dark sorcerers, practitioners of forbidden magic. They are performing rituals in the Sunken Ruins, trying to tap into the same power the ancients used. If they succeed, the consequences could be catastrophic. Stop them.",
+        "progress": "The sorcerers must be stopped before their ritual is complete.",
+        "complete": "The ritual site is disrupted and the sorcerers are dead. But what you describe -- the sigils, the channeling circles -- they were close. Dangerously close to unlocking something. We dodged a catastrophe today."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "volcanic_expedition",
+      "name": "Into the Inferno",
+      "description": "The Volcanic Caverns hold secrets that could change everything.",
+      "giver_npc": "Wanderer",
+      "giver_type": "villager",
+      "type": "explore",
+      "requirements": {
+        "min_level": 10,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "explore",
+          "target": "Volcanic Core",
+          "location": [14000, 22000],
+          "radius": 1200,
+          "count": 1,
+          "description": "Reach the heart of the Volcanic Caverns"
+        },
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 6,
+          "description": "Survive by slaying 6 creatures in the caverns"
+        }
+      ],
+      "rewards": {
+        "xp": 1300,
+        "gold": 600
+      },
+      "dialogue": {
+        "offer": "Far to the south, beneath the mountains, the earth bleeds fire. The Volcanic Caverns -- one of the most dangerous places in the known world. But the ancients built something down there. Their greatest works were forged in that heat. I need someone brave enough -- or foolish enough -- to see what remains.",
+        "progress": "The caverns are treacherous. Take supplies and fire resistance if you can find it.",
+        "complete": "You survived the Volcanic Caverns. Few can say that. And what you found there -- an ancient forge, still fed by the earth's own fire. This is where they made the weapons of legend. If we could reactivate it... but that is a task for another day. You have earned your rest."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "wyvern_hunt",
+      "name": "Wyvern Hunt",
+      "description": "Wyverns are attacking caravans. A bounty has been placed on their heads.",
+      "giver_npc": "Elara the Merchant",
+      "giver_type": "merchant",
+      "type": "kill",
+      "requirements": {
+        "min_level": 13,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "wyvern",
+          "count": 4,
+          "description": "Slay 4 Wyverns"
+        }
+      ],
+      "rewards": {
+        "xp": 1800,
+        "gold": 800
+      },
+      "dialogue": {
+        "offer": "I have lost three caravans to wyverns this month. Three! Those flying terrors are costing me more gold than I can afford. The trade guild has authorized a bounty: kill four wyverns and I will pay you more than the caravans were worth. Someone has to clip their wings.",
+        "progress": "Four wyverns. The skies are not safe until they are dead.",
+        "complete": "Four wyverns down. My caravan drivers are celebrating in the streets. The trade routes are open again, and my profits are recovering. Here is the full bounty -- you have earned it and then some."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "lich_threat",
+      "name": "The Lich's Tower",
+      "description": "A powerful lich has established a domain in the Demon Wastes. It must be destroyed.",
+      "giver_npc": "Guard Captain",
+      "giver_type": "guard",
+      "type": "kill",
+      "requirements": {
+        "min_level": 14,
+        "prerequisite_quest": "void_incursion"
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "lich",
+          "count": 3,
+          "description": "Destroy 3 Liches"
+        },
+        {
+          "type": "explore",
+          "target": "Lich Tower Ruins",
+          "location": [24000, 6000],
+          "radius": 1500,
+          "count": 1,
+          "description": "Investigate the source of undead power in the Demon Wastes"
+        }
+      ],
+      "rewards": {
+        "xp": 2200,
+        "gold": 1000
+      },
+      "dialogue": {
+        "offer": "Our scouts report something worse than void wraiths in the Demon Wastes. Liches -- undead sorcerers of terrible power. They are raising armies of the dead and their influence is spreading. If we do not destroy them now, we will face an undead invasion we cannot stop. This is the most dangerous assignment I have ever issued.",
+        "progress": "Three liches and their tower. This is our most critical mission.",
+        "complete": "Three liches destroyed and their tower broken. You have done what armies could not. The undead in the Demon Wastes are already crumbling without their masters. Thornwall is safer today because of you. I salute you."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "dragon_slayer",
+      "name": "Dragon Slayer",
+      "description": "Dragon whelps have grown bold enough to attack outlying settlements. Heroes are needed.",
+      "giver_npc": "Guard Captain",
+      "giver_type": "guard",
+      "type": "kill",
+      "requirements": {
+        "min_level": 15,
+        "prerequisite_quest": "lich_threat"
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "dragon_whelp",
+          "count": 3,
+          "description": "Slay 3 Dragon Whelps"
+        }
+      ],
+      "rewards": {
+        "xp": 3000,
+        "gold": 1500
+      },
+      "dialogue": {
+        "offer": "I never thought I would say these words, but we need a dragon slayer. Three young dragons have been raiding the far settlements. They are young, but do not be fooled -- a dragon whelp is more powerful than anything else you have faced. This is the ultimate test. Are you ready?",
+        "progress": "Three dragon whelps. Each one is a battle for survival.",
+        "complete": "Three dragons dead. Three. Do you understand what you have accomplished? You are the first person in living memory to slay a dragon -- and you killed three. Songs will be written about this. Here is every coin I can authorize. It is not enough, but it is everything we have."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "gem_collector",
+      "name": "Precious Stones",
+      "description": "Grimhammer needs rare gems for a special commission.",
+      "giver_npc": "Grimhammer",
+      "giver_type": "blacksmith",
+      "type": "gather",
+      "requirements": {
+        "min_level": 8,
+        "prerequisite_quest": "golem_cores"
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 10,
+          "description": "Slay creatures that might carry rare gems (10 kills)"
+        }
+      ],
+      "rewards": {
+        "xp": 700,
+        "gold": 350
+      },
+      "dialogue": {
+        "offer": "A nobleman from across the sea wants a gem-encrusted weapon. Rubies, sapphires, emeralds -- I need them all. The creatures in the deeper wilds sometimes carry gemstones in their gullets. Kill enough of them and you will find what I need. Ten should do it.",
+        "progress": "I need more gems. Keep hunting.",
+        "complete": "These are beautiful specimens. The nobleman will be thrilled, and his gold will fund my forge for months. Well done."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "marsh_clearing",
+      "name": "Marsh Clearing",
+      "description": "The Shadewood Marsh needs to be cleared of its most dangerous denizens periodically.",
+      "giver_npc": "Guard Captain",
+      "giver_type": "guard",
+      "type": "kill",
+      "requirements": {
+        "min_level": 5,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "kill_in_area",
+          "target": "npc_enemy",
+          "location": [12000, 7000],
+          "radius": 3500,
+          "count": 6,
+          "description": "Slay 6 creatures in the Shadewood Marsh"
+        }
+      ],
+      "rewards": {
+        "xp": 500,
+        "gold": 200
+      },
+      "dialogue": {
+        "offer": "The Shadewood Marsh needs sweeping. My patrols cannot reach that far, but the creatures there are getting bolder. Head into the marsh and kill six of whatever you find. It is dangerous work, but someone has to do it.",
+        "progress": "Six kills in the marsh. It is a foul place, but the work must be done.",
+        "complete": "The marsh is quieter now. It will not last, but every day of peace is a day our people can work and build. Good job."
+      },
+      "repeatable": true
+    },
+    {
+      "id": "citadel_clearing",
+      "name": "Citadel Sweep",
+      "description": "The corrupted knights in the Fallen Citadel need to be culled regularly.",
+      "giver_npc": "Guard Captain",
+      "giver_type": "guard",
+      "type": "kill",
+      "requirements": {
+        "min_level": 6,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "kill_in_area",
+          "target": "npc_enemy",
+          "location": [16000, 4000],
+          "radius": 3500,
+          "count": 5,
+          "description": "Slay 5 creatures in the Fallen Citadel"
+        }
+      ],
+      "rewards": {
+        "xp": 600,
+        "gold": 250
+      },
+      "dialogue": {
+        "offer": "The Fallen Citadel is a festering wound. Corrupted knights patrol its halls endlessly, and their numbers grow. I need someone to go in and thin them out. Five kills should ease the pressure for now.",
+        "progress": "Five kills in the Citadel. Those corrupted knights are tough, but I believe in you.",
+        "complete": "Five of their number destroyed. The patrols report fewer encounters already. The Citadel will rebuild its forces, but you have given us breathing room."
+      },
+      "repeatable": true
+    },
+    {
+      "id": "herb_gathering",
+      "name": "Medicinal Herbs",
+      "description": "The town healer needs wild herbs from the fields around Thornwall.",
+      "giver_npc": "Peasant",
+      "giver_type": "villager",
+      "type": "gather",
+      "requirements": {
+        "min_level": 1,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 4,
+          "description": "Collect herbs by slaying 4 creatures in herb-rich areas"
+        }
+      ],
+      "rewards": {
+        "xp": 80,
+        "gold": 40
+      },
+      "dialogue": {
+        "offer": "The healer is running low on medicinal herbs. The best ones grow where the creatures roam -- something about the soil being richer there. If you slay a few creatures, you can gather herbs from the areas you clear. Four kills should get us enough for a week's supply.",
+        "progress": "Four creatures cleared, four patches of herbs to gather. Keep going.",
+        "complete": "Perfect. The healer will have enough supplies to keep treating the injured. You have helped more people today than you realize."
+      },
+      "repeatable": true
+    },
+    {
+      "id": "silk_harvest",
+      "name": "Silk Harvest",
+      "description": "Spider silk is needed for the town's weaver.",
+      "giver_npc": "Elara the Merchant",
+      "giver_type": "merchant",
+      "type": "gather",
+      "requirements": {
+        "min_level": 4,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "giant_spider",
+          "count": 6,
+          "description": "Collect silk from 6 Giant Spiders"
+        }
+      ],
+      "rewards": {
+        "xp": 400,
+        "gold": 180
+      },
+      "dialogue": {
+        "offer": "Spider silk is worth its weight in gold to the right buyer. It is stronger than steel wire and lighter than cotton. Kill six giant spiders and harvest their silk. I will pay you handsomely -- the weavers in the capital pay even more handsomely for it.",
+        "progress": "Six spiders. I need the silk from all of them.",
+        "complete": "Six bundles of spider silk. The weaver's guild will be ecstatic. This silk can make armor light enough to dance in but strong enough to stop a blade. Here is your cut of the profits."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "ashen_exploration",
+      "name": "Ashen Expedition",
+      "description": "What caused the ancient cataclysm that created the Ashen Wastes?",
+      "giver_npc": "Wanderer",
+      "giver_type": "villager",
+      "type": "explore",
+      "requirements": {
+        "min_level": 8,
+        "prerequisite_quest": "heart_of_the_wilds"
+      },
+      "objectives": [
+        {
+          "type": "explore",
+          "target": "Cataclysm Crater",
+          "location": [22000, 10000],
+          "radius": 1500,
+          "count": 1,
+          "description": "Reach the center of the Ashen Wastes"
+        },
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 5,
+          "description": "Defeat 5 creatures guarding the ruins"
+        }
+      ],
+      "rewards": {
+        "xp": 1000,
+        "gold": 450
+      },
+      "dialogue": {
+        "offer": "The Ashen Wastes were not always ashen. Something happened there -- a cataclysm so powerful it scorched the land for leagues in every direction. The ancients knew what it was. I need you to find the center of the devastation and look for any surviving records. What destroyed that land could destroy us if it happens again.",
+        "progress": "The center of the Ashen Wastes. Whatever happened, the answer is there.",
+        "complete": "A crater. And in the center, melted stone shaped like a... hand? The ancients did not suffer a natural disaster. They did this to themselves. Some weapon, some spell gone wrong. We must make sure it never happens again."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "elemental_research",
+      "name": "Elemental Research",
+      "description": "The Wanderer seeks to understand the nature of elemental beings.",
+      "giver_npc": "Wanderer",
+      "giver_type": "villager",
+      "type": "kill",
+      "requirements": {
+        "min_level": 9,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "fire_elemental",
+          "count": 4,
+          "description": "Collect residue from 4 Fire Elementals"
+        },
+        {
+          "type": "kill",
+          "target": "stone_golem",
+          "count": 3,
+          "description": "Collect fragments from 3 Stone Golems"
+        }
+      ],
+      "rewards": {
+        "xp": 1100,
+        "gold": 500
+      },
+      "dialogue": {
+        "offer": "The elementals and golems that roam these lands -- they are not natural creatures. They are manifestations of the world's raw energy, given form and purpose. I need samples from both: fire elemental residue and golem fragments. Understanding how they exist could unlock secrets of creation itself.",
+        "progress": "I need samples from both fire elementals and stone golems. They are different expressions of the same fundamental force.",
+        "complete": "Fascinating. The elemental residue and golem fragments share the same underlying magical signature. They come from the same source -- the world itself is alive, and these creatures are its immune system. We are not fighting enemies. We are fighting the land's own defenses."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "ogre_stronghold",
+      "name": "The Ogre Stronghold",
+      "description": "Ogres have fortified a position in the foothills and are raiding trade routes.",
+      "giver_npc": "Guard Captain",
+      "giver_type": "guard",
+      "type": "kill",
+      "requirements": {
+        "min_level": 10,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "ogre",
+          "count": 4,
+          "description": "Destroy 4 Ogres at their stronghold"
+        }
+      ],
+      "rewards": {
+        "xp": 1300,
+        "gold": 600
+      },
+      "dialogue": {
+        "offer": "The ogres have built themselves a fortification -- if you can call a pile of boulders a fortification. They are using it to stage raids on our northern trade routes. Four ogres guard the approach. Clear them out and the stronghold falls apart on its own. Ogres are not architects.",
+        "progress": "Four ogres. They hit hard, so do not let them.",
+        "complete": "The ogre stronghold is broken. Without their heavy hitters, the remaining ogres scattered to the winds. Trade caravans are already moving freely again. Outstanding work."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "harpy_nests",
+      "name": "Harpy Nesting Season",
+      "description": "Harpies are nesting aggressively and attacking anyone who approaches the cliffs.",
+      "giver_npc": "Farmer",
+      "giver_type": "villager",
+      "type": "kill",
+      "requirements": {
+        "min_level": 6,
+        "prerequisite_quest": null
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "harpy",
+          "count": 5,
+          "description": "Drive back 5 Harpies from the nesting grounds"
+        }
+      ],
+      "rewards": {
+        "xp": 550,
+        "gold": 240
+      },
+      "dialogue": {
+        "offer": "The harpies are nesting again, and they get violent during nesting season. They have been swooping down on my livestock -- carried off two goats last week. Five of them killed should push the flock further away from our lands. Just be careful of their claws and that shriek -- it will rattle your teeth.",
+        "progress": "Five harpies. My goats are depending on you.",
+        "complete": "Five harpies down. The rest of the flock is already pulling back from our lands. My livestock can graze in peace again. Thank you -- here is your bounty."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "demon_wastes_recon",
+      "name": "Demon Wastes Reconnaissance",
+      "description": "The Demon Wastes must be scouted before any military operation can proceed.",
+      "giver_npc": "Guard Captain",
+      "giver_type": "guard",
+      "type": "explore",
+      "requirements": {
+        "min_level": 12,
+        "prerequisite_quest": "void_incursion"
+      },
+      "objectives": [
+        {
+          "type": "explore",
+          "target": "Demon Gate Ruins",
+          "location": [24000, 6000],
+          "radius": 1500,
+          "count": 1,
+          "description": "Reach the Demon Gate ruins in the Demon Wastes"
+        },
+        {
+          "type": "kill",
+          "target": "npc_enemy",
+          "count": 8,
+          "description": "Clear 8 creatures in the Demon Wastes"
+        }
+      ],
+      "rewards": {
+        "xp": 1600,
+        "gold": 750
+      },
+      "dialogue": {
+        "offer": "Before we can deal with the threats in the Demon Wastes permanently, I need intelligence. The old maps show ruins there -- something called the Demon Gate. I need you to reach it, map the approaches, and kill anything that gets in your way. Eight kills minimum -- I need to know how thick the enemy presence is.",
+        "progress": "The Demon Wastes are extremely dangerous. Eight kills and the Demon Gate ruins.",
+        "complete": "The Demon Gate is real. And from your description, it is still partially active. This explains why the Demon Wastes are so dangerous -- the barrier between worlds is paper-thin there. This intelligence is critical. We can now plan a proper military response."
+      },
+      "repeatable": false
+    },
+    {
+      "id": "dragon_scale_armor",
+      "name": "Dragon Scale Commission",
+      "description": "Grimhammer can forge legendary armor, but he needs dragon scales.",
+      "giver_npc": "Grimhammer",
+      "giver_type": "blacksmith",
+      "type": "gather",
+      "requirements": {
+        "min_level": 15,
+        "prerequisite_quest": "fire_within"
+      },
+      "objectives": [
+        {
+          "type": "kill",
+          "target": "dragon_whelp",
+          "count": 2,
+          "description": "Collect scales from 2 Dragon Whelps"
+        },
+        {
+          "type": "kill",
+          "target": "wyvern",
+          "count": 3,
+          "description": "Collect scales from 3 Wyverns as supplementary material"
+        }
+      ],
+      "rewards": {
+        "xp": 3500,
+        "gold": 1800
+      },
+      "dialogue": {
+        "offer": "I have dreamed of this my entire career. With the techniques from the old forge and the elemental cores powering my furnace, I can finally forge dragonscale armor. But I need the scales. Two dragon whelps and three wyverns should provide enough material. This will be my masterpiece -- the pinnacle of smithing across all the known lands.",
+        "progress": "Dragon and wyvern scales. This is the most important commission of my life.",
+        "complete": "These scales... they are magnificent. Each one is a work of art by nature itself. It will take me weeks to forge the armor, but when it is done, it will be the finest piece of equipment in existence. You brought me the impossible. I cannot thank you enough."
+      },
+      "repeatable": false
+    }
+  ]
+}

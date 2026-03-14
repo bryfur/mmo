@@ -1,0 +1,379 @@
+{
+  "loot_tables": [
+    {
+      "id": "goblin_scout_loot",
+      "monster_type": "goblin_scout",
+      "gold_min": 1,
+      "gold_max": 5,
+      "drops": [
+        { "item_id": "small_health_potion", "chance": 0.25, "count_min": 1, "count_max": 1 },
+        { "item_id": "monster_fang", "chance": 0.45, "count_min": 1, "count_max": 2 },
+        { "item_id": "tattered_hide", "chance": 0.35, "count_min": 1, "count_max": 2 },
+        { "item_id": "wild_herbs", "chance": 0.20, "count_min": 1, "count_max": 3 },
+        { "item_id": "iron_sword", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "shortbow", "chance": 0.03, "count_min": 1, "count_max": 1 },
+        { "item_id": "rusty_dagger", "chance": 0.06, "count_min": 1, "count_max": 1 },
+        { "item_id": "copper_ring", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "bone_amulet", "chance": 0.04, "count_min": 1, "count_max": 1 }
+      ]
+    },
+    {
+      "id": "forest_imp_loot",
+      "monster_type": "forest_imp",
+      "gold_min": 2,
+      "gold_max": 6,
+      "drops": [
+        { "item_id": "small_health_potion", "chance": 0.30, "count_min": 1, "count_max": 1 },
+        { "item_id": "monster_fang", "chance": 0.40, "count_min": 1, "count_max": 1 },
+        { "item_id": "wild_herbs", "chance": 0.30, "count_min": 1, "count_max": 3 },
+        { "item_id": "rough_wood", "chance": 0.25, "count_min": 1, "count_max": 2 },
+        { "item_id": "wooden_staff", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "cloth_robe", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "apprentice_wand", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "small_mana_potion", "chance": 0.20, "count_min": 1, "count_max": 1 },
+        { "item_id": "enchanted_dust", "chance": 0.10, "count_min": 1, "count_max": 2 }
+      ]
+    },
+    {
+      "id": "bandit_loot",
+      "monster_type": "bandit",
+      "gold_min": 5,
+      "gold_max": 15,
+      "drops": [
+        { "item_id": "small_health_potion", "chance": 0.30, "count_min": 1, "count_max": 2 },
+        { "item_id": "medium_health_potion", "chance": 0.10, "count_min": 1, "count_max": 1 },
+        { "item_id": "monster_fang", "chance": 0.30, "count_min": 1, "count_max": 2 },
+        { "item_id": "tattered_hide", "chance": 0.35, "count_min": 1, "count_max": 3 },
+        { "item_id": "iron_ore", "chance": 0.20, "count_min": 1, "count_max": 2 },
+        { "item_id": "steel_sword", "chance": 0.08, "count_min": 1, "count_max": 1 },
+        { "item_id": "hunters_longbow", "chance": 0.06, "count_min": 1, "count_max": 1 },
+        { "item_id": "reinforced_leather", "chance": 0.07, "count_min": 1, "count_max": 1 },
+        { "item_id": "speed_potion", "chance": 0.08, "count_min": 1, "count_max": 1 },
+        { "item_id": "damage_potion", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "stiletto", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "scroll_of_return", "chance": 0.06, "count_min": 1, "count_max": 1 }
+      ]
+    },
+    {
+      "id": "skeleton_warrior_loot",
+      "monster_type": "skeleton_warrior",
+      "gold_min": 4,
+      "gold_max": 12,
+      "drops": [
+        { "item_id": "small_health_potion", "chance": 0.25, "count_min": 1, "count_max": 1 },
+        { "item_id": "skeleton_bone", "chance": 0.55, "count_min": 1, "count_max": 3 },
+        { "item_id": "iron_ore", "chance": 0.25, "count_min": 1, "count_max": 2 },
+        { "item_id": "iron_sword", "chance": 0.08, "count_min": 1, "count_max": 1 },
+        { "item_id": "iron_mace", "chance": 0.06, "count_min": 1, "count_max": 1 },
+        { "item_id": "iron_helmet", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "wooden_shield", "chance": 0.06, "count_min": 1, "count_max": 1 },
+        { "item_id": "chain_mail", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "enchanted_dust", "chance": 0.12, "count_min": 1, "count_max": 2 }
+      ]
+    },
+    {
+      "id": "dire_wolf_loot",
+      "monster_type": "dire_wolf",
+      "gold_min": 4,
+      "gold_max": 12,
+      "drops": [
+        { "item_id": "small_health_potion", "chance": 0.25, "count_min": 1, "count_max": 1 },
+        { "item_id": "medium_health_potion", "chance": 0.12, "count_min": 1, "count_max": 1 },
+        { "item_id": "monster_fang", "chance": 0.55, "count_min": 1, "count_max": 3 },
+        { "item_id": "tattered_hide", "chance": 0.50, "count_min": 2, "count_max": 4 },
+        { "item_id": "leather_tunic", "chance": 0.06, "count_min": 1, "count_max": 1 },
+        { "item_id": "reinforced_leather", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "blessed_mace", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "leather_boots", "chance": 0.06, "count_min": 1, "count_max": 1 }
+      ]
+    },
+    {
+      "id": "giant_spider_loot",
+      "monster_type": "giant_spider",
+      "gold_min": 3,
+      "gold_max": 10,
+      "drops": [
+        { "item_id": "small_health_potion", "chance": 0.20, "count_min": 1, "count_max": 1 },
+        { "item_id": "spider_silk", "chance": 0.50, "count_min": 1, "count_max": 3 },
+        { "item_id": "monster_fang", "chance": 0.40, "count_min": 1, "count_max": 2 },
+        { "item_id": "antidote", "chance": 0.25, "count_min": 1, "count_max": 2 },
+        { "item_id": "venom_fang_dagger", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "stiletto", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "leather_boots", "chance": 0.05, "count_min": 1, "count_max": 1 }
+      ]
+    },
+    {
+      "id": "stone_golem_loot",
+      "monster_type": "stone_golem",
+      "gold_min": 8,
+      "gold_max": 20,
+      "drops": [
+        { "item_id": "medium_health_potion", "chance": 0.20, "count_min": 1, "count_max": 1 },
+        { "item_id": "iron_ore", "chance": 0.45, "count_min": 2, "count_max": 5 },
+        { "item_id": "golem_core", "chance": 0.30, "count_min": 1, "count_max": 1 },
+        { "item_id": "shadow_crystal", "chance": 0.15, "count_min": 1, "count_max": 1 },
+        { "item_id": "steel_plate", "chance": 0.08, "count_min": 1, "count_max": 1 },
+        { "item_id": "steel_sword", "chance": 0.06, "count_min": 1, "count_max": 1 },
+        { "item_id": "thunderhead_mace", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "crystal_staff", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "damage_potion", "chance": 0.08, "count_min": 1, "count_max": 1 },
+        { "item_id": "raw_emerald", "chance": 0.06, "count_min": 1, "count_max": 1 }
+      ]
+    },
+    {
+      "id": "shadow_stalker_loot",
+      "monster_type": "shadow_stalker",
+      "gold_min": 15,
+      "gold_max": 35,
+      "drops": [
+        { "item_id": "medium_health_potion", "chance": 0.30, "count_min": 1, "count_max": 2 },
+        { "item_id": "large_health_potion", "chance": 0.10, "count_min": 1, "count_max": 1 },
+        { "item_id": "shadow_crystal", "chance": 0.40, "count_min": 1, "count_max": 2 },
+        { "item_id": "corrupted_essence", "chance": 0.15, "count_min": 1, "count_max": 1 },
+        { "item_id": "runic_blade", "chance": 0.06, "count_min": 1, "count_max": 1 },
+        { "item_id": "windpiercer", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "stormbinder_staff", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "shadowstep_armor", "chance": 0.06, "count_min": 1, "count_max": 1 },
+        { "item_id": "arcanist_vestments", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "speed_potion", "chance": 0.12, "count_min": 1, "count_max": 1 },
+        { "item_id": "damage_potion", "chance": 0.10, "count_min": 1, "count_max": 1 },
+        { "item_id": "hood_of_shadows", "chance": 0.05, "count_min": 1, "count_max": 1 }
+      ]
+    },
+    {
+      "id": "harpy_loot",
+      "monster_type": "harpy",
+      "gold_min": 12,
+      "gold_max": 30,
+      "drops": [
+        { "item_id": "medium_health_potion", "chance": 0.25, "count_min": 1, "count_max": 1 },
+        { "item_id": "monster_fang", "chance": 0.35, "count_min": 1, "count_max": 2 },
+        { "item_id": "tattered_hide", "chance": 0.30, "count_min": 1, "count_max": 2 },
+        { "item_id": "windpiercer", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "windstrider_boots", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "gripping_gloves", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "elixir_of_speed", "chance": 0.08, "count_min": 1, "count_max": 1 },
+        { "item_id": "raw_ruby", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "phoenix_feather", "chance": 0.02, "count_min": 1, "count_max": 1 }
+      ]
+    },
+    {
+      "id": "troll_loot",
+      "monster_type": "troll",
+      "gold_min": 15,
+      "gold_max": 35,
+      "drops": [
+        { "item_id": "medium_health_potion", "chance": 0.30, "count_min": 1, "count_max": 2 },
+        { "item_id": "troll_blood", "chance": 0.45, "count_min": 1, "count_max": 2 },
+        { "item_id": "monster_fang", "chance": 0.40, "count_min": 2, "count_max": 3 },
+        { "item_id": "tattered_hide", "chance": 0.35, "count_min": 2, "count_max": 4 },
+        { "item_id": "war_axe", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "war_hammer", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "guardian_plate", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "elixir_of_strength", "chance": 0.08, "count_min": 1, "count_max": 1 },
+        { "item_id": "iron_gauntlets", "chance": 0.06, "count_min": 1, "count_max": 1 }
+      ]
+    },
+    {
+      "id": "corrupted_knight_loot",
+      "monster_type": "corrupted_knight",
+      "gold_min": 18,
+      "gold_max": 40,
+      "drops": [
+        { "item_id": "medium_health_potion", "chance": 0.25, "count_min": 1, "count_max": 2 },
+        { "item_id": "large_health_potion", "chance": 0.12, "count_min": 1, "count_max": 1 },
+        { "item_id": "corrupted_essence", "chance": 0.25, "count_min": 1, "count_max": 2 },
+        { "item_id": "shadow_crystal", "chance": 0.30, "count_min": 1, "count_max": 2 },
+        { "item_id": "runic_blade", "chance": 0.07, "count_min": 1, "count_max": 1 },
+        { "item_id": "thunderhead_mace", "chance": 0.06, "count_min": 1, "count_max": 1 },
+        { "item_id": "guardian_plate", "chance": 0.06, "count_min": 1, "count_max": 1 },
+        { "item_id": "arcanist_vestments", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "dawn_saber", "chance": 0.02, "count_min": 1, "count_max": 1 },
+        { "item_id": "damage_potion", "chance": 0.10, "count_min": 1, "count_max": 1 },
+        { "item_id": "berserker_axe", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "crown_of_thorns", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "amulet_of_the_sentinel", "chance": 0.04, "count_min": 1, "count_max": 1 }
+      ]
+    },
+    {
+      "id": "fire_elemental_loot",
+      "monster_type": "fire_elemental",
+      "gold_min": 20,
+      "gold_max": 45,
+      "drops": [
+        { "item_id": "medium_health_potion", "chance": 0.25, "count_min": 1, "count_max": 2 },
+        { "item_id": "large_health_potion", "chance": 0.15, "count_min": 1, "count_max": 1 },
+        { "item_id": "elemental_core", "chance": 0.35, "count_min": 1, "count_max": 1 },
+        { "item_id": "shadow_crystal", "chance": 0.20, "count_min": 1, "count_max": 2 },
+        { "item_id": "raw_ruby", "chance": 0.12, "count_min": 1, "count_max": 1 },
+        { "item_id": "frostfire_wand", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "stormbinder_staff", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "elixir_of_defense", "chance": 0.08, "count_min": 1, "count_max": 1 },
+        { "item_id": "scroll_of_fortification", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "enchanted_dust", "chance": 0.25, "count_min": 2, "count_max": 4 }
+      ]
+    },
+    {
+      "id": "ancient_warden_loot",
+      "monster_type": "ancient_warden",
+      "gold_min": 40,
+      "gold_max": 80,
+      "drops": [
+        { "item_id": "large_health_potion", "chance": 0.60, "count_min": 1, "count_max": 3 },
+        { "item_id": "corrupted_essence", "chance": 0.45, "count_min": 1, "count_max": 3 },
+        { "item_id": "void_shard", "chance": 0.15, "count_min": 1, "count_max": 1 },
+        { "item_id": "golem_core", "chance": 0.35, "count_min": 1, "count_max": 2 },
+        { "item_id": "blackfire_greatsword", "chance": 0.06, "count_min": 1, "count_max": 1 },
+        { "item_id": "dawn_saber", "chance": 0.06, "count_min": 1, "count_max": 1 },
+        { "item_id": "staff_of_the_void", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "serpents_bite", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "dreadnought_plate", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "guardian_plate", "chance": 0.10, "count_min": 1, "count_max": 1 },
+        { "item_id": "speed_potion", "chance": 0.20, "count_min": 1, "count_max": 2 },
+        { "item_id": "damage_potion", "chance": 0.20, "count_min": 1, "count_max": 2 },
+        { "item_id": "earthbreaker", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "aegis_of_the_ancients", "chance": 0.03, "count_min": 1, "count_max": 1 }
+      ]
+    },
+    {
+      "id": "ogre_loot",
+      "monster_type": "ogre",
+      "gold_min": 30,
+      "gold_max": 65,
+      "drops": [
+        { "item_id": "large_health_potion", "chance": 0.40, "count_min": 1, "count_max": 2 },
+        { "item_id": "monster_fang", "chance": 0.45, "count_min": 2, "count_max": 4 },
+        { "item_id": "tattered_hide", "chance": 0.40, "count_min": 3, "count_max": 5 },
+        { "item_id": "corrupted_essence", "chance": 0.20, "count_min": 1, "count_max": 1 },
+        { "item_id": "skullcleaver", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "doombringer_hammer", "chance": 0.03, "count_min": 1, "count_max": 1 },
+        { "item_id": "dreadnought_plate", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "warlords_greathelm", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "greaves_of_the_titan", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "elixir_of_strength", "chance": 0.10, "count_min": 1, "count_max": 1 }
+      ]
+    },
+    {
+      "id": "basilisk_loot",
+      "monster_type": "basilisk",
+      "gold_min": 35,
+      "gold_max": 70,
+      "drops": [
+        { "item_id": "large_health_potion", "chance": 0.45, "count_min": 1, "count_max": 2 },
+        { "item_id": "monster_fang", "chance": 0.40, "count_min": 2, "count_max": 3 },
+        { "item_id": "tattered_hide", "chance": 0.35, "count_min": 2, "count_max": 4 },
+        { "item_id": "raw_emerald", "chance": 0.10, "count_min": 1, "count_max": 1 },
+        { "item_id": "antidote", "chance": 0.30, "count_min": 1, "count_max": 2 },
+        { "item_id": "shadowfang", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "stalkers_leathers", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "ring_of_the_bear", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "elixir_of_defense", "chance": 0.08, "count_min": 1, "count_max": 1 }
+      ]
+    },
+    {
+      "id": "dark_sorcerer_loot",
+      "monster_type": "dark_sorcerer",
+      "gold_min": 35,
+      "gold_max": 75,
+      "drops": [
+        { "item_id": "large_health_potion", "chance": 0.40, "count_min": 1, "count_max": 2 },
+        { "item_id": "large_mana_potion", "chance": 0.30, "count_min": 1, "count_max": 2 },
+        { "item_id": "corrupted_essence", "chance": 0.35, "count_min": 1, "count_max": 2 },
+        { "item_id": "shadow_crystal", "chance": 0.30, "count_min": 1, "count_max": 2 },
+        { "item_id": "enchanted_dust", "chance": 0.35, "count_min": 2, "count_max": 5 },
+        { "item_id": "staff_of_the_void", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "frostfire_wand", "chance": 0.06, "count_min": 1, "count_max": 1 },
+        { "item_id": "voidweave_robe", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "ring_of_the_archmage", "chance": 0.03, "count_min": 1, "count_max": 1 },
+        { "item_id": "scroll_of_insight", "chance": 0.08, "count_min": 1, "count_max": 1 },
+        { "item_id": "raw_sapphire", "chance": 0.08, "count_min": 1, "count_max": 1 }
+      ]
+    },
+    {
+      "id": "void_wraith_loot",
+      "monster_type": "void_wraith",
+      "gold_min": 50,
+      "gold_max": 100,
+      "drops": [
+        { "item_id": "large_health_potion", "chance": 0.65, "count_min": 2, "count_max": 3 },
+        { "item_id": "void_shard", "chance": 0.30, "count_min": 1, "count_max": 2 },
+        { "item_id": "corrupted_essence", "chance": 0.50, "count_min": 2, "count_max": 4 },
+        { "item_id": "shadow_crystal", "chance": 0.40, "count_min": 2, "count_max": 3 },
+        { "item_id": "staff_of_the_void", "chance": 0.08, "count_min": 1, "count_max": 1 },
+        { "item_id": "blackfire_greatsword", "chance": 0.07, "count_min": 1, "count_max": 1 },
+        { "item_id": "serpents_bite", "chance": 0.07, "count_min": 1, "count_max": 1 },
+        { "item_id": "dreadnought_plate", "chance": 0.06, "count_min": 1, "count_max": 1 },
+        { "item_id": "voidrend", "chance": 0.02, "count_min": 1, "count_max": 1 },
+        { "item_id": "dragonscale_armor", "chance": 0.02, "count_min": 1, "count_max": 1 },
+        { "item_id": "speed_potion", "chance": 0.18, "count_min": 1, "count_max": 2 },
+        { "item_id": "damage_potion", "chance": 0.18, "count_min": 1, "count_max": 2 },
+        { "item_id": "phoenix_pendant", "chance": 0.03, "count_min": 1, "count_max": 1 }
+      ]
+    },
+    {
+      "id": "wyvern_loot",
+      "monster_type": "wyvern",
+      "gold_min": 55,
+      "gold_max": 110,
+      "drops": [
+        { "item_id": "large_health_potion", "chance": 0.60, "count_min": 2, "count_max": 3 },
+        { "item_id": "greater_health_potion", "chance": 0.15, "count_min": 1, "count_max": 1 },
+        { "item_id": "wyvern_scale", "chance": 0.45, "count_min": 1, "count_max": 2 },
+        { "item_id": "monster_fang", "chance": 0.40, "count_min": 2, "count_max": 4 },
+        { "item_id": "void_shard", "chance": 0.20, "count_min": 1, "count_max": 1 },
+        { "item_id": "serpents_bite", "chance": 0.06, "count_min": 1, "count_max": 1 },
+        { "item_id": "dragonlance", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "stalkers_leathers", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "elixir_of_speed", "chance": 0.10, "count_min": 1, "count_max": 1 },
+        { "item_id": "phoenix_feather", "chance": 0.05, "count_min": 1, "count_max": 1 }
+      ]
+    },
+    {
+      "id": "lich_loot",
+      "monster_type": "lich",
+      "gold_min": 60,
+      "gold_max": 120,
+      "drops": [
+        { "item_id": "large_health_potion", "chance": 0.60, "count_min": 2, "count_max": 3 },
+        { "item_id": "large_mana_potion", "chance": 0.50, "count_min": 2, "count_max": 3 },
+        { "item_id": "corrupted_essence", "chance": 0.50, "count_min": 2, "count_max": 4 },
+        { "item_id": "void_shard", "chance": 0.25, "count_min": 1, "count_max": 2 },
+        { "item_id": "enchanted_dust", "chance": 0.40, "count_min": 3, "count_max": 6 },
+        { "item_id": "staff_of_the_void", "chance": 0.08, "count_min": 1, "count_max": 1 },
+        { "item_id": "starweave_staff", "chance": 0.02, "count_min": 1, "count_max": 1 },
+        { "item_id": "voidweave_robe", "chance": 0.05, "count_min": 1, "count_max": 1 },
+        { "item_id": "ring_of_the_archmage", "chance": 0.04, "count_min": 1, "count_max": 1 },
+        { "item_id": "scroll_of_insight", "chance": 0.12, "count_min": 1, "count_max": 1 },
+        { "item_id": "scroll_of_fortification", "chance": 0.10, "count_min": 1, "count_max": 1 },
+        { "item_id": "void_diamond", "chance": 0.02, "count_min": 1, "count_max": 1 }
+      ]
+    },
+    {
+      "id": "dragon_whelp_loot",
+      "monster_type": "dragon_whelp",
+      "gold_min": 60,
+      "gold_max": 120,
+      "drops": [
+        { "item_id": "large_health_potion", "chance": 0.70, "count_min": 2, "count_max": 4 },
+        { "item_id": "greater_health_potion", "chance": 0.20, "count_min": 1, "count_max": 1 },
+        { "item_id": "void_shard", "chance": 0.25, "count_min": 1, "count_max": 2 },
+        { "item_id": "corrupted_essence", "chance": 0.45, "count_min": 2, "count_max": 3 },
+        { "item_id": "monster_fang", "chance": 0.60, "count_min": 3, "count_max": 5 },
+        { "item_id": "dragon_scale", "chance": 0.30, "count_min": 1, "count_max": 2 },
+        { "item_id": "voidrend", "chance": 0.03, "count_min": 1, "count_max": 1 },
+        { "item_id": "starfall_bow", "chance": 0.03, "count_min": 1, "count_max": 1 },
+        { "item_id": "dragonscale_armor", "chance": 0.03, "count_min": 1, "count_max": 1 },
+        { "item_id": "blackfire_greatsword", "chance": 0.08, "count_min": 1, "count_max": 1 },
+        { "item_id": "dawn_saber", "chance": 0.08, "count_min": 1, "count_max": 1 },
+        { "item_id": "staff_of_the_void", "chance": 0.07, "count_min": 1, "count_max": 1 },
+        { "item_id": "serpents_bite", "chance": 0.07, "count_min": 1, "count_max": 1 },
+        { "item_id": "dreadnought_plate", "chance": 0.07, "count_min": 1, "count_max": 1 },
+        { "item_id": "speed_potion", "chance": 0.20, "count_min": 1, "count_max": 2 },
+        { "item_id": "damage_potion", "chance": 0.20, "count_min": 1, "count_max": 2 },
+        { "item_id": "worldpiercer", "chance": 0.01, "count_min": 1, "count_max": 1 },
+        { "item_id": "starweave_staff", "chance": 0.01, "count_min": 1, "count_max": 1 },
+        { "item_id": "void_diamond", "chance": 0.03, "count_min": 1, "count_max": 1 }
+      ]
+    }
+  ]
+}

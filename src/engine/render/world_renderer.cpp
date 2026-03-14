@@ -109,26 +109,37 @@ void WorldRenderer::create_grid_mesh() {
     
     std::vector<float> grid_data;
     float grid_step = 100.0f;
-    
+
+    // Pre-calculate vertex count: 2 verts per grid line + 8 boundary verts, 7 floats each
+    int grid_lines_x = static_cast<int>(world_width_ / grid_step) + 1;
+    int grid_lines_z = static_cast<int>(world_height_ / grid_step) + 1;
+    int total_verts = (grid_lines_x + grid_lines_z) * 2 + 8;
+    grid_data.reserve(total_verts * 7);
+
+    auto push_vertex = [&](float x, float y, float z, float r, float g, float b, float a) {
+        grid_data.push_back(x); grid_data.push_back(y); grid_data.push_back(z);
+        grid_data.push_back(r); grid_data.push_back(g); grid_data.push_back(b); grid_data.push_back(a);
+    };
+
     // Grid lines
     for (float x = 0; x <= world_width_; x += grid_step) {
-        grid_data.insert(grid_data.end(), {x, 0.0f, 0.0f, 0.15f, 0.15f, 0.2f, 0.8f});
-        grid_data.insert(grid_data.end(), {x, 0.0f, world_height_, 0.15f, 0.15f, 0.2f, 0.8f});
+        push_vertex(x, 0.0f, 0.0f, 0.15f, 0.15f, 0.2f, 0.8f);
+        push_vertex(x, 0.0f, world_height_, 0.15f, 0.15f, 0.2f, 0.8f);
     }
     for (float z = 0; z <= world_height_; z += grid_step) {
-        grid_data.insert(grid_data.end(), {0.0f, 0.0f, z, 0.15f, 0.15f, 0.2f, 0.8f});
-        grid_data.insert(grid_data.end(), {world_width_, 0.0f, z, 0.15f, 0.15f, 0.2f, 0.8f});
+        push_vertex(0.0f, 0.0f, z, 0.15f, 0.15f, 0.2f, 0.8f);
+        push_vertex(world_width_, 0.0f, z, 0.15f, 0.15f, 0.2f, 0.8f);
     }
-    
+
     // World boundary
-    grid_data.insert(grid_data.end(), {0.0f, 0.0f, 0.0f, 0.4f, 0.4f, 0.5f, 1.0f});
-    grid_data.insert(grid_data.end(), {world_width_, 0.0f, 0.0f, 0.4f, 0.4f, 0.5f, 1.0f});
-    grid_data.insert(grid_data.end(), {world_width_, 0.0f, 0.0f, 0.4f, 0.4f, 0.5f, 1.0f});
-    grid_data.insert(grid_data.end(), {world_width_, 0.0f, world_height_, 0.4f, 0.4f, 0.5f, 1.0f});
-    grid_data.insert(grid_data.end(), {world_width_, 0.0f, world_height_, 0.4f, 0.4f, 0.5f, 1.0f});
-    grid_data.insert(grid_data.end(), {0.0f, 0.0f, world_height_, 0.4f, 0.4f, 0.5f, 1.0f});
-    grid_data.insert(grid_data.end(), {0.0f, 0.0f, world_height_, 0.4f, 0.4f, 0.5f, 1.0f});
-    grid_data.insert(grid_data.end(), {0.0f, 0.0f, 0.0f, 0.4f, 0.4f, 0.5f, 1.0f});
+    push_vertex(0.0f, 0.0f, 0.0f, 0.4f, 0.4f, 0.5f, 1.0f);
+    push_vertex(world_width_, 0.0f, 0.0f, 0.4f, 0.4f, 0.5f, 1.0f);
+    push_vertex(world_width_, 0.0f, 0.0f, 0.4f, 0.4f, 0.5f, 1.0f);
+    push_vertex(world_width_, 0.0f, world_height_, 0.4f, 0.4f, 0.5f, 1.0f);
+    push_vertex(world_width_, 0.0f, world_height_, 0.4f, 0.4f, 0.5f, 1.0f);
+    push_vertex(0.0f, 0.0f, world_height_, 0.4f, 0.4f, 0.5f, 1.0f);
+    push_vertex(0.0f, 0.0f, world_height_, 0.4f, 0.4f, 0.5f, 1.0f);
+    push_vertex(0.0f, 0.0f, 0.0f, 0.4f, 0.4f, 0.5f, 1.0f);
     
     grid_vertex_count_ = static_cast<uint32_t>(grid_data.size() / 7);
     

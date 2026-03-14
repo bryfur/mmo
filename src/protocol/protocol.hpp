@@ -14,3 +14,4 @@
 #include "connection_accepted_msg.hpp"
 #include "player_left_msg.hpp"
 #include "entity_exit_msg.hpp"
+#include "gameplay_msgs.hpp"

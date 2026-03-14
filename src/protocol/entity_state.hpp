@@ -30,6 +30,10 @@ struct NetEntityState : Serializable<NetEntityState> {
     // Per-instance scale multiplier (1.0 = default size)
     float scale = 1.0f;
 
+    // Mana (players only)
+    float mana = 0.0f;
+    float max_mana = 0.0f;
+
     // Rendering data (server-authoritative, client renders using these directly)
     char model_name[32] = {0};       // Model to render (e.g. "warrior", "building_tower")
     float target_size = 0.0f;        // Visual target size in world units
@@ -40,7 +44,7 @@ struct NetEntityState : Serializable<NetEntityState> {
 
     static constexpr size_t serialized_size() {
         return sizeof(uint32_t) + sizeof(EntityType) + sizeof(uint8_t) * 4 +
-               sizeof(float) * 11 + sizeof(uint32_t) + 32 + sizeof(uint8_t) +
+               sizeof(float) * 13 + sizeof(uint32_t) + 32 + sizeof(uint8_t) +
                32 + sizeof(float) + 16 + 16 + sizeof(float) + sizeof(uint8_t);
     }
 
@@ -60,6 +64,7 @@ struct NetEntityState : Serializable<NetEntityState> {
         w.write<uint8_t>(is_attacking ? 1 : 0);
         w.write(attack_dir_x); w.write(attack_dir_y);
         w.write(scale);
+        w.write(mana); w.write(max_mana);
         w.write_bytes(model_name, 32);
         w.write(target_size);
         w.write_bytes(effect_type, 16);
@@ -84,6 +89,7 @@ struct NetEntityState : Serializable<NetEntityState> {
         is_attacking = r.read<uint8_t>() != 0;
         attack_dir_x = r.read<float>(); attack_dir_y = r.read<float>();
         scale = r.read<float>();
+        mana = r.read<float>(); max_mana = r.read<float>();
         r.read_bytes(model_name, 32);
         target_size = r.read<float>();
         r.read_bytes(effect_type, 16);

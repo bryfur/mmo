@@ -16,6 +16,7 @@
 #include "engine/model_loader.hpp"
 #include "engine/graphics_settings.hpp"
 #include "engine/scene/camera_state.hpp"
+#include "engine/scene/frustum.hpp"
 #include "engine/render_stats.hpp"
 #include "engine/gpu/gpu_uniforms.hpp"
 #include "engine/heightmap.hpp"
@@ -51,7 +52,7 @@ public:
      * @param world_width World width for terrain/world renderers
      * @param world_height World height for terrain/world renderers
      */
-    bool init(render::RenderContext& context, float world_width = 8000.0f, float world_height = 8000.0f);
+    bool init(render::RenderContext& context, float world_width = 32000.0f, float world_height = 32000.0f);
 
     void shutdown();
 
@@ -104,8 +105,11 @@ private:
     // Rendering
     void render_3d_scene(const RenderScene& scene, const CameraState& camera, float dt);
     void render_model_command(const ModelCommand& cmd, const CameraState& camera);
+    void render_model_command_inner(const ModelCommand& cmd, const CameraState& camera);
     void render_skinned_model_command(const SkinnedModelCommand& cmd, const CameraState& camera);
-    void build_instance_batches(const RenderScene& scene, const CameraState& camera);
+    void render_skinned_model_command_inner(const SkinnedModelCommand& cmd, const CameraState& camera,
+                                            SDL_GPUTexture*& last_texture, int& last_has_texture);
+    void build_instance_batches(const RenderScene& scene, const CameraState& camera, const Frustum& frustum);
     void upload_instance_buffers();
     void render_instanced_models(const CameraState& camera);
     void render_instanced_shadow_models(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
@@ -153,12 +157,18 @@ private:
     std::unordered_map<std::string, std::vector<gpu::InstanceData>> instance_batches_;
     std::unordered_map<std::string, std::vector<gpu::ShadowInstanceData>> shadow_instance_batches_;
     std::vector<const ModelCommand*> non_instanced_commands_;  // individual draw fallback
+    std::vector<const SkinnedModelCommand*> shadow_skinned_commands_;  // pre-collected for shadow passes
     std::unique_ptr<gpu::GPUBuffer> instance_storage_buffer_;
     size_t instance_storage_capacity_ = 0;
     std::unique_ptr<gpu::GPUBuffer> shadow_instance_storage_buffer_;
     size_t shadow_instance_storage_capacity_ = 0;
 
+    // Reusable packing buffers to avoid per-frame allocations
+    std::vector<gpu::InstanceData> packed_instances_;
+    std::vector<gpu::ShadowInstanceData> packed_shadow_instances_;
+
     // ========== Render State ==========
+    Frustum frame_frustum_;  // Extracted once per frame, reused across passes
     SDL_GPURenderPass* main_render_pass_ = nullptr;
     SDL_GPUTexture* current_swapchain_ = nullptr;
     bool had_main_pass_this_frame_ = false;
@@ -166,6 +176,16 @@ private:
     float skybox_time_ = 0.0f;
     GraphicsSettings* graphics_ = nullptr;
     GraphicsSettings default_graphics_;
+
+    // ========== Per-Frame Caches ==========
+    // Model pointer cache: avoids repeated hash lookups across render passes
+    std::unordered_map<std::string, Model*> frame_model_cache_;
+
+    // Cached frame state (computed once in render_frame, reused everywhere)
+    gpu::ShadowDataUniforms frame_shadow_uniforms_{};
+    bool frame_fog_active_ = false;
+    float frame_draw_dist_sq_ = 0.0f;
+    bool frame_do_frustum_cull_ = false;
 
     // ========== Debug Stats ==========
     bool collect_stats_ = false;

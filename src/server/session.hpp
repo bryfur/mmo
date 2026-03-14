@@ -5,6 +5,7 @@
 #include <memory>
 #include <functional>
 #include <array>
+#include <deque>
 
 namespace mmo::server {
 
@@ -45,7 +46,7 @@ private:
     mmo::protocol::PacketHeader current_header_;
     
     // Write queue
-    std::vector<std::vector<uint8_t>> write_queue_;
+    std::deque<std::vector<uint8_t>> write_queue_;
     bool writing_ = false;
     std::mutex write_mutex_;
 };

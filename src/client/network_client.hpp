@@ -24,7 +24,8 @@ public:
 
     void send_class_select(uint8_t class_index);
     void send_input(const mmo::protocol::PlayerInput& input);
-    
+    void send_raw(const std::vector<uint8_t>& data);
+
     void set_message_callback(MessageCallback callback) { message_callback_ = callback; }
     
     // Process received messages on main thread

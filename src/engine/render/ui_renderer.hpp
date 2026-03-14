@@ -130,7 +130,7 @@ private:
     SDL_GPURenderPass* current_pass_ = nullptr;
     
     // Vertex batching for efficient rendering
-    static constexpr size_t MAX_VERTICES = 4096;
+    static constexpr size_t MAX_VERTICES = 16384;
     // Must match Vertex2D layout: position (2), texcoord (2), color (4)
     struct UIVertex {
         float x, y;           // Position

@@ -103,6 +103,50 @@ bool EditorApplication::on_init() {
         std::cout << "No save found. Use Procedural Generation to populate the world." << std::endl;
     }
 
+    // Load splatmap from PNG into CPU buffer so painting preserves existing data
+    {
+        std::string splatmap_path = "assets/textures/terrain_splatmap.png";
+        SDL_Surface* surface = IMG_Load(splatmap_path.c_str());
+        if (surface) {
+            // Convert to RGBA32 if needed
+            SDL_Surface* rgba = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
+            SDL_DestroySurface(surface);
+            if (rgba) {
+                uint32_t src_w = static_cast<uint32_t>(rgba->w);
+                uint32_t src_h = static_cast<uint32_t>(rgba->h);
+                if (src_w == splatmap_resolution_ && src_h == splatmap_resolution_) {
+                    // Exact match — copy directly
+                    size_t data_size = static_cast<size_t>(splatmap_resolution_) * splatmap_resolution_ * 4;
+                    splatmap_data_.resize(data_size);
+                    memcpy(splatmap_data_.data(), rgba->pixels, data_size);
+                    std::cout << "Loaded splatmap (" << src_w << "x" << src_h << ")\n";
+                } else {
+                    // Resolution mismatch — upscale with nearest-neighbor sampling
+                    size_t data_size = static_cast<size_t>(splatmap_resolution_) * splatmap_resolution_ * 4;
+                    splatmap_data_.resize(data_size);
+                    const uint8_t* src = static_cast<const uint8_t*>(rgba->pixels);
+                    for (uint32_t z = 0; z < splatmap_resolution_; ++z) {
+                        uint32_t sz = z * src_h / splatmap_resolution_;
+                        for (uint32_t x = 0; x < splatmap_resolution_; ++x) {
+                            uint32_t sx = x * src_w / splatmap_resolution_;
+                            uint32_t dst_idx = (z * splatmap_resolution_ + x) * 4;
+                            uint32_t src_idx = (sz * src_w + sx) * 4;
+                            splatmap_data_[dst_idx + 0] = src[src_idx + 0];
+                            splatmap_data_[dst_idx + 1] = src[src_idx + 1];
+                            splatmap_data_[dst_idx + 2] = src[src_idx + 2];
+                            splatmap_data_[dst_idx + 3] = src[src_idx + 3];
+                        }
+                    }
+                    std::cout << "Loaded and upscaled splatmap from " << src_w << "x" << src_h
+                              << " to " << splatmap_resolution_ << "x" << splatmap_resolution_ << "\n";
+                }
+                SDL_DestroySurface(rgba);
+            }
+        } else {
+            std::cout << "No splatmap found at " << splatmap_path << ", will create on first paint\n";
+        }
+    }
+
     // Initialize tools
     select_tool_ = std::make_unique<SelectTool>();
     terrain_tool_ = std::make_unique<TerrainBrushTool>();
@@ -367,46 +411,12 @@ void EditorApplication::on_update(float dt) {
         }
     }
 
-    // Save splatmap when dirty (immediate save to file)
+    // Update GPU texture when splatmap is painted (visual feedback only, no file save)
     if (splatmap_dirty_) {
-        // Save splatmap to PNG file
-        std::string splatmap_path = "assets/textures/terrain_splatmap.png";
-
-        // Verify data is valid
-        size_t expected_size = splatmap_resolution_ * splatmap_resolution_ * 4;
-        if (splatmap_data_.size() != expected_size) {
-            std::cerr << "Splatmap data size mismatch: " << splatmap_data_.size()
-                     << " (expected " << expected_size << ")\n";
-            splatmap_dirty_ = false;
-            return;
+        size_t expected_size = static_cast<size_t>(splatmap_resolution_) * splatmap_resolution_ * 4;
+        if (splatmap_data_.size() == expected_size) {
+            scene_renderer().terrain().update_splatmap(splatmap_data_.data(), splatmap_resolution_);
         }
-
-        // Update GPU texture immediately for visual feedback
-        scene_renderer().terrain().update_splatmap(splatmap_data_.data(), splatmap_resolution_);
-
-        // Create SDL_Surface from splatmap data (RGBA format)
-        SDL_Surface* surface = SDL_CreateSurfaceFrom(
-            splatmap_resolution_, splatmap_resolution_,
-            SDL_PIXELFORMAT_RGBA32,
-            splatmap_data_.data(),
-            splatmap_resolution_ * 4  // pitch: width * bytes_per_pixel
-        );
-
-        if (surface) {
-            // Save to PNG using SDL_image
-            bool success = IMG_SavePNG(surface, splatmap_path.c_str());
-            if (!success) {
-                const char* err = SDL_GetError();
-                std::cerr << "Failed to save splatmap to " << splatmap_path << ": "
-                         << (err && err[0] ? err : "Unknown error") << '\n';
-            } else {
-                std::cout << "Splatmap saved to " << splatmap_path << '\n';
-            }
-            SDL_DestroySurface(surface);
-        } else {
-            std::cerr << "Failed to create surface for splatmap: " << SDL_GetError() << '\n';
-        }
-
         splatmap_dirty_ = false;
     }
 
@@ -726,6 +736,25 @@ engine::scene::CameraState EditorApplication::get_camera_state() const {
 
 void EditorApplication::save_world() {
     if (WorldSave::save(save_dir_, heightmap_, registry_)) {
+        // Save splatmap to PNG
+        if (!splatmap_data_.empty()) {
+            std::string splatmap_path = "assets/textures/terrain_splatmap.png";
+            SDL_Surface* surface = SDL_CreateSurfaceFrom(
+                splatmap_resolution_, splatmap_resolution_,
+                SDL_PIXELFORMAT_RGBA32,
+                splatmap_data_.data(),
+                splatmap_resolution_ * 4
+            );
+            if (surface) {
+                if (IMG_SavePNG(surface, splatmap_path.c_str())) {
+                    std::cout << "Splatmap saved to " << splatmap_path << '\n';
+                } else {
+                    std::cerr << "Failed to save splatmap: " << SDL_GetError() << '\n';
+                }
+                SDL_DestroySurface(surface);
+            }
+        }
+
         toast_message_ = "World saved!";
         toast_timer_ = 3.0f;
         // Update mtime so we don't hot-reload our own save

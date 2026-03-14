@@ -116,6 +116,36 @@ void InputHandler::process_event(const SDL_Event& event) {
                     attack_latched_ = true;
                 }
                 break;
+            case SDLK_I:
+                if (game_input_enabled_) inventory_pressed_ = true;
+                break;
+            case SDLK_L:
+                if (game_input_enabled_) quest_log_pressed_ = true;
+                break;
+            case SDLK_T:
+                if (game_input_enabled_) talent_tree_pressed_ = true;
+                break;
+            case SDLK_E:
+                if (game_input_enabled_) interact_pressed_ = true;
+                break;
+            case SDLK_M:
+                if (game_input_enabled_) map_pressed_ = true;
+                break;
+            case SDLK_1:
+                if (game_input_enabled_) skill_pressed_ = 1;
+                break;
+            case SDLK_2:
+                if (game_input_enabled_) skill_pressed_ = 2;
+                break;
+            case SDLK_3:
+                if (game_input_enabled_) skill_pressed_ = 3;
+                break;
+            case SDLK_4:
+                if (game_input_enabled_) skill_pressed_ = 4;
+                break;
+            case SDLK_5:
+                if (game_input_enabled_) skill_pressed_ = 5;
+                break;
         }
     }
 

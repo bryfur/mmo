@@ -209,7 +209,8 @@ void GPUBuffer::update(SDL_GPUCommandBuffer* cmd, const void* data, size_t size,
     }
 
     if (offset + size > size_) {
-        SDL_Log("GPUBuffer::update: Data exceeds buffer size");
+        SDL_Log("GPUBuffer::update: Data exceeds buffer size (data=%zu + offset=%zu = %zu > buffer=%zu)",
+                size, offset, offset + size, size_);
         return;
     }
 

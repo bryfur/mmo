@@ -8,6 +8,7 @@
 #include <memory>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 // Forward declarations
 namespace mmo::engine::gpu {
@@ -162,7 +163,7 @@ private:
     static constexpr uint64_t CACHE_EXPIRY_FRAMES = 300;  // Remove unused textures after ~5 seconds at 60fps
 
     // Texts that were requested but not in cache - created at end of frame
-    std::vector<std::string> pending_text_creates_;
+    std::unordered_set<std::string> pending_text_creates_;
 
     // Batched text rendering data
     struct QueuedText {
@@ -176,7 +177,7 @@ private:
     std::vector<float> batch_vertices_;  // All vertex data for queued texts
     static constexpr size_t VERTICES_PER_QUAD = 6;
     static constexpr size_t FLOATS_PER_VERTEX = 4;  // x, y, u, v
-    static constexpr size_t MAX_QUEUED_TEXTS = 256;
+    static constexpr size_t MAX_QUEUED_TEXTS = 4096;
 };
 
 } // namespace mmo::engine::render

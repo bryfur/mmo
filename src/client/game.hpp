@@ -12,10 +12,13 @@
 #include "client/animation_loader.hpp"
 #include "game_state.hpp"
 #include "menu_system.hpp"
+#include "gameplay_hud.hpp"
+#include "gameplay_panels.hpp"
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <memory>
 
@@ -126,6 +129,7 @@ private:
     // Camera state
     float player_x_ = 0.0f;
     float player_z_ = 0.0f;
+    bool camera_height_func_set_ = false;
 
     // Frame timing
     float last_dt_ = 0.016f;  // Last frame's delta time for rendering
@@ -134,6 +138,44 @@ private:
     engine::systems::CameraModeConfig exploration_camera_config_;
     engine::systems::CameraModeConfig sprint_camera_config_;
     engine::systems::CameraModeConfig combat_camera_config_;
+
+    // Gameplay UI state
+    HUDState hud_state_;
+    PanelState panel_state_;
+
+    // NPC Quest interaction state
+    struct QuestOfferData {
+        std::string quest_id;
+        std::string quest_name;
+        std::string description;
+        std::string dialogue;
+        int xp_reward = 0;
+        int gold_reward = 0;
+        struct Objective { std::string description; int count; float loc_x = 0; float loc_z = 0; float radius = 0; };
+        std::vector<Objective> objectives;
+    };
+
+    struct NPCInteractionState {
+        bool showing_dialogue = false;
+        uint32_t npc_id = 0;
+        std::string npc_name;
+        std::vector<QuestOfferData> available_quests;
+        int selected_quest = 0;
+        bool showing_quest_detail = false;
+
+        void close() { showing_dialogue = false; available_quests.clear(); selected_quest = 0; showing_quest_detail = false; }
+    };
+
+    NPCInteractionState npc_interaction_;
+
+    // NPC quest availability (updated by server)
+    std::unordered_set<uint32_t> npcs_with_quests_;      // NPCs that have "!" (available quest)
+    std::unordered_set<uint32_t> npcs_with_turnins_;     // NPCs that have "?" (quest ready to turn in)
+
+    // World-to-screen projection cache (updated each frame)
+    glm::mat4 cached_vp_matrix_ = glm::mat4(1.0f);
+    float cached_screen_w_ = 1280.0f;
+    float cached_screen_h_ = 720.0f;
 
     // Reusable buffers for network message processing (avoids per-frame allocations)
     std::vector<uint32_t> to_remove_buffer_;

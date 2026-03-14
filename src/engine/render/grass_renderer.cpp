@@ -171,6 +171,7 @@ void GrassRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
     fu.fog_color = glm::vec3(0.12f, 0.14f, 0.2f);
     fu.fog_end = grass_view_distance;
     fu.fog_enabled = 1;
+    fu.light_dir = light_dir;
 
     SDL_PushGPUFragmentUniformData(cmd, 0, &fu, sizeof(fu));
 

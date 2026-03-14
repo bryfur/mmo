@@ -168,8 +168,8 @@ private:
     
     // Fog settings
     glm::vec3 fog_color_ = glm::vec3(0.35f, 0.45f, 0.6f);
-    float fog_start_ = 800.0f;
-    float fog_end_ = 4000.0f;
+    float fog_start_ = 1600.0f;
+    float fog_end_ = 12000.0f;
 };
 
 } // namespace mmo::engine::render

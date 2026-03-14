@@ -138,8 +138,8 @@ void MenuSystem::init_graphics_menu() {
     draw_dist.type = MenuItemType::Slider;
     draw_dist.slider_value = &graphics_settings_.draw_distance;
     draw_dist.slider_min = 0;
-    draw_dist.slider_max = 4;
-    draw_dist.slider_labels = {"500", "1000", "2000", "4000", "8000"};
+    draw_dist.slider_max = 6;
+    draw_dist.slider_labels = {"500", "1000", "2000", "4000", "8000", "16000", "32000"};
     menu_items_.push_back(draw_dist);
 
     MenuItem frustum_cull;
@@ -279,6 +279,7 @@ void MenuSystem::update(float dt) {
         if (input_.menu_select_pressed() || input_.menu_left_pressed() || input_.menu_right_pressed()) {
             if (item.toggle_value) {
                 *item.toggle_value = !*item.toggle_value;
+                settings_dirty_ = true;
             }
         }
     } else if (item.type == MenuItemType::Slider) {
@@ -288,12 +289,14 @@ void MenuSystem::update(float dt) {
                     *item.slider_value = item.slider_max;
                 else
                     *item.slider_value -= 1;
+                settings_dirty_ = true;
             }
             if (input_.menu_right_pressed()) {
                 if (*item.slider_value >= item.slider_max)
                     *item.slider_value = item.slider_min;
                 else
                     *item.slider_value += 1;
+                settings_dirty_ = true;
             }
         }
     } else if (item.type == MenuItemType::FloatSlider) {

@@ -119,6 +119,77 @@ void Session::handle_packet() {
             break;
         }
 
+        case MessageType::NPCInteract: {
+            if (current_header_.payload_size >= NPCInteractMsg::serialized_size() && player_id_ != 0) {
+                NPCInteractMsg msg;
+                msg.deserialize(payload_buffer_);
+                server_.on_npc_interact(shared_from_this(), player_id_, msg.npc_network_id);
+            }
+            break;
+        }
+
+        case MessageType::QuestAccept: {
+            if (current_header_.payload_size >= QuestAcceptMsg::serialized_size() && player_id_ != 0) {
+                QuestAcceptMsg msg;
+                msg.deserialize(payload_buffer_);
+                std::string quest_id(msg.quest_id, strnlen(msg.quest_id, sizeof(msg.quest_id)));
+                server_.on_quest_accept(player_id_, quest_id);
+            }
+            break;
+        }
+
+        case MessageType::QuestTurnIn: {
+            if (current_header_.payload_size >= QuestTurnInMsg::serialized_size() && player_id_ != 0) {
+                QuestTurnInMsg msg;
+                msg.deserialize(payload_buffer_);
+                std::string quest_id(msg.quest_id, strnlen(msg.quest_id, sizeof(msg.quest_id)));
+                server_.on_quest_turnin(player_id_, quest_id);
+            }
+            break;
+        }
+
+        case MessageType::SkillUse: {
+            if (current_header_.payload_size >= SkillUseMsg::serialized_size() && player_id_ != 0) {
+                SkillUseMsg msg;
+                msg.deserialize(payload_buffer_);
+                std::string skill_id(msg.skill_id, strnlen(msg.skill_id, sizeof(msg.skill_id)));
+                server_.on_skill_use(player_id_, skill_id, msg.dir_x, msg.dir_z);
+            }
+            break;
+        }
+
+        case MessageType::TalentUnlock: {
+            if (current_header_.payload_size >= TalentUnlockMsg::serialized_size() && player_id_ != 0) {
+                TalentUnlockMsg msg;
+                msg.deserialize(payload_buffer_);
+                std::string talent_id(msg.talent_id, strnlen(msg.talent_id, sizeof(msg.talent_id)));
+                server_.on_talent_unlock(player_id_, talent_id);
+            }
+            break;
+        }
+
+        case MessageType::ItemEquip: {
+            // Reuse a fixed-size string field (32 bytes) for item_id
+            if (current_header_.payload_size >= 32 && player_id_ != 0) {
+                char item_id_buf[32] = {};
+                std::memcpy(item_id_buf, payload_buffer_.data(), std::min(current_header_.payload_size, 32u));
+                std::string item_id(item_id_buf, strnlen(item_id_buf, 32));
+                server_.on_item_equip(player_id_, item_id);
+            }
+            break;
+        }
+
+        case MessageType::ItemUnequip: {
+            // Reuse a fixed-size string field (32 bytes) for slot name
+            if (current_header_.payload_size >= 32 && player_id_ != 0) {
+                char slot_buf[32] = {};
+                std::memcpy(slot_buf, payload_buffer_.data(), std::min(current_header_.payload_size, 32u));
+                std::string slot(slot_buf, strnlen(slot_buf, 32));
+                server_.on_item_unequip(player_id_, slot);
+            }
+            break;
+        }
+
         default:
             std::cout << "Unknown message type: " << static_cast<int>(current_header_.type) << std::endl;
             break;
@@ -138,7 +209,7 @@ void Session::do_write() {
         [this, self](asio::error_code ec, std::size_t /*length*/) {
             std::lock_guard<std::mutex> lock(write_mutex_);
             if (!ec) {
-                write_queue_.erase(write_queue_.begin());
+                write_queue_.pop_front();
                 if (!write_queue_.empty()) {
                     do_write();
                 } else {

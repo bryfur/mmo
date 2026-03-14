@@ -1,7 +1,6 @@
 #include "animation_player.hpp"
 
 #include <cmath>
-#include <unordered_map>
 #include <glm/gtc/matrix_transform.hpp>
 
 namespace mmo::engine::animation {
@@ -10,6 +9,8 @@ void AnimationPlayer::reset() {
     time = 0.0f;
     prev_clip = -1;
     blend_factor = 1.0f;
+    cached_clip_index_ = -1;
+    cached_prev_clip_index_ = -1;
     for (auto& m : bone_matrices) m = glm::mat4(1.0f);
     for (auto& m : world_transforms) m = glm::mat4(1.0f);
 }
@@ -22,6 +23,8 @@ void AnimationPlayer::crossfade_to(int clip_index, float duration) {
     blend_duration = duration;
     current_clip = clip_index;
     time = 0.0f;
+    cached_clip_index_ = -1;
+    cached_prev_clip_index_ = -1;
 }
 
 void AnimationPlayer::update(const Skeleton& skeleton,
@@ -69,8 +72,9 @@ void AnimationPlayer::update(const Skeleton& skeleton,
 }
 
 // Helper: sample a clip's channels for a single joint at a given time
+// Uses a flat vector indexed by bone_index instead of unordered_map
 static void sample_clip_joint(const AnimationClip* clip,
-                              const std::unordered_map<int, const AnimationChannel*>& channels,
+                              const std::vector<const AnimationChannel*>& channels,
                               int joint_idx, float time,
                               const Joint& joint,
                               glm::vec3& out_translation,
@@ -81,16 +85,16 @@ static void sample_clip_joint(const AnimationClip* clip,
     out_scale = joint.local_scale;
 
     if (!clip) return;
-    auto it = channels.find(joint_idx);
-    if (it == channels.end()) return;
-    const auto& ch = *it->second;
+    if (joint_idx < 0 || joint_idx >= static_cast<int>(channels.size())) return;
+    const auto* ch = channels[joint_idx];
+    if (!ch) return;
 
-    if (!ch.position_times.empty())
-        out_translation = interpolate_keyframes(ch.position_times, ch.positions, time);
-    if (!ch.rotation_times.empty())
-        out_rotation = interpolate_keyframes(ch.rotation_times, ch.rotations, time);
-    if (!ch.scale_times.empty())
-        out_scale = interpolate_keyframes(ch.scale_times, ch.scales, time);
+    if (!ch->position_times.empty())
+        out_translation = interpolate_keyframes(ch->position_times, ch->positions, time);
+    if (!ch->rotation_times.empty())
+        out_rotation = interpolate_keyframes(ch->rotation_times, ch->rotations, time);
+    if (!ch->scale_times.empty())
+        out_scale = interpolate_keyframes(ch->scale_times, ch->scales, time);
 }
 
 void AnimationPlayer::compute_bone_matrices(const Skeleton& skeleton,
@@ -98,30 +102,41 @@ void AnimationPlayer::compute_bone_matrices(const Skeleton& skeleton,
     size_t num_joints = skeleton.joints.size();
     if (num_joints == 0) return;
 
-    // Current clip
+    // Build flat channel lookup (indexed by bone_index) - cache across frames
     const AnimationClip* clip = nullptr;
-    if (current_clip >= 0 && current_clip < static_cast<int>(clips.size()))
+    if (current_clip >= 0 && current_clip < static_cast<int>(clips.size())) {
         clip = &clips[current_clip];
-
-    std::unordered_map<int, const AnimationChannel*> cur_channels;
-    if (clip) {
-        for (const auto& ch : clip->channels)
-            cur_channels[ch.bone_index] = &ch;
+        if (current_clip != cached_clip_index_) {
+            channel_lookup_.assign(num_joints, nullptr);
+            for (const auto& ch : clip->channels) {
+                if (ch.bone_index >= 0 && ch.bone_index < static_cast<int>(num_joints))
+                    channel_lookup_[ch.bone_index] = &ch;
+            }
+            cached_clip_index_ = current_clip;
+        }
+    } else {
+        channel_lookup_.assign(num_joints, nullptr);
+        cached_clip_index_ = -1;
     }
 
-    // Previous clip (for crossfade)
+    // Previous clip (for crossfade) - cache across frames
     const AnimationClip* prev_clip_ptr = nullptr;
-    std::unordered_map<int, const AnimationChannel*> prev_channels;
     bool blending = (blend_factor < 1.0f && prev_clip >= 0 &&
                      prev_clip < static_cast<int>(clips.size()));
     if (blending) {
         prev_clip_ptr = &clips[prev_clip];
-        for (const auto& ch : prev_clip_ptr->channels)
-            prev_channels[ch.bone_index] = &ch;
+        if (prev_clip != cached_prev_clip_index_) {
+            prev_channel_lookup_.assign(num_joints, nullptr);
+            for (const auto& ch : prev_clip_ptr->channels) {
+                if (ch.bone_index >= 0 && ch.bone_index < static_cast<int>(num_joints))
+                    prev_channel_lookup_[ch.bone_index] = &ch;
+            }
+            cached_prev_clip_index_ = prev_clip;
+        }
     }
 
-    // Compute local transforms for each joint (with optional crossfade blending)
-    std::vector<glm::mat4> local_transforms(num_joints);
+    // Compute local transforms for each joint - reuse buffer
+    local_transforms_.resize(num_joints);
     for (size_t i = 0; i < num_joints; i++) {
         const auto& joint = skeleton.joints[i];
         int idx = static_cast<int>(i);
@@ -129,14 +144,14 @@ void AnimationPlayer::compute_bone_matrices(const Skeleton& skeleton,
         glm::vec3 translation;
         glm::quat rotation;
         glm::vec3 scale;
-        sample_clip_joint(clip, cur_channels, idx, time, joint,
+        sample_clip_joint(clip, channel_lookup_, idx, time, joint,
                           translation, rotation, scale);
 
         if (blending) {
             glm::vec3 prev_t;
             glm::quat prev_r;
             glm::vec3 prev_s;
-            sample_clip_joint(prev_clip_ptr, prev_channels, idx, prev_time, joint,
+            sample_clip_joint(prev_clip_ptr, prev_channel_lookup_, idx, prev_time, joint,
                               prev_t, prev_r, prev_s);
 
             float t = blend_factor;
@@ -145,10 +160,12 @@ void AnimationPlayer::compute_bone_matrices(const Skeleton& skeleton,
             scale = glm::mix(prev_s, scale, t);
         }
 
-        glm::mat4 T = glm::translate(glm::mat4(1.0f), translation);
-        glm::mat4 R = glm::mat4_cast(rotation);
-        glm::mat4 S = glm::scale(glm::mat4(1.0f), scale);
-        local_transforms[i] = T * R * S;
+        glm::mat4 m = glm::mat4_cast(rotation);
+        m[0] *= scale.x;
+        m[1] *= scale.y;
+        m[2] *= scale.z;
+        m[3] = glm::vec4(translation, 1.0f);
+        local_transforms_[i] = m;
     }
 
     // Compute world transforms by walking hierarchy (clamped to MAX_BONES)
@@ -156,9 +173,9 @@ void AnimationPlayer::compute_bone_matrices(const Skeleton& skeleton,
     for (size_t i = 0; i < count; i++) {
         const auto& joint = skeleton.joints[i];
         if (joint.parent_index >= 0 && joint.parent_index < static_cast<int>(count)) {
-            world_transforms[i] = world_transforms[joint.parent_index] * local_transforms[i];
+            world_transforms[i] = world_transforms[joint.parent_index] * local_transforms_[i];
         } else {
-            world_transforms[i] = local_transforms[i];
+            world_transforms[i] = local_transforms_[i];
         }
     }
 

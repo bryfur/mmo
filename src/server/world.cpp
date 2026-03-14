@@ -11,6 +11,11 @@
 #include "systems/combat_system.hpp"
 #include "systems/ai_system.hpp"
 #include "systems/physics_system.hpp"
+#include "systems/leveling_system.hpp"
+#include "systems/loot_system.hpp"
+#include "systems/quest_system.hpp"
+#include "systems/skill_system.hpp"
+#include "systems/zone_system.hpp"
 #include "entity_config.hpp"
 #include <nlohmann/json.hpp>
 #include <cstdint>
@@ -31,6 +36,7 @@ using namespace mmo::protocol;
 
 World::World(const GameConfig& config)
     : config_(&config)
+    , zone_system_(config)
     , spatial_grid_(config.network().spatial_grid_cell_size)
     , rng_(std::random_device{}()) {
     // Load heightmap from editor save
@@ -54,7 +60,26 @@ World::World(const GameConfig& config)
                   << "Use the editor to generate and save a world.\n";
     }
     
-    // Create physics bodies for all spawned entities  
+    // Spawn zone-based monsters across the world
+    zone_system_.spawn_initial_monsters(
+        registry_,
+        [this]() { return next_network_id(); },
+        [this](float x, float z) { return get_terrain_height(x, z); }
+    );
+
+    // Add zone monsters to spatial grid and network ID map
+    auto zone_monsters = registry_.view<ecs::NetworkId, ecs::Transform, ecs::EntityInfo, ecs::MonsterTypeId>();
+    for (auto entity : zone_monsters) {
+        auto& net_id = zone_monsters.get<ecs::NetworkId>(entity);
+        auto& transform = zone_monsters.get<ecs::Transform>(entity);
+        auto& info = zone_monsters.get<ecs::EntityInfo>(entity);
+        if (network_id_to_entity_.find(net_id.id) == network_id_to_entity_.end()) {
+            network_id_to_entity_[net_id.id] = entity;
+            spatial_grid_.update_entity(net_id.id, transform.x, transform.z, info.type);
+        }
+    }
+
+    // Create physics bodies for all spawned entities
     physics_.create_bodies(registry_);
     
     // Count physics bodies by type
@@ -109,8 +134,9 @@ uint32_t World::add_player(const std::string& name, PlayerClass player_class) {
     uint32_t net_id = next_network_id();
     
     // Spawn players in the town (safe zone)
-    const float town_center_x = config_->world().width / 2.0f;
-    const float town_center_z = config_->world().height / 2.0f;
+    // Town is at old world center from editor save data
+    const float town_center_x = 4000.0f;
+    const float town_center_z = 4000.0f;
     std::uniform_real_distribution<float> dist_offset(-50.0f, 50.0f);
     float spawn_x = town_center_x + dist_offset(rng_);
     float spawn_z = town_center_z + dist_offset(rng_);
@@ -146,6 +172,18 @@ uint32_t World::add_player(const std::string& name, PlayerClass player_class) {
     registry_.emplace<ecs::PlayerTag>(entity);
     registry_.emplace<ecs::InputState>(entity);
     registry_.emplace<ecs::Scale>(entity);  // Default scale = 1.0
+
+    // Progression components
+    ecs::PlayerLevel player_level;
+    player_level.mana = 100.0f;
+    player_level.max_mana = 100.0f;
+    player_level.mana_regen = 5.0f;
+    registry_.emplace<ecs::PlayerLevel>(entity, player_level);
+    registry_.emplace<ecs::Inventory>(entity);
+    registry_.emplace<ecs::Equipment>(entity);
+    registry_.emplace<ecs::QuestState>(entity);
+    registry_.emplace<ecs::SkillState>(entity);
+    registry_.emplace<ecs::TalentState>(entity);
     
     // Add physics collider for player (dynamic body for collision response)
     // Size matches visual scale from client rendering
@@ -168,6 +206,9 @@ uint32_t World::add_player(const std::string& name, PlayerClass player_class) {
     // Add to spatial grid
     spatial_grid_.update_entity(net_id, spawn_x, spawn_z, EntityType::Player);
 
+    // Add to fast lookup map
+    network_id_to_entity_[net_id] = entity;
+
     return net_id;
 }
 
@@ -178,6 +219,9 @@ void World::remove_player(uint32_t player_id) {
     if (entity != entt::null) {
         // Remove from spatial grid
         spatial_grid_.remove_entity(player_id);
+
+        // Remove from fast lookup map
+        network_id_to_entity_.erase(player_id);
 
         // Remove physics body first
         physics_.destroy_body(registry_, entity);
@@ -216,18 +260,243 @@ void World::update(float dt) {
     // Update game systems
     systems::update_movement(registry_, dt, *config_);
     systems::update_ai(registry_, dt, *config_);
-    systems::update_combat(registry_, dt, *config_);
+    auto combat_hits = systems::update_combat(registry_, dt, *config_);
+
+    // Generate CombatEvent and EntityDeath events from combat hits
+    for (const auto& hit : combat_hits) {
+        uint32_t attacker_net_id = 0;
+        uint32_t target_net_id = 0;
+        if (auto* net = registry_.try_get<ecs::NetworkId>(hit.attacker))
+            attacker_net_id = net->id;
+        if (auto* net = registry_.try_get<ecs::NetworkId>(hit.target))
+            target_net_id = net->id;
+
+        // Send CombatEvent to all nearby players (broadcast via player_id=0,
+        // which send_progression_updates will broadcast)
+        // For now, send to all players that are involved or nearby
+        {
+            // Send to all connected players - they'll filter by visibility client-side
+            auto players_view = registry_.view<ecs::PlayerTag, ecs::NetworkId>();
+            for (auto player : players_view) {
+                auto& pnet = players_view.get<ecs::NetworkId>(player);
+                GameplayEvent evt;
+                evt.type = GameplayEvent::Type::CombatEvent;
+                evt.player_id = pnet.id;
+                evt.attacker_id = attacker_net_id;
+                evt.target_id = target_net_id;
+                evt.damage_amount = hit.damage;
+                pending_events_.push_back(evt);
+            }
+        }
+
+        // Entity death event
+        if (hit.target_died) {
+            auto players_view = registry_.view<ecs::PlayerTag, ecs::NetworkId>();
+            for (auto player : players_view) {
+                auto& pnet = players_view.get<ecs::NetworkId>(player);
+                GameplayEvent evt;
+                evt.type = GameplayEvent::Type::EntityDeath;
+                evt.player_id = pnet.id;
+                evt.dead_entity_id = target_net_id;
+                evt.killer_entity_id = attacker_net_id;
+                pending_events_.push_back(evt);
+            }
+        }
+    }
+
+    // Update progression systems
+    systems::update_mana_regen(registry_, dt);
+    systems::update_skill_cooldowns(registry_, dt);
+
+    // Update quests and generate progress/complete events
+    auto quest_changes = systems::update_quests(registry_, dt, *config_);
+    for (auto& [entity, change] : quest_changes) {
+        auto* net_id = registry_.try_get<ecs::NetworkId>(entity);
+        if (!net_id) continue;
+
+        if (change.quest_complete) {
+            GameplayEvent evt;
+            evt.type = GameplayEvent::Type::QuestComplete;
+            evt.player_id = net_id->id;
+            evt.quest_id = change.quest_id;
+            evt.quest_name = change.quest_name;
+            pending_events_.push_back(evt);
+        } else {
+            GameplayEvent evt;
+            evt.type = GameplayEvent::Type::QuestProgress;
+            evt.player_id = net_id->id;
+            evt.quest_id = change.quest_id;
+            evt.objective_index = change.objective_index;
+            evt.obj_current = change.current;
+            evt.obj_required = change.required;
+            evt.obj_complete = change.objective_complete;
+            pending_events_.push_back(evt);
+        }
+    }
+
+    // Check for dead monsters - award XP/loot and respawn
+    {
+        auto dead_npcs = registry_.view<ecs::NPCTag, ecs::Health, ecs::MonsterTypeId>();
+        for (auto entity : dead_npcs) {
+            auto& health = dead_npcs.get<ecs::Health>(entity);
+            if (health.is_alive()) continue;
+
+            auto& monster_info = dead_npcs.get<ecs::MonsterTypeId>(entity);
+
+            // Award XP/loot to nearest player who killed it
+            auto& transform = registry_.get<ecs::Transform>(entity);
+            float best_dist = 1000.0f;
+            entt::entity killer = entt::null;
+            auto players = registry_.view<ecs::PlayerTag, ecs::Transform, ecs::Health>();
+            for (auto player : players) {
+                auto& ph = players.get<ecs::Health>(player);
+                if (!ph.is_alive()) continue;
+                auto& pt = players.get<ecs::Transform>(player);
+                float dx = pt.x - transform.x;
+                float dz = pt.z - transform.z;
+                float dist = std::sqrt(dx * dx + dz * dz);
+                if (dist < best_dist) {
+                    best_dist = dist;
+                    killer = player;
+                }
+            }
+
+            if (killer != entt::null) {
+                // Snapshot XP/level before awarding so we can compute the gain
+                auto& killer_level_pre = registry_.get<ecs::PlayerLevel>(killer);
+                int xp_before = killer_level_pre.xp;
+                int level_before = killer_level_pre.level;
+
+                systems::award_kill_xp(registry_, killer, entity, *config_);
+                auto loot = systems::roll_loot(monster_info.type_id, *config_);
+                systems::give_loot(registry_, killer, loot);
+
+                // Process quest kill objectives and generate events
+                auto quest_kill_changes = systems::on_monster_killed(registry_, killer, monster_info.type_id, *config_);
+                auto& killer_net_id = registry_.get<ecs::NetworkId>(killer);
+
+                for (auto& change : quest_kill_changes) {
+                    if (change.quest_complete) {
+                        GameplayEvent evt;
+                        evt.type = GameplayEvent::Type::QuestComplete;
+                        evt.player_id = killer_net_id.id;
+                        evt.quest_id = change.quest_id;
+                        evt.quest_name = change.quest_name;
+                        pending_events_.push_back(evt);
+                    } else {
+                        GameplayEvent evt;
+                        evt.type = GameplayEvent::Type::QuestProgress;
+                        evt.player_id = killer_net_id.id;
+                        evt.quest_id = change.quest_id;
+                        evt.objective_index = change.objective_index;
+                        evt.obj_current = change.current;
+                        evt.obj_required = change.required;
+                        evt.obj_complete = change.objective_complete;
+                        pending_events_.push_back(evt);
+                    }
+                }
+
+                // Generate gameplay events for the client
+                auto& killer_level = registry_.get<ecs::PlayerLevel>(killer);
+
+                // XP gain event
+                {
+                    GameplayEvent evt;
+                    evt.type = GameplayEvent::Type::XPGain;
+                    evt.player_id = killer_net_id.id;
+                    evt.xp_gained = killer_level.xp - xp_before;
+                    evt.total_xp = killer_level.xp;
+                    // Calculate XP to next level
+                    const auto& xp_curve = config_->leveling().xp_curve;
+                    int level_idx = killer_level.level;
+                    evt.xp_to_next = (level_idx < static_cast<int>(xp_curve.size())) ? xp_curve[level_idx] : 99999;
+                    evt.new_level = killer_level.level;
+                    pending_events_.push_back(evt);
+                }
+
+                // Level up event (if level changed)
+                if (killer_level.level > level_before) {
+                    auto& killer_health = registry_.get<ecs::Health>(killer);
+                    auto& killer_combat = registry_.get<ecs::Combat>(killer);
+
+                    GameplayEvent evt;
+                    evt.type = GameplayEvent::Type::LevelUp;
+                    evt.player_id = killer_net_id.id;
+                    evt.new_level = killer_level.level;
+                    evt.new_max_health = killer_health.max;
+                    evt.new_damage = killer_combat.damage;
+                    evt.total_xp = killer_level.xp;
+                    const auto& xp_curve = config_->leveling().xp_curve;
+                    int level_idx = killer_level.level;
+                    evt.xp_to_next = (level_idx < static_cast<int>(xp_curve.size())) ? xp_curve[level_idx] : 99999;
+                    pending_events_.push_back(evt);
+                }
+
+                // Loot event
+                if (loot.gold > 0 || !loot.items.empty()) {
+                    GameplayEvent evt;
+                    evt.type = GameplayEvent::Type::LootDrop;
+                    evt.player_id = killer_net_id.id;
+                    evt.loot_gold = loot.gold;
+                    evt.total_gold = killer_level.gold;
+                    for (auto& [item_id, count] : loot.items) {
+                        const auto* item_cfg = config_->find_item(item_id);
+                        std::string name = item_cfg ? item_cfg->name : item_id;
+                        std::string rarity = item_cfg ? item_cfg->rarity : "common";
+                        evt.loot_items.push_back({name, rarity, count});
+                    }
+                    pending_events_.push_back(evt);
+                }
+
+                // Inventory update after loot
+                {
+                    GameplayEvent evt;
+                    evt.type = GameplayEvent::Type::InventoryUpdate;
+                    evt.player_id = killer_net_id.id;
+                    pending_events_.push_back(evt);
+                }
+            }
+
+            // Respawn monster in its zone
+            zone_system_.respawn_monster(
+                registry_, entity,
+                [this](float x, float z) { return get_terrain_height(x, z); }
+            );
+        }
+    }
 
     // Update physics (handles collision detection and response)
     physics_.update(registry_, dt);
 
-    // Update spatial grid with new positions
-    auto view = registry_.view<ecs::NetworkId, ecs::Transform, ecs::EntityInfo>();
+    // Update spatial grid - only for entities that can move (have Velocity)
+    // Static entities (buildings, environment) are added once at spawn and never change cell
+    auto view = registry_.view<ecs::NetworkId, ecs::Transform, ecs::EntityInfo, ecs::Velocity>();
     for (auto entity : view) {
-        const auto& net_id = view.get<ecs::NetworkId>(entity);
-        const auto& transform = view.get<ecs::Transform>(entity);
-        const auto& info = view.get<ecs::EntityInfo>(entity);
+        auto&& [net_id, transform, info, vel] = view.get(entity);
+        if (vel.x == 0.0f && vel.z == 0.0f) continue;
         spatial_grid_.update_entity(net_id.id, transform.x, transform.z, info.type);
+    }
+
+    // Zone change detection
+    {
+        auto players = registry_.view<ecs::PlayerTag, ecs::Transform, ecs::NetworkId>();
+        for (auto entity : players) {
+            auto& transform = players.get<ecs::Transform>(entity);
+            auto& net_id = players.get<ecs::NetworkId>(entity);
+
+            const auto* zone = config_->find_zone_at(transform.x, transform.z);
+            std::string zone_name = zone ? zone->name : "Wilderness";
+
+            auto& last = player_zones_[net_id.id];
+            if (zone_name != last) {
+                last = zone_name;
+                GameplayEvent evt;
+                evt.type = GameplayEvent::Type::ZoneChange;
+                evt.player_id = net_id.id;
+                evt.zone_name = zone_name;
+                pending_events_.push_back(evt);
+            }
+        }
     }
 }
 
@@ -267,15 +536,20 @@ NetEntityState World::get_entity_state(uint32_t network_id) const {
     state.attack_cooldown = combat.current_cooldown;
 
     // Include attack direction if available
-    if (registry_.all_of<ecs::AttackDirection>(entity)) {
-        const auto& attack_dir = registry_.get<ecs::AttackDirection>(entity);
-        state.attack_dir_x = attack_dir.x;
-        state.attack_dir_y = attack_dir.y;
+    if (const auto* attack_dir = registry_.try_get<ecs::AttackDirection>(entity)) {
+        state.attack_dir_x = attack_dir->x;
+        state.attack_dir_y = attack_dir->y;
     }
 
     // Include per-instance scale if available
-    if (registry_.all_of<ecs::Scale>(entity)) {
-        state.scale = registry_.get<ecs::Scale>(entity).value;
+    if (const auto* scale = registry_.try_get<ecs::Scale>(entity)) {
+        state.scale = scale->value;
+    }
+
+    // Include mana for players
+    if (const auto* player_level = registry_.try_get<ecs::PlayerLevel>(entity)) {
+        state.mana = player_level->mana;
+        state.max_mana = player_level->max_mana;
     }
 
     std::strncpy(state.name, name.value.c_str(), 31);
@@ -324,15 +598,20 @@ std::vector<NetEntityState> World::get_all_entities() const {
         state.attack_cooldown = combat.current_cooldown;
         
         // Include attack direction if available
-        if (registry_.all_of<ecs::AttackDirection>(entity)) {
-            const auto& attack_dir = registry_.get<ecs::AttackDirection>(entity);
-            state.attack_dir_x = attack_dir.x;
-            state.attack_dir_y = attack_dir.y;
+        if (const auto* attack_dir = registry_.try_get<ecs::AttackDirection>(entity)) {
+            state.attack_dir_x = attack_dir->x;
+            state.attack_dir_y = attack_dir->y;
         }
-        
+
         // Include per-instance scale if available
-        if (registry_.all_of<ecs::Scale>(entity)) {
-            state.scale = registry_.get<ecs::Scale>(entity).value;
+        if (const auto* scale = registry_.try_get<ecs::Scale>(entity)) {
+            state.scale = scale->value;
+        }
+
+        // Include mana for players
+        if (const auto* player_level = registry_.try_get<ecs::PlayerLevel>(entity)) {
+            state.mana = player_level->mana;
+            state.max_mana = player_level->max_mana;
         }
 
         std::strncpy(state.name, name.value.c_str(), 31);
@@ -343,16 +622,19 @@ std::vector<NetEntityState> World::get_all_entities() const {
 
         result.push_back(state);
     }
-    
+
     return result;
 }
 
+std::vector<World::GameplayEvent> World::take_events() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return std::move(pending_events_);
+}
+
 entt::entity World::find_entity_by_network_id(uint32_t id) const {
-    auto view = registry_.view<ecs::NetworkId>();
-    for (auto entity : view) {
-        if (view.get<ecs::NetworkId>(entity).id == id) {
-            return entity;
-        }
+    auto it = network_id_to_entity_.find(id);
+    if (it != network_id_to_entity_.end()) {
+        return it->second;
     }
     return entt::null;
 }
@@ -511,7 +793,9 @@ bool World::spawn_from_world_data() {
         py = get_terrain_height(px, pz);
 
         auto entity = registry_.create();
-        registry_.emplace<ecs::NetworkId>(entity, next_network_id());
+        uint32_t net_id = next_network_id();
+        registry_.emplace<ecs::NetworkId>(entity, net_id);
+        network_id_to_entity_[net_id] = entity;
 
         ecs::Transform transform;
         transform.x = px;
@@ -549,6 +833,7 @@ bool World::spawn_from_world_data() {
                 rb.motion_type = ecs::PhysicsMotionType::Static;
                 registry_.emplace<ecs::RigidBody>(entity, rb);
 
+                spatial_grid_.update_entity(net_id, px, pz, EntityType::Building);
                 buildings++;
                 break;
             }
@@ -587,6 +872,7 @@ bool World::spawn_from_world_data() {
                 rb.motion_type = ecs::PhysicsMotionType::Static;
                 registry_.emplace<ecs::RigidBody>(entity, rb);
 
+                spatial_grid_.update_entity(net_id, px, pz, EntityType::Environment);
                 environment++;
                 break;
             }
@@ -630,6 +916,7 @@ bool World::spawn_from_world_data() {
                     registry_.emplace<ecs::StaticTag>(entity);
                 }
 
+                spatial_grid_.update_entity(net_id, px, pz, EntityType::TownNPC);
                 town_npcs++;
                 break;
             }

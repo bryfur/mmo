@@ -78,7 +78,7 @@ protected:
 
     /** Initialize the rendering subsystems (window, GPU, scene renderer, camera). */
     bool init_renderer(int width, int height, const std::string& title,
-                       float world_width = 8000.0f, float world_height = 8000.0f);
+                       float world_width = 32000.0f, float world_height = 32000.0f);
 
     /** Shut down all rendering subsystems. */
     void shutdown_renderer();

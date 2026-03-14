@@ -40,6 +40,41 @@ enum class MessageType : uint8_t {
     EntityEnter = 40,         // Full entity state when entering view
     EntityUpdate = 41,        // Changed fields only
     EntityExit = 42,          // Entity ID leaving view
+
+    // Progression messages
+    LevelUp = 50,             // Server notifies client of level up
+    XPGain = 51,              // Server notifies client of XP gained
+    GoldChange = 52,          // Gold amount changed
+
+    // Inventory messages
+    InventoryUpdate = 55,     // Full inventory sync
+    LootDrop = 56,            // Item(s) dropped from monster kill
+    ItemEquip = 57,           // Client equips an item
+    ItemUnequip = 58,         // Client unequips an item
+
+    // Quest messages
+    QuestOffer = 60,          // Server offers a quest to client
+    QuestAccept = 61,         // Client accepts a quest
+    QuestProgress = 62,       // Server updates quest objective progress
+    QuestComplete = 63,       // Server notifies quest completion
+    QuestTurnIn = 64,         // Client turns in completed quest
+    QuestList = 65,           // Server sends available quests for an NPC
+
+    // Skill messages
+    SkillUse = 70,            // Client requests skill use
+    SkillCooldown = 71,       // Server sends cooldown update
+    SkillUnlock = 72,         // Server notifies skill unlock
+
+    // Talent messages
+    TalentUnlock = 75,        // Client requests talent unlock
+    TalentSync = 76,          // Server sends talent state
+
+    // NPC interaction
+    NPCInteract = 80,        // Client interacts with NPC
+    NPCDialogue = 81,        // Server sends NPC dialogue
+
+    // World events
+    ZoneChange = 85,          // Player entered a new zone
 };
 
 } // namespace mmo::protocol

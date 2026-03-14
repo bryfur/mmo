@@ -69,12 +69,17 @@ struct Mesh {
     int texture_width = 0;
     int texture_height = 0;
 
+    // Cached index count (valid after GPU upload, when CPU-side data is freed)
+    uint32_t cached_index_count = 0;
+
     // Convenience accessors
     uint32_t vertex_count() const {
         return is_skinned ? static_cast<uint32_t>(skinned_vertices.size())
                           : static_cast<uint32_t>(vertices.size());
     }
-    uint32_t index_count() const { return static_cast<uint32_t>(indices.size()); }
+    uint32_t index_count() const {
+        return cached_index_count > 0 ? cached_index_count : static_cast<uint32_t>(indices.size());
+    }
 
     // Bind vertex and index buffers for rendering (SDL3 GPU API)
     void bind_buffers(struct SDL_GPURenderPass* pass) const;
@@ -92,11 +97,24 @@ struct Model {
     bool has_skeleton = false;
     FootIKData foot_ik;
 
+    // Pre-computed bounding sphere for fast frustum culling (avoids per-entity recomputation)
+    glm::vec3 bounding_center = {0, 0, 0};
+    float bounding_half_diag = 0.0f;
+
     float width() const { return max_x - min_x; }
     float height() const { return max_y - min_y; }
     float depth() const { return max_z - min_z; }
     float max_dimension() const {
         return std::max({width(), height(), depth()});
+    }
+
+    void compute_bounding_sphere() {
+        bounding_center = glm::vec3(
+            (min_x + max_x) * 0.5f,
+            (min_y + max_y) * 0.5f,
+            (min_z + max_z) * 0.5f
+        );
+        bounding_half_diag = glm::length(glm::vec3(width(), height(), depth())) * 0.5f;
     }
 
     // Animation helpers

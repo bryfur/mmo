@@ -16,7 +16,7 @@ namespace mmo::editor {
 class EditorApplication;
 
 enum class ToolType { Select, Terrain, Place };
-enum class BrushMode { Raise, Lower, Smooth, Flatten };
+enum class BrushMode { Raise, Lower, Smooth, Flatten, SetMax };
 enum class PaintMode { Height, Splatmap };
 enum class SplatChannel { Grass, Dirt, Rock, Sand };
 

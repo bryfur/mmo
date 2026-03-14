@@ -1,6 +1,6 @@
 {
-    "width": 8000.0,
-    "height": 8000.0,
+    "width": 32000.0,
+    "height": 32000.0,
     "spawn_zones": {
         "mountain_rocks": {
             "count": 40,

@@ -27,6 +27,9 @@ public:
     }
     const ControlsSettings& controls_settings() const { return controls_settings_; }
 
+    bool settings_dirty() const { return settings_dirty_; }
+    void clear_settings_dirty() { settings_dirty_ = false; }
+
 private:
     void init_menu_items();
     void init_main_menu();
@@ -44,6 +47,7 @@ private:
     int max_vsync_mode_ = 2;
     engine::GraphicsSettings graphics_settings_;
     ControlsSettings controls_settings_;
+    bool settings_dirty_ = true;
 
     int prev_menu_selected_ = -1;
     float menu_highlight_progress_ = 1.0f;

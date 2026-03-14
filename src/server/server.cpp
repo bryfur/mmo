@@ -6,6 +6,10 @@
 #include "server/game_types.hpp"
 #include "server/session.hpp"
 #include "server/ecs/game_components.hpp"
+#include "systems/quest_system.hpp"
+#include "systems/skill_system.hpp"
+#include "systems/loot_system.hpp"
+#include "systems/leveling_system.hpp"
 #include <entt/entt.hpp>
 #include <algorithm>
 #include <chrono>
@@ -15,6 +19,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -133,6 +138,15 @@ void Server::on_class_select(std::shared_ptr<Session> session, uint8_t class_ind
         auto player_state = world_.get_entity_state(player_id);
         broadcast_except(build_packet(MessageType::PlayerJoined, player_state), player_id);
     }
+
+    // Tell client which NPCs have quests available for them
+    send_quest_availability(player_id);
+
+    // Send available skills for this class
+    send_skill_list(player_id);
+
+    // Send initial talent state
+    send_talent_sync(player_id);
 }
 
 void Server::on_player_disconnect(uint32_t player_id) {
@@ -161,6 +175,148 @@ void Server::on_player_input(uint32_t player_id, const PlayerInput& input) {
     world_.update_player_input(player_id, input);
 }
 
+void Server::on_npc_interact(std::shared_ptr<Session> session, uint32_t player_id, uint32_t npc_id) {
+    auto& registry = world_.registry();
+    auto player_entity = world_.find_entity_by_network_id(player_id);
+    auto npc_entity = world_.find_entity_by_network_id(npc_id);
+
+    if (player_entity == entt::null || npc_entity == entt::null) return;
+    if (!registry.all_of<ecs::EntityInfo, ecs::Name>(npc_entity)) return;
+
+    auto& npc_info = registry.get<ecs::EntityInfo>(npc_entity);
+    if (npc_info.type != protocol::EntityType::TownNPC) return;
+
+    // Map npc_type index to string for quest lookup
+    std::string npc_type;
+    switch (npc_info.npc_type) {
+        case 1: npc_type = "merchant"; break;
+        case 2: npc_type = "guard"; break;
+        case 3: npc_type = "blacksmith"; break;
+        case 4: npc_type = "innkeeper"; break;
+        default: npc_type = "villager"; break;
+    }
+
+    // Auto turn-in any completable quests from this NPC type
+    if (registry.all_of<ecs::QuestState>(player_entity)) {
+        auto& quest_state = registry.get<ecs::QuestState>(player_entity);
+        for (auto& active : quest_state.active_quests) {
+            if (active.all_complete) {
+                const auto* qcfg = config_.find_quest(active.quest_id);
+                if (qcfg && qcfg->giver_type == npc_type) {
+                    systems::turn_in_quest(registry, player_entity, active.quest_id, config_);
+                }
+            }
+        }
+    }
+
+    // Get available quests for this NPC and send offers to client
+    auto available = systems::get_available_quests(registry, player_entity, npc_type, config_);
+
+    auto& npc_name = registry.get<ecs::Name>(npc_entity);
+
+    // Send dialogue header so client knows how many quests to expect
+    NPCDialogueMsg dlg;
+    dlg.npc_id = npc_id;
+    std::strncpy(dlg.npc_name, npc_name.value.c_str(), sizeof(dlg.npc_name) - 1);
+    std::strncpy(dlg.dialogue, "What can I do for you?", sizeof(dlg.dialogue) - 1);
+    dlg.quest_count = static_cast<uint8_t>(available.size());
+    session->send(build_packet(MessageType::NPCDialogue, dlg));
+
+    // Send each available quest as a QuestOffer
+    for (const auto* quest : available) {
+        QuestOfferMsg offer;
+        std::strncpy(offer.quest_id, quest->id.c_str(), sizeof(offer.quest_id) - 1);
+        std::strncpy(offer.quest_name, quest->name.c_str(), sizeof(offer.quest_name) - 1);
+        std::strncpy(offer.dialogue, quest->dialogue.offer.c_str(), sizeof(offer.dialogue) - 1);
+        offer.xp_reward = quest->rewards.xp;
+        offer.gold_reward = quest->rewards.gold;
+        offer.objective_count = static_cast<uint8_t>(
+            std::min(quest->objectives.size(), static_cast<size_t>(QuestOfferMsg::MAX_OBJECTIVES)));
+        for (int i = 0; i < offer.objective_count; ++i) {
+            std::strncpy(offer.objectives[i].description,
+                         quest->objectives[i].description.c_str(),
+                         sizeof(offer.objectives[i].description) - 1);
+            offer.objectives[i].count = quest->objectives[i].count;
+            offer.objectives[i].location_x = quest->objectives[i].location_x;
+            offer.objectives[i].location_z = quest->objectives[i].location_z;
+            offer.objectives[i].radius = quest->objectives[i].radius;
+        }
+        session->send(build_packet(MessageType::QuestOffer, offer));
+    }
+}
+
+void Server::on_quest_accept(uint32_t player_id, const std::string& quest_id) {
+    auto& registry = world_.registry();
+    auto player = world_.find_entity_by_network_id(player_id);
+    if (player == entt::null) return;
+    systems::accept_quest(registry, player, quest_id, config_);
+    send_quest_availability(player_id);
+}
+
+void Server::on_quest_turnin(uint32_t player_id, const std::string& quest_id) {
+    auto& registry = world_.registry();
+    auto player = world_.find_entity_by_network_id(player_id);
+    if (player == entt::null) return;
+    systems::turn_in_quest(registry, player, quest_id, config_);
+    send_quest_availability(player_id);
+}
+
+void Server::on_skill_use(uint32_t player_id, const std::string& skill_id, float dir_x, float dir_z) {
+    auto& registry = world_.registry();
+    auto player = world_.find_entity_by_network_id(player_id);
+    if (player == entt::null) return;
+
+    bool success = systems::use_skill(registry, player, skill_id, dir_x, dir_z, config_);
+
+    // Send SkillResultMsg back to client
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+    auto sit = sessions_.find(player_id);
+    if (sit == sessions_.end() || !sit->second->is_open()) return;
+
+    SkillResultMsg result;
+    std::strncpy(result.skill_id, skill_id.c_str(), sizeof(result.skill_id) - 1);
+    result.success = success ? 1 : 0;
+    result.cooldown = 0;
+    if (success) {
+        const SkillConfig* skill_cfg = config_.find_skill(skill_id);
+        if (skill_cfg) result.cooldown = skill_cfg->cooldown;
+    }
+    sit->second->send(build_packet(MessageType::SkillCooldown, result));
+}
+
+void Server::on_talent_unlock(uint32_t player_id, const std::string& talent_id) {
+    auto& registry = world_.registry();
+    auto player = world_.find_entity_by_network_id(player_id);
+    if (player == entt::null) return;
+
+    bool success = systems::unlock_talent(registry, player, talent_id, config_);
+    if (success) {
+        send_talent_sync(player_id);
+    }
+}
+
+void Server::on_item_equip(uint32_t player_id, const std::string& item_id) {
+    auto& registry = world_.registry();
+    auto player = world_.find_entity_by_network_id(player_id);
+    if (player == entt::null) return;
+
+    bool success = systems::equip_item(registry, player, item_id, config_);
+    if (success) {
+        send_inventory_update(player_id);
+    }
+}
+
+void Server::on_item_unequip(uint32_t player_id, const std::string& slot) {
+    auto& registry = world_.registry();
+    auto player = world_.find_entity_by_network_id(player_id);
+    if (player == entt::null) return;
+
+    bool success = systems::unequip_item(registry, player, slot, config_);
+    if (success) {
+        send_inventory_update(player_id);
+    }
+}
+
 void Server::broadcast(const std::vector<uint8_t>& data) {
     std::lock_guard<std::mutex> lock(sessions_mutex_);
     for (auto& [id, session] : sessions_) {
@@ -182,23 +338,100 @@ void Server::broadcast_except(const std::vector<uint8_t>& data, uint32_t exclude
 void Server::game_loop() {
     if (!running_) return;
 
+    // Initialize absolute tick time on first call
+    if (next_tick_time_ == std::chrono::steady_clock::time_point{}) {
+        next_tick_time_ = std::chrono::steady_clock::now();
+    }
+
     auto now = std::chrono::steady_clock::now();
     float dt = std::chrono::duration<float>(now - last_tick_).count();
     last_tick_ = now;
 
     world_.update(dt);
 
+    // Send progression events (XP, loot, level ups, zone changes) to clients
+    send_progression_updates();
+
     // Use delta compression instead of full world state broadcasts
     send_entity_deltas();
     // broadcast_world_state();  // Old method - kept for reference/rollback
 
     float tick_duration = 1.0f / config_.server().tick_rate;
-    tick_timer_.expires_after(std::chrono::milliseconds(static_cast<int>(tick_duration * 1000)));
+    next_tick_time_ += std::chrono::microseconds(static_cast<int>(tick_duration * 1000000));
+    tick_timer_.expires_at(next_tick_time_);
     tick_timer_.async_wait([this](asio::error_code ec) {
         if (!ec && running_) {
             game_loop();
         }
     });
+}
+
+void Server::send_quest_availability(uint32_t player_id) {
+    auto& registry = world_.registry();
+    auto player = world_.find_entity_by_network_id(player_id);
+    if (player == entt::null) return;
+
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+    auto sit = sessions_.find(player_id);
+    if (sit == sessions_.end() || !sit->second->is_open()) return;
+
+    // Collect NPC network IDs that have quests available for this player
+    std::vector<uint32_t> npc_ids_with_quests;
+
+    auto npc_view = registry.view<ecs::NetworkId, ecs::EntityInfo, ecs::Name>();
+    for (auto entity : npc_view) {
+        auto& info = npc_view.get<ecs::EntityInfo>(entity);
+        if (info.type != protocol::EntityType::TownNPC) continue;
+
+        // Map NPC type to quest giver type string
+        std::string npc_type;
+        switch (info.npc_type) {
+            case 1: npc_type = "merchant"; break;
+            case 2: npc_type = "guard"; break;
+            case 3: npc_type = "blacksmith"; break;
+            case 4: npc_type = "innkeeper"; break;
+            case 5: npc_type = "villager"; break;
+            default: npc_type = "villager"; break;
+        }
+
+        auto available = systems::get_available_quests(registry, player, npc_type, config_);
+
+        // Also check for completable quests
+        bool has_completable = false;
+        if (registry.all_of<ecs::QuestState>(player)) {
+            auto& qs = registry.get<ecs::QuestState>(player);
+            for (auto& active : qs.active_quests) {
+                if (!active.all_complete) continue;
+                const auto* qcfg = config_.find_quest(active.quest_id);
+                if (qcfg && qcfg->giver_type == npc_type) {
+                    has_completable = true;
+                    break;
+                }
+            }
+        }
+
+        if (!available.empty() || has_completable) {
+            auto& net_id = npc_view.get<ecs::NetworkId>(entity);
+            // Encode: high bit = has completable quest (show "?"), otherwise "!"
+            uint32_t encoded_id = net_id.id;
+            if (has_completable) encoded_id |= 0x80000000;
+            npc_ids_with_quests.push_back(encoded_id);
+        }
+    }
+
+    // Send QuestList message: count(u16) + npc_ids(u32 each)
+    std::vector<uint8_t> data;
+    BufferWriter w(data);
+    PacketHeader hdr;
+    hdr.type = MessageType::QuestList;
+    uint16_t count = static_cast<uint16_t>(std::min(npc_ids_with_quests.size(), static_cast<size_t>(100)));
+    hdr.payload_size = sizeof(uint16_t) + count * sizeof(uint32_t);
+    hdr.serialize(w);
+    w.write(count);
+    for (uint16_t i = 0; i < count; ++i) {
+        w.write(npc_ids_with_quests[i]);
+    }
+    sit->second->send(data);
 }
 
 void Server::broadcast_world_state() {
@@ -284,13 +517,20 @@ void Server::send_entity_deltas() {
         // Query visible entities (spatial partitioning with tiered view distances)
         auto nearby_ids = world_.query_entities_near(transform.x, transform.z, network_config.max_view_distance());
 
-        // Filter by per-entity view distance
-        std::vector<uint32_t> visible_now;
-
+        // Build state cache: call get_entity_state once per entity
+        std::unordered_map<uint32_t, protocol::NetEntityState> state_cache;
+        state_cache.reserve(nearby_ids.size());
         for (uint32_t entity_id : nearby_ids) {
             auto entity_state = world_.get_entity_state(entity_id);
             if (entity_state.id == 0) continue;
+            state_cache.emplace(entity_id, entity_state);
+        }
 
+        // Filter by per-entity view distance
+        std::vector<uint32_t> visible_now;
+        visible_now.reserve(state_cache.size());
+
+        for (auto& [entity_id, entity_state] : state_cache) {
             float dx = entity_state.x - transform.x;
             float dz = entity_state.z - transform.z;
             float dist_sq = dx*dx + dz*dz;
@@ -307,16 +547,18 @@ void Server::send_entity_deltas() {
         // ENTER: in visible_now but not in known
         for (uint32_t id : visible_now) {
             if (!view->knows_entity(id)) {
-                auto state = world_.get_entity_state(id);
+                const auto& state = state_cache[id];
                 session->send(build_packet(MessageType::EntityEnter, state));
                 view->add_known_entity(id, state);
             }
         }
 
         // EXIT: in known but not in visible_now
+        // Sort visible_now and use binary_search instead of building an unordered_set
+        std::sort(visible_now.begin(), visible_now.end());
         std::vector<uint32_t> to_remove;
         for (uint32_t id : known) {
-            if (std::find(visible_now.begin(), visible_now.end(), id) == visible_now.end()) {
+            if (!std::binary_search(visible_now.begin(), visible_now.end(), id)) {
                 EntityExitMsg msg;
                 msg.entity_id = id;
                 session->send(build_packet(MessageType::EntityExit, msg));
@@ -331,7 +573,7 @@ void Server::send_entity_deltas() {
         for (uint32_t id : visible_now) {
             if (!view->knows_entity(id)) continue;  // Just entered, skip update
 
-            auto current_state = world_.get_entity_state(id);
+            const auto& current_state = state_cache[id];
             auto last_state = view->get_last_state(id);
             if (!last_state) continue;
 
@@ -360,6 +602,211 @@ void Server::send_entity_deltas() {
     }
 }
 
+void Server::send_inventory_update(uint32_t player_id) {
+    auto& registry = world_.registry();
+    auto player = world_.find_entity_by_network_id(player_id);
+    if (player == entt::null) return;
+
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+    auto sit = sessions_.find(player_id);
+    if (sit == sessions_.end() || !sit->second->is_open()) return;
+
+    auto* inv = registry.try_get<ecs::Inventory>(player);
+    auto* equip = registry.try_get<ecs::Equipment>(player);
+    auto* level = registry.try_get<ecs::PlayerLevel>(player);
+
+    // Pack inventory: gold(i32) + slot_count(u8) + [item_id(32) + count(u8)] * slots
+    //                 + weapon_id(32) + armor_id(32)
+    std::vector<uint8_t> payload;
+    BufferWriter pw(payload);
+
+    pw.write(static_cast<int32_t>(level ? level->gold : 0));
+    uint8_t used = inv ? static_cast<uint8_t>(inv->used_slots) : 0;
+    pw.write(used);
+    for (int i = 0; i < used; ++i) {
+        pw.write_fixed_string(inv->slots[i].item_id, 32);
+        pw.write(static_cast<uint8_t>(inv->slots[i].count));
+    }
+    // Equipment
+    pw.write_fixed_string(equip ? equip->weapon_id : "", 32);
+    pw.write_fixed_string(equip ? equip->armor_id : "", 32);
+
+    sit->second->send(build_packet(MessageType::InventoryUpdate, payload));
+}
+
+void Server::send_talent_sync(uint32_t player_id) {
+    auto& registry = world_.registry();
+    auto player = world_.find_entity_by_network_id(player_id);
+    if (player == entt::null) return;
+
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+    auto sit = sessions_.find(player_id);
+    if (sit == sessions_.end() || !sit->second->is_open()) return;
+
+    auto* talent_state = registry.try_get<ecs::TalentState>(player);
+    if (!talent_state) return;
+
+    TalentSyncMsg msg;
+    msg.talent_points = talent_state->talent_points;
+    msg.unlocked_count = static_cast<uint8_t>(
+        std::min(talent_state->unlocked_talents.size(), static_cast<size_t>(TalentSyncMsg::MAX_TALENTS)));
+    for (int i = 0; i < msg.unlocked_count; ++i) {
+        std::strncpy(msg.unlocked_ids[i], talent_state->unlocked_talents[i].c_str(),
+                     sizeof(msg.unlocked_ids[i]) - 1);
+    }
+    sit->second->send(build_packet(MessageType::TalentSync, msg));
+}
+
+void Server::send_skill_list(uint32_t player_id) {
+    auto& registry = world_.registry();
+    auto player = world_.find_entity_by_network_id(player_id);
+    if (player == entt::null) return;
+
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+    auto sit = sessions_.find(player_id);
+    if (sit == sessions_.end() || !sit->second->is_open()) return;
+
+    auto unlocked = systems::get_unlocked_skills(registry, player, config_);
+
+    // Send skill list as SkillUnlock messages (one per skill)
+    for (const auto* skill : unlocked) {
+        SkillResultMsg msg;
+        std::strncpy(msg.skill_id, skill->id.c_str(), sizeof(msg.skill_id) - 1);
+        msg.cooldown = skill->cooldown;
+        msg.success = 1;  // Indicates skill is available
+        sit->second->send(build_packet(MessageType::SkillUnlock, msg));
+    }
+}
+
+void Server::send_progression_updates() {
+    auto events = world_.take_events();
+    if (events.empty()) return;
+
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+    for (auto& evt : events) {
+        auto sit = sessions_.find(evt.player_id);
+        if (sit == sessions_.end() || !sit->second->is_open()) continue;
+
+        switch (evt.type) {
+            case World::GameplayEvent::Type::XPGain: {
+                XPGainMsg msg;
+                msg.xp_gained = evt.xp_gained;
+                msg.total_xp = evt.total_xp;
+                msg.xp_to_next = evt.xp_to_next;
+                msg.current_level = evt.new_level;
+                sit->second->send(build_packet(MessageType::XPGain, msg));
+                break;
+            }
+            case World::GameplayEvent::Type::LevelUp: {
+                LevelUpMsg msg;
+                msg.new_level = evt.new_level;
+                msg.new_max_health = evt.new_max_health;
+                msg.new_damage = evt.new_damage;
+                sit->second->send(build_packet(MessageType::LevelUp, msg));
+
+                // On level up, send updated skill list (new skills may have unlocked)
+                // Note: sessions_mutex_ is already held, so call send directly
+                {
+                    auto player = world_.find_entity_by_network_id(evt.player_id);
+                    if (player != entt::null) {
+                        auto unlocked = systems::get_unlocked_skills(world_.registry(), player, config_);
+                        for (const auto* skill : unlocked) {
+                            SkillResultMsg skill_msg;
+                            std::strncpy(skill_msg.skill_id, skill->id.c_str(), sizeof(skill_msg.skill_id) - 1);
+                            skill_msg.cooldown = skill->cooldown;
+                            skill_msg.success = 1;
+                            sit->second->send(build_packet(MessageType::SkillUnlock, skill_msg));
+                        }
+                    }
+                }
+                break;
+            }
+            case World::GameplayEvent::Type::LootDrop: {
+                std::vector<uint8_t> payload;
+                BufferWriter pw(payload);
+                pw.write(static_cast<int32_t>(evt.loot_gold));
+                pw.write(static_cast<int32_t>(evt.total_gold));
+                uint8_t count = static_cast<uint8_t>(std::min(evt.loot_items.size(), static_cast<size_t>(5)));
+                pw.write(count);
+                for (int i = 0; i < count; ++i) {
+                    pw.write_fixed_string(evt.loot_items[i].name, 32);
+                    pw.write_fixed_string(evt.loot_items[i].rarity, 16);
+                    pw.write(static_cast<uint8_t>(evt.loot_items[i].count));
+                }
+                sit->second->send(build_packet(MessageType::LootDrop, payload));
+                break;
+            }
+            case World::GameplayEvent::Type::ZoneChange: {
+                ZoneChangeMsg msg;
+                std::strncpy(msg.zone_name, evt.zone_name.c_str(), sizeof(msg.zone_name) - 1);
+                sit->second->send(build_packet(MessageType::ZoneChange, msg));
+                break;
+            }
+            case World::GameplayEvent::Type::QuestProgress: {
+                QuestProgressMsg msg;
+                std::strncpy(msg.quest_id, evt.quest_id.c_str(), sizeof(msg.quest_id) - 1);
+                msg.objective_index = evt.objective_index;
+                msg.current = evt.obj_current;
+                msg.required = evt.obj_required;
+                msg.complete = evt.obj_complete ? 1 : 0;
+                sit->second->send(build_packet(MessageType::QuestProgress, msg));
+                break;
+            }
+            case World::GameplayEvent::Type::QuestComplete: {
+                QuestCompleteMsg msg;
+                std::strncpy(msg.quest_id, evt.quest_id.c_str(), sizeof(msg.quest_id) - 1);
+                std::strncpy(msg.quest_name, evt.quest_name.c_str(), sizeof(msg.quest_name) - 1);
+                sit->second->send(build_packet(MessageType::QuestComplete, msg));
+                break;
+            }
+            case World::GameplayEvent::Type::InventoryUpdate: {
+                // Delegate to the helper (but we already hold sessions_mutex_,
+                // so send directly here instead of calling the helper)
+                auto player = world_.find_entity_by_network_id(evt.player_id);
+                if (player != entt::null) {
+                    auto& registry = world_.registry();
+                    auto* inv = registry.try_get<ecs::Inventory>(player);
+                    auto* equip = registry.try_get<ecs::Equipment>(player);
+                    auto* level = registry.try_get<ecs::PlayerLevel>(player);
+
+                    std::vector<uint8_t> payload;
+                    BufferWriter pw(payload);
+                    pw.write(static_cast<int32_t>(level ? level->gold : 0));
+                    uint8_t used = inv ? static_cast<uint8_t>(inv->used_slots) : 0;
+                    pw.write(used);
+                    for (int i = 0; i < used; ++i) {
+                        pw.write_fixed_string(inv->slots[i].item_id, 32);
+                        pw.write(static_cast<uint8_t>(inv->slots[i].count));
+                    }
+                    pw.write_fixed_string(equip ? equip->weapon_id : "", 32);
+                    pw.write_fixed_string(equip ? equip->armor_id : "", 32);
+                    sit->second->send(build_packet(MessageType::InventoryUpdate, payload));
+                }
+                break;
+            }
+            case World::GameplayEvent::Type::CombatEvent: {
+                // Send combat event: attacker(u32) + target(u32) + damage(f32)
+                std::vector<uint8_t> payload;
+                BufferWriter pw(payload);
+                pw.write(evt.attacker_id);
+                pw.write(evt.target_id);
+                pw.write(evt.damage_amount);
+                sit->second->send(build_packet(MessageType::CombatEvent, payload));
+                break;
+            }
+            case World::GameplayEvent::Type::EntityDeath: {
+                // Send entity death: dead_id(u32) + killer_id(u32)
+                std::vector<uint8_t> payload;
+                BufferWriter pw(payload);
+                pw.write(evt.dead_entity_id);
+                pw.write(evt.killer_entity_id);
+                sit->second->send(build_packet(MessageType::EntityDeath, payload));
+                break;
+            }
+        }
+    }
+}
+
 float Server::get_update_interval(protocol::EntityType type) const {
     // Rate limiting: max update frequency per entity type
     switch(type) {
@@ -383,7 +830,8 @@ bool Server::has_changes(const protocol::NetEntityState& current,
            current.is_attacking != last.is_attacking ||
            current.attack_dir_x != last.attack_dir_x ||
            current.attack_dir_y != last.attack_dir_y ||
-           current.rotation != last.rotation;
+           current.rotation != last.rotation ||
+           current.mana != last.mana;
 }
 
 protocol::EntityDeltaUpdate Server::create_delta(const protocol::NetEntityState& current,
@@ -425,6 +873,11 @@ protocol::EntityDeltaUpdate Server::create_delta(const protocol::NetEntityState&
     if (current.rotation != last.rotation) {
         delta.flags |= protocol::EntityDeltaUpdate::FLAG_ROTATION;
         delta.rotation = current.rotation;
+    }
+
+    if (current.mana != last.mana) {
+        delta.flags |= protocol::EntityDeltaUpdate::FLAG_MANA;
+        delta.mana = current.mana;
     }
 
     return delta;

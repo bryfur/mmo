@@ -146,7 +146,14 @@ void apply_foot_ik(
         size_t count = std::min(skeleton.joints.size(), static_cast<size_t>(MAX_BONES));
         for (size_t i = 0; i < count; i++) {
             world_transforms[i][3].y += drop_model;
-            bone_matrices[i] = world_transforms[i] * skeleton.joints[i].inverse_bind_matrix;
+            // Only the translation row of bone_matrices changes when adding a Y offset to world_transforms
+            // bone_matrices[i] = world_transforms[i] * inv_bind
+            // The Y offset affects column 3 of the product: bone_matrices[i][3] += drop_model * inv_bind[1]
+            const glm::mat4& inv_bind = skeleton.joints[i].inverse_bind_matrix;
+            bone_matrices[i][3][0] += drop_model * inv_bind[1][0];
+            bone_matrices[i][3][1] += drop_model * inv_bind[1][1];
+            bone_matrices[i][3][2] += drop_model * inv_bind[1][2];
+            bone_matrices[i][3][3] += drop_model * inv_bind[1][3];
         }
         left_offset -= pelvis_drop;
         right_offset -= pelvis_drop;
@@ -191,15 +198,20 @@ void apply_body_lean(
                            * lean_rot
                            * glm::translate(glm::mat4(1.0f), -pivot);
 
-    for (size_t i = 0; i < skeleton.joints.size() && i < static_cast<size_t>(MAX_BONES); i++) {
-        // Walk parent chain to check if descendant of spine
-        int cur = static_cast<int>(i);
-        bool is_descendant = false;
-        while (cur >= 0) {
-            if (cur == spine_index) { is_descendant = true; break; }
-            cur = skeleton.joints[cur].parent_index;
+    // Precompute spine descendants in one pass (O(n)) instead of walking
+    // parent chains per bone (O(n * depth))
+    size_t joint_count = std::min(skeleton.joints.size(), static_cast<size_t>(MAX_BONES));
+    bool is_spine_descendant[MAX_BONES] = {};
+    is_spine_descendant[spine_index] = true;
+    for (size_t i = 0; i < joint_count; i++) {
+        int parent = skeleton.joints[i].parent_index;
+        if (parent >= 0 && parent < static_cast<int>(joint_count) && is_spine_descendant[parent]) {
+            is_spine_descendant[i] = true;
         }
-        if (!is_descendant) continue;
+    }
+
+    for (size_t i = 0; i < joint_count; i++) {
+        if (!is_spine_descendant[i]) continue;
 
         world_transforms[i] = pivot_xform * world_transforms[i];
         bone_matrices[i] = world_transforms[i] * skeleton.joints[i].inverse_bind_matrix;

@@ -517,6 +517,7 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
     }
 
     model.loaded = true;
+    model.compute_bounding_sphere();
     std::cout << "Loaded GLB model: " << path << " (" << model.meshes.size() << " meshes)"
               << " bounds: Y=[" << model.min_y << ", " << model.max_y << "]" << std::endl;
     return true;
@@ -577,6 +578,17 @@ void ModelLoader::upload_to_gpu(gpu::GPUDevice& device, Model& model) {
         }
 
         mesh.uploaded = true;
+
+        // Cache index count before freeing CPU-side geometry data
+        mesh.cached_index_count = static_cast<uint32_t>(mesh.indices.size());
+
+        // Free CPU-side vertex/index data - it's on the GPU now
+        mesh.vertices.clear();
+        mesh.vertices.shrink_to_fit();
+        mesh.skinned_vertices.clear();
+        mesh.skinned_vertices.shrink_to_fit();
+        mesh.indices.clear();
+        mesh.indices.shrink_to_fit();
     }
 }
 

@@ -20,15 +20,15 @@ namespace mmo::protocol {
  */
 namespace heightmap_config {
     // Resolution of each chunk (vertices per edge)
-    // 257 = 256 cells + 1 for edge vertices (power of 2 + 1 for seamless tiling)
-    constexpr uint32_t CHUNK_RESOLUTION = 257;
-    
+    // 1025 = 1024 cells + 1 for edge vertices (power of 2 + 1 for seamless tiling)
+    constexpr uint32_t CHUNK_RESOLUTION = 1025;
+
     // World size each chunk covers (in world units/meters)
-    constexpr float CHUNK_WORLD_SIZE = 8000.0f;
+    constexpr float CHUNK_WORLD_SIZE = 32000.0f;
     
     // Height range for normalization (for 16-bit storage)
     constexpr float MIN_HEIGHT = -500.0f;
-    constexpr float MAX_HEIGHT = 500.0f;
+    constexpr float MAX_HEIGHT = 1000.0f;
     
     // Meters per texel
     constexpr float TEXEL_SIZE = CHUNK_WORLD_SIZE / (CHUNK_RESOLUTION - 1);

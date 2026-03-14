@@ -103,7 +103,7 @@ private:
 
     // Splatmap (RGBA texture for terrain material painting)
     std::vector<uint8_t> splatmap_data_;  // RGBA pixels
-    uint32_t splatmap_resolution_ = 1024;  // 1024x1024 splatmap
+    uint32_t splatmap_resolution_ = 4096;  // 4096x4096 splatmap
     bool splatmap_dirty_ = false;
 
     // Camera

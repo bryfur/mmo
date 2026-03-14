@@ -22,8 +22,16 @@ class BufferWriter {
 
     void ensure(size_t n) {
         if (vec_) {
-            if (vec_->size() < offset_ + n) {
-                vec_->resize(offset_ + n);
+            size_t required = offset_ + n;
+            if (vec_->size() < required) {
+                // Reserve with exponential growth to avoid repeated reallocations,
+                // but only resize to the exact amount needed (size() == actual data)
+                if (vec_->capacity() < required) {
+                    size_t new_cap = vec_->capacity() * 2;
+                    if (new_cap < required) new_cap = required;
+                    vec_->reserve(new_cap);
+                }
+                vec_->resize(required);
             }
             data_ = vec_->data();
             capacity_ = vec_->size();

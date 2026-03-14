@@ -109,7 +109,7 @@ public:
     );
 
     // Update all active effects and particles
-    void update(float dt, std::function<float(float, float)> get_terrain_height = nullptr);
+    void update(float dt, const std::function<float(float, float)>& get_terrain_height = nullptr);
 
     // Get all active effects (for rendering)
     const std::vector<EffectInstance>& get_effects() const { return effects_; }
@@ -127,7 +127,7 @@ private:
     std::vector<EffectInstance> effects_;
 
     // Helper functions
-    void update_emitter(EmitterInstance& emitter, float dt, std::function<float(float, float)> get_terrain_height);
+    void update_emitter(EmitterInstance& emitter, float dt, const std::function<float(float, float)>& get_terrain_height);
     void spawn_particles(EmitterInstance& emitter, int count);
     void update_particle(Particle& particle, const EmitterDefinition& emitter_def, float dt);
     glm::vec3 calculate_initial_velocity(const VelocityDefinition& vel_def, const glm::vec3& direction, int particle_index);

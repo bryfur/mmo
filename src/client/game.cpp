@@ -27,6 +27,7 @@
 #include <cstring>
 #include <cmath>
 #include <vector>
+#include <SDL3/SDL.h>
 
 namespace mmo::client {
 
@@ -188,8 +189,11 @@ void Game::on_update(float dt) {
 
     if (game_state_ == GameState::Playing || game_state_ == GameState::ClassSelect) {
         menu_system_->update(dt);
-        apply_graphics_settings();
-        apply_controls_settings();
+        if (menu_system_->settings_dirty()) {
+            apply_graphics_settings();
+            apply_controls_settings();
+            menu_system_->clear_settings_dirty();
+        }
     }
 
     switch (game_state_) {
@@ -264,8 +268,8 @@ void Game::update_class_select(float dt) {
 }
 
 void Game::render_class_select() {
-    player_x_ = world_config_.world_width / 2.0f;
-    player_z_ = world_config_.world_height / 2.0f;
+    player_x_ = 4000.0f;  // Town center from editor save
+    player_z_ = 4000.0f;
     camera().set_yaw(0.0f);
     camera().set_pitch(30.0f);
     update_camera_smooth(last_dt_);
@@ -310,8 +314,8 @@ void Game::render_spawning() {
 }
 
 void Game::render_connecting() {
-    player_x_ = world_config_.world_width / 2.0f;
-    player_z_ = world_config_.world_height / 2.0f;
+    player_x_ = 4000.0f;  // Town center from editor save
+    player_z_ = 4000.0f;
     camera().set_yaw(0.0f);
     camera().set_pitch(30.0f);
     update_camera_smooth(last_dt_);
@@ -358,6 +362,189 @@ void Game::update_playing(float dt) {
         input().consume_attack();
     }
     input().reset_changed();
+
+    // Panel key toggles (check SDL key state directly)
+    {
+        static bool prev_i = false, prev_l = false, prev_t = false, prev_m = false;
+        const bool* keys = SDL_GetKeyboardState(nullptr);
+        bool i_down = keys[SDL_SCANCODE_I];
+        bool l_down = keys[SDL_SCANCODE_L];
+        bool t_down = keys[SDL_SCANCODE_T];
+        bool m_down = keys[SDL_SCANCODE_M];
+
+        if (i_down && !prev_i && !menu_system_->is_open()) panel_state_.toggle_inventory();
+        if (l_down && !prev_l && !menu_system_->is_open()) panel_state_.toggle_quest_log();
+        if (t_down && !prev_t && !menu_system_->is_open()) panel_state_.toggle_talent_tree();
+        if (m_down && !prev_m && !menu_system_->is_open()) panel_state_.toggle_world_map();
+
+        prev_i = i_down; prev_l = l_down; prev_t = t_down; prev_m = m_down;
+    }
+
+    // NPC interaction (E key)
+    if (input().interact_pressed()) {
+        if (npc_interaction_.showing_dialogue) {
+            if (npc_interaction_.showing_quest_detail) {
+                // Accept the quest
+                if (!npc_interaction_.available_quests.empty()) {
+                    auto& quest = npc_interaction_.available_quests[npc_interaction_.selected_quest];
+
+                    // Send QuestAccept to server
+                    QuestAcceptMsg accept_msg;
+                    std::strncpy(accept_msg.quest_id, quest.quest_id.c_str(), 31);
+                    network_.send_raw(build_packet(MessageType::QuestAccept, accept_msg));
+
+                    // Add to quest tracker on HUD
+                    QuestTrackerEntry tracker;
+                    tracker.quest_name = quest.quest_name;
+                    for (auto& obj : quest.objectives) {
+                        tracker.objectives.push_back({obj.description, 0, obj.count, false});
+                    }
+                    hud_state_.tracked_quests.push_back(tracker);
+
+                    // Add objective locations to world map and minimap
+                    for (auto& obj : quest.objectives) {
+                        if (obj.radius > 0.0f) {
+                            MapQuestMarker marker;
+                            marker.quest_name = quest.quest_name;
+                            marker.world_x = obj.loc_x;
+                            marker.world_z = obj.loc_z;
+                            marker.radius = obj.radius;
+                            marker.complete = false;
+                            panel_state_.map_quest_markers.push_back(marker);
+
+                            HUDState::MinimapState::ObjectiveArea area;
+                            area.world_x = obj.loc_x;
+                            area.world_z = obj.loc_z;
+                            area.radius = obj.radius;
+                            hud_state_.minimap.objective_areas.push_back(area);
+                        }
+                    }
+
+                    // Close dialogue
+                    npc_interaction_.close();
+                }
+            } else {
+                // Enter quest detail view
+                if (!npc_interaction_.available_quests.empty()) {
+                    npc_interaction_.showing_quest_detail = true;
+                }
+            }
+        } else {
+            // Try to interact with nearest NPC
+            auto local_it = network_to_entity_.find(local_player_id_);
+            if (local_it != network_to_entity_.end() && registry_.valid(local_it->second)) {
+                auto& local_transform = registry_.get<ecs::Transform>(local_it->second);
+
+                float best_dist = 200.0f;
+                uint32_t best_npc_id = 0;
+                std::string best_npc_name;
+
+                auto npc_view = registry_.view<ecs::NetworkId, ecs::Transform, ecs::EntityInfo, ecs::Name>();
+                for (auto entity : npc_view) {
+                    auto& npc_info = npc_view.get<ecs::EntityInfo>(entity);
+                    if (npc_info.type != mmo::protocol::EntityType::TownNPC) continue;
+
+                    auto& npc_transform = npc_view.get<ecs::Transform>(entity);
+                    float dx = npc_transform.x - local_transform.x;
+                    float dz = npc_transform.z - local_transform.z;
+                    float dist = std::sqrt(dx * dx + dz * dz);
+
+                    if (dist < best_dist) {
+                        best_dist = dist;
+                        best_npc_id = npc_view.get<ecs::NetworkId>(entity).id;
+                        best_npc_name = npc_view.get<ecs::Name>(entity).value;
+                    }
+                }
+
+                if (best_npc_id != 0) {
+                    npc_interaction_.npc_id = best_npc_id;
+                    npc_interaction_.npc_name = best_npc_name;
+                    npc_interaction_.available_quests.clear();
+                    npc_interaction_.selected_quest = 0;
+                    npc_interaction_.showing_quest_detail = false;
+                    npc_interaction_.showing_dialogue = true;
+
+                    // Send NPCInteract to server
+                    NPCInteractMsg msg;
+                    msg.npc_network_id = best_npc_id;
+                    network_.send_raw(build_packet(MessageType::NPCInteract, msg));
+                }
+            }
+        }
+    }
+
+    // Quest dialogue navigation
+    if (npc_interaction_.showing_dialogue) {
+        // ESC or Q to close/go back
+        if (input().menu_toggle_pressed()) {
+            if (npc_interaction_.showing_quest_detail) {
+                npc_interaction_.showing_quest_detail = false;
+            } else {
+                npc_interaction_.close();
+            }
+            input().clear_menu_inputs(); // prevent menu from opening
+        }
+
+        // W/S to navigate quest list (use raw SDL keys since menu_up/down only work when game input disabled)
+        if (!npc_interaction_.showing_quest_detail && !npc_interaction_.available_quests.empty()) {
+            static bool prev_w = false, prev_s = false;
+            const bool* keys = SDL_GetKeyboardState(nullptr);
+            bool w_down = keys[SDL_SCANCODE_W];
+            bool s_down = keys[SDL_SCANCODE_S];
+
+            if (w_down && !prev_w) {
+                npc_interaction_.selected_quest = std::max(0, npc_interaction_.selected_quest - 1);
+            }
+            if (s_down && !prev_s) {
+                npc_interaction_.selected_quest = std::min(static_cast<int>(npc_interaction_.available_quests.size()) - 1, npc_interaction_.selected_quest + 1);
+            }
+
+            prev_w = w_down;
+            prev_s = s_down;
+        }
+
+        // Q key to decline/go back from detail view
+        {
+            static bool prev_q = false;
+            const bool* keys = SDL_GetKeyboardState(nullptr);
+            bool q_down = keys[SDL_SCANCODE_Q];
+            if (q_down && !prev_q) {
+                if (npc_interaction_.showing_quest_detail) {
+                    npc_interaction_.showing_quest_detail = false;
+                } else {
+                    npc_interaction_.close();
+                }
+            }
+            prev_q = q_down;
+        }
+    }
+
+    // Skill key handling (1-5)
+    {
+        int skill_key = input().skill_pressed();
+        if (skill_key >= 1 && skill_key <= 5 && !panel_state_.any_panel_open()) {
+            int slot_idx = skill_key - 1;
+            auto& slot = hud_state_.skill_slots[slot_idx];
+            if (slot.available && slot.cooldown <= 0.0f) {
+                // Get attack direction from input
+                auto& eng_input = input().get_input();
+
+                // Send skill use to server
+                SkillUseMsg msg;
+                std::strncpy(msg.skill_id, slot.skill_id.c_str(), 31);
+                msg.dir_x = eng_input.attack_dir_x;
+                msg.dir_z = eng_input.attack_dir_y;
+                network_.send_raw(build_packet(MessageType::SkillUse, msg));
+
+                // Set local cooldown for immediate visual feedback
+                slot.cooldown = slot.max_cooldown;
+            }
+        }
+    }
+
+    input().clear_gameplay_inputs();
+
+    hud_state_.update(dt);
 
     local_player_id_ = network_.local_player_id();
 
@@ -411,10 +598,7 @@ void Game::update_playing(float dt) {
         namespace anim = mmo::engine::animation;
         auto anim_view = registry_.view<ecs::Velocity, ecs::EntityInfo, ecs::Combat, ecs::AnimationInstance>();
         for (auto entity : anim_view) {
-            auto& info = registry_.get<ecs::EntityInfo>(entity);
-            auto& vel = registry_.get<ecs::Velocity>(entity);
-            auto& combat = registry_.get<ecs::Combat>(entity);
-            auto& inst = registry_.get<ecs::AnimationInstance>(entity);
+            auto&& [vel, info, combat, inst] = anim_view.get(entity);
 
             if (info.model_name.empty()) continue;
             Model* model = models().get_model(info.model_name);
@@ -546,6 +730,90 @@ void Game::update_playing(float dt) {
 
     glm::vec3 cam_forward = camera().get_forward();
     input().set_camera_forward(cam_forward.x, cam_forward.z);
+
+    // Populate skill slots based on class (hardcoded for now until server sends skill data)
+    if (hud_state_.skill_slots[0].skill_id.empty() && selected_class_index_ >= 0) {
+        const char* class_names[] = {"warrior", "mage", "paladin", "archer"};
+        const char* class_name = class_names[std::min(selected_class_index_, 3)];
+        (void)class_name; // Will be used when server sends skill data
+
+        // Hardcoded skill names per class for HUD display
+        struct SkillInfo { const char* id; const char* name; float cd; };
+        SkillInfo warrior_skills[] = {{"warrior_charge","Charge",8},{"warrior_ground_slam","Ground Slam",12},{"warrior_battle_cry","Battle Cry",25},{"warrior_whirlwind","Whirlwind",15},{"warrior_execute","Execute",20}};
+        SkillInfo mage_skills[] = {{"mage_fireball","Fireball",6},{"mage_frost_nova","Frost Nova",10},{"mage_blink","Blink",12},{"mage_arcane_rain","Arcane Rain",18},{"mage_meteor","Meteor",25}};
+        SkillInfo paladin_skills[] = {{"paladin_holy_strike","Holy Strike",5},{"paladin_consecrate","Consecrate",10},{"paladin_divine_shield","Divine Shield",30},{"paladin_healing_aura","Healing Aura",20},{"paladin_judgment","Judgment",8}};
+        SkillInfo archer_skills[] = {{"archer_evasive_roll","Evasive Roll",6},{"archer_multi_shot","Multi-Shot",8},{"archer_snare_trap","Snare Trap",15},{"archer_piercing_shot","Piercing Shot",10},{"archer_rain_of_arrows","Rain of Arrows",20}};
+
+        SkillInfo* skills = warrior_skills;
+        if (selected_class_index_ == 1) skills = mage_skills;
+        else if (selected_class_index_ == 2) skills = paladin_skills;
+        else if (selected_class_index_ == 3) skills = archer_skills;
+
+        for (int i = 0; i < 5; ++i) {
+            hud_state_.skill_slots[i].skill_id = skills[i].id;
+            hud_state_.skill_slots[i].name = skills[i].name;
+            hud_state_.skill_slots[i].max_cooldown = skills[i].cd;
+            hud_state_.skill_slots[i].key_number = i + 1;
+            hud_state_.skill_slots[i].available = true; // All available for now
+        }
+    }
+
+    // Sync HUD state from local player entity
+    {
+        auto pit = network_to_entity_.find(local_player_id_);
+        if (pit != network_to_entity_.end() && registry_.valid(pit->second)) {
+            auto entity = pit->second;
+            // Note: client doesn't have PlayerLevel/Inventory components yet
+            // HUD state will be populated when server sends progression messages
+            // For now, just keep the HUD state as-is (it will show defaults)
+            (void)entity;
+        }
+    }
+
+    // Update minimap
+    {
+        auto local_it = network_to_entity_.find(local_player_id_);
+        if (local_it != network_to_entity_.end() && registry_.valid(local_it->second)) {
+            auto& lt = registry_.get<ecs::Transform>(local_it->second);
+            hud_state_.minimap.player_x = lt.x;
+            hud_state_.minimap.player_z = lt.z;
+            panel_state_.player_x = lt.x;
+            panel_state_.player_z = lt.z;
+        }
+
+        hud_state_.minimap.icons.clear();
+        hud_state_.minimap.objective_areas.clear();
+
+        // Add nearby entities to minimap
+        auto entity_view = registry_.view<ecs::Transform, ecs::EntityInfo, ecs::NetworkId>();
+        for (auto entity : entity_view) {
+            auto& t = entity_view.get<ecs::Transform>(entity);
+            auto& info = entity_view.get<ecs::EntityInfo>(entity);
+            auto& nid = entity_view.get<ecs::NetworkId>(entity);
+
+            if (nid.id == local_player_id_) continue;
+
+            float dx = t.x - hud_state_.minimap.player_x;
+            float dz = t.z - hud_state_.minimap.player_z;
+            if (dx * dx + dz * dz > 2000.0f * 2000.0f) continue;
+
+            uint32_t color = 0;
+            switch (info.type) {
+                case EntityType::TownNPC:     color = 0xFF00CC00; break;  // green
+                case EntityType::NPC:         color = 0xFF0000FF; break;  // red
+                case EntityType::Player:      color = 0xFFFFFF00; break;  // cyan
+                case EntityType::Building:    color = 0xFF888888; break;  // gray
+                default: continue;
+            }
+
+            HUDState::MinimapState::MapIcon icon;
+            icon.world_x = t.x;
+            icon.world_z = t.z;
+            icon.color = color;
+            icon.is_objective = false;
+            hud_state_.minimap.icons.push_back(icon);
+        }
+    }
 }
 
 void Game::render_playing() {
@@ -559,6 +827,12 @@ void Game::render_playing() {
     render_scene_.set_draw_ground(true);
     render_scene_.set_draw_grass(gfx.grass_enabled);
 
+    // Cache VP matrix for world-to-screen projection in UI
+    auto cam_state = get_camera_state();
+    cached_vp_matrix_ = cam_state.view_projection;
+    cached_screen_w_ = static_cast<float>(screen_width());
+    cached_screen_h_ = static_cast<float>(screen_height());
+
     // Add entities to scene as model commands
     // Distance cull from player position (camera is 200-350 units behind player)
     float draw_dist = gfx.get_draw_distance();
@@ -566,10 +840,9 @@ void Game::render_playing() {
 
     auto entity_view = registry_.view<ecs::NetworkId, ecs::Transform, ecs::Health, ecs::EntityInfo, ecs::Name>();
     for (auto entity : entity_view) {
-        auto& net_id = registry_.get<ecs::NetworkId>(entity);
+        auto&& [net_id, transform, health, info, name] = entity_view.get(entity);
         bool is_local = (net_id.id == local_player_id_);
 
-        auto& info = registry_.get<ecs::EntityInfo>(entity);
         // Filter trees/rocks by scene flags
         if (info.type == EntityType::Environment) {
             bool is_tree = (info.model_name.compare(0, 5, "tree_") == 0);
@@ -579,7 +852,6 @@ void Game::render_playing() {
 
         // Distance culling from player position (always render local player)
         if (!is_local) {
-            auto& transform = registry_.get<ecs::Transform>(entity);
             float dx = transform.x - player_x_;
             float dz = transform.z - player_z_;
             if (dx * dx + dz * dz > ENTITY_DRAW_DISTANCE_SQ) continue;
@@ -646,8 +918,11 @@ void Game::add_entity_to_scene(entt::entity entity, bool is_local) {
     if (model->has_skeleton && anim_inst && anim_inst->bound) {
         render_scene_.add_skinned_model(info.model_name, model_mat, anim_inst->player.bone_matrices, tint);
     } else if (model->has_skeleton) {
-        std::array<glm::mat4, 64> identity_bones;
-        identity_bones.fill(glm::mat4(1.0f));
+        static const auto identity_bones = []() {
+            std::array<glm::mat4, 64> arr;
+            arr.fill(glm::mat4(1.0f));
+            return arr;
+        }();
         render_scene_.add_skinned_model(info.model_name, model_mat, identity_bones, tint);
     } else {
         render_scene_.add_model(info.model_name, model_mat, tint, attack_tilt);
@@ -664,6 +939,7 @@ void Game::add_entity_to_scene(entt::entity entity, bool is_local) {
                                        target_size * 0.8f, health_ratio,
                                        ui_colors::HEALTH_HIGH, ui_colors::HEALTH_BAR_BG, ui_colors::HEALTH_3D_BG);
     }
+
 }
 
 // ============================================================================
@@ -705,6 +981,142 @@ void Game::handle_network_message(MessageType type, const std::vector<uint8_t>& 
         case MessageType::EntityExit:
             on_entity_exit(payload);
             break;
+        case MessageType::XPGain: {
+            if (payload.size() >= 4 * sizeof(int32_t)) {
+                BufferReader r(payload);
+                int32_t xp_gained = r.read<int32_t>();
+                int32_t total_xp = r.read<int32_t>();
+                int32_t xp_to_next = r.read<int32_t>();
+                int32_t level = r.read<int32_t>();
+                (void)xp_gained;
+
+                int old_level = hud_state_.level;
+                hud_state_.xp = total_xp;
+                hud_state_.xp_to_next_level = xp_to_next;
+                hud_state_.level = level;
+
+                if (level > old_level) {
+                    hud_state_.show_level_up(level);
+                }
+            }
+            break;
+        }
+        case MessageType::LevelUp: {
+            if (payload.size() >= sizeof(int32_t)) {
+                BufferReader r(payload);
+                int32_t new_level = r.read<int32_t>();
+                hud_state_.show_level_up(new_level);
+                hud_state_.level = new_level;
+            }
+            break;
+        }
+        case MessageType::GoldChange: {
+            if (payload.size() >= 2 * sizeof(int32_t)) {
+                BufferReader r(payload);
+                int32_t gold_change = r.read<int32_t>();
+                int32_t total_gold = r.read<int32_t>();
+                hud_state_.gold = total_gold;
+                if (gold_change > 0) {
+                    char buf[64];
+                    snprintf(buf, sizeof(buf), "+%d Gold", gold_change);
+                    hud_state_.add_loot(buf, 0xFF00DDFF);
+                }
+            }
+            break;
+        }
+        case MessageType::LootDrop: {
+            if (payload.size() >= sizeof(int32_t) + 1) {
+                BufferReader r(payload);
+                int32_t gold = r.read<int32_t>();
+                uint8_t item_count = r.read<uint8_t>();
+
+                if (gold > 0) {
+                    hud_state_.gold += gold;
+                    char buf[64];
+                    snprintf(buf, sizeof(buf), "+%d Gold", gold);
+                    hud_state_.add_loot(buf, 0xFF00DDFF);
+                }
+
+                for (uint8_t i = 0; i < item_count && r.remaining_size() >= 49; ++i) {
+                    std::string name = r.read_fixed_string(32);
+                    std::string rarity = r.read_fixed_string(16);
+                    uint8_t count = r.read<uint8_t>();
+
+                    // Determine color from rarity
+                    uint32_t color = 0xFFAAAAAA; // common
+                    if (rarity == "uncommon") color = 0xFF00CC00;
+                    else if (rarity == "rare") color = 0xFF0088FF;
+                    else if (rarity == "epic") color = 0xFFCC00CC;
+                    else if (rarity == "legendary") color = 0xFF00AAFF;
+
+                    char buf[64];
+                    if (count > 1)
+                        snprintf(buf, sizeof(buf), "Received: %s x%d", name.c_str(), count);
+                    else
+                        snprintf(buf, sizeof(buf), "Received: %s", name.c_str());
+                    hud_state_.add_loot(buf, color);
+                }
+            }
+            break;
+        }
+        case MessageType::QuestOffer: {
+            if (payload.size() >= QuestOfferMsg::serialized_size()) {
+                QuestOfferMsg msg;
+                msg.deserialize(payload);
+
+                QuestOfferData offer;
+                offer.quest_id = std::string(msg.quest_id, strnlen(msg.quest_id, 32));
+                offer.quest_name = std::string(msg.quest_name, strnlen(msg.quest_name, 64));
+                offer.description = std::string(msg.description, strnlen(msg.description, 256));
+                offer.dialogue = std::string(msg.dialogue, strnlen(msg.dialogue, 256));
+                offer.xp_reward = msg.xp_reward;
+                offer.gold_reward = msg.gold_reward;
+
+                for (uint8_t i = 0; i < msg.objective_count && i < QuestOfferMsg::MAX_OBJECTIVES; ++i) {
+                    offer.objectives.push_back({
+                        std::string(msg.objectives[i].description, strnlen(msg.objectives[i].description, 64)),
+                        msg.objectives[i].count,
+                        msg.objectives[i].location_x,
+                        msg.objectives[i].location_z,
+                        msg.objectives[i].radius
+                    });
+                }
+
+                npc_interaction_.available_quests.push_back(std::move(offer));
+            }
+            break;
+        }
+        case MessageType::ZoneChange: {
+            if (payload.size() >= 64) {
+                char zone_buf[64] = {};
+                std::memcpy(zone_buf, payload.data(), 64);
+                hud_state_.set_zone(std::string(zone_buf, strnlen(zone_buf, 64)));
+            }
+            break;
+        }
+        case MessageType::QuestList: {
+            if (payload.size() >= sizeof(uint16_t)) {
+                npcs_with_quests_.clear();
+                npcs_with_turnins_.clear();
+                size_t offset = 0;
+                uint16_t count;
+                std::memcpy(&count, payload.data(), sizeof(uint16_t));
+                offset += sizeof(uint16_t);
+                for (uint16_t i = 0; i < count && offset + sizeof(uint32_t) <= payload.size(); ++i) {
+                    uint32_t encoded;
+                    std::memcpy(&encoded, payload.data() + offset, sizeof(uint32_t));
+                    offset += sizeof(uint32_t);
+                    uint32_t npc_id = encoded & 0x7FFFFFFF;
+                    bool has_turnin = (encoded & 0x80000000) != 0;
+                    if (has_turnin) {
+                        npcs_with_turnins_.insert(npc_id);
+                    } else {
+                        npcs_with_quests_.insert(npc_id);
+                    }
+                }
+            }
+            break;
+        }
         default:
             break;
     }
@@ -986,9 +1398,14 @@ bool Game::load_models(const std::string& assets_path) {
 
 void Game::update_camera_smooth(float dt) {
     camera().set_screen_size(screen_width(), screen_height());
-    camera().set_terrain_height_func([this](float x, float z) {
-        return get_terrain_height(x, z);
-    });
+
+    // Set terrain height callback once (lazy init) instead of every frame
+    if (!camera_height_func_set_) {
+        camera().set_terrain_height_func([this](float x, float z) {
+            return get_terrain_height(x, z);
+        });
+        camera_height_func_set_ = true;
+    }
 
     float terrain_y = get_terrain_height(player_x_, player_z_);
     camera().set_target(glm::vec3(player_x_, terrain_y, player_z_));
@@ -1193,6 +1610,151 @@ void Game::build_playing_ui(UIScene& ui) {
                  ns.packets_sent_per_sec, ns.packets_recv_per_sec, ns.message_queue_size);
         ui.add_text(buf, x, y, 0.8f, color);
     }
+
+    // Quest markers above NPCs (only show for NPCs with available/completable quests)
+    {
+        auto npc_view = registry_.view<ecs::NetworkId, ecs::Transform, ecs::EntityInfo>();
+        for (auto entity : npc_view) {
+            auto& info = npc_view.get<ecs::EntityInfo>(entity);
+            if (info.type != EntityType::TownNPC) continue;
+
+            auto& net_id = npc_view.get<ecs::NetworkId>(entity);
+            bool has_quest = npcs_with_quests_.count(net_id.id) > 0;
+            bool has_turnin = npcs_with_turnins_.count(net_id.id) > 0;
+            if (!has_quest && !has_turnin) continue;
+
+            auto& transform = npc_view.get<ecs::Transform>(entity);
+
+            // Project world position to screen
+            float marker_world_y = transform.y + info.target_size * 1.6f;
+            glm::vec4 world_pos(transform.x, marker_world_y, transform.z, 1.0f);
+            glm::vec4 clip = cached_vp_matrix_ * world_pos;
+            if (clip.w <= 0.0f) continue;
+
+            float ndc_x = clip.x / clip.w;
+            float ndc_y = clip.y / clip.w;
+            float sx = (ndc_x * 0.5f + 0.5f) * cached_screen_w_;
+            float sy = (1.0f - (ndc_y * 0.5f + 0.5f)) * cached_screen_h_;
+
+            if (sx < -50 || sx > cached_screen_w_ + 50 || sy < -50 || sy > cached_screen_h_ + 50) continue;
+
+            float dx = transform.x - player_x_;
+            float dz = transform.z - player_z_;
+            float dist_sq = dx * dx + dz * dz;
+            if (dist_sq > 800.0f * 800.0f) continue;
+
+            // Scale marker based on distance
+            float dist = std::sqrt(dist_sq);
+            float scale_factor = std::max(0.6f, 1.0f - dist / 1000.0f);
+            float circle_r = 14.0f * scale_factor;
+
+            if (has_turnin) {
+                // Yellow "?" - quest ready to turn in
+                ui.add_filled_rect(sx - circle_r, sy - circle_r, circle_r * 2, circle_r * 2, 0xCC002200);
+                ui.add_rect_outline(sx - circle_r, sy - circle_r, circle_r * 2, circle_r * 2, 0xFF00FF00, 2.0f);
+                ui.add_text("?", sx - 5 * scale_factor, sy - 10 * scale_factor, 1.4f * scale_factor, 0xFF00FF00);
+            } else {
+                // Gold "!" - quest available
+                ui.add_filled_rect(sx - circle_r, sy - circle_r, circle_r * 2, circle_r * 2, 0xCC003344);
+                ui.add_rect_outline(sx - circle_r, sy - circle_r, circle_r * 2, circle_r * 2, 0xFF00DDFF, 2.0f);
+                ui.add_text("!", sx - 4 * scale_factor, sy - 10 * scale_factor, 1.4f * scale_factor, 0xFF00DDFF);
+            }
+        }
+    }
+
+    // NPC Quest dialogue popup
+    if (npc_interaction_.showing_dialogue) {
+        float pw = 500.0f, ph = 400.0f;
+        float px = (screen_width() - pw) / 2.0f;
+        float py = (screen_height() - ph) / 2.0f;
+
+        // Background panel
+        ui.add_filled_rect(px, py, pw, ph, 0xEE1a1a2e);
+        ui.add_rect_outline(px, py, pw, ph, 0xFF00BBFF, 2.0f);
+
+        // NPC name header
+        ui.add_filled_rect(px, py, pw, 35.0f, 0xFF332211);
+        ui.add_text(npc_interaction_.npc_name, px + 15, py + 8, 1.2f, 0xFF00DDFF);
+
+        // Close hint
+        ui.add_text("[ESC] Close", px + pw - 120, py + 10, 0.8f, 0xFF888888);
+
+        if (!npc_interaction_.showing_quest_detail) {
+            // Quest list view
+            if (npc_interaction_.available_quests.empty()) {
+                ui.add_text("No quests available.", px + 20, py + 60, 1.0f, 0xFF888888);
+            } else {
+                ui.add_text("Available Quests:", px + 20, py + 50, 1.0f, 0xFFCCCCCC);
+
+                float qy = py + 80;
+                for (int i = 0; i < static_cast<int>(npc_interaction_.available_quests.size()); ++i) {
+                    auto& quest = npc_interaction_.available_quests[i];
+                    bool selected = (i == npc_interaction_.selected_quest);
+
+                    // Quest entry background
+                    if (selected) {
+                        ui.add_filled_rect(px + 10, qy - 2, pw - 20, 28.0f, 0x40FFFFFF);
+                    }
+
+                    // Quest name
+                    ui.add_text(quest.quest_name, px + 25, qy + 2, 1.0f, selected ? 0xFFFFFFFF : 0xFFCCCCCC);
+
+                    // Rewards preview
+                    char reward_text[64];
+                    snprintf(reward_text, sizeof(reward_text), "XP: %d  Gold: %d", quest.xp_reward, quest.gold_reward);
+                    ui.add_text(reward_text, px + pw - 180, qy + 4, 0.7f, 0xFF00DDFF);
+
+                    qy += 32.0f;
+                }
+
+                ui.add_text("[W/S] Navigate  [ENTER] View Quest", px + 20, py + ph - 35, 0.8f, 0xFF888888);
+            }
+        } else {
+            // Quest detail view
+            auto& quest = npc_interaction_.available_quests[npc_interaction_.selected_quest];
+
+            // Quest name
+            ui.add_text(quest.quest_name, px + 20, py + 50, 1.2f, 0xFF00DDFF);
+
+            // Dialogue
+            ui.add_text(quest.dialogue, px + 20, py + 80, 0.8f, 0xFFCCCCCC);
+
+            // Description
+            ui.add_text(quest.description, px + 20, py + 130, 0.85f, 0xFFAAAAAA);
+
+            // Objectives
+            ui.add_text("Objectives:", px + 20, py + 170, 1.0f, 0xFFFFFFFF);
+            float oy = py + 195;
+            for (auto& obj : quest.objectives) {
+                char obj_text[128];
+                snprintf(obj_text, sizeof(obj_text), "- %s (%d)", obj.description.c_str(), obj.count);
+                ui.add_text(obj_text, px + 30, oy, 0.85f, 0xFFCCCCCC);
+                oy += 22.0f;
+            }
+
+            // Rewards
+            oy += 10.0f;
+            ui.add_text("Rewards:", px + 20, oy, 1.0f, 0xFFFFFFFF);
+            oy += 25.0f;
+            char reward_buf[64];
+            snprintf(reward_buf, sizeof(reward_buf), "XP: %d   Gold: %d", quest.xp_reward, quest.gold_reward);
+            ui.add_text(reward_buf, px + 30, oy, 0.9f, 0xFF00DDFF);
+
+            // Accept / Decline buttons
+            float btn_y = py + ph - 50;
+            ui.add_filled_rect(px + pw / 2 - 160, btn_y, 140, 35, 0xFF004400);
+            ui.add_rect_outline(px + pw / 2 - 160, btn_y, 140, 35, 0xFF00CC00, 2.0f);
+            ui.add_text("Accept [E]", px + pw / 2 - 130, btn_y + 8, 1.0f, 0xFF00FF00);
+
+            ui.add_filled_rect(px + pw / 2 + 20, btn_y, 140, 35, 0xFF440000);
+            ui.add_rect_outline(px + pw / 2 + 20, btn_y, 140, 35, 0xFFCC0000, 2.0f);
+            ui.add_text("Decline [Q]", px + pw / 2 + 45, btn_y + 8, 1.0f, 0xFFFF4444);
+        }
+    }
+
+    // Gameplay HUD overlay
+    build_gameplay_hud(ui, hud_state_, static_cast<float>(screen_width()), static_cast<float>(screen_height()));
+    build_gameplay_panels(ui, panel_state_, static_cast<float>(screen_width()), static_cast<float>(screen_height()));
 }
 
 // ============================================================================

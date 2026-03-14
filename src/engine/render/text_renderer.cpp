@@ -310,10 +310,7 @@ void TextRenderer::draw_text(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* rende
     CachedText* cached = get_or_create_text_texture(cmd, text, true);
     if (!cached || !cached->texture) {
         // Text not in cache yet - queue it for creation after render passes end
-        // Check if not already queued
-        if (std::find(pending_text_creates_.begin(), pending_text_creates_.end(), text) == pending_text_creates_.end()) {
-            pending_text_creates_.push_back(text);
-        }
+        pending_text_creates_.insert(text);
         return;
     }
 
@@ -398,10 +395,7 @@ void TextRenderer::queue_text_draw(const std::string& text, float x, float y,
     // Check if text is cached - if not, queue for texture creation
     auto it = text_cache_.find(text);
     if (it == text_cache_.end()) {
-        if (std::find(pending_text_creates_.begin(), pending_text_creates_.end(), text)
-            == pending_text_creates_.end()) {
-            pending_text_creates_.push_back(text);
-        }
+        pending_text_creates_.insert(text);
         return;  // Text will be rendered next frame after texture is created
     }
 
@@ -426,9 +420,7 @@ void TextRenderer::queue_text_draw(const std::string& text, float x, float y,
     };
 
     // Add vertices to batch
-    for (float v : vertices) {
-        batch_vertices_.push_back(v);
-    }
+    batch_vertices_.insert(batch_vertices_.end(), std::begin(vertices), std::end(vertices));
 
     // Queue the text draw
     QueuedText qt;
@@ -452,6 +444,11 @@ void TextRenderer::upload_queued_text(SDL_GPUCommandBuffer* cmd) {
 void TextRenderer::draw_queued_text(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* render_pass) {
     if (queued_texts_.empty() || !cmd || !render_pass || !pipeline_registry_) return;
 
+    // Bind text pipeline once before the loop
+    auto* text_pipeline = pipeline_registry_->get_text_pipeline();
+    if (!text_pipeline) return;
+    text_pipeline->bind(render_pass);
+
     for (const auto& qt : queued_texts_) {
         // Get cached texture
         auto it = text_cache_.find(qt.text);
@@ -464,12 +461,6 @@ void TextRenderer::draw_queued_text(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass
         float g = ((qt.color >> 8) & 0xFF) / 255.0f;
         float b = ((qt.color >> 16) & 0xFF) / 255.0f;
         float a = ((qt.color >> 24) & 0xFF) / 255.0f;
-
-        // Bind text pipeline
-        auto* text_pipeline = pipeline_registry_->get_text_pipeline();
-        if (text_pipeline) {
-            text_pipeline->bind(render_pass);
-        }
 
         // Push uniforms
         SDL_PushGPUVertexUniformData(cmd, 0, &projection_, sizeof(glm::mat4));
@@ -511,10 +502,7 @@ void TextRenderer::draw_text_immediate(SDL_GPUCommandBuffer* cmd, SDL_GPURenderP
     auto it = text_cache_.find(text);
     if (it == text_cache_.end() || !it->second.texture) {
         // Queue for next frame
-        if (std::find(pending_text_creates_.begin(), pending_text_creates_.end(), text)
-            == pending_text_creates_.end()) {
-            pending_text_creates_.push_back(text);
-        }
+        pending_text_creates_.insert(text);
         return;
     }
 
@@ -547,6 +535,10 @@ void TextRenderer::draw_text_immediate(SDL_GPUCommandBuffer* cmd, SDL_GPURenderP
 
     // Use the end of batch_vertices_ for immediate draws
     size_t immediate_offset = batch_vertices_.size();
+    size_t max_floats = MAX_QUEUED_TEXTS * VERTICES_PER_QUAD * FLOATS_PER_VERTEX;
+    if (immediate_offset + VERTICES_PER_QUAD * FLOATS_PER_VERTEX > max_floats) {
+        return; // Buffer full, skip this text draw
+    }
     for (float v : vertices) {
         batch_vertices_.push_back(v);
     }

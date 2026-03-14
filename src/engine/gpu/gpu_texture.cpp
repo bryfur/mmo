@@ -71,6 +71,8 @@ size_t GPUTexture::get_bytes_per_pixel(SDL_GPUTextureFormat format) {
     switch (format) {
         case SDL_GPU_TEXTUREFORMAT_R8_UNORM:
             return 1;
+        case SDL_GPU_TEXTUREFORMAT_R16_UNORM:
+            return 2;
         case SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM:
         case SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM:
         case SDL_GPU_TEXTUREFORMAT_D32_FLOAT:

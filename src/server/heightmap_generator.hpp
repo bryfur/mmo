@@ -50,10 +50,14 @@ inline float heightmap_get_world(const mmo::protocol::HeightmapChunk& chunk, flo
     float fx = tx - x0;
     float fz = tz - z0;
 
-    float h00 = heightmap_get_local(chunk, x0, z0);
-    float h10 = heightmap_get_local(chunk, x1, z0);
-    float h01 = heightmap_get_local(chunk, x0, z1);
-    float h11 = heightmap_get_local(chunk, x1, z1);
+    // Inline height lookups — indices are already clamped above, skip redundant bounds checks
+    const float range = mmo::protocol::heightmap_config::MAX_HEIGHT - mmo::protocol::heightmap_config::MIN_HEIGHT;
+    const float inv_65535 = 1.0f / 65535.0f;
+    const float min_h = mmo::protocol::heightmap_config::MIN_HEIGHT;
+    float h00 = chunk.height_data[z0 * chunk.resolution + x0] * inv_65535 * range + min_h;
+    float h10 = chunk.height_data[z0 * chunk.resolution + x1] * inv_65535 * range + min_h;
+    float h01 = chunk.height_data[z1 * chunk.resolution + x0] * inv_65535 * range + min_h;
+    float h11 = chunk.height_data[z1 * chunk.resolution + x1] * inv_65535 * range + min_h;
 
     float h0 = h00 * (1.0f - fx) + h10 * fx;
     float h1 = h01 * (1.0f - fx) + h11 * fx;
@@ -99,8 +103,8 @@ inline float terrain_height(float x, float z, float world_width, float world_hei
 
     height *= flatness;
 
-    if (dist > 2000.0f) {
-        float rise_factor = (dist - 2000.0f) / 2000.0f;
+    if (dist > 8000.0f) {
+        float rise_factor = (dist - 8000.0f) / 8000.0f;
         rise_factor = std::min(rise_factor, 1.0f);
         height += rise_factor * rise_factor * 150.0f;
     }

@@ -19,7 +19,9 @@ struct GridCell {
 
 struct GridCellHash {
     size_t operator()(const GridCell& cell) const {
-        return std::hash<int>()(cell.x) ^ (std::hash<int>()(cell.y) << 1);
+        size_t h = std::hash<int>()(cell.x);
+        h ^= std::hash<int>()(cell.y) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        return h;
     }
 };
 

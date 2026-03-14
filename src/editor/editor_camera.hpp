@@ -45,7 +45,7 @@ public:
 private:
     void update_vectors();
 
-    glm::vec3 position_{4000.0f, 200.0f, 4000.0f};  // Start above town center
+    glm::vec3 position_{4000.0f, 200.0f, 4000.0f};
     glm::vec3 forward_{0.0f, 0.0f, -1.0f};
     glm::vec3 right_{1.0f, 0.0f, 0.0f};
     glm::vec3 up_{0.0f, 1.0f, 0.0f};

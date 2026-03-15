@@ -33,6 +33,8 @@ cbuffer TransformUniforms {
     float3 cameraPos;
     float _padding0;
     float4x4 normalMatrix;  // Pre-computed inverse-transpose of model matrix (CPU-side)
+    int useSkinning;
+    float3 _padding1;
 };
 
 VSOutput VSMain(VSInput input) {

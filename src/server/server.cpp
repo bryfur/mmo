@@ -268,20 +268,26 @@ void Server::on_skill_use(uint32_t player_id, const std::string& skill_id, float
 
     bool success = systems::use_skill(registry, player, skill_id, dir_x, dir_z, config_);
 
-    // Send SkillResultMsg back to client
+    // Send SkillCooldownMsg back to client
     std::lock_guard<std::mutex> lock(sessions_mutex_);
     auto sit = sessions_.find(player_id);
     if (sit == sessions_.end() || !sit->second->is_open()) return;
 
-    SkillResultMsg result;
-    std::strncpy(result.skill_id, skill_id.c_str(), sizeof(result.skill_id) - 1);
-    result.success = success ? 1 : 0;
-    result.cooldown = 0;
     if (success) {
+        // Find the skill's slot index for the client
+        auto unlocked = systems::get_unlocked_skills(registry, player, config_);
+        uint16_t slot_idx = 0;
         const SkillConfig* skill_cfg = config_.find_skill(skill_id);
-        if (skill_cfg) result.cooldown = skill_cfg->cooldown;
+        for (uint16_t i = 0; i < unlocked.size() && i < 5; ++i) {
+            if (unlocked[i]->id == skill_id) { slot_idx = i; break; }
+        }
+
+        SkillCooldownMsg cd_msg;
+        cd_msg.skill_id = slot_idx;
+        cd_msg.cooldown_remaining = skill_cfg ? skill_cfg->cooldown : 0.0f;
+        cd_msg.cooldown_total = skill_cfg ? skill_cfg->cooldown : 0.0f;
+        sit->second->send(build_packet(MessageType::SkillCooldown, cd_msg));
     }
-    sit->second->send(build_packet(MessageType::SkillCooldown, result));
 }
 
 void Server::on_talent_unlock(uint32_t player_id, const std::string& talent_id) {
@@ -312,6 +318,52 @@ void Server::on_item_unequip(uint32_t player_id, const std::string& slot) {
     if (player == entt::null) return;
 
     bool success = systems::unequip_item(registry, player, slot, config_);
+    if (success) {
+        send_inventory_update(player_id);
+    }
+}
+
+void Server::on_item_equip_by_slot(uint32_t player_id, uint8_t slot_index) {
+    auto& registry = world_.registry();
+    auto player = world_.find_entity_by_network_id(player_id);
+    if (player == entt::null) return;
+
+    auto* inv = registry.try_get<ecs::Inventory>(player);
+    if (!inv || slot_index >= inv->used_slots) return;
+
+    std::string item_id = inv->slots[slot_index].item_id;
+    if (item_id.empty()) return;
+
+    bool success = systems::equip_item(registry, player, item_id, config_);
+    if (success) {
+        send_inventory_update(player_id);
+    }
+}
+
+void Server::on_item_unequip_slot(uint32_t player_id, uint8_t equip_slot) {
+    auto& registry = world_.registry();
+    auto player = world_.find_entity_by_network_id(player_id);
+    if (player == entt::null) return;
+
+    std::string slot = (equip_slot == 0) ? "weapon" : "armor";
+    bool success = systems::unequip_item(registry, player, slot, config_);
+    if (success) {
+        send_inventory_update(player_id);
+    }
+}
+
+void Server::on_item_use(uint32_t player_id, uint8_t slot_index) {
+    auto& registry = world_.registry();
+    auto player = world_.find_entity_by_network_id(player_id);
+    if (player == entt::null) return;
+
+    auto* inv = registry.try_get<ecs::Inventory>(player);
+    if (!inv || slot_index >= inv->used_slots) return;
+
+    std::string item_id = inv->slots[slot_index].item_id;
+    if (item_id.empty()) return;
+
+    bool success = systems::use_consumable(registry, player, item_id, config_);
     if (success) {
         send_inventory_update(player_id);
     }
@@ -613,25 +665,27 @@ void Server::send_inventory_update(uint32_t player_id) {
 
     auto* inv = registry.try_get<ecs::Inventory>(player);
     auto* equip = registry.try_get<ecs::Equipment>(player);
-    auto* level = registry.try_get<ecs::PlayerLevel>(player);
 
-    // Pack inventory: gold(i32) + slot_count(u8) + [item_id(32) + count(u8)] * slots
-    //                 + weapon_id(32) + armor_id(32)
-    std::vector<uint8_t> payload;
-    BufferWriter pw(payload);
+    // Helper to map string item_id to uint16_t index (1-based, 0 = empty)
+    auto item_to_index = [this](const std::string& item_id) -> uint16_t {
+        if (item_id.empty()) return 0;
+        const auto& items = config_.items();
+        for (uint16_t i = 0; i < items.size(); ++i) {
+            if (items[i].id == item_id) return i + 1;  // 1-based
+        }
+        return 0;
+    };
 
-    pw.write(static_cast<int32_t>(level ? level->gold : 0));
-    uint8_t used = inv ? static_cast<uint8_t>(inv->used_slots) : 0;
-    pw.write(used);
-    for (int i = 0; i < used; ++i) {
-        pw.write_fixed_string(inv->slots[i].item_id, 32);
-        pw.write(static_cast<uint8_t>(inv->slots[i].count));
+    InventoryUpdateMsg msg;
+    msg.slot_count = inv ? static_cast<uint8_t>(inv->used_slots) : 0;
+    for (int i = 0; i < msg.slot_count && i < InventoryUpdateMsg::MAX_SLOTS; ++i) {
+        msg.slots[i].item_id = item_to_index(inv->slots[i].item_id);
+        msg.slots[i].count = static_cast<uint16_t>(inv->slots[i].count);
     }
-    // Equipment
-    pw.write_fixed_string(equip ? equip->weapon_id : "", 32);
-    pw.write_fixed_string(equip ? equip->armor_id : "", 32);
+    msg.equipped_weapon = equip ? item_to_index(equip->weapon_id) : 0;
+    msg.equipped_armor = equip ? item_to_index(equip->armor_id) : 0;
 
-    sit->second->send(build_packet(MessageType::InventoryUpdate, payload));
+    sit->second->send(build_packet(MessageType::InventoryUpdate, msg));
 }
 
 void Server::send_talent_sync(uint32_t player_id) {
@@ -668,14 +722,15 @@ void Server::send_skill_list(uint32_t player_id) {
 
     auto unlocked = systems::get_unlocked_skills(registry, player, config_);
 
-    // Send skill list as SkillUnlock messages (one per skill)
-    for (const auto* skill : unlocked) {
-        SkillResultMsg msg;
-        std::strncpy(msg.skill_id, skill->id.c_str(), sizeof(msg.skill_id) - 1);
-        msg.cooldown = skill->cooldown;
-        msg.success = 1;  // Indicates skill is available
-        sit->second->send(build_packet(MessageType::SkillUnlock, msg));
+    // Send all unlocked skills in a single SkillUnlockMsg
+    SkillUnlockMsg msg;
+    msg.skill_count = static_cast<uint8_t>(
+        std::min(unlocked.size(), static_cast<size_t>(SkillUnlockMsg::MAX_SKILLS)));
+    for (int i = 0; i < msg.skill_count; ++i) {
+        msg.skills[i].skill_id = static_cast<uint16_t>(i);
+        std::strncpy(msg.skills[i].name, unlocked[i]->name.c_str(), sizeof(msg.skills[i].name) - 1);
     }
+    sit->second->send(build_packet(MessageType::SkillUnlock, msg));
 }
 
 void Server::send_progression_updates() {
@@ -710,13 +765,15 @@ void Server::send_progression_updates() {
                     auto player = world_.find_entity_by_network_id(evt.player_id);
                     if (player != entt::null) {
                         auto unlocked = systems::get_unlocked_skills(world_.registry(), player, config_);
-                        for (const auto* skill : unlocked) {
-                            SkillResultMsg skill_msg;
-                            std::strncpy(skill_msg.skill_id, skill->id.c_str(), sizeof(skill_msg.skill_id) - 1);
-                            skill_msg.cooldown = skill->cooldown;
-                            skill_msg.success = 1;
-                            sit->second->send(build_packet(MessageType::SkillUnlock, skill_msg));
+                        SkillUnlockMsg skill_msg;
+                        skill_msg.skill_count = static_cast<uint8_t>(
+                            std::min(unlocked.size(), static_cast<size_t>(SkillUnlockMsg::MAX_SKILLS)));
+                        for (int si = 0; si < skill_msg.skill_count; ++si) {
+                            skill_msg.skills[si].skill_id = static_cast<uint16_t>(si);
+                            std::strncpy(skill_msg.skills[si].name, unlocked[si]->name.c_str(),
+                                         sizeof(skill_msg.skills[si].name) - 1);
                         }
+                        sit->second->send(build_packet(MessageType::SkillUnlock, skill_msg));
                     }
                 }
                 break;
@@ -760,27 +817,31 @@ void Server::send_progression_updates() {
                 break;
             }
             case World::GameplayEvent::Type::InventoryUpdate: {
-                // Delegate to the helper (but we already hold sessions_mutex_,
-                // so send directly here instead of calling the helper)
+                // Build InventoryUpdateMsg using same struct format as send_inventory_update
                 auto player = world_.find_entity_by_network_id(evt.player_id);
                 if (player != entt::null) {
                     auto& registry = world_.registry();
                     auto* inv = registry.try_get<ecs::Inventory>(player);
                     auto* equip = registry.try_get<ecs::Equipment>(player);
-                    auto* level = registry.try_get<ecs::PlayerLevel>(player);
 
-                    std::vector<uint8_t> payload;
-                    BufferWriter pw(payload);
-                    pw.write(static_cast<int32_t>(level ? level->gold : 0));
-                    uint8_t used = inv ? static_cast<uint8_t>(inv->used_slots) : 0;
-                    pw.write(used);
-                    for (int i = 0; i < used; ++i) {
-                        pw.write_fixed_string(inv->slots[i].item_id, 32);
-                        pw.write(static_cast<uint8_t>(inv->slots[i].count));
+                    auto item_to_index = [this](const std::string& item_id) -> uint16_t {
+                        if (item_id.empty()) return 0;
+                        const auto& items = config_.items();
+                        for (uint16_t i = 0; i < items.size(); ++i) {
+                            if (items[i].id == item_id) return i + 1;
+                        }
+                        return 0;
+                    };
+
+                    InventoryUpdateMsg inv_msg;
+                    inv_msg.slot_count = inv ? static_cast<uint8_t>(inv->used_slots) : 0;
+                    for (int i = 0; i < inv_msg.slot_count && i < InventoryUpdateMsg::MAX_SLOTS; ++i) {
+                        inv_msg.slots[i].item_id = item_to_index(inv->slots[i].item_id);
+                        inv_msg.slots[i].count = static_cast<uint16_t>(inv->slots[i].count);
                     }
-                    pw.write_fixed_string(equip ? equip->weapon_id : "", 32);
-                    pw.write_fixed_string(equip ? equip->armor_id : "", 32);
-                    sit->second->send(build_packet(MessageType::InventoryUpdate, payload));
+                    inv_msg.equipped_weapon = equip ? item_to_index(equip->weapon_id) : 0;
+                    inv_msg.equipped_armor = equip ? item_to_index(equip->armor_id) : 0;
+                    sit->second->send(build_packet(MessageType::InventoryUpdate, inv_msg));
                 }
                 break;
             }

@@ -280,10 +280,8 @@ inline void build_xp_bar(UIScene& ui, const HUDState& hud, float /*screen_w*/, f
     float bar_width = 250.0f;
     float bar_height = 12.0f;
     float padding = 20.0f;
-    float health_bar_bottom = screen_h - padding; // bottom of health bar
-    float gap = 6.0f;
     float x = padding;
-    float y = health_bar_bottom + gap;
+    float y = screen_h - padding - bar_height - 30.0f; // Above health bar area
 
     // Background frame
     ui.add_filled_rect(x - 2, y - 2, bar_width + 4, bar_height + 4, hud_colors::XP_FRAME);

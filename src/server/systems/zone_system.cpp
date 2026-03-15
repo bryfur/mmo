@@ -184,6 +184,11 @@ void ZoneSystem::respawn_monster(entt::registry& registry, entt::entity monster,
     collider.half_height = capsule_half_height;
     collider.offset_y = offset_y;
 
+    // NOTE: The Jolt body shape is NOT updated here because ZoneSystem has no access
+    // to PhysicsSystem. The caller (World::update) must call
+    // physics_.update_body_shape(registry_, monster, capsule_radius, capsule_half_height)
+    // after respawn_monster() if the monster type changed and dimensions differ.
+
     // Teleport physics body if present
     auto* physics_body = registry.try_get<ecs::PhysicsBody>(monster);
     if (physics_body) {

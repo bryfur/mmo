@@ -4,6 +4,7 @@
 #include "protocol/protocol.hpp"
 #include <algorithm>
 #include <string>
+#include <unordered_map>
 #include <vector>
 #include <cstdint>
 
@@ -29,6 +30,9 @@ struct ClassConfig {
     float cone_angle = 0.5f;
     float speed = 200.0f;
     float size = 32.0f;
+    // Per-class mana (loaded from skills.json mana_system section)
+    float base_mana = 100.0f;
+    float mana_regen = 5.0f;
 };
 
 struct MonsterConfig {
@@ -236,6 +240,7 @@ struct TalentEffect {
     float defense_mult = 1.0f;
     float mana_mult = 1.0f;
     float cooldown_mult = 1.0f;
+    float attack_speed_mult = 1.0f;
 };
 
 struct TalentConfig {
@@ -439,6 +444,16 @@ private:
     WallConfig wall_;
     TowerConfig corner_towers_;
     float safe_zone_radius_ = 400.0f;
+
+    void apply_mana_system();  // Post-load: apply mana_system data to class configs
+
+    // Mana system per-class data (from skills.json)
+    struct ManaSystemEntry {
+        float base_mana = 100.0f;
+        float mana_per_level = 5.0f;
+        float mana_regen = 5.0f;
+    };
+    std::unordered_map<std::string, ManaSystemEntry> mana_system_;
 
     // New gameplay configs
     std::vector<MonsterTypeConfig> monster_types_;

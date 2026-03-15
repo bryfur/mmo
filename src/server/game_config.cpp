@@ -412,24 +412,23 @@ bool GameConfig::load_leveling(const std::string& path) {
         if (j.contains("death_penalty")) {
             leveling_.death_xp_loss_percent = j["death_penalty"].value("xp_loss_percent", 5.0f);
         }
-        // Load class growth
-        leveling_.class_growth.resize(4); // 4 classes
+        // Load class growth - dynamically sized to match the number of loaded classes
+        leveling_.class_growth.resize(classes_.size());
         if (j.contains("stat_growth_per_level")) {
             const auto& sg = j["stat_growth_per_level"];
-            auto load_growth = [&](const std::string& name, int idx) {
-                if (sg.contains(name)) {
-                    const auto& g = sg[name];
-                    leveling_.class_growth[idx].health = g.value("health", 0.0f);
-                    leveling_.class_growth[idx].damage = g.value("damage", 0.0f);
-                    leveling_.class_growth[idx].speed = g.value("speed", 0.0f);
-                    leveling_.class_growth[idx].attack_range = g.value("attack_range", 0.0f);
-                    leveling_.class_growth[idx].attack_cooldown_reduction = g.value("attack_cooldown_reduction", 0.0f);
+            for (size_t i = 0; i < classes_.size(); ++i) {
+                // Match class config name (uppercase) to growth key (lowercase)
+                std::string lower_name = classes_[i].name;
+                for (auto& c : lower_name) c = static_cast<char>(std::tolower(c));
+                if (sg.contains(lower_name)) {
+                    const auto& g = sg[lower_name];
+                    leveling_.class_growth[i].health = g.value("health", 0.0f);
+                    leveling_.class_growth[i].damage = g.value("damage", 0.0f);
+                    leveling_.class_growth[i].speed = g.value("speed", 0.0f);
+                    leveling_.class_growth[i].attack_range = g.value("attack_range", 0.0f);
+                    leveling_.class_growth[i].attack_cooldown_reduction = g.value("attack_cooldown_reduction", 0.0f);
                 }
-            };
-            load_growth("warrior", 0);
-            load_growth("mage", 1);
-            load_growth("paladin", 2);
-            load_growth("archer", 3);
+            }
         }
         std::cout << "[GameConfig] Loaded leveling config: " << leveling_.max_level << " levels\n";
         return true;
@@ -479,11 +478,45 @@ bool GameConfig::load_skills(const std::string& path) {
             sk.debuff_duration = s.value("debuff_duration", 0.0f);
             skills_.push_back(std::move(sk));
         }
+        // Load mana_system section (per-class mana values)
+        if (j.contains("mana_system")) {
+            const auto& ms = j["mana_system"];
+            if (ms.contains("base_mana") && ms.contains("mana_regen_per_second")) {
+                for (auto& [class_name, mana_val] : ms["base_mana"].items()) {
+                    auto& entry = mana_system_[class_name];
+                    entry.base_mana = mana_val.get<float>();
+                }
+                for (auto& [class_name, regen_val] : ms["mana_regen_per_second"].items()) {
+                    mana_system_[class_name].mana_regen = regen_val.get<float>();
+                }
+                if (ms.contains("mana_per_level")) {
+                    for (auto& [class_name, mpl_val] : ms["mana_per_level"].items()) {
+                        mana_system_[class_name].mana_per_level = mpl_val.get<float>();
+                    }
+                }
+                // Apply mana values to class configs
+                apply_mana_system();
+            }
+        }
+
         std::cout << "[GameConfig] Loaded " << skills_.size() << " skills\n";
         return true;
     } catch (const json::exception& e) {
         std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << "\n";
         return false;
+    }
+}
+
+void GameConfig::apply_mana_system() {
+    for (auto& cls : classes_) {
+        // Match class name (case-insensitive: config uses "WARRIOR", mana_system uses "warrior")
+        std::string lower_name = cls.name;
+        for (auto& c : lower_name) c = static_cast<char>(std::tolower(c));
+        auto it = mana_system_.find(lower_name);
+        if (it != mana_system_.end()) {
+            cls.base_mana = it->second.base_mana;
+            cls.mana_regen = it->second.mana_regen;
+        }
     }
 }
 
@@ -515,10 +548,11 @@ bool GameConfig::load_talents(const std::string& path) {
                                 tc.effect.speed_mult = e.value("speed_mult", 1.0f);
                                 tc.effect.health_mult = e.value("health_mult", 1.0f);
                                 tc.effect.crit_chance = e.value("crit_chance", 0.0f);
-                                tc.effect.kill_heal_pct = e.value("kill_heal_pct", 0.0f);
+                                tc.effect.kill_heal_pct = e.value("kill_heal_percent", 0.0f);
                                 tc.effect.defense_mult = e.value("defense_mult", 1.0f);
                                 tc.effect.mana_mult = e.value("mana_mult", 1.0f);
                                 tc.effect.cooldown_mult = e.value("cooldown_mult", 1.0f);
+                                tc.effect.attack_speed_mult = e.value("attack_speed_mult", 1.0f);
                             }
                             tb.talents.push_back(std::move(tc));
                         }

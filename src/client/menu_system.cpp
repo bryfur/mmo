@@ -303,9 +303,11 @@ void MenuSystem::update(float dt) {
         if (item.float_value) {
             if (input_.menu_left_pressed()) {
                 *item.float_value = std::max(item.float_min, *item.float_value - item.float_step);
+                settings_dirty_ = true;
             }
             if (input_.menu_right_pressed()) {
                 *item.float_value = std::min(item.float_max, *item.float_value + item.float_step);
+                settings_dirty_ = true;
             }
         }
     } else if (item.type == MenuItemType::Button) {

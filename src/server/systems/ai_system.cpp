@@ -4,7 +4,7 @@
 #include "server/ecs/game_components.hpp"
 #include "server/game_config.hpp"
 #include <cmath>
-#include <cstdlib>
+#include <random>
 
 namespace mmo::server::systems {
 
@@ -25,9 +25,21 @@ bool is_in_safe_zone(float x, float z, float center_x, float center_z, float rad
 } // anonymous namespace
 
 void update_ai(entt::registry& registry, float dt, const GameConfig& config) {
-    const float town_center_x = config.world().width / 2.0f;
-    const float town_center_z = config.world().height / 2.0f;
+    // Use the town_safe_zone center from zone config instead of computing from world size.
+    // The world may be 32000x32000 but the town is at (4000, 4000).
+    float town_center_x = 4000.0f;  // fallback
+    float town_center_z = 4000.0f;
+    for (const auto& zone : config.zones()) {
+        if (zone.id == "town_safe_zone") {
+            town_center_x = zone.center_x;
+            town_center_z = zone.center_z;
+            break;
+        }
+    }
     const float safe_radius = config.safe_zone_radius();
+
+    // Thread-local RNG for town NPC wander behavior (replaces std::rand)
+    static thread_local std::mt19937 rng{std::random_device{}()};
     // Update hostile NPCs
     auto npc_view = registry.view<ecs::NPCTag, ecs::Transform, ecs::Velocity,
                                    ecs::Combat, ecs::AIState, ecs::Health>();
@@ -100,7 +112,14 @@ void update_ai(entt::registry& registry, float dt, const GameConfig& config) {
                 velocity.x = 0;
                 velocity.z = 0;
             } else {
-                float speed = config.monster().speed * speed_mult;
+                // Use per-monster-type speed when available, fall back to global config
+                float base_speed = config.monster().speed;
+                if (registry.all_of<ecs::MonsterTypeId>(entity)) {
+                    const auto& type_id = registry.get<ecs::MonsterTypeId>(entity);
+                    const auto* mt = config.find_monster_type(type_id.type_id);
+                    if (mt) base_speed = mt->speed;
+                }
+                float speed = base_speed * speed_mult;
                 velocity.x = (dx / dist) * speed;
                 velocity.z = (dz / dist) * speed;
             }
@@ -128,7 +147,8 @@ void update_ai(entt::registry& registry, float dt, const GameConfig& config) {
             if (dist < 5.0f) {
                 // Reached target, stop and idle
                 ai.is_moving = false;
-                ai.idle_timer = 2.0f + (std::rand() % 30) / 10.0f;  // 2-5 seconds
+                std::uniform_real_distribution<float> idle_dist(2.0f, 5.0f);
+                ai.idle_timer = idle_dist(rng);  // 2-5 seconds
                 velocity.x = 0;
                 velocity.z = 0;
             } else {
@@ -150,8 +170,10 @@ void update_ai(entt::registry& registry, float dt, const GameConfig& config) {
             ai.idle_timer -= dt;
             if (ai.idle_timer <= 0) {
                 // Pick random target within wander radius
-                float angle = (std::rand() % 360) * 3.14159f / 180.0f;
-                float radius = (std::rand() % 100) / 100.0f * ai.wander_radius;
+                std::uniform_real_distribution<float> angle_dist(0.0f, 2.0f * 3.14159f);
+                std::uniform_real_distribution<float> radius_dist(0.0f, ai.wander_radius);
+                float angle = angle_dist(rng);
+                float radius = radius_dist(rng);
                 ai.target_x = ai.home_x + std::cos(angle) * radius;
                 ai.target_z = ai.home_z + std::sin(angle) * radius;
                 ai.is_moving = true;

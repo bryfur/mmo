@@ -45,7 +45,9 @@ World::World(const GameConfig& config)
 
     // Initialize physics with gravity for 3D game
     physics_.initialize();
-    physics_.set_gravity(0.0f, -9.81f, 0.0f);
+    // Gravity set to 0: all entities are ground-locked via terrain height snapping,
+    // so gravity wastes CPU and prevents body sleep.
+    physics_.set_gravity(0.0f, 0.0f, 0.0f);
 
     // Set terrain height callback for ground snapping
     physics_.set_terrain_height_callback([this](float x, float z) {
@@ -134,10 +136,16 @@ uint32_t World::add_player(const std::string& name, PlayerClass player_class) {
     auto entity = registry_.create();
     uint32_t net_id = next_network_id();
     
-    // Spawn players in the town (safe zone)
-    // Town is at old world center from editor save data
-    const float town_center_x = 4000.0f;
-    const float town_center_z = 4000.0f;
+    // Spawn players in the town (safe zone) - read center from zone config
+    float town_center_x = 4000.0f;
+    float town_center_z = 4000.0f;
+    for (const auto& zone : config_->zones()) {
+        if (zone.id == "town_safe_zone") {
+            town_center_x = zone.center_x;
+            town_center_z = zone.center_z;
+            break;
+        }
+    }
     std::uniform_real_distribution<float> dist_offset(-50.0f, 50.0f);
     float spawn_x = town_center_x + dist_offset(rng_);
     float spawn_z = town_center_z + dist_offset(rng_);
@@ -175,11 +183,11 @@ uint32_t World::add_player(const std::string& name, PlayerClass player_class) {
     registry_.emplace<ecs::Scale>(entity);  // Default scale = 1.0
     registry_.emplace<ecs::BuffState>(entity);  // Empty buff state for status effects
 
-    // Progression components
+    // Progression components - use per-class mana from skills.json mana_system
     ecs::PlayerLevel player_level;
-    player_level.mana = 100.0f;
-    player_level.max_mana = 100.0f;
-    player_level.mana_regen = 5.0f;
+    player_level.mana = cls.base_mana;
+    player_level.max_mana = cls.base_mana;
+    player_level.mana_regen = cls.mana_regen;
     registry_.emplace<ecs::PlayerLevel>(entity, player_level);
     registry_.emplace<ecs::Inventory>(entity);
     registry_.emplace<ecs::Equipment>(entity);
@@ -204,6 +212,9 @@ uint32_t World::add_player(const std::string& name, PlayerClass player_class) {
     rb.mass = 70.0f;  // ~70kg for a character
     rb.linear_damping = 0.9f;  // High damping for responsive control
     registry_.emplace<ecs::RigidBody>(entity, rb);
+
+    // Create physics body immediately so the player has collision from the first tick
+    physics_.create_bodies(registry_);
 
     // Add to spatial grid
     spatial_grid_.update_entity(net_id, spawn_x, spawn_z, EntityType::Player);
@@ -464,6 +475,61 @@ void World::update(float dt) {
                 registry_, entity,
                 [this](float x, float z) { return get_terrain_height(x, z); }
             );
+
+            // Update Jolt body shape to match new collider dimensions after respawn
+            if (registry_.all_of<ecs::Collider, ecs::PhysicsBody>(entity)) {
+                const auto& collider = registry_.get<ecs::Collider>(entity);
+                physics_.update_body_shape(registry_, entity, collider.radius, collider.half_height);
+            }
+        }
+    }
+
+    // Handle player death: apply death penalty, reset health, teleport to town spawn
+    {
+        float town_cx = 4000.0f;
+        float town_cz = 4000.0f;
+        for (const auto& zone : config_->zones()) {
+            if (zone.id == "town_safe_zone") {
+                town_cx = zone.center_x;
+                town_cz = zone.center_z;
+                break;
+            }
+        }
+        std::uniform_real_distribution<float> offset_dist(-50.0f, 50.0f);
+
+        auto death_view = registry_.view<ecs::PlayerTag, ecs::Health, ecs::Transform>();
+        for (auto entity : death_view) {
+            auto& health = death_view.get<ecs::Health>(entity);
+            if (health.current > 0.0f) continue;
+
+            // Apply death XP penalty
+            systems::apply_death_penalty(registry_, entity, *config_);
+
+            // Reset health to max
+            health.current = health.max;
+
+            // Restore mana to full
+            if (auto* pl = registry_.try_get<ecs::PlayerLevel>(entity)) {
+                pl->mana = pl->max_mana;
+            }
+
+            // Teleport back to town spawn
+            auto& transform = death_view.get<ecs::Transform>(entity);
+            transform.x = town_cx + offset_dist(rng_);
+            transform.z = town_cz + offset_dist(rng_);
+            transform.y = get_terrain_height(transform.x, transform.z);
+
+            // Stop all movement
+            if (auto* vel = registry_.try_get<ecs::Velocity>(entity)) {
+                vel->x = 0.0f;
+                vel->y = 0.0f;
+                vel->z = 0.0f;
+            }
+
+            // Mark physics body for teleport
+            if (auto* body = registry_.try_get<ecs::PhysicsBody>(entity)) {
+                body->needs_teleport = true;
+            }
         }
     }
 
@@ -743,6 +809,27 @@ void World::load_heightmap() {
         std::cerr << "[World] Truncated editor heightmap at " << path << "\n";
         heightmap_init(heightmap_, 0, 0, protocol::heightmap_config::CHUNK_RESOLUTION);
         return;
+    }
+
+    // Re-encode height data if the file's min/max range differs from the protocol constants.
+    // The editor may save with a different height range; we need to normalize to the
+    // protocol's standard range so heightmap_get_local/heightmap_get_world decode correctly.
+    const float proto_min = protocol::heightmap_config::MIN_HEIGHT;
+    const float proto_max = protocol::heightmap_config::MAX_HEIGHT;
+    if (std::abs(min_h - proto_min) > 0.01f || std::abs(max_h - proto_max) > 0.01f) {
+        const float file_range = max_h - min_h;
+        const float proto_range = proto_max - proto_min;
+        if (file_range > 0.01f) {
+            for (size_t i = 0; i < data_size; ++i) {
+                // Decode from file range, re-encode to protocol range
+                float height = (data[i] / 65535.0f) * file_range + min_h;
+                float normalized = (height - proto_min) / proto_range;
+                normalized = std::fmax(0.0f, std::fmin(1.0f, normalized));
+                data[i] = static_cast<uint16_t>(normalized * 65535.0f);
+            }
+            std::cout << "[World] Re-encoded heightmap from range [" << min_h << ", " << max_h
+                      << "] to protocol range [" << proto_min << ", " << proto_max << "]\n";
+        }
     }
 
     // Populate server HeightmapChunk

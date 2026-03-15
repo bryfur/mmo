@@ -200,14 +200,16 @@ bool use_skill(entt::registry& registry, entt::entity player, const std::string&
                 apply_effect(registry, entity, root);
             }
 
-            // Apply enemy damage reduction debuff
+            // Apply enemy outgoing damage reduction debuff.
+            // Use DamageBoost with a negative value so their outgoing damage is reduced.
+            // (DefenseBoost would incorrectly reduce their incoming damage instead.)
             if (skill->debuff_duration > 0.0f && skill->enemy_damage_reduction > 0.0f) {
                 ecs::StatusEffect debuff;
-                debuff.type = ecs::StatusEffect::Type::DefenseBoost;
+                debuff.type = ecs::StatusEffect::Type::DamageBoost;
                 debuff.duration = skill->debuff_duration;
                 debuff.tick_timer = 0.0f;
                 debuff.tick_interval = 0.0f;
-                debuff.value = skill->enemy_damage_reduction;
+                debuff.value = -skill->enemy_damage_reduction;  // Negative = reduce outgoing damage
                 debuff.source_id = player_net_id;
                 apply_effect(registry, entity, debuff);
             }
@@ -378,6 +380,7 @@ TalentEffect compute_talent_effects(entt::registry& registry, entt::entity playe
         aggregate.defense_mult *= e.defense_mult;
         aggregate.mana_mult *= e.mana_mult;
         aggregate.cooldown_mult *= e.cooldown_mult;
+        aggregate.attack_speed_mult *= e.attack_speed_mult;
 
         // Additive effects
         aggregate.crit_chance += e.crit_chance;
@@ -388,11 +391,38 @@ TalentEffect compute_talent_effects(entt::registry& registry, entt::entity playe
 }
 
 void apply_talent_effects(entt::registry& registry, entt::entity player, const GameConfig& config) {
-    // Compute aggregate effects - the combat system reads these values
-    // when applying damage/stats. For now, ensure TalentState is up to date.
-    // The actual stat modifications happen through the combat system
-    // checking talent effects at damage/heal time.
-    (void)compute_talent_effects(registry, player, config);
+    TalentEffect effects = compute_talent_effects(registry, player, config);
+
+    // Get the player's base class stats to re-derive from base * talent multipliers
+    if (!registry.all_of<ecs::EntityInfo>(player)) return;
+    const auto& info = registry.get<ecs::EntityInfo>(player);
+    const auto& cls = config.get_class(info.player_class);
+
+    // Apply talent multipliers to combat stats
+    if (registry.all_of<ecs::Combat>(player)) {
+        auto& combat = registry.get<ecs::Combat>(player);
+        combat.damage = cls.damage * effects.damage_mult;
+        combat.attack_cooldown = cls.attack_cooldown * effects.attack_speed_mult;
+    }
+
+    // Apply talent multipliers to health
+    if (registry.all_of<ecs::Health>(player)) {
+        auto& health = registry.get<ecs::Health>(player);
+        float new_max = cls.health * effects.health_mult;
+        // Preserve health ratio when max changes
+        float ratio = health.max > 0.0f ? health.current / health.max : 1.0f;
+        health.max = new_max;
+        health.current = new_max * ratio;
+    }
+
+    // Apply talent multipliers to mana
+    if (registry.all_of<ecs::PlayerLevel>(player)) {
+        auto& pl = registry.get<ecs::PlayerLevel>(player);
+        float new_max = cls.base_mana * effects.mana_mult;
+        float ratio = pl.max_mana > 0.0f ? pl.mana / pl.max_mana : 1.0f;
+        pl.max_mana = new_max;
+        pl.mana = new_max * ratio;
+    }
 }
 
 } // namespace mmo::server::systems

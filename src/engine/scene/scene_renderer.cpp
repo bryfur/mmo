@@ -654,7 +654,7 @@ void SceneRenderer::render_model_command_inner(const ModelCommand& cmd, const Ca
     transform_uniforms.view = camera.view;
     transform_uniforms.projection = camera.projection;
     transform_uniforms.cameraPos = camera.position;
-    transform_uniforms.normalMatrix = model_mat; // Correct for uniform-scale transforms
+    transform_uniforms.normalMatrix = glm::transpose(glm::inverse(model_mat));
     transform_uniforms.useSkinning = 0;
 
     bool fog_active = !cmd.no_fog && frame_fog_active_;
@@ -755,7 +755,7 @@ void SceneRenderer::build_instance_batches(const RenderScene& scene, const Camer
 
         gpu::InstanceData inst;
         inst.model = cmd.transform;
-        inst.normalMatrix = cmd.transform; // Correct for uniform-scale transforms
+        inst.normalMatrix = glm::transpose(glm::inverse(cmd.transform));
         inst.tint = cmd.tint;
         inst.noFog = cmd.no_fog ? 1.0f : 0.0f;
         instance_batches_[cmd.model_name].push_back(inst);
@@ -987,7 +987,7 @@ void SceneRenderer::render_skinned_model_command_inner(const SkinnedModelCommand
     transform_uniforms.view = camera.view;
     transform_uniforms.projection = camera.projection;
     transform_uniforms.cameraPos = camera.position;
-    transform_uniforms.normalMatrix = model_mat; // Correct for uniform-scale transforms
+    transform_uniforms.normalMatrix = glm::transpose(glm::inverse(model_mat));
     transform_uniforms.useSkinning = 1;
 
     bool fog_active = frame_fog_active_;

@@ -185,7 +185,7 @@
             "name": "Dragon's Reach",
             "center_x": 28000,
             "center_z": 28000,
-            "radius": 4500,
+            "radius": 4000,
             "level_min": 12,
             "level_max": 15,
             "monster_density": 0.8,

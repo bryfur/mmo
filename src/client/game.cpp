@@ -346,13 +346,7 @@ void Game::update_playing(float dt) {
     update_damage_numbers(dt);
     update_notifications(dt);
 
-    // Tick skill cooldowns locally
-    for (auto& slot : hud_state_.skill_slots) {
-        if (slot.cooldown > 0.0f) {
-            slot.cooldown -= dt;
-            if (slot.cooldown < 0.0f) slot.cooldown = 0.0f;
-        }
-    }
+    // Skill cooldowns are ticked in hud_state_.update(dt) below
 
     // Panel interaction (before menu system eats inputs)
     if (!menu_system_->is_open()) {
@@ -391,10 +385,10 @@ void Game::update_playing(float dt) {
         bool t_down = keys[SDL_SCANCODE_T];
         bool m_down = keys[SDL_SCANCODE_M];
 
-        if (i_down && !prev_i && !menu_system_->is_open()) panel_state_.toggle_inventory();
-        if (l_down && !prev_l && !menu_system_->is_open()) panel_state_.toggle_quest_log();
-        if (t_down && !prev_t && !menu_system_->is_open()) panel_state_.toggle_talent_tree();
-        if (m_down && !prev_m && !menu_system_->is_open()) panel_state_.toggle_world_map();
+        if (i_down && !prev_i && !menu_system_->is_open()) { panel_state_.toggle_inventory(); panel_state_.active_panel = panel_state_.inventory_open ? ActivePanel::Inventory : ActivePanel::None; }
+        if (l_down && !prev_l && !menu_system_->is_open()) { panel_state_.toggle_quest_log(); panel_state_.active_panel = panel_state_.quest_log_open ? ActivePanel::QuestLog : ActivePanel::None; }
+        if (t_down && !prev_t && !menu_system_->is_open()) { panel_state_.toggle_talent_tree(); panel_state_.active_panel = panel_state_.talent_tree_open ? ActivePanel::Talents : ActivePanel::None; }
+        if (m_down && !prev_m && !menu_system_->is_open()) { panel_state_.toggle_world_map(); panel_state_.active_panel = ActivePanel::None; }
 
         prev_i = i_down; prev_l = l_down; prev_t = t_down; prev_m = m_down;
     }
@@ -1056,7 +1050,7 @@ void Game::handle_network_message(MessageType type, const std::vector<uint8_t>& 
                 uint8_t item_count = r.read<uint8_t>();
 
                 if (gold > 0) {
-                    hud_state_.gold += gold;
+                    // Gold total is set authoritatively by GoldChange messages
                     char buf[64];
                     snprintf(buf, sizeof(buf), "+%d Gold", gold);
                     hud_state_.add_loot(buf, 0xFF00DDFF);
@@ -1622,7 +1616,7 @@ void Game::build_playing_ui(UIScene& ui) {
         ui.add_filled_rect(hx, hy, bar_width * health_ratio, bar_height, hp_color);
 
         char hp_text[32];
-        snprintf(hp_text, sizeof(hp_text), "HP: %.0f / %.0f", health_ratio * health.max, health.max);
+        snprintf(hp_text, sizeof(hp_text), "HP: %.0f / %.0f", health.current, health.max);
         ui.add_text(hp_text, hx + 10, hy + 5, 1.0f, ui_colors::WHITE);
     }
 
@@ -1813,9 +1807,8 @@ void Game::build_playing_ui(UIScene& ui) {
     build_gameplay_hud(ui, hud_state_, static_cast<float>(screen_width()), static_cast<float>(screen_height()));
     build_gameplay_panels(ui, panel_state_, static_cast<float>(screen_width()), static_cast<float>(screen_height()));
 
-    // Gameplay UI layers (client branch)
-    build_skill_bar_ui(ui);
-    build_quest_tracker_ui(ui);
+    // Gameplay UI layers
+    // Skill bar and quest tracker are already rendered by build_gameplay_hud above
     build_notifications_ui(ui);
     build_damage_numbers_ui(ui);
     build_dialogue_ui(ui);
@@ -2212,10 +2205,18 @@ void Game::update_panel_input(float /*dt*/) {
 
         // Navigate dialogue options
         if (hud_state_.dialogue.quest_count > 0) {
-            if (keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_W]) {
-                // Handled per-frame but fine for simple nav
-            }
-            if (keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_S]) {
+            {
+                static bool dlg_up_was = false, dlg_down_was = false;
+                bool dlg_up_now = keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_W];
+                bool dlg_down_now = keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_S];
+                if (dlg_up_now && !dlg_up_was && hud_state_.dialogue.selected_option > 0) {
+                    hud_state_.dialogue.selected_option--;
+                }
+                if (dlg_down_now && !dlg_down_was && hud_state_.dialogue.selected_option < hud_state_.dialogue.quest_count - 1) {
+                    hud_state_.dialogue.selected_option++;
+                }
+                dlg_up_was = dlg_up_now;
+                dlg_down_was = dlg_down_now;
             }
 
             // Accept quest on Enter/Space
@@ -2245,10 +2246,8 @@ void Game::update_panel_input(float /*dt*/) {
         return;
     }
 
-    // Toggle panels
-    if (i_down && !i_was_down) panel_state_.toggle_panel(ActivePanel::Inventory);
-    if (t_down && !t_was_down) panel_state_.toggle_panel(ActivePanel::Talents);
-    if (l_down && !l_was_down) panel_state_.toggle_panel(ActivePanel::QuestLog);
+    // Panel toggles are handled in update_playing's key block above
+    // This function only handles panel-specific interactions
 
     // Close panel on ESC
     if (esc_down && !esc_was_down && panel_state_.is_panel_open()) {
@@ -2324,7 +2323,7 @@ void Game::update_panel_input(float /*dt*/) {
         if (up_now && !up_was && panel_state_.talent_cursor > 0) {
             panel_state_.talent_cursor--;
         }
-        if (down_now && !down_was) {
+        if (down_now && !down_was && panel_state_.talent_cursor < 8) {  // 9 talents (0-8)
             panel_state_.talent_cursor++;
         }
         up_was = up_now;

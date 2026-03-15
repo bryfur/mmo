@@ -201,8 +201,11 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
         // Determine attack cone from class config
         float cone_angle = config.get_class(info.player_class).cone_angle;
 
-        // Apply damage multiplier from buffs
+        // Apply damage multiplier from buffs and equipment
         float effective_damage = combat.damage;
+        if (registry.all_of<ecs::Equipment>(entity)) {
+            effective_damage += registry.get<ecs::Equipment>(entity).damage_bonus;
+        }
         if (registry.all_of<ecs::BuffState>(entity)) {
             effective_damage *= registry.get<ecs::BuffState>(entity).get_damage_multiplier();
         }
@@ -213,7 +216,12 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
                                                   input.attack_dir_x, input.attack_dir_y,
                                                   cone_angle);
         for (auto target : targets) {
-            bool died = apply_damage(registry, target, effective_damage, entity);
+            // Factor in target's equipment defense
+            float mitigated_damage = effective_damage;
+            if (registry.all_of<ecs::Equipment>(target)) {
+                mitigated_damage = std::max(0.0f, mitigated_damage - registry.get<ecs::Equipment>(target).defense);
+            }
+            bool died = apply_damage(registry, target, mitigated_damage, entity);
             CombatHit hit;
             hit.attacker = entity;
             hit.target = target;
@@ -245,6 +253,11 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
             float effective_damage = combat.damage;
             if (registry.all_of<ecs::BuffState>(entity)) {
                 effective_damage *= registry.get<ecs::BuffState>(entity).get_damage_multiplier();
+            }
+
+            // Factor in target's equipment defense
+            if (registry.all_of<ecs::Equipment>(target)) {
+                effective_damage = std::max(0.0f, effective_damage - registry.get<ecs::Equipment>(target).defense);
             }
 
             bool died = apply_damage(registry, target, effective_damage, entity);

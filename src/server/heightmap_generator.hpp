@@ -68,12 +68,15 @@ namespace heightmap_generator {
 
 namespace detail {
 
-inline float terrain_height(float x, float z, float world_width, float world_height) {
-    float world_center_x = world_width / 2.0f;
-    float world_center_z = world_height / 2.0f;
+inline float terrain_height(float x, float z, float world_width, float world_height,
+                            float town_center_x = -1.0f, float town_center_z = -1.0f) {
+    // Flatten terrain around the town center, not the world center.
+    // The town may be at (4000, 4000) in a 32000x32000 world.
+    float flat_center_x = (town_center_x >= 0.0f) ? town_center_x : (world_width / 2.0f);
+    float flat_center_z = (town_center_z >= 0.0f) ? town_center_z : (world_height / 2.0f);
 
-    float dx = x - world_center_x;
-    float dz = z - world_center_z;
+    float dx = x - flat_center_x;
+    float dz = z - flat_center_z;
     float dist = std::sqrt(dx * dx + dz * dz);
 
     float playable_radius = 600.0f;
@@ -114,7 +117,8 @@ inline float terrain_height(float x, float z, float world_width, float world_hei
 
 } // namespace detail
 
-inline void generate_procedural(mmo::protocol::HeightmapChunk& chunk, float world_width, float world_height) {
+inline void generate_procedural(mmo::protocol::HeightmapChunk& chunk, float world_width, float world_height,
+                                float town_center_x = -1.0f, float town_center_z = -1.0f) {
     for (uint32_t z = 0; z < chunk.resolution; ++z) {
         for (uint32_t x = 0; x < chunk.resolution; ++x) {
             float u = static_cast<float>(x) / (chunk.resolution - 1);
@@ -122,7 +126,8 @@ inline void generate_procedural(mmo::protocol::HeightmapChunk& chunk, float worl
             float world_x = chunk.world_origin_x + u * chunk.world_size;
             float world_z = chunk.world_origin_z + v * chunk.world_size;
 
-            float height = detail::terrain_height(world_x, world_z, world_width, world_height);
+            float height = detail::terrain_height(world_x, world_z, world_width, world_height,
+                                                  town_center_x, town_center_z);
             heightmap_set(chunk, x, z, height);
         }
     }

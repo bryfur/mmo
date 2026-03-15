@@ -31,6 +31,7 @@
 #include <iostream>
 #include <thread>
 #include <utility>
+#include <mutex>
 #include <vector>
 
 // Disable common warnings from Jolt
@@ -140,10 +141,12 @@ public:
     }
 
     void ClearEvents() {
+        std::lock_guard<std::mutex> lock(mutex_);
         events_.clear();
     }
 
-    const std::vector<ecs::CollisionEvent>& GetEvents() const {
+    std::vector<ecs::CollisionEvent> GetEventsCopy() {
+        std::lock_guard<std::mutex> lock(mutex_);
         return events_;
     }
 
@@ -176,7 +179,7 @@ private:
         ecs::CollisionEvent event;
         event.entity_a_network_id = static_cast<uint32_t>(body1.GetUserData());
         event.entity_b_network_id = static_cast<uint32_t>(body2.GetUserData());
-        
+
         // Get contact point (average of contact points)
         if (manifold.mRelativeContactPointsOn1.size() > 0) {
             JPH::Vec3 point = manifold.GetWorldSpaceContactPointOn1(0);
@@ -184,16 +187,18 @@ private:
             event.contact_point_y = point.GetY();
             event.contact_point_z = point.GetZ();
         }
-        
+
         event.normal_x = manifold.mWorldSpaceNormal.GetX();
         event.normal_y = manifold.mWorldSpaceNormal.GetY();
         event.normal_z = manifold.mWorldSpaceNormal.GetZ();
         event.penetration_depth = manifold.mPenetrationDepth;
-        
+
+        std::lock_guard<std::mutex> lock(mutex_);
         events_.push_back(event);
     }
 
     CollisionCallback callback_;
+    std::mutex mutex_;
     std::vector<ecs::CollisionEvent> events_;
 };
 
@@ -216,11 +221,12 @@ public:
     std::unordered_map<uint32_t, JPH::BodyID> network_to_body;
     std::unordered_map<uint32_t, uint32_t> body_to_network; // BodyID index to network ID
     
-    // Maps entt entity to network ID for quick lookup
+    // Maps entt entity to network ID and reverse for quick lookup
     std::unordered_map<entt::entity, uint32_t> entity_to_network;
+    std::unordered_map<uint32_t, entt::entity> network_to_entity;
     
     float gravity_x = 0.0f;
-    float gravity_y = -9.81f;  // Default gravity (can be 0 for 2D top-down)
+    float gravity_y = 0.0f;  // 0 gravity: entities are ground-locked via terrain snapping
     float gravity_z = 0.0f;
     
     CollisionCallback collision_callback;
@@ -296,6 +302,7 @@ void PhysicsSystem::shutdown() {
     impl_->network_to_body.clear();
     impl_->body_to_network.clear();
     impl_->entity_to_network.clear();
+    impl_->network_to_entity.clear();
 
     // Destroy systems in reverse order
     impl_->physics_system.reset();
@@ -426,6 +433,7 @@ void PhysicsSystem::create_bodies(entt::registry& registry) {
         impl_->network_to_body[network_id.id] = body->GetID();
         impl_->body_to_network[body->GetID().GetIndex()] = network_id.id;
         impl_->entity_to_network[entity] = network_id.id;
+        impl_->network_to_entity[network_id.id] = entity;
 
         // Add PhysicsBody component
         registry.emplace<ecs::PhysicsBody>(entity, body->GetID().GetIndexAndSequenceNumber(), true);
@@ -454,6 +462,7 @@ void PhysicsSystem::destroy_body(entt::registry& registry, entt::entity entity) 
         impl_->network_to_body.erase(it);
     }
     
+    impl_->network_to_entity.erase(network_id->id);
     impl_->entity_to_network.erase(entity);
     registry.remove<ecs::PhysicsBody>(entity);
 }
@@ -484,8 +493,13 @@ void PhysicsSystem::update(entt::registry& registry, float dt) {
         
         auto it = impl_->network_to_body.find(network_id.id);
         if (it != impl_->network_to_body.end()) {
-            // Teleport body to new position and reset velocity
-            JPH::RVec3 new_pos(transform.x, transform.y, transform.z);
+            // Add collider offset_y to match body creation (Fix #9)
+            float offset_y = 0.0f;
+            const auto* collider = registry.try_get<ecs::Collider>(entity);
+            if (collider) {
+                offset_y = collider->offset_y;
+            }
+            JPH::RVec3 new_pos(transform.x, transform.y + offset_y, transform.z);
             body_interface.SetPosition(it->second, new_pos, JPH::EActivation::Activate);
             body_interface.SetLinearVelocity(it->second, JPH::Vec3::sZero());
         }
@@ -550,9 +564,10 @@ void PhysicsSystem::update(entt::registry& registry, float dt) {
     // Sync transforms back to ECS for dynamic bodies
     sync_transforms(registry);
 
-    // Fire collision callbacks
+    // Fire collision callbacks (copy events since they were recorded from worker threads)
     if (impl_->collision_callback) {
-        for (const auto& event : impl_->contact_listener.GetEvents()) {
+        auto events = impl_->contact_listener.GetEventsCopy();
+        for (const auto& event : events) {
             // Find entities by network ID
             entt::entity entity_a = entt::null;
             entt::entity entity_b = entt::null;
@@ -685,7 +700,8 @@ bool PhysicsSystem::are_colliding(entt::registry& registry, entt::entity a, entt
     auto* net_b = registry.try_get<ecs::NetworkId>(b);
     if (!net_a || !net_b) return false;
 
-    for (const auto& event : impl_->contact_listener.GetEvents()) {
+    auto events = impl_->contact_listener.GetEventsCopy();
+    for (const auto& event : events) {
         if ((event.entity_a_network_id == net_a->id && event.entity_b_network_id == net_b->id) ||
             (event.entity_a_network_id == net_b->id && event.entity_b_network_id == net_a->id)) {
             return true;
@@ -699,8 +715,8 @@ void PhysicsSystem::set_collision_callback(CollisionCallback callback) {
     impl_->contact_listener.SetCollisionCallback(impl_->collision_callback);
 }
 
-const std::vector<ecs::CollisionEvent>& PhysicsSystem::get_collision_events() const {
-    return impl_->contact_listener.GetEvents();
+std::vector<ecs::CollisionEvent> PhysicsSystem::get_collision_events() const {
+    return impl_->contact_listener.GetEventsCopy();
 }
 
 bool PhysicsSystem::ray_cast(float origin_x, float origin_y, float origin_z,
@@ -724,12 +740,14 @@ bool PhysicsSystem::ray_cast(float origin_x, float origin_y, float origin_z,
         out_hit_y = static_cast<float>(hit_point.GetY());
         out_hit_z = static_cast<float>(hit_point.GetZ());
         
-        // Find entity by body ID
+        // Find entity by body ID -> network ID -> entity
+        out_hit_entity = entt::null;
         auto body_it = impl_->body_to_network.find(hit.mBodyID.GetIndex());
         if (body_it != impl_->body_to_network.end()) {
-            // We'd need to look up the entity by network ID
-            // For now, set to null - caller can use network ID from collision event
-            out_hit_entity = entt::null;
+            auto entity_it = impl_->network_to_entity.find(body_it->second);
+            if (entity_it != impl_->network_to_entity.end()) {
+                out_hit_entity = entity_it->second;
+            }
         }
         
         return true;
@@ -752,6 +770,38 @@ void PhysicsSystem::set_gravity(float x, float y, float z) {
     if (impl_->initialized) {
         impl_->physics_system->SetGravity(JPH::Vec3(x, y, z));
     }
+}
+
+void PhysicsSystem::update_body_shape(entt::registry& registry, entt::entity entity,
+                                      float radius, float half_height) {
+    if (!impl_->initialized) {
+        return;
+    }
+
+    auto* network_id = registry.try_get<ecs::NetworkId>(entity);
+    if (!network_id) return;
+
+    auto it = impl_->network_to_body.find(network_id->id);
+    if (it == impl_->network_to_body.end()) return;
+
+    auto* collider = registry.try_get<ecs::Collider>(entity);
+    if (!collider) return;
+
+    // Create new shape based on collider type
+    JPH::ShapeRefC shape;
+    switch (collider->type) {
+        case ecs::ColliderType::Capsule:
+            shape = new JPH::CapsuleShape(half_height, radius);
+            break;
+        case ecs::ColliderType::Sphere:
+            shape = new JPH::SphereShape(radius);
+            break;
+        default:
+            return; // Only capsule and sphere support radius/half_height update
+    }
+
+    auto& body_interface = impl_->physics_system->GetBodyInterface();
+    body_interface.SetShape(it->second, shape, true, JPH::EActivation::Activate);
 }
 
 void PhysicsSystem::optimize_broadphase() {

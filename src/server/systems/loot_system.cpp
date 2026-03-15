@@ -1,8 +1,11 @@
 #include "loot_system.hpp"
+#include "buff_system.hpp"
+#include "leveling_system.hpp"
 #include "server/ecs/game_components.hpp"
 #include "server/game_config.hpp"
 #include <algorithm>
 #include <random>
+#include <string>
 
 namespace mmo::server::systems {
 
@@ -76,17 +79,38 @@ bool equip_item(entt::registry& registry, entt::entity player, const std::string
     // Check level requirement
     if (level->level < item->level_req) return false;
 
+    // Fix #5: Check class restriction
+    if (!item->classes.empty()) {
+        const auto* info = registry.try_get<ecs::EntityInfo>(player);
+        if (!info) return false;
+        const char* player_class_name = class_name_for_index(info->player_class);
+        bool class_allowed = false;
+        for (const auto& cls : item->classes) {
+            if (cls == player_class_name) {
+                class_allowed = true;
+                break;
+            }
+        }
+        if (!class_allowed) return false;
+    }
+
     // Determine slot
     if (item->type == "weapon") {
-        // Unequip current weapon first
+        // Fix #7: Check if old weapon can be returned to inventory before swapping
         if (!equip->weapon_id.empty()) {
-            inv->add_item(equip->weapon_id);
+            if (inv->used_slots >= ecs::Inventory::MAX_SLOTS) {
+                return false; // Inventory full, can't swap
+            }
+            inv->add_item(equip->weapon_id, 1, 1);
         }
         equip->weapon_id = item_id;
     } else if (item->type == "armor") {
-        // Unequip current armor first
+        // Fix #7: Check if old armor can be returned to inventory before swapping
         if (!equip->armor_id.empty()) {
-            inv->add_item(equip->armor_id);
+            if (inv->used_slots >= ecs::Inventory::MAX_SLOTS) {
+                return false; // Inventory full, can't swap
+            }
+            inv->add_item(equip->armor_id, 1, 1);
         }
         equip->armor_id = item_id;
     } else {
@@ -141,6 +165,30 @@ bool use_consumable(entt::registry& registry, entt::entity player, const std::st
         if (auto* health = registry.try_get<ecs::Health>(player)) {
             health->current = std::min(health->current + item->stats.heal_amount, health->max);
         }
+    }
+
+    // Fix #6: Apply buff effects from consumable potions
+    if (item->stats.buff_duration > 0.0f && item->stats.buff_multiplier != 0.0f) {
+        ecs::StatusEffect buff;
+        buff.duration = item->stats.buff_duration;
+        buff.tick_timer = 0.0f;
+        buff.tick_interval = 0.0f;
+        buff.value = item->stats.buff_multiplier;
+        buff.source_id = 0;
+
+        // Determine buff type from item subtype
+        if (item->subtype == "speed_potion" || item->subtype == "speed") {
+            buff.type = ecs::StatusEffect::Type::SpeedBoost;
+        } else if (item->subtype == "damage_potion" || item->subtype == "damage") {
+            buff.type = ecs::StatusEffect::Type::DamageBoost;
+        } else if (item->subtype == "defense_potion" || item->subtype == "defense") {
+            buff.type = ecs::StatusEffect::Type::DefenseBoost;
+        } else {
+            // Default to damage boost for unrecognized buff potions
+            buff.type = ecs::StatusEffect::Type::DamageBoost;
+        }
+
+        apply_effect(registry, player, buff);
     }
 
     // Remove 1 from inventory

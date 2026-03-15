@@ -139,7 +139,7 @@ public:
     /**
      * @brief Get current collision events from last update
      */
-    const std::vector<ecs::CollisionEvent>& get_collision_events() const;
+    std::vector<ecs::CollisionEvent> get_collision_events() const;
 
     /**
      * @brief Ray cast into the physics world
@@ -172,6 +172,16 @@ public:
      */
     void set_gravity(float x, float y, float z);
     
+    /**
+     * @brief Update the shape of an existing physics body (e.g., after respawn resize)
+     * @param registry ECS registry
+     * @param entity Target entity
+     * @param radius New capsule/sphere radius
+     * @param half_height New capsule half height
+     */
+    void update_body_shape(entt::registry& registry, entt::entity entity,
+                          float radius, float half_height);
+
     /**
      * @brief Optimize broadphase after adding many static bodies
      * Call this after spawning all static objects for better collision performance

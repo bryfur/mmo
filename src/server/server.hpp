@@ -34,6 +34,9 @@ public:
     void on_talent_unlock(uint32_t player_id, const std::string& talent_id);
     void on_item_equip(uint32_t player_id, const std::string& item_id);
     void on_item_unequip(uint32_t player_id, const std::string& slot);
+    void on_item_equip_by_slot(uint32_t player_id, uint8_t slot_index);
+    void on_item_unequip_slot(uint32_t player_id, uint8_t equip_slot);
+    void on_item_use(uint32_t player_id, uint8_t slot_index);
 
     void broadcast(const std::vector<uint8_t>& data);
     void broadcast_except(const std::vector<uint8_t>& data, uint32_t exclude_id);

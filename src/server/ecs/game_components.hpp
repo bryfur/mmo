@@ -202,22 +202,27 @@ struct Inventory {
     InventoryItem slots[MAX_SLOTS] = {};
     int used_slots = 0;
 
-    bool add_item(const std::string& id, int count = 1) {
-        // Stack with existing
+    bool add_item(const std::string& id, int count = 1, int max_stack = 99) {
+        // Stack with existing (respect max stack size)
         for (int i = 0; i < used_slots; ++i) {
             if (slots[i].item_id == id) {
-                slots[i].count += count;
-                return true;
+                int can_add = max_stack - slots[i].count;
+                if (can_add <= 0) continue;  // This stack is full, try another or new slot
+                int to_add = (count <= can_add) ? count : can_add;
+                slots[i].count += to_add;
+                count -= to_add;
+                if (count <= 0) return true;
             }
         }
-        // New slot
-        if (used_slots < MAX_SLOTS) {
+        // Remaining items go into new slots
+        while (count > 0 && used_slots < MAX_SLOTS) {
+            int to_add = (count <= max_stack) ? count : max_stack;
             slots[used_slots].item_id = id;
-            slots[used_slots].count = count;
+            slots[used_slots].count = to_add;
             ++used_slots;
-            return true;
+            count -= to_add;
         }
-        return false; // Full
+        return count <= 0;
     }
 
     bool remove_item(const std::string& id, int count = 1) {

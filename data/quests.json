@@ -15,24 +15,24 @@
         {
           "type": "visit",
           "target": "Iron Forge",
-          "location": [4200, 3960],
-          "radius": 80,
+          "location": [4220, 3840],
+          "radius": 120,
           "count": 1,
           "description": "Visit the Iron Forge"
         },
         {
           "type": "visit",
           "target": "General Store",
-          "location": [4140, 4100],
-          "radius": 80,
+          "location": [4180, 4180],
+          "radius": 120,
           "count": 1,
           "description": "Visit the General Store"
         },
         {
           "type": "visit",
           "target": "Guard Tower",
-          "location": [3780, 4120],
-          "radius": 80,
+          "location": [3740, 4180],
+          "radius": 120,
           "count": 1,
           "description": "Visit the Guard Tower"
         }

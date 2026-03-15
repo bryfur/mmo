@@ -169,23 +169,30 @@ void Session::handle_packet() {
         }
 
         case MessageType::ItemEquip: {
-            // Reuse a fixed-size string field (32 bytes) for item_id
-            if (current_header_.payload_size >= 32 && player_id_ != 0) {
-                char item_id_buf[32] = {};
-                std::memcpy(item_id_buf, payload_buffer_.data(), std::min(current_header_.payload_size, 32u));
-                std::string item_id(item_id_buf, strnlen(item_id_buf, 32));
-                server_.on_item_equip(player_id_, item_id);
+            if (current_header_.payload_size >= ItemEquipMsg::serialized_size() && player_id_ != 0) {
+                ItemEquipMsg msg;
+                msg.deserialize(payload_buffer_);
+                // Look up item_id from inventory slot index
+                server_.on_item_equip_by_slot(player_id_, msg.slot_index);
             }
             break;
         }
 
         case MessageType::ItemUnequip: {
-            // Reuse a fixed-size string field (32 bytes) for slot name
-            if (current_header_.payload_size >= 32 && player_id_ != 0) {
-                char slot_buf[32] = {};
-                std::memcpy(slot_buf, payload_buffer_.data(), std::min(current_header_.payload_size, 32u));
-                std::string slot(slot_buf, strnlen(slot_buf, 32));
-                server_.on_item_unequip(player_id_, slot);
+            if (current_header_.payload_size >= ItemUnequipMsg::serialized_size() && player_id_ != 0) {
+                ItemUnequipMsg msg;
+                msg.deserialize(payload_buffer_);
+                // equip_slot: 0 = weapon, 1 = armor
+                server_.on_item_unequip_slot(player_id_, msg.equip_slot);
+            }
+            break;
+        }
+
+        case MessageType::ItemUse: {
+            if (current_header_.payload_size >= ItemUseMsg::serialized_size() && player_id_ != 0) {
+                ItemUseMsg msg;
+                msg.deserialize(payload_buffer_);
+                server_.on_item_use(player_id_, msg.slot_index);
             }
             break;
         }

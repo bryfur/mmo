@@ -452,4 +452,152 @@ struct BuffState {
         return total;
     }
 };
+// ============================================================================
+// Talent Passive State - runtime state for talent effects
+// Updated by apply_talent_effects; runtime mutable fields updated by systems
+// ============================================================================
+struct TalentPassiveState {
+    // --- Aggregated talent stats (set by apply_talent_effects) ---
+    float speed_mult = 1.0f;
+    float defense_mult = 1.0f;
+    float crit_chance = 0.0f;
+    float crit_damage_mult = 1.0f;
+    float kill_heal_pct = 0.0f;
+    float mana_cost_mult = 1.0f;
+    float skill_damage_mult = 1.0f;
+    float attack_range_bonus = 0.0f;
+    float attack_range_mult = 1.0f;
+    float healing_received_mult = 1.0f;
+    float global_cdr = 0.0f;
+    float cooldown_mult = 1.0f;
+    bool cc_immunity = false;
+
+    // On-hit procs
+    float slow_on_hit_chance = 0.0f;
+    float slow_on_hit_value = 0.0f;
+    float slow_on_hit_dur = 0.0f;
+    float burn_on_hit_pct = 0.0f;
+    float burn_on_hit_dur = 0.0f;
+    float poison_on_hit_pct = 0.0f;
+    float poison_on_hit_dur = 0.0f;
+    float mana_on_hit_pct = 0.0f;
+    float hit_speed_bonus = 0.0f;
+    float hit_speed_dur = 0.0f;
+
+    // Kill effects
+    float kill_explosion_pct = 0.0f;
+    float kill_explosion_radius = 0.0f;
+    float kill_damage_bonus = 0.0f;
+    float kill_damage_dur = 0.0f;
+    float kill_speed_bonus = 0.0f;
+    float kill_speed_dur = 0.0f;
+    float burn_spread_radius = 0.0f;
+
+    // Cheat death
+    bool has_cheat_death = false;
+    float cheat_death_hp = 0.1f;
+    float cheat_death_cooldown_max = 60.0f;
+
+    // Damage reflect
+    float reflect_percent = 0.0f;
+
+    // Stationary
+    float stationary_damage_mult = 1.0f;
+    float stationary_damage_reduction = 0.0f;
+    float stationary_heal_pct = 0.0f;
+    float stationary_delay = 9999.0f;
+
+    // Low HP
+    float low_health_regen_pct = 0.0f;
+    float low_health_threshold = 0.0f;
+
+    // Fury
+    float fury_threshold = 0.0f;
+    float fury_damage_mult = 1.0f;
+    float fury_attack_speed_mult = 1.0f;
+
+    // Combo
+    float combo_damage_bonus = 0.0f;
+    int combo_max_stacks = 0;
+    float combo_window = 3.0f;
+
+    // Empowered attacks
+    int empowered_every = 0;
+    float empowered_damage_mult = 1.0f;
+    float empowered_stun_dur = 0.0f;
+
+    // Passive aura
+    float aura_damage_pct = 0.0f;
+    float aura_range = 0.0f;
+
+    // Nearby debuff aura
+    float nearby_debuff_range = 0.0f;
+    float nearby_damage_reduction = 0.0f;
+
+    // Panic freeze
+    float panic_freeze_radius = 0.0f;
+    float panic_freeze_duration = 0.0f;
+    float panic_freeze_threshold = 0.0f;
+    float panic_freeze_cooldown_max = 60.0f;
+
+    // Periodic shield
+    float shield_regen_pct = 0.0f;
+    float shield_regen_cooldown_max = 15.0f;
+
+    // Spell echo
+    float spell_echo_chance = 0.0f;
+
+    // Frozen vulnerability
+    float frozen_vulnerability = 0.0f;
+
+    // Mana conditionals
+    float high_mana_damage_mult = 1.0f;
+    float high_mana_threshold = 0.0f;
+    float low_mana_regen_mult = 1.0f;
+    float low_mana_threshold = 0.0f;
+
+    // Conditional damage
+    float high_hp_bonus_damage = 0.0f;
+    float high_hp_threshold = 0.0f;
+    float max_range_damage_bonus = 0.0f;
+
+    // Damage sharing
+    float damage_share_percent = 0.0f;
+    float share_radius = 0.0f;
+
+    // Avenge
+    bool has_avenge = false;
+    float avenge_damage_mult = 1.0f;
+    float avenge_attack_speed_mult = 1.0f;
+    float avenge_duration = 0.0f;
+
+    // Dodge
+    float moving_dodge_chance = 0.0f;
+
+    // Trap modifications
+    int max_traps = 1;
+    float trap_lifetime_mult = 1.0f;
+    float trap_radius_mult = 1.0f;
+    float trap_vulnerability = 0.0f;
+    float trap_vulnerability_dur = 0.0f;
+    float trap_cdr = 0.0f;
+    float trap_cloud_damage = 0.0f;
+    float trap_cloud_duration = 0.0f;
+    float trap_cloud_radius = 0.0f;
+    float poison_death_explosion_pct = 0.0f;
+    float poison_explosion_radius = 0.0f;
+
+    // --- Runtime mutable state (updated by gameplay systems) ---
+    float cheat_death_timer = 0.0f;
+    float shield_regen_timer = 0.0f;
+    float panic_freeze_timer = 0.0f;
+    float aura_tick_timer = 0.5f;
+    float debuff_aura_timer = 1.0f;
+    float stationary_timer = 0.0f;
+    bool was_moving_last_tick = false;
+    int combo_stacks = 0;
+    float combo_decay_timer = 0.0f;
+    int empowered_counter = 0;
+};
+
 } // namespace mmo::server::ecs

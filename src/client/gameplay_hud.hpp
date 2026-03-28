@@ -391,7 +391,7 @@ inline void build_skill_bar(UIScene& ui, const HUDState& hud, float screen_w, fl
     int slot_count = 5;
     float total_width = slot_count * slot_size + (slot_count - 1) * slot_gap;
     float start_x = (screen_w - total_width) / 2.0f;
-    float y = screen_h - slot_size - 20.0f;
+    float y = screen_h - slot_size - 30.0f;
 
     // Panel background behind all slots
     float panel_pad = 8.0f;
@@ -489,9 +489,12 @@ inline void build_quest_tracker(UIScene& ui, const HUDState& hud, float screen_w
 
         // Objectives
         for (const auto& obj : quest.objectives) {
+            // Truncate description to fit panel width at scale 0.6 (~4.8px/char, 196px available)
+            std::string desc = obj.description;
+            if (desc.length() > 28) desc = desc.substr(0, 27) + "~";
             char obj_text[128];
             snprintf(obj_text, sizeof(obj_text), "  %s: %d/%d",
-                     obj.description.c_str(), obj.current, obj.required);
+                     desc.c_str(), obj.current, obj.required);
 
             uint32_t obj_color = obj.complete ? hud_colors::QUEST_DONE : hud_colors::QUEST_OBJ;
             ui.add_text(obj_text, x + 12, cy, 0.6f, obj_color);
@@ -644,7 +647,7 @@ inline void build_minimap(UIScene& ui, const HUDState& hud, float screen_w, floa
 
     // Draw quest objective areas as translucent rectangles
     for (const auto& area : hud.minimap.objective_areas) {
-        float ax, ay;
+        float ax = 0.0f, ay = 0.0f;
         if (world_to_map(area.world_x, area.world_z, ax, ay)) {
             float area_r = (area.radius / world_radius) * map_radius;
             area_r = std::max(4.0f, std::min(area_r, map_radius * 0.5f));
@@ -655,7 +658,7 @@ inline void build_minimap(UIScene& ui, const HUDState& hud, float screen_w, floa
 
     // Draw map icons (NPCs, monsters, etc.)
     for (const auto& icon : hud.minimap.icons) {
-        float ix, iy;
+        float ix = 0.0f, iy = 0.0f;
         if (world_to_map(icon.world_x, icon.world_z, ix, iy)) {
             if (icon.is_objective) {
                 // Diamond shape for objectives (rotated square)

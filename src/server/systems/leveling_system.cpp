@@ -89,9 +89,11 @@ bool check_level_up(entt::registry& registry, entt::entity player, const GameCon
             }
         }
 
-        // Award talent point
+        // Award talent point (respecting config thresholds)
         auto* talents = registry.try_get<ecs::TalentState>(player);
-        if (talents) {
+        const auto& talent_cfg = config.talent_config();
+        if (talents && player_level->level >= talent_cfg.first_talent_point_level
+            && talents->talent_points < talent_cfg.max_talent_points) {
             talents->talent_points++;
         }
 

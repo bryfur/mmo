@@ -69,6 +69,7 @@ enum class MessageType : uint8_t {
     // Talent messages
     TalentUnlock = 75,        // Client -> server: unlock talent
     TalentSync = 76,          // Server -> client: talent state sync
+    TalentTree = 77,          // Server -> client: full talent tree for player's class
 
     // NPC interaction
     NPCInteract = 80,         // Client -> server: interact with NPC

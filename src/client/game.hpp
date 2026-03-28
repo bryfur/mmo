@@ -75,6 +75,7 @@ private:
     void on_skill_cooldown(const std::vector<uint8_t>& payload);
     void on_skill_unlock(const std::vector<uint8_t>& payload);
     void on_talent_sync(const std::vector<uint8_t>& payload);
+    void on_talent_tree(const std::vector<uint8_t>& payload);
     void on_npc_dialogue(const std::vector<uint8_t>& payload);
 
     // Panel interaction
@@ -83,8 +84,6 @@ private:
     void update_notifications(float dt);
 
     // Panel UI rendering
-    void build_skill_bar_ui(engine::scene::UIScene& ui);
-    void build_quest_tracker_ui(engine::scene::UIScene& ui);
     void build_notifications_ui(engine::scene::UIScene& ui);
     void build_damage_numbers_ui(engine::scene::UIScene& ui);
     void build_dialogue_ui(engine::scene::UIScene& ui);

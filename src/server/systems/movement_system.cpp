@@ -41,6 +41,11 @@ void update_movement(entt::registry& registry, float dt, const GameConfig& confi
             speed *= 1.6f;
         }
 
+        // Apply talent speed multiplier (Fleet Footed, etc.)
+        if (registry.all_of<ecs::TalentPassiveState>(entity)) {
+            speed *= registry.get<ecs::TalentPassiveState>(entity).speed_mult;
+        }
+
         // Apply buff speed multiplier (slow/speed boost)
         if (registry.all_of<ecs::BuffState>(entity)) {
             speed *= registry.get<ecs::BuffState>(entity).get_speed_multiplier();
@@ -59,6 +64,18 @@ void update_movement(entt::registry& registry, float dt, const GameConfig& confi
         } else {
             velocity.x = 0.0f;
             velocity.z = 0.0f;
+        }
+
+        // Track stationary state for stationary-based talent effects
+        if (registry.all_of<ecs::TalentPassiveState>(entity)) {
+            auto& tp = registry.get<ecs::TalentPassiveState>(entity);
+            if (move_len > 0.1f) {
+                tp.stationary_timer = 0.0f;
+                tp.was_moving_last_tick = true;
+            } else {
+                tp.stationary_timer += dt;
+                tp.was_moving_last_tick = false;
+            }
         }
 
         // Don't update transform directly - physics will handle it

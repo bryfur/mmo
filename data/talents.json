@@ -1,6 +1,6 @@
 {
     "talent_points_per_level": 1,
-    "first_talent_point_level": 3,
+    "first_talent_point_level": 2,
     "max_talent_points": 28,
     "talent_trees": [
         {

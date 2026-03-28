@@ -145,7 +145,8 @@ void Server::on_class_select(std::shared_ptr<Session> session, uint8_t class_ind
     // Send available skills for this class
     send_skill_list(player_id);
 
-    // Send initial talent state
+    // Send talent tree for this class, then initial talent state
+    send_talent_tree(player_id);
     send_talent_sync(player_id);
 }
 
@@ -711,6 +712,40 @@ void Server::send_talent_sync(uint32_t player_id) {
     sit->second->send(build_packet(MessageType::TalentSync, msg));
 }
 
+void Server::send_talent_tree(uint32_t player_id) {
+    auto& registry = world_.registry();
+    auto player = world_.find_entity_by_network_id(player_id);
+    if (player == entt::null) return;
+
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+    auto sit = sessions_.find(player_id);
+    if (sit == sessions_.end() || !sit->second->is_open()) return;
+
+    auto* info = registry.try_get<ecs::EntityInfo>(player);
+    if (!info) return;
+
+    const char* player_class = systems::class_name_for_index(info->player_class);
+    TalentTreeMsg msg;
+    int idx = 0;
+    for (const auto& tree : config_.talent_trees()) {
+        if (tree.class_name != player_class) continue;
+        for (const auto& branch : tree.branches) {
+            for (const auto& t : branch.talents) {
+                if (idx >= TalentTreeMsg::MAX_TALENTS) break;
+                std::strncpy(msg.talents[idx].id, t.id.c_str(), 31);
+                std::strncpy(msg.talents[idx].name, t.name.c_str(), 31);
+                std::strncpy(msg.talents[idx].description, t.description.c_str(), 127);
+                msg.talents[idx].tier = static_cast<uint8_t>(t.tier);
+                std::strncpy(msg.talents[idx].prerequisite, t.prerequisite.c_str(), 31);
+                std::strncpy(msg.talents[idx].branch_name, branch.name.c_str(), 31);
+                idx++;
+            }
+        }
+    }
+    msg.talent_count = static_cast<uint8_t>(idx);
+    sit->second->send(build_packet(MessageType::TalentTree, msg));
+}
+
 void Server::send_skill_list(uint32_t player_id) {
     auto& registry = world_.registry();
     auto player = world_.find_entity_by_network_id(player_id);
@@ -774,6 +809,27 @@ void Server::send_progression_updates() {
                                          sizeof(skill_msg.skills[si].name) - 1);
                         }
                         sit->second->send(build_packet(MessageType::SkillUnlock, skill_msg));
+                    }
+                }
+
+                // Send updated talent points (inline — sessions_mutex_ already held)
+                {
+                    auto player = world_.find_entity_by_network_id(evt.player_id);
+                    if (player != entt::null) {
+                        auto* talent_state = world_.registry().try_get<ecs::TalentState>(player);
+                        if (talent_state) {
+                            TalentSyncMsg talent_msg;
+                            talent_msg.talent_points = talent_state->talent_points;
+                            talent_msg.unlocked_count = static_cast<uint8_t>(
+                                std::min(talent_state->unlocked_talents.size(),
+                                         static_cast<size_t>(TalentSyncMsg::MAX_TALENTS)));
+                            for (int ti = 0; ti < talent_msg.unlocked_count; ++ti) {
+                                std::strncpy(talent_msg.unlocked_ids[ti],
+                                             talent_state->unlocked_talents[ti].c_str(),
+                                             sizeof(talent_msg.unlocked_ids[ti]) - 1);
+                            }
+                            sit->second->send(build_packet(MessageType::TalentSync, talent_msg));
+                        }
                     }
                 }
                 break;
@@ -888,6 +944,7 @@ bool Server::has_changes(const protocol::NetEntityState& current,
            current.vx != last.vx ||
            current.vy != last.vy ||
            current.health != last.health ||
+           current.max_health != last.max_health ||
            current.is_attacking != last.is_attacking ||
            current.attack_dir_x != last.attack_dir_x ||
            current.attack_dir_y != last.attack_dir_y ||
@@ -917,6 +974,11 @@ protocol::EntityDeltaUpdate Server::create_delta(const protocol::NetEntityState&
     if (current.health != last.health) {
         delta.flags |= protocol::EntityDeltaUpdate::FLAG_HEALTH;
         delta.health = current.health;
+    }
+
+    if (current.max_health != last.max_health) {
+        delta.flags |= protocol::EntityDeltaUpdate::FLAG_MAX_HEALTH;
+        delta.max_health = current.max_health;
     }
 
     if (current.is_attacking != last.is_attacking) {

@@ -144,8 +144,19 @@ struct PanelState {
 
     // Talent data (client branch)
     uint8_t talent_points = 0;
-    std::vector<uint16_t> unlocked_talents;
+    std::vector<std::string> unlocked_talents;  // String IDs from server
     int talent_cursor = 0;
+
+    // Talent tree definition (received from server)
+    struct ClientTalent {
+        std::string id;
+        std::string name;
+        std::string description;
+        int tier = 1;
+        std::string prerequisite;
+        std::string branch_name;
+    };
+    std::vector<ClientTalent> talent_tree;  // Full list for player's class
 
     // Quest log cursor (client branch)
     int quest_cursor = 0;
@@ -241,8 +252,10 @@ inline void build_inventory_panel(engine::scene::UIScene& ui, const PanelState& 
                     // Rarity border
                     ui.add_rect_outline(sx, sy, SLOT, SLOT, rarity_color(slot.rarity), 2.0f);
 
-                    // Item name
-                    ui.add_text(slot.item_name, sx + 4.0f, sy + 26.0f, 0.6f, WHITE);
+                    // Item name — truncate to fit 70px slot at scale 0.6 (~12 chars)
+                    std::string name = slot.item_name;
+                    if (name.length() > 12) name = name.substr(0, 11) + "~";
+                    ui.add_text(name, sx + 4.0f, sy + 26.0f, 0.6f, WHITE);
 
                     // Stack count
                     if (slot.count > 1) {
@@ -518,7 +531,7 @@ inline void build_world_map_panel(engine::scene::UIScene& ui, const PanelState& 
     ui.add_text("WORLD MAP", px + PW * 0.5f - 44.0f, py + 10.0f, 1.2f, WHITE);
 
     // Close hint
-    ui.add_text("[M] Close", px + PW - 100.0f, py + 12.0f, 0.7f, TEXT_HINT);
+    ui.add_text("[M/ESC] Close", px + PW - 110.0f, py + 12.0f, 0.7f, TEXT_HINT);
 
     // Map area (inside panel, with padding)
     const float MAP_PAD = 16.0f;
@@ -554,7 +567,7 @@ inline void build_world_map_panel(engine::scene::UIScene& ui, const PanelState& 
     };
 
     for (const auto& zone : zones) {
-        float sx, sy;
+        float sx = 0.0f, sy = 0.0f;
         world_to_map(zone.cx, zone.cz, sx, sy);
         float sr = (zone.radius / WORLD_SIZE) * map_w;
 
@@ -589,7 +602,7 @@ inline void build_world_map_panel(engine::scene::UIScene& ui, const PanelState& 
     };
 
     for (const auto& poi : pois) {
-        float sx, sy;
+        float sx = 0.0f, sy = 0.0f;
         world_to_map(poi.x, poi.z, sx, sy);
 
         // Small diamond shape using two triangles approximated with a small filled rect + outline
@@ -603,7 +616,7 @@ inline void build_world_map_panel(engine::scene::UIScene& ui, const PanelState& 
 
     // --- Quest objective markers ---
     for (const auto& qm : state.map_quest_markers) {
-        float sx, sy;
+        float sx = 0.0f, sy = 0.0f;
         world_to_map(qm.world_x, qm.world_z, sx, sy);
         float sr = (qm.radius / WORLD_SIZE) * map_w;
         if (sr < 6.0f) sr = 6.0f;
@@ -625,7 +638,7 @@ inline void build_world_map_panel(engine::scene::UIScene& ui, const PanelState& 
 
     // --- Player position ---
     {
-        float sx, sy;
+        float sx = 0.0f, sy = 0.0f;
         world_to_map(state.player_x, state.player_z, sx, sy);
 
         // Player marker: white filled rect with outline
@@ -659,9 +672,12 @@ inline void build_world_map_panel(engine::scene::UIScene& ui, const PanelState& 
 
 inline void build_gameplay_panels(engine::scene::UIScene& ui, const PanelState& state,
                                   float screen_w, float screen_h) {
-    if (state.inventory_open)   build_inventory_panel(ui, state, screen_w, screen_h);
-    if (state.quest_log_open)   build_quest_log_panel(ui, state, screen_w, screen_h);
-    if (state.talent_tree_open) build_talent_tree_panel(ui, state, screen_w, screen_h);
+    // Only render server-branch panels that aren't handled by active_panel switch
+    if (state.inventory_open && state.active_panel != ActivePanel::Inventory)
+        build_inventory_panel(ui, state, screen_w, screen_h);
+    if (state.quest_log_open && state.active_panel != ActivePanel::QuestLog)
+        build_quest_log_panel(ui, state, screen_w, screen_h);
+    // Talent tree: always skip — build_talent_panel_ui in game.cpp is the active version
     if (state.world_map_open)   build_world_map_panel(ui, state, screen_w, screen_h);
 }
 } // namespace mmo::client

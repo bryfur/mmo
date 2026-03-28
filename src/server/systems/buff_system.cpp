@@ -61,6 +61,21 @@ void update_buffs(entt::registry& registry, float dt) {
 void apply_effect(entt::registry& registry, entt::entity target, ecs::StatusEffect effect) {
     if (!registry.valid(target)) return;
 
+    // CC immunity: block crowd control effects on players with the talent
+    if (registry.all_of<ecs::TalentPassiveState>(target)) {
+        if (registry.get<ecs::TalentPassiveState>(target).cc_immunity) {
+            switch (effect.type) {
+                case ecs::StatusEffect::Type::Stun:
+                case ecs::StatusEffect::Type::Root:
+                case ecs::StatusEffect::Type::Freeze:
+                case ecs::StatusEffect::Type::Slow:
+                    return;  // Blocked by Unstoppable Force
+                default:
+                    break;
+            }
+        }
+    }
+
     if (!registry.all_of<ecs::BuffState>(target)) {
         registry.emplace<ecs::BuffState>(target);
     }

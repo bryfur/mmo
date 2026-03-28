@@ -17,6 +17,7 @@
 #include "systems/quest_system.hpp"
 #include "systems/skill_system.hpp"
 #include "systems/zone_system.hpp"
+#include "systems/talent_passive_system.hpp"
 #include "entity_config.hpp"
 #include <nlohmann/json.hpp>
 #include <cstdint>
@@ -381,6 +382,107 @@ void World::update(float dt) {
                 int level_before = killer_level_pre.level;
 
                 systems::award_kill_xp(registry_, killer, entity, *config_);
+
+                // Apply kill-based talent effects
+                if (registry_.all_of<ecs::TalentPassiveState>(killer)) {
+                    auto& tp = registry_.get<ecs::TalentPassiveState>(killer);
+                    const auto& dead_transform = registry_.get<ecs::Transform>(entity);
+                    float dead_max_hp = registry_.all_of<ecs::Health>(entity)
+                        ? registry_.get<ecs::Health>(entity).max : 0.0f;
+
+                    // Kill heal (Bloodlust, etc.)
+                    if (tp.kill_heal_pct > 0.0f && registry_.all_of<ecs::Health>(killer)) {
+                        auto& kh = registry_.get<ecs::Health>(killer);
+                        kh.current = std::min(kh.max, kh.current + kh.max * tp.kill_heal_pct);
+                    }
+
+                    // Kill explosion (Inferno)
+                    if (tp.kill_explosion_pct > 0.0f && tp.kill_explosion_radius > 0.0f &&
+                        dead_max_hp > 0.0f) {
+                        float explosion_dmg = dead_max_hp * tp.kill_explosion_pct;
+                        auto npc_explode_view = registry_.view<ecs::NPCTag, ecs::Health, ecs::Transform>();
+                        for (auto npc : npc_explode_view) {
+                            if (npc == entity) continue;
+                            auto& nh = npc_explode_view.get<ecs::Health>(npc);
+                            if (!nh.is_alive()) continue;
+                            const auto& nt = npc_explode_view.get<ecs::Transform>(npc);
+                            float dx = nt.x - dead_transform.x, dz = nt.z - dead_transform.z;
+                            if (std::sqrt(dx * dx + dz * dz) <= tp.kill_explosion_radius) {
+                                nh.current = std::max(0.0f, nh.current - explosion_dmg);
+                            }
+                        }
+                    }
+
+                    // Burn spread on kill (Living Bomb)
+                    if (tp.burn_spread_radius > 0.0f && registry_.all_of<ecs::Combat>(killer)) {
+                        float spread_dmg = registry_.get<ecs::Combat>(killer).damage * 0.03f;
+                        uint32_t killer_net_id2 = registry_.all_of<ecs::NetworkId>(killer)
+                            ? registry_.get<ecs::NetworkId>(killer).id : 0;
+                        auto npc_burn_view = registry_.view<ecs::NPCTag, ecs::Health, ecs::Transform>();
+                        for (auto npc : npc_burn_view) {
+                            if (npc == entity) continue;
+                            auto& nh = npc_burn_view.get<ecs::Health>(npc);
+                            if (!nh.is_alive()) continue;
+                            const auto& nt = npc_burn_view.get<ecs::Transform>(npc);
+                            float dx = nt.x - dead_transform.x, dz = nt.z - dead_transform.z;
+                            if (std::sqrt(dx * dx + dz * dz) <= tp.burn_spread_radius) {
+                                ecs::StatusEffect burn;
+                                burn.type = ecs::StatusEffect::Type::Burn;
+                                burn.duration = 4.0f;
+                                burn.tick_timer = burn.tick_interval = 1.0f;
+                                burn.value = spread_dmg;
+                                burn.source_id = killer_net_id2;
+                                systems::apply_effect(registry_, npc, burn);
+                            }
+                        }
+                    }
+
+                    // Poison death explosion (Death Zone)
+                    if (tp.poison_death_explosion_pct > 0.0f && tp.poison_explosion_radius > 0.0f &&
+                        dead_max_hp > 0.0f) {
+                        float explosion_dmg = dead_max_hp * tp.poison_death_explosion_pct;
+                        uint32_t killer_net_id3 = registry_.all_of<ecs::NetworkId>(killer)
+                            ? registry_.get<ecs::NetworkId>(killer).id : 0;
+                        auto npc_poison_view = registry_.view<ecs::NPCTag, ecs::Health, ecs::Transform>();
+                        for (auto npc : npc_poison_view) {
+                            if (npc == entity) continue;
+                            auto& nh = npc_poison_view.get<ecs::Health>(npc);
+                            if (!nh.is_alive()) continue;
+                            const auto& nt = npc_poison_view.get<ecs::Transform>(npc);
+                            float dx = nt.x - dead_transform.x, dz = nt.z - dead_transform.z;
+                            if (std::sqrt(dx * dx + dz * dz) <= tp.poison_explosion_radius) {
+                                ecs::StatusEffect poison;
+                                poison.type = ecs::StatusEffect::Type::Poison;
+                                poison.duration = 5.0f;
+                                poison.tick_timer = poison.tick_interval = 1.0f;
+                                poison.value = explosion_dmg / 5.0f;
+                                poison.source_id = killer_net_id3;
+                                systems::apply_effect(registry_, npc, poison);
+                            }
+                        }
+                    }
+
+                    // Kill damage/speed buffs (Conqueror)
+                    if (tp.kill_damage_bonus > 0.0f && tp.kill_damage_dur > 0.0f) {
+                        ecs::StatusEffect dmg_buff;
+                        dmg_buff.type = ecs::StatusEffect::Type::DamageBoost;
+                        dmg_buff.duration = tp.kill_damage_dur;
+                        dmg_buff.tick_timer = dmg_buff.tick_interval = 0.0f;
+                        dmg_buff.value = tp.kill_damage_bonus;
+                        dmg_buff.source_id = 0;
+                        systems::apply_effect(registry_, killer, dmg_buff);
+                    }
+                    if (tp.kill_speed_bonus > 0.0f && tp.kill_speed_dur > 0.0f) {
+                        ecs::StatusEffect spd_buff;
+                        spd_buff.type = ecs::StatusEffect::Type::SpeedBoost;
+                        spd_buff.duration = tp.kill_speed_dur;
+                        spd_buff.tick_timer = spd_buff.tick_interval = 0.0f;
+                        spd_buff.value = tp.kill_speed_bonus;
+                        spd_buff.source_id = 0;
+                        systems::apply_effect(registry_, killer, spd_buff);
+                    }
+                }
+
                 auto loot = systems::roll_loot(monster_info.type_id, *config_);
                 systems::give_loot(registry_, killer, loot);
 
@@ -535,6 +637,9 @@ void World::update(float dt) {
 
     // Update buff/debuff system (tick durations, apply DoT/HoT, remove expired)
     systems::update_buffs(registry_, dt);
+
+    // Update talent passive effects (regen, auras, fury, cooldown timers, etc.)
+    systems::update_talent_passives(registry_, dt, *config_);
 
     // Update physics (handles collision detection and response)
     physics_.update(registry_, dt);

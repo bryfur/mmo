@@ -129,8 +129,15 @@ public:
     void add_line(float x1, float y1, float x2, float y2, uint32_t color, float line_width = 2.0f);
     
     // ========== Text Commands ==========
-    
+
     void add_text(const std::string& text, float x, float y, float scale = 1.0f, uint32_t color = 0xFFFFFFFF);
+
+    /**
+     * Word-wrapped text. Returns total height consumed so caller can position subsequent elements.
+     * Approximate char width: 8px * scale. line_height defaults to 18 * scale.
+     */
+    float add_text_wrapped(const std::string& text, float x, float y, float max_width,
+                           float scale = 1.0f, uint32_t color = 0xFFFFFFFF, float line_height = 0.0f);
     
     // ========== Widget Commands ==========
     

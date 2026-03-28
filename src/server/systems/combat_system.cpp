@@ -1,4 +1,5 @@
 #include "combat_system.hpp"
+#include "buff_system.hpp"
 #include "entt/entity/entity.hpp"
 #include "entt/entity/fwd.hpp"
 #include "protocol/protocol.hpp"
@@ -55,12 +56,33 @@ entt::entity find_nearest_target(entt::registry& registry, entt::entity attacker
 bool apply_damage(entt::registry& registry, entt::entity target, float damage,
                    entt::entity attacker = entt::null) {
     if (target == entt::null) return false;
+    if (!registry.all_of<ecs::Health>(target)) return false;
 
-    // Check target invulnerability and defense
+    // Moving dodge check for players
+    if (attacker != entt::null && registry.all_of<ecs::TalentPassiveState>(target)) {
+        auto& tp = registry.get<ecs::TalentPassiveState>(target);
+        if (tp.moving_dodge_chance > 0.0f && tp.was_moving_last_tick) {
+            static thread_local std::mt19937 rng_dodge{std::random_device{}()};
+            static thread_local std::uniform_real_distribution<float> dist_dodge(0.0f, 1.0f);
+            if (dist_dodge(rng_dodge) < tp.moving_dodge_chance) {
+                return false; // Dodged
+            }
+        }
+    }
+
+    // Stationary damage reduction for target
+    if (registry.all_of<ecs::TalentPassiveState>(target)) {
+        auto& tp = registry.get<ecs::TalentPassiveState>(target);
+        if (tp.stationary_damage_reduction > 0.0f && tp.stationary_timer >= tp.stationary_delay) {
+            damage *= (1.0f - tp.stationary_damage_reduction);
+        }
+    }
+
+    // Check target invulnerability and defense buffs
     if (registry.all_of<ecs::BuffState>(target)) {
         auto& target_buffs = registry.get<ecs::BuffState>(target);
         if (target_buffs.is_invulnerable()) {
-            return false; // No damage
+            return false;
         }
         damage *= target_buffs.get_defense_multiplier();
 
@@ -81,9 +103,32 @@ bool apply_damage(entt::registry& registry, entt::entity target, float damage,
         }
     }
 
+    // Talent defense multiplier
+    if (registry.all_of<ecs::TalentPassiveState>(target)) {
+        damage *= registry.get<ecs::TalentPassiveState>(target).defense_mult;
+    }
+
     auto& health = registry.get<ecs::Health>(target);
     bool was_alive = health.is_alive();
     health.current = std::max(0.0f, health.current - damage);
+
+    // Cheat death: survive a killing blow
+    if (was_alive && !health.is_alive() && registry.all_of<ecs::TalentPassiveState>(target)) {
+        auto& tp = registry.get<ecs::TalentPassiveState>(target);
+        if (tp.has_cheat_death && tp.cheat_death_timer <= 0.0f) {
+            health.current = health.max * tp.cheat_death_hp;
+            tp.cheat_death_timer = tp.cheat_death_cooldown_max;
+            // Grant brief invulnerability
+            ecs::StatusEffect invuln;
+            invuln.type = ecs::StatusEffect::Type::Invulnerable;
+            invuln.duration = 2.0f;
+            invuln.tick_timer = 0.0f;
+            invuln.tick_interval = 0.0f;
+            invuln.value = 0.0f;
+            invuln.source_id = 0;
+            apply_effect(registry, target, invuln);
+        }
+    }
 
     // Apply lifesteal to attacker
     if (attacker != entt::null && damage > 0.0f && registry.all_of<ecs::BuffState>(attacker)) {
@@ -92,6 +137,15 @@ bool apply_damage(entt::registry& registry, entt::entity target, float damage,
             auto& attacker_health = registry.get<ecs::Health>(attacker);
             attacker_health.current = std::min(attacker_health.max,
                 attacker_health.current + damage * lifesteal);
+        }
+    }
+
+    // Damage reflect: deal a fraction back to attacker
+    if (attacker != entt::null && damage > 0.0f && registry.all_of<ecs::TalentPassiveState>(target)) {
+        float reflect = registry.get<ecs::TalentPassiveState>(target).reflect_percent;
+        if (reflect > 0.0f && registry.all_of<ecs::Health>(attacker)) {
+            auto& ah = registry.get<ecs::Health>(attacker);
+            ah.current = std::max(0.0f, ah.current - damage * reflect);
         }
     }
 
@@ -201,6 +255,12 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
         // Determine attack cone from class config
         float cone_angle = config.get_class(info.player_class).cone_angle;
 
+        // Get talent passive state for this attacker
+        ecs::TalentPassiveState* tp = registry.try_get<ecs::TalentPassiveState>(entity);
+
+        static thread_local std::mt19937 rng_combat{std::random_device{}()};
+        static thread_local std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
+
         // Apply damage multiplier from buffs and equipment
         float effective_damage = combat.damage;
         if (registry.all_of<ecs::Equipment>(entity)) {
@@ -210,24 +270,184 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
             effective_damage *= registry.get<ecs::BuffState>(entity).get_damage_multiplier();
         }
 
+        // Fury damage bonus (when at low HP)
+        if (tp && tp->fury_threshold > 0.0f) {
+            if (health.ratio() <= tp->fury_threshold) {
+                effective_damage *= tp->fury_damage_mult;
+            }
+        }
+
+        // High-mana damage bonus
+        if (tp && tp->high_mana_threshold > 0.0f && registry.all_of<ecs::PlayerLevel>(entity)) {
+            const auto& pl = registry.get<ecs::PlayerLevel>(entity);
+            float mana_ratio = pl.max_mana > 0.0f ? pl.mana / pl.max_mana : 0.0f;
+            if (mana_ratio >= tp->high_mana_threshold) {
+                effective_damage *= tp->high_mana_damage_mult;
+            }
+        }
+
+        // Combo stack damage bonus
+        if (tp && tp->combo_max_stacks > 0 && tp->combo_stacks > 0) {
+            effective_damage *= (1.0f + tp->combo_damage_bonus * static_cast<float>(tp->combo_stacks));
+        }
+
+        // Empowered attack tracking
+        bool is_empowered = false;
+        if (tp && tp->empowered_every > 0) {
+            tp->empowered_counter++;
+            if (tp->empowered_counter >= tp->empowered_every) {
+                tp->empowered_counter = 0;
+                is_empowered = true;
+            }
+        }
+
         // Find and damage all targets in attack cone
         auto targets = find_targets_in_direction(registry, entity, EntityType::NPC,
                                                   combat.attack_range,
                                                   input.attack_dir_x, input.attack_dir_y,
                                                   cone_angle);
+
+        uint32_t player_net_id = registry.all_of<ecs::NetworkId>(entity)
+            ? registry.get<ecs::NetworkId>(entity).id : 0;
+
+        bool hit_any = false;
         for (auto target : targets) {
             // Factor in target's equipment defense
-            float mitigated_damage = effective_damage;
+            float hit_damage = effective_damage;
             if (registry.all_of<ecs::Equipment>(target)) {
-                mitigated_damage = std::max(0.0f, mitigated_damage - registry.get<ecs::Equipment>(target).defense);
+                hit_damage = std::max(0.0f, hit_damage - registry.get<ecs::Equipment>(target).defense);
             }
-            bool died = apply_damage(registry, target, mitigated_damage, entity);
+
+            // Empowered attack damage multiplier
+            if (is_empowered && tp) {
+                hit_damage *= tp->empowered_damage_mult;
+            }
+
+            // Crit check
+            if (tp && tp->crit_chance > 0.0f && dist01(rng_combat) < tp->crit_chance) {
+                hit_damage *= tp->crit_damage_mult;
+            }
+
+            // Stationary damage multiplier
+            if (tp && tp->stationary_damage_mult > 1.0f &&
+                tp->stationary_timer >= tp->stationary_delay) {
+                hit_damage *= tp->stationary_damage_mult;
+            }
+
+            // High-HP bonus damage (based on target's HP)
+            if (tp && tp->high_hp_bonus_damage > 0.0f && registry.all_of<ecs::Health>(target)) {
+                const auto& th = registry.get<ecs::Health>(target);
+                if (th.ratio() > tp->high_hp_threshold) {
+                    hit_damage *= (1.0f + tp->high_hp_bonus_damage);
+                }
+            }
+
+            // Max-range damage bonus
+            if (tp && tp->max_range_damage_bonus > 0.0f &&
+                registry.all_of<ecs::Transform>(entity) && registry.all_of<ecs::Transform>(target)) {
+                const auto& at = registry.get<ecs::Transform>(entity);
+                const auto& tt = registry.get<ecs::Transform>(target);
+                float dx = tt.x - at.x, dz = tt.z - at.z;
+                float dist_to_target = std::sqrt(dx * dx + dz * dz);
+                if (dist_to_target >= combat.attack_range * 0.75f) {
+                    hit_damage *= (1.0f + tp->max_range_damage_bonus);
+                }
+            }
+
+            // Frozen vulnerability
+            if (tp && tp->frozen_vulnerability > 0.0f && registry.all_of<ecs::BuffState>(target)) {
+                if (registry.get<ecs::BuffState>(target).has(ecs::StatusEffect::Type::Freeze)) {
+                    hit_damage *= (1.0f + tp->frozen_vulnerability);
+                }
+            }
+
+            bool died = apply_damage(registry, target, hit_damage, entity);
+
+            // On-hit slow
+            if (tp && tp->slow_on_hit_value > 0.0f && tp->slow_on_hit_dur > 0.0f) {
+                float chance = tp->slow_on_hit_chance > 0.0f ? tp->slow_on_hit_chance : 1.0f;
+                if (dist01(rng_combat) < chance) {
+                    ecs::StatusEffect slow_fx;
+                    slow_fx.type = ecs::StatusEffect::Type::Slow;
+                    slow_fx.duration = tp->slow_on_hit_dur;
+                    slow_fx.tick_timer = 0.0f;
+                    slow_fx.tick_interval = 0.0f;
+                    slow_fx.value = tp->slow_on_hit_value;
+                    slow_fx.source_id = player_net_id;
+                    apply_effect(registry, target, slow_fx);
+                }
+            }
+
+            // On-hit burn
+            if (tp && tp->burn_on_hit_pct > 0.0f && tp->burn_on_hit_dur > 0.0f) {
+                ecs::StatusEffect burn_fx;
+                burn_fx.type = ecs::StatusEffect::Type::Burn;
+                burn_fx.duration = tp->burn_on_hit_dur;
+                burn_fx.tick_timer = 1.0f;
+                burn_fx.tick_interval = 1.0f;
+                burn_fx.value = effective_damage * tp->burn_on_hit_pct;
+                burn_fx.source_id = player_net_id;
+                apply_effect(registry, target, burn_fx);
+            }
+
+            // On-hit poison
+            if (tp && tp->poison_on_hit_pct > 0.0f && tp->poison_on_hit_dur > 0.0f) {
+                ecs::StatusEffect poison_fx;
+                poison_fx.type = ecs::StatusEffect::Type::Poison;
+                poison_fx.duration = tp->poison_on_hit_dur;
+                poison_fx.tick_timer = 1.0f;
+                poison_fx.tick_interval = 1.0f;
+                poison_fx.value = effective_damage * tp->poison_on_hit_pct;
+                poison_fx.source_id = player_net_id;
+                apply_effect(registry, target, poison_fx);
+            }
+
+            // Empowered stun
+            if (is_empowered && tp && tp->empowered_stun_dur > 0.0f) {
+                ecs::StatusEffect stun_fx;
+                stun_fx.type = ecs::StatusEffect::Type::Stun;
+                stun_fx.duration = tp->empowered_stun_dur;
+                stun_fx.tick_timer = 0.0f;
+                stun_fx.tick_interval = 0.0f;
+                stun_fx.value = 0.0f;
+                stun_fx.source_id = player_net_id;
+                apply_effect(registry, target, stun_fx);
+            }
+
+            // Combo stack increment
+            if (tp && tp->combo_max_stacks > 0) {
+                tp->combo_stacks = std::min(tp->combo_max_stacks, tp->combo_stacks + 1);
+                tp->combo_decay_timer = tp->combo_window;
+            }
+
             CombatHit hit;
             hit.attacker = entity;
             hit.target = target;
-            hit.damage = effective_damage;
+            hit.damage = hit_damage;
             hit.target_died = died;
             hits.push_back(hit);
+            hit_any = true;
+        }
+
+        // Per-attack (not per-target) on-hit effects
+        if (hit_any) {
+            // Mana on hit
+            if (tp && tp->mana_on_hit_pct > 0.0f && registry.all_of<ecs::PlayerLevel>(entity)) {
+                auto& pl = registry.get<ecs::PlayerLevel>(entity);
+                pl.mana = std::min(pl.max_mana, pl.mana + pl.max_mana * tp->mana_on_hit_pct);
+            }
+
+            // Hit speed boost
+            if (tp && tp->hit_speed_bonus > 0.0f && tp->hit_speed_dur > 0.0f) {
+                ecs::StatusEffect speed_fx;
+                speed_fx.type = ecs::StatusEffect::Type::SpeedBoost;
+                speed_fx.duration = tp->hit_speed_dur;
+                speed_fx.tick_timer = 0.0f;
+                speed_fx.tick_interval = 0.0f;
+                speed_fx.value = tp->hit_speed_bonus;
+                speed_fx.source_id = player_net_id;
+                apply_effect(registry, entity, speed_fx);
+            }
         }
     }
 

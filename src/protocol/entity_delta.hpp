@@ -13,6 +13,7 @@ struct EntityDeltaUpdate : Serializable<EntityDeltaUpdate> {
     float x = 0.0f, y = 0.0f, z = 0.0f;
     float vx = 0.0f, vy = 0.0f;
     float health = 0.0f;
+    float max_health = 0.0f;
     uint8_t is_attacking = 0;
     float attack_dir_x = 0.0f, attack_dir_y = 0.0f;
     float rotation = 0.0f;
@@ -25,6 +26,7 @@ struct EntityDeltaUpdate : Serializable<EntityDeltaUpdate> {
     static constexpr uint8_t FLAG_ATTACK_DIR = 0x10;
     static constexpr uint8_t FLAG_ROTATION = 0x20;
     static constexpr uint8_t FLAG_MANA = 0x40;
+    static constexpr uint8_t FLAG_MAX_HEALTH = 0x80;
 
     // Variable size based on flags
     static size_t serialized_size(uint8_t flags) {
@@ -32,6 +34,7 @@ struct EntityDeltaUpdate : Serializable<EntityDeltaUpdate> {
         if (flags & FLAG_POSITION) size += sizeof(float) * 3;
         if (flags & FLAG_VELOCITY) size += sizeof(float) * 2;
         if (flags & FLAG_HEALTH) size += sizeof(float);
+        if (flags & FLAG_MAX_HEALTH) size += sizeof(float);
         if (flags & FLAG_ATTACKING) size += sizeof(uint8_t);
         if (flags & FLAG_ATTACK_DIR) size += sizeof(float) * 2;
         if (flags & FLAG_ROTATION) size += sizeof(float);
@@ -48,6 +51,7 @@ struct EntityDeltaUpdate : Serializable<EntityDeltaUpdate> {
         if (flags & FLAG_POSITION) { w.write(x); w.write(y); w.write(z); }
         if (flags & FLAG_VELOCITY) { w.write(vx); w.write(vy); }
         if (flags & FLAG_HEALTH) { w.write(health); }
+        if (flags & FLAG_MAX_HEALTH) { w.write(max_health); }
         if (flags & FLAG_ATTACKING) { w.write(is_attacking); }
         if (flags & FLAG_ATTACK_DIR) { w.write(attack_dir_x); w.write(attack_dir_y); }
         if (flags & FLAG_ROTATION) { w.write(rotation); }
@@ -61,6 +65,7 @@ struct EntityDeltaUpdate : Serializable<EntityDeltaUpdate> {
         if (flags & FLAG_POSITION) { x = r.read<float>(); y = r.read<float>(); z = r.read<float>(); }
         if (flags & FLAG_VELOCITY) { vx = r.read<float>(); vy = r.read<float>(); }
         if (flags & FLAG_HEALTH) { health = r.read<float>(); }
+        if (flags & FLAG_MAX_HEALTH) { max_health = r.read<float>(); }
         if (flags & FLAG_ATTACKING) { is_attacking = r.read<uint8_t>(); }
         if (flags & FLAG_ATTACK_DIR) { attack_dir_x = r.read<float>(); attack_dir_y = r.read<float>(); }
         if (flags & FLAG_ROTATION) { rotation = r.read<float>(); }

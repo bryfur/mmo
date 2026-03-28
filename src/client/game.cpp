@@ -15,6 +15,7 @@
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/ext/vector_float3.hpp"
 #include "glm/ext/vector_float4.hpp"
+#include "protocol/gameplay_msgs.hpp"
 #include "protocol/heightmap.hpp"
 #include <SDL3/SDL_keyboard.h>
 #include <SDL3/SDL_scancode.h>
@@ -190,6 +191,28 @@ void Game::on_update(float dt) {
     last_dt_ = dt;  // Store for use in render functions
 
     if (game_state_ == GameState::Playing || game_state_ == GameState::ClassSelect) {
+        // If ESC is pressed while a dialog or panel is open, close it instead of opening the menu
+        if (game_state_ == GameState::Playing && input().menu_toggle_pressed()) {
+            bool consumed = false;
+            if (npc_interaction_.showing_dialogue) {
+                if (npc_interaction_.showing_quest_detail) {
+                    npc_interaction_.showing_quest_detail = false;
+                } else {
+                    npc_interaction_.close();
+                }
+                consumed = true;
+            } else if (hud_state_.dialogue.visible) {
+                hud_state_.dialogue.visible = false;
+                consumed = true;
+            } else if (panel_state_.is_panel_open()) {
+                panel_state_.close_all();
+                consumed = true;
+            }
+            if (consumed) {
+                input().clear_menu_inputs();
+            }
+        }
+
         menu_system_->update(dt);
         if (menu_system_->settings_dirty()) {
             apply_graphics_settings();
@@ -348,7 +371,7 @@ void Game::update_playing(float dt) {
 
     // Skill cooldowns are ticked in hud_state_.update(dt) below
 
-    // Panel interaction (before menu system eats inputs)
+    // Panel interaction (ESC close is handled in on_update before menu system)
     if (!menu_system_->is_open()) {
         update_panel_input(dt);
     }
@@ -393,54 +416,49 @@ void Game::update_playing(float dt) {
         prev_i = i_down; prev_l = l_down; prev_t = t_down; prev_m = m_down;
     }
 
+    // Helper: accept currently selected quest from NPC dialog
+    auto accept_selected_quest = [&]() {
+        if (npc_interaction_.available_quests.empty()) return;
+        auto& quest = npc_interaction_.available_quests[npc_interaction_.selected_quest];
+
+        QuestAcceptMsg accept_msg;
+        std::strncpy(accept_msg.quest_id, quest.quest_id.c_str(), 31);
+        network_.send_raw(build_packet(MessageType::QuestAccept, accept_msg));
+
+        QuestTrackerEntry tracker;
+        tracker.quest_name = quest.quest_name;
+        for (auto& obj : quest.objectives) {
+            tracker.objectives.push_back({obj.description, 0, obj.count, false});
+        }
+        hud_state_.tracked_quests.push_back(tracker);
+
+        for (auto& obj : quest.objectives) {
+            if (obj.radius > 0.0f) {
+                MapQuestMarker marker;
+                marker.quest_name = quest.quest_name;
+                marker.world_x = obj.loc_x;
+                marker.world_z = obj.loc_z;
+                marker.radius = obj.radius;
+                marker.complete = false;
+                panel_state_.map_quest_markers.push_back(marker);
+
+                HUDState::MinimapState::ObjectiveArea area;
+                area.world_x = obj.loc_x;
+                area.world_z = obj.loc_z;
+                area.radius = obj.radius;
+                hud_state_.minimap.objective_areas.push_back(area);
+            }
+        }
+        npc_interaction_.close();
+    };
+
     // NPC interaction (E key)
     if (input().interact_pressed()) {
         if (npc_interaction_.showing_dialogue) {
             if (npc_interaction_.showing_quest_detail) {
-                // Accept the quest
-                if (!npc_interaction_.available_quests.empty()) {
-                    auto& quest = npc_interaction_.available_quests[npc_interaction_.selected_quest];
-
-                    // Send QuestAccept to server
-                    QuestAcceptMsg accept_msg;
-                    std::strncpy(accept_msg.quest_id, quest.quest_id.c_str(), 31);
-                    network_.send_raw(build_packet(MessageType::QuestAccept, accept_msg));
-
-                    // Add to quest tracker on HUD
-                    QuestTrackerEntry tracker;
-                    tracker.quest_name = quest.quest_name;
-                    for (auto& obj : quest.objectives) {
-                        tracker.objectives.push_back({obj.description, 0, obj.count, false});
-                    }
-                    hud_state_.tracked_quests.push_back(tracker);
-
-                    // Add objective locations to world map and minimap
-                    for (auto& obj : quest.objectives) {
-                        if (obj.radius > 0.0f) {
-                            MapQuestMarker marker;
-                            marker.quest_name = quest.quest_name;
-                            marker.world_x = obj.loc_x;
-                            marker.world_z = obj.loc_z;
-                            marker.radius = obj.radius;
-                            marker.complete = false;
-                            panel_state_.map_quest_markers.push_back(marker);
-
-                            HUDState::MinimapState::ObjectiveArea area;
-                            area.world_x = obj.loc_x;
-                            area.world_z = obj.loc_z;
-                            area.radius = obj.radius;
-                            hud_state_.minimap.objective_areas.push_back(area);
-                        }
-                    }
-
-                    // Close dialogue
-                    npc_interaction_.close();
-                }
-            } else {
-                // Enter quest detail view
-                if (!npc_interaction_.available_quests.empty()) {
-                    npc_interaction_.showing_quest_detail = true;
-                }
+                accept_selected_quest();
+            } else if (!npc_interaction_.available_quests.empty()) {
+                npc_interaction_.showing_quest_detail = true;
             }
         } else {
             // Try to interact with nearest NPC
@@ -476,6 +494,7 @@ void Game::update_playing(float dt) {
                     npc_interaction_.selected_quest = 0;
                     npc_interaction_.showing_quest_detail = false;
                     npc_interaction_.showing_dialogue = true;
+                    hud_state_.dialogue.visible = false;  // suppress legacy dialog
 
                     // Send NPCInteract to server
                     NPCInteractMsg msg;
@@ -514,6 +533,21 @@ void Game::update_playing(float dt) {
 
             prev_w = w_down;
             prev_s = s_down;
+        }
+
+        // Enter key to view quest detail / accept quest
+        {
+            static bool prev_enter = false;
+            const bool* keys = SDL_GetKeyboardState(nullptr);
+            bool enter_down = keys[SDL_SCANCODE_RETURN];
+            if (enter_down && !prev_enter) {
+                if (npc_interaction_.showing_quest_detail) {
+                    accept_selected_quest();
+                } else if (!npc_interaction_.available_quests.empty()) {
+                    npc_interaction_.showing_quest_detail = true;
+                }
+            }
+            prev_enter = enter_down;
         }
 
         // Q key to decline/go back from detail view
@@ -1021,11 +1055,12 @@ void Game::handle_network_message(MessageType type, const std::vector<uint8_t>& 
             break;
         }
         case MessageType::LevelUp: {
-            if (payload.size() >= sizeof(int32_t)) {
-                BufferReader r(payload);
-                int32_t new_level = r.read<int32_t>();
-                hud_state_.show_level_up(new_level);
-                hud_state_.level = new_level;
+            if (payload.size() >= LevelUpMsg::serialized_size()) {
+                LevelUpMsg msg;
+                msg.deserialize(payload);
+                hud_state_.show_level_up(msg.new_level);
+                hud_state_.level = msg.new_level;
+                hud_state_.max_health = msg.new_max_health;
             }
             break;
         }
@@ -1164,6 +1199,9 @@ void Game::handle_network_message(MessageType type, const std::vector<uint8_t>& 
             break;
         case MessageType::TalentSync:
             on_talent_sync(payload);
+            break;
+        case MessageType::TalentTree:
+            on_talent_tree(payload);
             break;
         case MessageType::NPCDialogue:
             on_npc_dialogue(payload);
@@ -1609,10 +1647,9 @@ void Game::build_playing_ui(UIScene& ui) {
         ui.add_rect_outline(hx - 2, hy - 2, bar_width + 4, bar_height + 4, ui_colors::BORDER, 2.0f);
         ui.add_filled_rect(hx, hy, bar_width, bar_height, ui_colors::HEALTH_BG);
 
-        uint32_t hp_color;
+        uint32_t hp_color = ui_colors::HEALTH_LOW;
         if (health_ratio > 0.5f) hp_color = ui_colors::HEALTH_HIGH;
         else if (health_ratio > 0.25f) hp_color = ui_colors::HEALTH_MED;
-        else hp_color = ui_colors::HEALTH_LOW;
         ui.add_filled_rect(hx, hy, bar_width * health_ratio, bar_height, hp_color);
 
         char hp_text[32];
@@ -1764,42 +1801,49 @@ void Game::build_playing_ui(UIScene& ui) {
             // Quest detail view
             auto& quest = npc_interaction_.available_quests[npc_interaction_.selected_quest];
 
-            // Quest name
-            ui.add_text(quest.quest_name, px + 20, py + 50, 1.2f, 0xFF00DDFF);
+            float text_w = pw - 40.0f;  // 20px padding each side
 
-            // Dialogue
-            ui.add_text(quest.dialogue, px + 20, py + 80, 0.8f, 0xFFCCCCCC);
+            // Quest name (word-wrapped)
+            float oy = py + 50;
+            oy += ui.add_text_wrapped(quest.quest_name, px + 20, oy, text_w, 1.2f, 0xFF00DDFF);
+            oy += 4.0f;
 
-            // Description
-            ui.add_text(quest.description, px + 20, py + 130, 0.85f, 0xFFAAAAAA);
+            // Dialogue (word-wrapped)
+            oy += ui.add_text_wrapped(quest.dialogue, px + 20, oy, text_w, 0.8f, 0xFFCCCCCC);
+            oy += 4.0f;
+
+            // Description (word-wrapped)
+            oy += ui.add_text_wrapped(quest.description, px + 20, oy, text_w, 0.85f, 0xFFAAAAAA);
+            oy += 8.0f;
 
             // Objectives
-            ui.add_text("Objectives:", px + 20, py + 170, 1.0f, 0xFFFFFFFF);
-            float oy = py + 195;
+            ui.add_text("Objectives:", px + 20, oy, 1.0f, 0xFFFFFFFF);
+            oy += 22.0f;
+            float btn_y = py + ph - 50;
             for (auto& obj : quest.objectives) {
+                if (oy + 16.0f > btn_y - 60.0f) break;  // Reserve space for rewards + buttons
                 char obj_text[128];
                 snprintf(obj_text, sizeof(obj_text), "- %s (%d)", obj.description.c_str(), obj.count);
-                ui.add_text(obj_text, px + 30, oy, 0.85f, 0xFFCCCCCC);
-                oy += 22.0f;
+                float h = ui.add_text_wrapped(std::string(obj_text), px + 30, oy, text_w - 10.0f, 0.85f, 0xFFCCCCCC);
+                oy += h;
             }
 
             // Rewards
-            oy += 10.0f;
+            oy = std::max(oy + 8.0f, btn_y - 50.0f);
             ui.add_text("Rewards:", px + 20, oy, 1.0f, 0xFFFFFFFF);
-            oy += 25.0f;
+            oy += 22.0f;
             char reward_buf[64];
             snprintf(reward_buf, sizeof(reward_buf), "XP: %d   Gold: %d", quest.xp_reward, quest.gold_reward);
             ui.add_text(reward_buf, px + 30, oy, 0.9f, 0xFF00DDFF);
 
             // Accept / Decline buttons
-            float btn_y = py + ph - 50;
-            ui.add_filled_rect(px + pw / 2 - 160, btn_y, 140, 35, 0xFF004400);
-            ui.add_rect_outline(px + pw / 2 - 160, btn_y, 140, 35, 0xFF00CC00, 2.0f);
-            ui.add_text("Accept [E]", px + pw / 2 - 130, btn_y + 8, 1.0f, 0xFF00FF00);
+            ui.add_filled_rect(px + pw / 2 - 170, btn_y, 160, 35, 0xFF004400);
+            ui.add_rect_outline(px + pw / 2 - 170, btn_y, 160, 35, 0xFF00CC00, 2.0f);
+            ui.add_text("Accept [E/Enter]", px + pw / 2 - 155, btn_y + 8, 0.9f, 0xFF00FF00);
 
             ui.add_filled_rect(px + pw / 2 + 20, btn_y, 140, 35, 0xFF440000);
             ui.add_rect_outline(px + pw / 2 + 20, btn_y, 140, 35, 0xFFCC0000, 2.0f);
-            ui.add_text("Decline [Q]", px + pw / 2 + 45, btn_y + 8, 1.0f, 0xFFFF4444);
+            ui.add_text("Decline [Q]", px + pw / 2 + 42, btn_y + 8, 0.9f, 0xFFFF4444);
         }
     }
 
@@ -1811,7 +1855,10 @@ void Game::build_playing_ui(UIScene& ui) {
     // Skill bar and quest tracker are already rendered by build_gameplay_hud above
     build_notifications_ui(ui);
     build_damage_numbers_ui(ui);
-    build_dialogue_ui(ui);
+    // Only show the simple dialogue if the richer npc_interaction_ dialog is not active
+    if (!npc_interaction_.showing_dialogue) {
+        build_dialogue_ui(ui);
+    }
 
     // Panels (drawn on top)
     switch (panel_state_.active_panel) {
@@ -1919,6 +1966,14 @@ void Game::apply_delta_to_entity(entt::entity entity, const mmo::protocol::Entit
         if (registry_.all_of<ecs::Health>(entity)) {
             auto& health = registry_.get<ecs::Health>(entity);
             health.current = delta.health;
+        }
+    }
+
+    // Update max health
+    if (delta.flags & mmo::protocol::EntityDeltaUpdate::FLAG_MAX_HEALTH) {
+        if (registry_.all_of<ecs::Health>(entity)) {
+            auto& health = registry_.get<ecs::Health>(entity);
+            health.max = delta.max_health;
         }
     }
 
@@ -2145,9 +2200,35 @@ void Game::on_talent_sync(const std::vector<uint8_t>& payload) {
     panel_state_.talent_points_display = msg.talent_points;
     panel_state_.unlocked_talents.clear();
     for (int i = 0; i < msg.unlocked_count && i < TalentSyncMsg::MAX_TALENTS; ++i) {
-        // unlocked_ids is char[32] array - convert to uint16_t hash for panel tracking
-        panel_state_.unlocked_talents.push_back(static_cast<uint16_t>(i + 1));
+        std::string id(msg.unlocked_ids[i], strnlen(msg.unlocked_ids[i], 32));
+        if (!id.empty()) {
+            panel_state_.unlocked_talents.push_back(id);
+        }
     }
+}
+
+void Game::on_talent_tree(const std::vector<uint8_t>& payload) {
+    if (payload.size() < TalentTreeMsg::serialized_size()) {
+        std::cout << "[TalentTree] Payload too small: " << payload.size()
+                  << " < " << TalentTreeMsg::serialized_size() << std::endl;
+        return;
+    }
+
+    TalentTreeMsg msg;
+    msg.deserialize(payload);
+
+    panel_state_.talent_tree.clear();
+    for (int i = 0; i < msg.talent_count && i < TalentTreeMsg::MAX_TALENTS; ++i) {
+        PanelState::ClientTalent t;
+        t.id = std::string(msg.talents[i].id, strnlen(msg.talents[i].id, 32));
+        t.name = std::string(msg.talents[i].name, strnlen(msg.talents[i].name, 32));
+        t.description = std::string(msg.talents[i].description, strnlen(msg.talents[i].description, 128));
+        t.tier = msg.talents[i].tier;
+        t.prerequisite = std::string(msg.talents[i].prerequisite, strnlen(msg.talents[i].prerequisite, 32));
+        t.branch_name = std::string(msg.talents[i].branch_name, strnlen(msg.talents[i].branch_name, 32));
+        panel_state_.talent_tree.push_back(std::move(t));
+    }
+    std::cout << "[TalentTree] Received " << panel_state_.talent_tree.size() << " talents" << std::endl;
 }
 
 void Game::on_npc_dialogue(const std::vector<uint8_t>& payload) {
@@ -2320,28 +2401,30 @@ void Game::update_panel_input(float /*dt*/) {
         bool down_now = keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_S];
         bool enter_now = keys[SDL_SCANCODE_RETURN];
 
+        int max_cursor = static_cast<int>(panel_state_.talent_tree.size()) - 1;
+        if (max_cursor < 0) max_cursor = 0;
+
         if (up_now && !up_was && panel_state_.talent_cursor > 0) {
             panel_state_.talent_cursor--;
         }
-        if (down_now && !down_was && panel_state_.talent_cursor < 8) {  // 9 talents (0-8)
+        if (down_now && !down_was && panel_state_.talent_cursor < max_cursor) {
             panel_state_.talent_cursor++;
         }
         up_was = up_now;
         down_was = down_now;
 
-        // Unlock talent on Enter if we have points
-        if (enter_now && !enter_was && panel_state_.talent_points > 0) {
-            // Send talent unlock for the currently selected talent
-            // The talent_cursor maps to talent IDs starting at 1
-            int tid = panel_state_.talent_cursor + 1;
+        // Unlock talent on Enter if we have points and a valid selection
+        if (enter_now && !enter_was && panel_state_.talent_points > 0
+            && panel_state_.talent_cursor < static_cast<int>(panel_state_.talent_tree.size())) {
+            const auto& talent = panel_state_.talent_tree[panel_state_.talent_cursor];
             // Only unlock if not already unlocked
             bool already_unlocked = false;
-            for (uint16_t ut : panel_state_.unlocked_talents) {
-                if (ut == static_cast<uint16_t>(tid)) { already_unlocked = true; break; }
+            for (const auto& ut : panel_state_.unlocked_talents) {
+                if (ut == talent.id) { already_unlocked = true; break; }
             }
             if (!already_unlocked) {
                 TalentUnlockMsg msg;
-                snprintf(msg.talent_id, sizeof(msg.talent_id), "talent_%d", tid);
+                std::strncpy(msg.talent_id, talent.id.c_str(), sizeof(msg.talent_id) - 1);
                 network_.send_raw(build_packet(MessageType::TalentUnlock, msg));
             }
         }
@@ -2411,82 +2494,10 @@ void Game::update_notifications(float dt) {
 // Gameplay UI Rendering
 // ============================================================================
 
-void Game::build_skill_bar_ui(UIScene& ui) {
-    float sw = static_cast<float>(screen_width());
-    float bar_width = 400.0f;
-    float slot_size = 44.0f;
-    float slot_gap = 6.0f;
-    float start_x = (sw - bar_width) / 2.0f;
-    float y = static_cast<float>(screen_height()) - 60.0f;
-
-    // Background bar
-    ui.add_filled_rect(start_x - 5, y - 5, bar_width + 10, slot_size + 10, 0x80000000);
-
-    constexpr int NUM_SKILL_SLOTS = 5;
-    for (int i = 0; i < NUM_SKILL_SLOTS; ++i) {
-        float x = start_x + i * (slot_size + slot_gap);
-        const auto& slot = hud_state_.skill_slots[i];
-
-        // Slot background
-        uint32_t bg_color = slot.available ? 0xCC333333 : 0xCC111111;
-        ui.add_filled_rect(x, y, slot_size, slot_size, bg_color);
-        ui.add_rect_outline(x, y, slot_size, slot_size, 0xFF666666, 1.0f);
-
-        // Keybind number
-        char key[4];
-        snprintf(key, sizeof(key), "%d", i + 1);
-        ui.add_text(key, x + 2, y + 2, 0.6f, 0xFF888888);
-
-        if (slot.available && !slot.name.empty()) {
-            // Skill name (truncated)
-            std::string label = slot.name.substr(0, 4);
-            ui.add_text(label, x + 4, y + 16, 0.7f, ui_colors::WHITE);
-
-            // Cooldown overlay
-            if (slot.cooldown > 0.0f && slot.max_cooldown > 0.0f) {
-                float ratio = slot.cooldown / slot.max_cooldown;
-                float overlay_h = slot_size * ratio;
-                ui.add_filled_rect(x, y + (slot_size - overlay_h), slot_size, overlay_h, 0x88000000);
-
-                char cd[8];
-                snprintf(cd, sizeof(cd), "%.1f", slot.cooldown);
-                ui.add_text(cd, x + 8, y + 14, 0.8f, 0xFFFF4444);
-            }
-        }
-    }
-}
-
-void Game::build_quest_tracker_ui(UIScene& ui) {
-    if (hud_state_.tracked_quests.empty()) return;
-
-    float x = static_cast<float>(screen_width()) - 260.0f;
-    float y = 10.0f;
-    float w = 250.0f;
-
-    ui.add_filled_rect(x, y, w, 20.0f, 0x80000000);
-    ui.add_text("QUESTS", x + 5, y + 3, 0.8f, 0xFFFFCC00);
-    y += 22.0f;
-
-    for (const auto& quest : hud_state_.tracked_quests) {
-        ui.add_filled_rect(x, y, w, 16.0f, 0x60000000);
-        ui.add_text(quest.quest_name, x + 5, y + 1, 0.7f, ui_colors::WHITE);
-        y += 18.0f;
-
-        for (const auto& obj : quest.objectives) {
-            char progress[64];
-            snprintf(progress, sizeof(progress), "  %s: %d/%d",
-                     obj.description.c_str(), obj.current, obj.required);
-            uint32_t color = obj.complete ? 0xFF00FF00 : 0xFFCCCCCC;
-            ui.add_text(progress, x + 5, y + 1, 0.6f, color);
-            y += 14.0f;
-        }
-        y += 4.0f;
-    }
-}
 
 void Game::build_notifications_ui(UIScene& ui) {
     float cx = static_cast<float>(screen_width()) / 2.0f;
-    float y = 80.0f;
+    float y = 160.0f;  // Below zone name (~y=60+30px) and debug HUD (~y=130 max)
 
     for (const auto& notif : hud_state_.notifications) {
         float alpha_ratio = std::min(notif.timer / 0.5f, 1.0f);  // Fade out last 0.5s
@@ -2517,11 +2528,9 @@ void Game::build_damage_numbers_ui(UIScene& ui) {
         float alpha_ratio = dn.alpha();
         uint8_t alpha = static_cast<uint8_t>(255 * alpha_ratio);
 
-        uint32_t color;
+        uint32_t color = 0x000000FF | (static_cast<uint32_t>(alpha) << 24);  // default: red damage
         if (dn.is_heal) {
-            color = 0x0000FF00 | (alpha << 24);  // Green for heals
-        } else {
-            color = 0x000000FF | (alpha << 24);  // Red for damage (ABGR)
+            color = 0x0000FF00 | (static_cast<uint32_t>(alpha) << 24);  // Green for heals
         }
 
         char text[16];
@@ -2555,8 +2564,8 @@ void Game::build_dialogue_ui(UIScene& ui) {
     ui.add_filled_rect(x, y, w, 28.0f, 0xFF443322);
     ui.add_text(hud_state_.dialogue.npc_name, x + 10, y + 5, 1.0f, 0xFFFFCC00);
 
-    // Dialogue text
-    ui.add_text(hud_state_.dialogue.dialogue, x + 15, y + 40, 0.8f, ui_colors::WHITE);
+    // Dialogue text (word-wrapped to panel width)
+    ui.add_text_wrapped(hud_state_.dialogue.dialogue, x + 15, y + 40, w - 30.0f, 0.8f, ui_colors::WHITE);
 
     // Quest options
     float option_y = y + 100.0f;
@@ -2573,7 +2582,7 @@ void Game::build_dialogue_ui(UIScene& ui) {
     }
 
     // Close hint
-    ui.add_text("[E] Close    [Enter] Accept", x + 10, y + h - 25, 0.7f, ui_colors::TEXT_HINT);
+    ui.add_text("[E/ESC] Close    [Enter] Accept", x + 10, y + h - 25, 0.7f, ui_colors::TEXT_HINT);
 }
 
 void Game::build_inventory_panel_ui(UIScene& ui) {
@@ -2590,7 +2599,7 @@ void Game::build_inventory_panel_ui(UIScene& ui) {
     // Title
     ui.add_filled_rect(px, py, w, 28.0f, 0xFF334455);
     ui.add_text("INVENTORY", px + 10, py + 5, 1.0f, ui_colors::WHITE);
-    ui.add_text("[I] Close", px + w - 80, py + 8, 0.6f, ui_colors::TEXT_HINT);
+    ui.add_text("[I/ESC] Close", px + w - 100, py + 8, 0.6f, ui_colors::TEXT_HINT);
 
     // Equipped items section
     float ey = py + 35.0f;
@@ -2644,72 +2653,139 @@ void Game::build_inventory_panel_ui(UIScene& ui) {
 void Game::build_talent_panel_ui(UIScene& ui) {
     float sw = static_cast<float>(screen_width());
     float sh = static_cast<float>(screen_height());
-    float w = 400.0f;
-    float h = 450.0f;
+    float w = 420.0f;
+    float h = sh * 0.8f;  // Use 80% of screen height
+    if (h > 700.0f) h = 700.0f;
+    if (h < 400.0f) h = 400.0f;
     float px = (sw - w) / 2.0f;
     float py = (sh - h) / 2.0f;
 
     ui.add_filled_rect(px, py, w, h, 0xE0222222);
     ui.add_rect_outline(px, py, w, h, 0xFF888888, 2.0f);
 
-    // Title
+    // Title bar
     ui.add_filled_rect(px, py, w, 28.0f, 0xFF553322);
     ui.add_text("TALENT TREE", px + 10, py + 5, 1.0f, ui_colors::WHITE);
 
     char pts[32];
     snprintf(pts, sizeof(pts), "Points: %d", panel_state_.talent_points);
-    ui.add_text(pts, px + w - 100, py + 8, 0.7f, 0xFFFFCC00);
+    ui.add_text(pts, px + w - 100, py + 8, 0.7f,
+                panel_state_.talent_points > 0 ? 0xFF00FF00 : 0xFFFFCC00);
 
-    ui.add_text("[T] Close  [Enter] Unlock", px + 10, py + h - 22, 0.6f, ui_colors::TEXT_HINT);
+    // Footer
+    ui.add_filled_rect(px, py + h - 28, w, 28, 0xE0222222);
+    ui.add_text("[W/S] Navigate  [Enter] Unlock  [T/ESC] Close", px + 10, py + h - 22, 0.55f, ui_colors::TEXT_HINT);
 
-    // Talent list (simple vertical list for now)
-    // Hardcoded talent names - would come from data in a full implementation
-    static const char* talent_names[] = {
-        "Strength I", "Vitality I", "Critical Strike",
-        "Strength II", "Vitality II", "Evasion",
-        "Power Strike", "Fortify", "Berserker"
-    };
-    static const int num_talents = 9;
+    if (panel_state_.talent_tree.empty()) {
+        ui.add_text("No talents available", px + 20, py + 50, 0.8f, ui_colors::TEXT_HINT);
+        return;
+    }
 
-    float ty = py + 40.0f;
-    for (int i = 0; i < num_talents; ++i) {
+    // Content area
+    float content_top = py + 34.0f;
+    float content_bottom = py + h - 32.0f;
+
+    // First pass: compute total content height and selected item y-offset
+    float total_h = 0.0f;
+    float selected_y_start = 0.0f;
+    std::string prev_branch_calc;
+    for (int i = 0; i < static_cast<int>(panel_state_.talent_tree.size()); ++i) {
+        const auto& talent = panel_state_.talent_tree[i];
+        if (talent.branch_name != prev_branch_calc) {
+            if (!prev_branch_calc.empty()) total_h += 6.0f;
+            total_h += 18.0f;
+            prev_branch_calc = talent.branch_name;
+        }
+        if (i == panel_state_.talent_cursor) selected_y_start = total_h;
+        total_h += (i == panel_state_.talent_cursor) ? 48.0f : 32.0f;
+    }
+
+    // Scroll offset to keep selected talent visible
+    float view_h = content_bottom - content_top;
+    static float scroll_offset = 0.0f;
+    float selected_y_end = selected_y_start + 48.0f;
+    if (selected_y_start - scroll_offset < 0.0f) {
+        scroll_offset = selected_y_start;
+    }
+    if (selected_y_end - scroll_offset > view_h) {
+        scroll_offset = selected_y_end - view_h;
+    }
+    if (scroll_offset < 0.0f) scroll_offset = 0.0f;
+    if (total_h <= view_h) scroll_offset = 0.0f;
+
+    // Second pass: render
+    std::string prev_branch;
+    float slot_y = content_top - scroll_offset;
+
+    for (int i = 0; i < static_cast<int>(panel_state_.talent_tree.size()); ++i) {
+        const auto& talent = panel_state_.talent_tree[i];
         bool selected = (i == panel_state_.talent_cursor);
-        uint16_t tid = static_cast<uint16_t>(i + 1);
 
-        bool unlocked = false;
-        for (uint16_t ut : panel_state_.unlocked_talents) {
-            if (ut == tid) { unlocked = true; break; }
+        // Branch header
+        if (talent.branch_name != prev_branch) {
+            if (!prev_branch.empty()) slot_y += 6.0f;
+            if (slot_y >= content_top - 18.0f && slot_y < content_bottom) {
+                ui.add_text(talent.branch_name, px + 15, slot_y + 1, 0.7f, 0xFF00DDFF);
+            }
+            slot_y += 18.0f;
+            prev_branch = talent.branch_name;
         }
 
-        float slot_y = ty + i * 40.0f;
-        if (slot_y + 35.0f > py + h - 30.0f) break;
+        float row_h = selected ? 48.0f : 32.0f;
 
-        // Background
-        uint32_t bg_color = selected ? 0x40FFFFFF : 0x20000000;
-        ui.add_filled_rect(px + 10, slot_y, w - 20, 35.0f, bg_color);
+        // Only render if visible
+        if (slot_y + row_h > content_top && slot_y < content_bottom) {
+            bool unlocked = false;
+            for (const auto& ut : panel_state_.unlocked_talents) {
+                if (ut == talent.id) { unlocked = true; break; }
+            }
+            bool prereq_met = talent.prerequisite.empty();
+            if (!prereq_met) {
+                for (const auto& ut : panel_state_.unlocked_talents) {
+                    if (ut == talent.prerequisite) { prereq_met = true; break; }
+                }
+            }
 
-        // Status indicator
-        uint32_t status_color;
-        const char* status_text;
-        if (unlocked) {
-            status_color = 0xFF00FF00;  // Green
-            status_text = "[OK]";
-        } else if (panel_state_.talent_points > 0) {
-            status_color = 0xFF00AAFF;  // Orange/available
-            status_text = "[  ]";
-        } else {
-            status_color = 0xFF666666;  // Locked
-            status_text = "[--]";
+            // Row background
+            uint32_t bg_color = selected ? 0x40FFFFFF : 0x15FFFFFF;
+            ui.add_filled_rect(px + 10, slot_y, w - 20, row_h, bg_color);
+
+            // Status
+            uint32_t status_color = 0xFF666666;
+            const char* status_text = "[--]";
+            if (unlocked) {
+                status_color = 0xFF00FF00;
+                status_text = "[OK]";
+            } else if (panel_state_.talent_points > 0 && prereq_met) {
+                status_color = 0xFF00AAFF;
+                status_text = "[  ]";
+            }
+
+            ui.add_text(status_text, px + 15, slot_y + 3, 0.65f, status_color);
+
+            // Talent name
+            ui.add_text(talent.name, px + 50, slot_y + 3, 0.75f,
+                        unlocked ? 0xFF00FF00 : (selected ? ui_colors::WHITE : 0xFFCCCCCC));
+
+            // Tier
+            char tier_buf[8];
+            snprintf(tier_buf, sizeof(tier_buf), "T%d", talent.tier);
+            ui.add_text(tier_buf, px + w - 45, slot_y + 4, 0.55f, 0xFF888888);
+
+            // Description on selected row
+            if (selected) {
+                ui.add_text_wrapped(talent.description, px + 50, slot_y + 18, w - 100, 0.5f, 0xFFAAAAAA);
+            }
         }
 
-        ui.add_text(status_text, px + 15, slot_y + 3, 0.7f, status_color);
-        ui.add_text(talent_names[i], px + 55, slot_y + 3, 0.8f,
-                    unlocked ? 0xFF00FF00 : (selected ? ui_colors::WHITE : 0xFFCCCCCC));
+        slot_y += row_h;
+    }
 
-        // Row/tier indicator
-        char tier[16];
-        snprintf(tier, sizeof(tier), "Tier %d", (i / 3) + 1);
-        ui.add_text(tier, px + w - 80, slot_y + 5, 0.6f, 0xFF888888);
+    // Scroll indicator
+    if (total_h > view_h) {
+        float bar_h = view_h * (view_h / total_h);
+        float bar_y = content_top + (scroll_offset / total_h) * view_h;
+        ui.add_filled_rect(px + w - 6, bar_y, 3, bar_h, 0x60FFFFFF);
     }
 }
 
@@ -2727,7 +2803,7 @@ void Game::build_quest_log_panel_ui(UIScene& ui) {
     // Title
     ui.add_filled_rect(px, py, w, 28.0f, 0xFF335533);
     ui.add_text("QUEST LOG", px + 10, py + 5, 1.0f, ui_colors::WHITE);
-    ui.add_text("[L] Close  [X] Abandon", px + 10, py + h - 22, 0.6f, ui_colors::TEXT_HINT);
+    ui.add_text("[L/ESC] Close  [X] Abandon", px + 10, py + h - 22, 0.6f, ui_colors::TEXT_HINT);
 
     if (hud_state_.tracked_quests.empty()) {
         ui.add_text("No active quests.", px + 20, py + 60, 0.9f, ui_colors::TEXT_DIM);

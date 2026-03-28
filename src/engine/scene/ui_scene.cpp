@@ -52,6 +52,40 @@ void UIScene::add_text(const std::string& text, float x, float y, float scale, u
     commands_.push_back(std::move(cmd));
 }
 
+float UIScene::add_text_wrapped(const std::string& text, float x, float y, float max_width,
+                                 float scale, uint32_t color, float line_height) {
+    constexpr float CHAR_WIDTH_BASE = 8.0f;
+    float char_w = CHAR_WIDTH_BASE * scale;
+    if (line_height <= 0.0f) line_height = 18.0f * scale;
+    int max_chars = static_cast<int>(max_width / char_w);
+    if (max_chars < 1) max_chars = 1;
+
+    float cur_y = y;
+    size_t pos = 0;
+    while (pos < text.size()) {
+        size_t remaining = text.size() - pos;
+        if (static_cast<int>(remaining) <= max_chars) {
+            // Rest fits on one line
+            add_text(text.substr(pos), x, cur_y, scale, color);
+            cur_y += line_height;
+            break;
+        }
+        // Find last space within max_chars for word boundary
+        size_t end = pos + max_chars;
+        size_t wrap = text.rfind(' ', end);
+        if (wrap == std::string::npos || wrap <= pos) {
+            // No space found — hard break
+            wrap = end;
+        }
+        add_text(text.substr(pos, wrap - pos), x, cur_y, scale, color);
+        cur_y += line_height;
+        pos = wrap;
+        // Skip the space we broke at
+        if (pos < text.size() && text[pos] == ' ') ++pos;
+    }
+    return cur_y - y;
+}
+
 void UIScene::add_button(float x, float y, float w, float h, const std::string& label,
                           uint32_t color, bool selected) {
     UICommand cmd;

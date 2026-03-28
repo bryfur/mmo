@@ -525,6 +525,9 @@ bool GameConfig::load_talents(const std::string& path) {
     if (!f.is_open()) return false;
     try {
         json j = json::parse(f);
+        talent_config_.first_talent_point_level = j.value("first_talent_point_level", 3);
+        talent_config_.max_talent_points = j.value("max_talent_points", 28);
+
         talent_trees_.clear();
         for (const auto& tree : j["talent_trees"]) {
             TalentTreeConfig ttc;
@@ -544,6 +547,7 @@ bool GameConfig::load_talents(const std::string& path) {
                             tc.prerequisite = t.value("requires", "");
                             if (t.contains("effect")) {
                                 const auto& e = t["effect"];
+                                // Base stats
                                 tc.effect.damage_mult = e.value("damage_mult", 1.0f);
                                 tc.effect.speed_mult = e.value("speed_mult", 1.0f);
                                 tc.effect.health_mult = e.value("health_mult", 1.0f);
@@ -553,6 +557,149 @@ bool GameConfig::load_talents(const std::string& path) {
                                 tc.effect.mana_mult = e.value("mana_mult", 1.0f);
                                 tc.effect.cooldown_mult = e.value("cooldown_mult", 1.0f);
                                 tc.effect.attack_speed_mult = e.value("attack_speed_mult", 1.0f);
+
+                                // Additional stat modifiers
+                                tc.effect.crit_damage_mult = e.value("crit_damage_mult", 1.0f);
+                                tc.effect.mana_cost_mult = e.value("mana_cost_mult", 1.0f);
+                                tc.effect.skill_damage_mult = e.value("skill_damage_mult", 1.0f);
+                                tc.effect.attack_range_bonus = e.value("attack_range_bonus", 0.0f);
+                                tc.effect.attack_range_mult = e.value("attack_range_mult", 1.0f);
+                                tc.effect.healing_received_mult = e.value("healing_received_mult", 1.0f);
+                                tc.effect.global_cdr = e.value("global_cdr_percent", 0.0f);
+                                tc.effect.cc_immunity = e.value("cc_immunity", false);
+
+                                // Cheat death
+                                if (e.contains("cheat_death_cooldown") || e.contains("angel_cooldown")) {
+                                    tc.effect.has_cheat_death = true;
+                                    tc.effect.cheat_death_cooldown = e.contains("angel_cooldown")
+                                        ? e.value("angel_cooldown", 120.0f)
+                                        : e.value("cheat_death_cooldown", 60.0f);
+                                    tc.effect.cheat_death_hp = e.value("cheat_death_health", 0.1f);
+                                }
+
+                                // Avenge
+                                if (e.contains("avenge_damage_mult")) {
+                                    tc.effect.has_avenge = true;
+                                    tc.effect.avenge_damage_mult = e.value("avenge_damage_mult", 1.0f);
+                                    tc.effect.avenge_attack_speed_mult = e.value("avenge_attack_speed", 1.0f);
+                                    tc.effect.avenge_duration = e.value("avenge_duration", 0.0f);
+                                }
+
+                                // On-hit procs
+                                tc.effect.slow_on_hit_chance = e.value("slow_chance", 0.0f);
+                                tc.effect.slow_on_hit_value = e.value("slow_percent",
+                                    e.value("attack_slow_percent", 0.0f));
+                                tc.effect.slow_on_hit_dur = e.value("slow_duration",
+                                    e.value("attack_slow_duration", 0.0f));
+                                tc.effect.burn_on_hit_pct = e.value("burn_damage_percent", 0.0f);
+                                tc.effect.burn_on_hit_dur = e.value("burn_duration", 0.0f);
+                                tc.effect.poison_on_hit_pct = e.value("poison_damage_percent", 0.0f);
+                                tc.effect.poison_on_hit_dur = e.value("poison_duration", 0.0f);
+                                tc.effect.mana_on_hit_pct = e.value("attack_mana_restore_percent", 0.0f);
+                                tc.effect.hit_speed_bonus = e.value("hit_speed_bonus", 0.0f);
+                                tc.effect.hit_speed_dur = e.value("hit_speed_duration", 0.0f);
+
+                                // Kill effects
+                                tc.effect.kill_explosion_pct = e.value("kill_explosion_percent", 0.0f);
+                                tc.effect.kill_explosion_radius = e.value("kill_explosion_radius", 0.0f);
+                                {
+                                    float kdm = e.value("kill_damage_mult", 1.0f);
+                                    tc.effect.kill_damage_bonus = (kdm > 1.0f) ? kdm - 1.0f : 0.0f;
+                                }
+                                tc.effect.kill_damage_dur = e.value("kill_buff_duration", 0.0f);
+                                {
+                                    float ksm = e.value("kill_speed_mult", 1.0f);
+                                    tc.effect.kill_speed_bonus = (ksm > 1.0f) ? ksm - 1.0f : 0.0f;
+                                }
+                                tc.effect.kill_speed_dur = e.value("kill_buff_duration", 0.0f);
+                                tc.effect.burn_spread_radius = e.value("burn_spread_radius", 0.0f);
+
+                                // Damage reflect
+                                tc.effect.reflect_percent = e.value("reflect_percent",
+                                    e.value("reflect_damage_percent", 0.0f));
+
+                                // Stationary
+                                tc.effect.stationary_damage_mult = e.value("stationary_damage_mult", 1.0f);
+                                tc.effect.stationary_damage_reduction = e.value("stationary_damage_reduction", 0.0f);
+                                tc.effect.stationary_heal_pct = e.value("stationary_heal_percent", 0.0f);
+                                if (e.contains("stationary_delay") || e.contains("stationary_damage_mult") ||
+                                    e.contains("stationary_damage_reduction") || e.contains("stationary_heal_percent")) {
+                                    tc.effect.stationary_delay = e.value("stationary_delay", 1.0f);
+                                }
+
+                                // Low HP
+                                tc.effect.low_health_regen_pct = e.value("low_health_regen_percent", 0.0f);
+                                tc.effect.low_health_threshold = e.value("low_health_threshold", 0.0f);
+
+                                // Fury
+                                tc.effect.fury_threshold = e.value("fury_threshold", 0.0f);
+                                tc.effect.fury_damage_mult = e.value("fury_damage_mult", 1.0f);
+                                tc.effect.fury_attack_speed_mult = e.value("fury_attack_speed_mult", 1.0f);
+
+                                // Combo stacks
+                                tc.effect.combo_damage_bonus = e.value("combo_damage_bonus", 0.0f);
+                                tc.effect.combo_max_stacks = e.value("combo_max_stacks", 0);
+                                tc.effect.combo_window = e.value("combo_window", 3.0f);
+
+                                // Empowered attacks
+                                tc.effect.empowered_every = e.value("empowered_attack_every", 0);
+                                tc.effect.empowered_damage_mult = e.value("empowered_damage_mult", 1.0f);
+                                tc.effect.empowered_stun_dur = e.value("empowered_stun_duration", 0.0f);
+
+                                // Passive aura
+                                tc.effect.aura_damage_pct = e.value("aura_damage_percent", 0.0f);
+                                tc.effect.aura_range = e.value("aura_range", 0.0f);
+
+                                // Nearby debuff
+                                tc.effect.nearby_debuff_range = e.value("presence_range", 0.0f);
+                                tc.effect.nearby_damage_reduction = e.value("nearby_enemy_damage_reduction", 0.0f);
+
+                                // Panic freeze
+                                tc.effect.panic_freeze_radius = e.value("panic_freeze_radius", 0.0f);
+                                tc.effect.panic_freeze_duration = e.value("panic_freeze_duration", 0.0f);
+                                tc.effect.panic_freeze_threshold = e.value("panic_freeze_threshold", 0.0f);
+                                tc.effect.panic_freeze_cooldown = e.value("panic_freeze_cooldown", 60.0f);
+
+                                // Periodic shield
+                                tc.effect.shield_regen_pct = e.value("shield_percent", 0.0f);
+                                tc.effect.shield_regen_cooldown = e.value("shield_cooldown", 15.0f);
+
+                                // Spell echo
+                                tc.effect.spell_echo_chance = e.value("spell_echo_chance", 0.0f);
+
+                                // Frozen vulnerability
+                                tc.effect.frozen_vulnerability = e.value("frozen_vulnerability", 0.0f);
+
+                                // Mana conditionals
+                                tc.effect.high_mana_damage_mult = e.value("high_mana_damage_mult", 1.0f);
+                                tc.effect.high_mana_threshold = e.value("high_mana_threshold", 0.0f);
+                                tc.effect.low_mana_regen_mult = e.value("low_mana_regen_mult", 1.0f);
+                                tc.effect.low_mana_threshold = e.value("low_mana_threshold", 0.0f);
+
+                                // Conditional damage
+                                tc.effect.high_hp_bonus_damage = e.value("high_hp_bonus_damage", 0.0f);
+                                tc.effect.high_hp_threshold = e.value("high_hp_threshold", 0.0f);
+                                tc.effect.max_range_damage_bonus = e.value("max_range_damage_bonus", 0.0f);
+
+                                // Damage sharing
+                                tc.effect.damage_share_percent = e.value("damage_share_percent", 0.0f);
+                                tc.effect.share_radius = e.value("share_radius", 0.0f);
+
+                                // Dodge
+                                tc.effect.moving_dodge_chance = e.value("moving_dodge_chance", 0.0f);
+
+                                // Trap modifications
+                                tc.effect.max_traps = e.value("max_traps", 1);
+                                tc.effect.trap_lifetime_mult = e.value("trap_lifetime_mult", 1.0f);
+                                tc.effect.trap_radius_mult = e.value("trap_radius_mult", 1.0f);
+                                tc.effect.trap_vulnerability = e.value("trap_vulnerability", 0.0f);
+                                tc.effect.trap_vulnerability_dur = e.value("trap_vulnerability_duration", 0.0f);
+                                tc.effect.trap_cdr = e.value("trap_cdr", 0.0f);
+                                tc.effect.trap_cloud_damage = e.value("trap_cloud_damage", 0.0f);
+                                tc.effect.trap_cloud_duration = e.value("trap_cloud_duration", 0.0f);
+                                tc.effect.trap_cloud_radius = e.value("trap_cloud_radius", 0.0f);
+                                tc.effect.poison_death_explosion_pct = e.value("poison_death_explosion_percent", 0.0f);
+                                tc.effect.poison_explosion_radius = e.value("explosion_radius", 0.0f);
                             }
                             tb.talents.push_back(std::move(tc));
                         }

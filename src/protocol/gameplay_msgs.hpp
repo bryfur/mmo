@@ -532,6 +532,48 @@ struct TalentSyncMsg : Serializable<TalentSyncMsg> {
     }
 };
 
+struct TalentTreeMsg : Serializable<TalentTreeMsg> {
+    static constexpr int MAX_TALENTS = 32;
+    uint8_t talent_count = 0;
+    struct TalentEntry {
+        char id[32] = {};
+        char name[32] = {};
+        char description[128] = {};
+        uint8_t tier = 0;
+        char prerequisite[32] = {};
+        char branch_name[32] = {};
+    };
+    TalentEntry talents[MAX_TALENTS] = {};
+
+    static constexpr size_t serialized_size() {
+        return sizeof(uint8_t) + static_cast<size_t>(MAX_TALENTS) * (32 + 32 + 128 + 1 + 32 + 32);
+    }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write(talent_count);
+        for (int i = 0; i < MAX_TALENTS; ++i) {
+            w.write_bytes(talents[i].id, 32);
+            w.write_bytes(talents[i].name, 32);
+            w.write_bytes(talents[i].description, 128);
+            w.write(talents[i].tier);
+            w.write_bytes(talents[i].prerequisite, 32);
+            w.write_bytes(talents[i].branch_name, 32);
+        }
+    }
+
+    void deserialize_impl(BufferReader& r) {
+        talent_count = r.read<uint8_t>();
+        for (int i = 0; i < MAX_TALENTS; ++i) {
+            r.read_bytes(talents[i].id, 32);
+            r.read_bytes(talents[i].name, 32);
+            r.read_bytes(talents[i].description, 128);
+            talents[i].tier = r.read<uint8_t>();
+            r.read_bytes(talents[i].prerequisite, 32);
+            r.read_bytes(talents[i].branch_name, 32);
+        }
+    }
+};
+
 // ============================================================================
 // NPC Dialogue
 // ============================================================================

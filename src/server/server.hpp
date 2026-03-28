@@ -60,6 +60,9 @@ private:
     // Send talent sync to a player
     void send_talent_sync(uint32_t player_id);
 
+    // Send talent tree definition for a player's class
+    void send_talent_tree(uint32_t player_id);
+
     // Send available skills to a player
     void send_skill_list(uint32_t player_id);
 

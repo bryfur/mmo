@@ -232,6 +232,7 @@ struct SkillConfig {
 // ============================================================================
 
 struct TalentEffect {
+    // === Existing base stats ===
     float damage_mult = 1.0f;
     float speed_mult = 1.0f;
     float health_mult = 1.0f;
@@ -241,6 +242,133 @@ struct TalentEffect {
     float mana_mult = 1.0f;
     float cooldown_mult = 1.0f;
     float attack_speed_mult = 1.0f;
+
+    // === Additional stat modifiers ===
+    float crit_damage_mult = 1.0f;
+    float mana_cost_mult = 1.0f;
+    float skill_damage_mult = 1.0f;
+    float attack_range_bonus = 0.0f;
+    float attack_range_mult = 1.0f;
+    float healing_received_mult = 1.0f;
+    float global_cdr = 0.0f;
+
+    // === Boolean flags (OR'd when aggregating) ===
+    bool cc_immunity = false;
+    bool has_cheat_death = false;
+    bool has_avenge = false;
+
+    // === On-hit procs ===
+    float slow_on_hit_chance = 0.0f;
+    float slow_on_hit_value = 0.0f;
+    float slow_on_hit_dur = 0.0f;
+    float burn_on_hit_pct = 0.0f;
+    float burn_on_hit_dur = 0.0f;
+    float poison_on_hit_pct = 0.0f;
+    float poison_on_hit_dur = 0.0f;
+    float mana_on_hit_pct = 0.0f;
+    float hit_speed_bonus = 0.0f;
+    float hit_speed_dur = 0.0f;
+
+    // === Kill effects ===
+    float kill_explosion_pct = 0.0f;
+    float kill_explosion_radius = 0.0f;
+    float kill_damage_bonus = 0.0f;
+    float kill_damage_dur = 0.0f;
+    float kill_speed_bonus = 0.0f;
+    float kill_speed_dur = 0.0f;
+    float burn_spread_radius = 0.0f;
+
+    // === Cheat death ===
+    float cheat_death_hp = 0.1f;
+    float cheat_death_cooldown = 60.0f;
+
+    // === Damage reflect ===
+    float reflect_percent = 0.0f;
+
+    // === Stationary mechanics ===
+    float stationary_damage_mult = 1.0f;
+    float stationary_damage_reduction = 0.0f;
+    float stationary_heal_pct = 0.0f;
+    float stationary_delay = 9999.0f;
+
+    // === Low HP effects ===
+    float low_health_regen_pct = 0.0f;
+    float low_health_threshold = 0.0f;
+
+    // === Fury / rage ===
+    float fury_threshold = 0.0f;
+    float fury_damage_mult = 1.0f;
+    float fury_attack_speed_mult = 1.0f;
+
+    // === Combo stacks ===
+    float combo_damage_bonus = 0.0f;
+    int combo_max_stacks = 0;
+    float combo_window = 3.0f;
+
+    // === Empowered attacks ===
+    int empowered_every = 0;
+    float empowered_damage_mult = 1.0f;
+    float empowered_stun_dur = 0.0f;
+
+    // === Passive aura ===
+    float aura_damage_pct = 0.0f;
+    float aura_range = 0.0f;
+
+    // === Nearby enemy debuff ===
+    float nearby_debuff_range = 0.0f;
+    float nearby_damage_reduction = 0.0f;
+
+    // === Panic freeze ===
+    float panic_freeze_radius = 0.0f;
+    float panic_freeze_duration = 0.0f;
+    float panic_freeze_threshold = 0.0f;
+    float panic_freeze_cooldown = 60.0f;
+
+    // === Periodic shield ===
+    float shield_regen_pct = 0.0f;
+    float shield_regen_cooldown = 15.0f;
+
+    // === Spell echo ===
+    float spell_echo_chance = 0.0f;
+
+    // === Frozen target vulnerability ===
+    float frozen_vulnerability = 0.0f;
+
+    // === Mana conditionals ===
+    float high_mana_damage_mult = 1.0f;
+    float high_mana_threshold = 0.0f;
+    float low_mana_regen_mult = 1.0f;
+    float low_mana_threshold = 0.0f;
+
+    // === Conditional damage ===
+    float high_hp_bonus_damage = 0.0f;
+    float high_hp_threshold = 0.0f;
+    float max_range_damage_bonus = 0.0f;
+
+    // === Damage sharing (Martyr) ===
+    float damage_share_percent = 0.0f;
+    float share_radius = 0.0f;
+
+    // === Avenge ===
+    float avenge_damage_mult = 1.0f;
+    float avenge_attack_speed_mult = 1.0f;
+    float avenge_duration = 0.0f;
+
+    // === Dodge ===
+    float moving_dodge_chance = 0.0f;
+
+    // === Trap modifications ===
+    int max_traps = 1;
+    float trap_lifetime_mult = 1.0f;
+    float trap_radius_mult = 1.0f;
+    float trap_vulnerability = 0.0f;
+    float trap_vulnerability_dur = 0.0f;
+    float trap_cdr = 0.0f;
+    float trap_cloud_damage = 0.0f;
+    float trap_cloud_duration = 0.0f;
+    float trap_cloud_radius = 0.0f;
+    float poison_death_explosion_pct = 0.0f;
+    float poison_explosion_radius = 0.0f;
 };
 
 struct TalentConfig {
@@ -261,6 +389,11 @@ struct TalentBranch {
 struct TalentTreeConfig {
     std::string class_name;
     std::vector<TalentBranch> branches;
+};
+
+struct TalentGlobalConfig {
+    int first_talent_point_level = 3;
+    int max_talent_points = 28;
 };
 
 // ============================================================================
@@ -406,6 +539,7 @@ public:
 
     // Talents
     const std::vector<TalentTreeConfig>& talent_trees() const { return talent_trees_; }
+    const TalentGlobalConfig& talent_config() const { return talent_config_; }
     const TalentConfig* find_talent(const std::string& id) const;
 
     // Quests
@@ -463,6 +597,7 @@ private:
     LevelingConfig leveling_;
     std::vector<SkillConfig> skills_;
     std::vector<TalentTreeConfig> talent_trees_;
+    TalentGlobalConfig talent_config_;
     std::vector<QuestConfig> quests_;
 };
 

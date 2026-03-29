@@ -6,9 +6,10 @@
 #include "engine/scene/ui_scene.hpp"
 #include "engine/systems/camera_controller.hpp"
 #include "engine/model_loader.hpp"
+#include "engine/model_utils.hpp"
 #include "engine/animation/animation_state_machine.hpp"
 #include "engine/animation/ik_solver.hpp"
-#include "engine/render_constants.hpp"
+#include "client/ui_colors.hpp"
 #include "engine/heightmap.hpp"
 #include "entt/entity/fwd.hpp"
 #include "glm/ext/matrix_float4x4.hpp"
@@ -157,6 +158,8 @@ bool Game::on_init() {
     connecting_timer_ = 0.0f;
 
     menu_system_ = std::make_unique<MenuSystem>(input(), [this]() { quit(); }, max_vsync_mode());
+    // Seed menu with persisted settings loaded by init_renderer()
+    menu_system_->graphics_settings() = graphics_settings();
     {
         auto modes = available_resolutions();
         std::vector<MenuSystem::ResolutionOption> res_opts;
@@ -647,8 +650,8 @@ void Game::update_playing(float dt) {
         for (auto entity : anim_view) {
             auto&& [vel, info, combat, inst] = anim_view.get(entity);
 
-            if (info.model_name.empty()) continue;
-            Model* model = models().get_model(info.model_name);
+            if (info.model_handle == mmo::engine::INVALID_MODEL_HANDLE) continue;
+            Model* model = models().get_model(info.model_handle);
             if (!model || !model->has_skeleton) continue;
 
             // Lazy-init: load state machine from entity's animation config
@@ -685,24 +688,14 @@ void Game::update_playing(float dt) {
 
             // Build model matrix for IK world-space queries
             auto& transform = registry_.get<ecs::Transform>(entity);
-            float target_size = info.target_size;
-            float model_size = model->max_dimension();
-            float scale = (target_size * 1.5f) / model_size;
 
             auto* smooth = registry_.try_get<ecs::SmoothRotation>(entity);
             float rotation = smooth ? smooth->current : transform.rotation;
 
             glm::vec3 position(transform.x, transform.y, transform.z);
-            glm::mat4 model_mat = glm::translate(glm::mat4(1.0f), position);
-            model_mat = glm::rotate(model_mat, rotation, glm::vec3(0.0f, 1.0f, 0.0f));
-            if (inst.attack_tilt != 0.0f) {
-                model_mat = glm::rotate(model_mat, inst.attack_tilt, glm::vec3(1.0f, 0.0f, 0.0f));
-            }
-            model_mat = glm::scale(model_mat, glm::vec3(scale));
-            float cx = (model->min_x + model->max_x) / 2.0f;
-            float cy = model->min_y;
-            float cz = (model->min_z + model->max_z) / 2.0f;
-            model_mat = model_mat * glm::translate(glm::mat4(1.0f), glm::vec3(-cx, -cy, -cz));
+            float scale = (info.target_size * 1.5f) / model->max_dimension();
+            glm::mat4 model_mat = engine::build_model_transform(
+                *model, position, rotation, info.target_size, inst.attack_tilt);
 
             // Foot IK: use terrain slope relative to entity base (not absolute)
             // so ankle height doesn't cause constant sinking
@@ -717,8 +710,13 @@ void Game::update_playing(float dt) {
                 float left_offset = get_terrain_height(lf.x, lf.z) - base_terrain;
                 float right_offset = get_terrain_height(rf.x, rf.z) - base_terrain;
 
+                // Smooth foot IK offsets to eliminate per-frame jitter
+                inst.foot_ik_smoother.update(left_offset, right_offset, dt);
+
                 anim::apply_foot_ik(inst.player.bone_matrices, inst.player.world_transforms,
-                                    model->skeleton, ik, model_mat, scale, left_offset, right_offset);
+                                    model->skeleton, ik, model_mat, scale,
+                                    inst.foot_ik_smoother.smoothed_left_offset,
+                                    inst.foot_ik_smoother.smoothed_right_offset);
             }
 
             // Body lean
@@ -929,9 +927,11 @@ void Game::add_entity_to_scene(entt::entity entity, bool is_local) {
     auto& health = registry_.get<ecs::Health>(entity);
     auto& info = registry_.get<ecs::EntityInfo>(entity);
 
-    if (info.model_name.empty()) return;
+    if (info.model_handle == mmo::engine::INVALID_MODEL_HANDLE && info.model_name.empty()) return;
 
-    Model* model = models().get_model(info.model_name);
+    Model* model = (info.model_handle != mmo::engine::INVALID_MODEL_HANDLE)
+        ? models().get_model(info.model_handle)
+        : models().get_model(info.model_name);
     if (!model) return;
 
     // Read rotation (already smoothed in update_playing)
@@ -948,37 +948,24 @@ void Game::add_entity_to_scene(entt::entity entity, bool is_local) {
     if (anim_inst) attack_tilt = anim_inst->attack_tilt;
 
     // Build transform matrix
-    float target_size = info.target_size;
-    float model_size = model->max_dimension();
-    float scale = (target_size * 1.5f) / model_size;
-
     glm::vec3 position(transform.x, transform.y, transform.z);
-    glm::mat4 model_mat = glm::translate(glm::mat4(1.0f), position);
-    model_mat = glm::rotate(model_mat, rotation, glm::vec3(0.0f, 1.0f, 0.0f));
-    if (attack_tilt != 0.0f) {
-        model_mat = glm::rotate(model_mat, attack_tilt, glm::vec3(1.0f, 0.0f, 0.0f));
-    }
-    model_mat = glm::scale(model_mat, glm::vec3(scale));
-
-    float cx = (model->min_x + model->max_x) / 2.0f;
-    float cy = model->min_y;
-    float cz = (model->min_z + model->max_z) / 2.0f;
-    model_mat = model_mat * glm::translate(glm::mat4(1.0f), glm::vec3(-cx, -cy, -cz));
+    glm::mat4 model_mat = engine::build_model_transform(
+        *model, position, rotation, info.target_size, attack_tilt);
 
     glm::vec4 tint(1.0f);
 
     // Submit draw command (bone matrices already have IK/lean applied from update_playing)
     if (model->has_skeleton && anim_inst && anim_inst->bound) {
-        render_scene_.add_skinned_model(info.model_name, model_mat, anim_inst->player.bone_matrices, tint);
+        render_scene_.add_skinned_model(info.model_handle, model_mat, anim_inst->player.bone_matrices, tint);
     } else if (model->has_skeleton) {
         static const auto identity_bones = []() {
             std::array<glm::mat4, 64> arr;
             arr.fill(glm::mat4(1.0f));
             return arr;
         }();
-        render_scene_.add_skinned_model(info.model_name, model_mat, identity_bones, tint);
+        render_scene_.add_skinned_model(info.model_handle, model_mat, identity_bones, tint);
     } else {
-        render_scene_.add_model(info.model_name, model_mat, tint, attack_tilt);
+        render_scene_.add_model(info.model_handle, model_mat, tint, attack_tilt != 0.0f);
     }
 
     // Health bar
@@ -987,9 +974,9 @@ void Game::add_entity_to_scene(entt::entity entity, bool is_local) {
                             info.type != EntityType::TownNPC);
     if (show_health_bar && !is_local) {
         float health_ratio = health.current / health.max;
-        float bar_height_offset = transform.y + target_size * 1.3f;
+        float bar_height_offset = transform.y + info.target_size * 1.3f;
         render_scene_.add_billboard_3d(transform.x, bar_height_offset, transform.z,
-                                       target_size * 0.8f, health_ratio,
+                                       info.target_size * 0.8f, health_ratio,
                                        ui_colors::HEALTH_HIGH, ui_colors::HEALTH_BAR_BG, ui_colors::HEALTH_3D_BG);
     }
 
@@ -1361,6 +1348,7 @@ void Game::update_entity_from_state(entt::entity entity, const NetEntityState& s
     info.environment_type = state.environment_type;
     info.color = state.color;
     info.model_name = state.model_name;
+    info.model_handle = models().get_handle(state.model_name);
     info.target_size = state.target_size;
     info.effect_type = state.effect_type;
     info.animation = state.animation;
@@ -1396,7 +1384,7 @@ void Game::remove_entity(uint32_t network_id) {
 }
 
 void Game::spawn_attack_effect(const NetEntityState& state, float dir_x, float dir_y) {
-    const ::engine::EffectDefinition* effect_def = effect_registry_.get_effect(state.effect_type);
+    const mmo::engine::EffectDefinition* effect_def = effect_registry_.get_effect(state.effect_type);
     if (effect_def) {
         // Both use x,z horizontal, y up
         glm::vec3 direction(dir_x, 0.0f, dir_y);
@@ -1421,19 +1409,20 @@ bool Game::load_models(const std::string& assets_path) {
 
     bool success = true;
 
-    if (!mdl.load_model("warrior", models_path + "warrior_rigged.glb")) {
-        success &= mdl.load_model("warrior", models_path + "warrior.glb");
+    using mmo::engine::INVALID_MODEL_HANDLE;
+    if (mdl.load_model("warrior", models_path + "warrior_rigged.glb") == INVALID_MODEL_HANDLE) {
+        if (mdl.load_model("warrior", models_path + "warrior.glb") == INVALID_MODEL_HANDLE) success = false;
     }
-    if (!mdl.load_model("mage", models_path + "mage_rigged.glb")) {
-        success &= mdl.load_model("mage", models_path + "mage.glb");
+    if (mdl.load_model("mage", models_path + "mage_rigged.glb") == INVALID_MODEL_HANDLE) {
+        if (mdl.load_model("mage", models_path + "mage.glb") == INVALID_MODEL_HANDLE) success = false;
     }
-    if (!mdl.load_model("paladin", models_path + "paladin_rigged.glb")) {
-        success &= mdl.load_model("paladin", models_path + "paladin.glb");
+    if (mdl.load_model("paladin", models_path + "paladin_rigged.glb") == INVALID_MODEL_HANDLE) {
+        if (mdl.load_model("paladin", models_path + "paladin.glb") == INVALID_MODEL_HANDLE) success = false;
     }
-    if (!mdl.load_model("archer", models_path + "archer_rigged.glb")) {
-        success &= mdl.load_model("archer", models_path + "archer.glb");
+    if (mdl.load_model("archer", models_path + "archer_rigged.glb") == INVALID_MODEL_HANDLE) {
+        if (mdl.load_model("archer", models_path + "archer.glb") == INVALID_MODEL_HANDLE) success = false;
     }
-    success &= mdl.load_model("npc_enemy", models_path + "npc_enemy.glb");
+    if (mdl.load_model("npc_enemy", models_path + "npc_enemy.glb") == INVALID_MODEL_HANDLE) success = false;
 
     mdl.load_model("ground_grass", models_path + "ground_grass.glb");
     mdl.load_model("ground_stone", models_path + "ground_stone.glb");
@@ -1502,20 +1491,11 @@ void Game::update_camera_smooth(float dt) {
 }
 
 CameraState Game::get_camera_state() const {
-    CameraState state;
-    state.view = camera().get_view_matrix();
-    state.projection = camera().get_projection_matrix();
-    state.view_projection = state.projection * state.view;
-    state.position = camera().get_position();
-    return state;
+    return camera().get_camera_state();
 }
 
 void Game::apply_graphics_settings() {
-    const auto& gfx = menu_system_->graphics_settings();
-    set_graphics_settings(gfx);
-    set_anisotropic_filter(gfx.anisotropic_filter);
-    set_vsync_mode(gfx.vsync_mode);
-    set_window_mode(gfx.window_mode, gfx.resolution_index);
+    apply_all_graphics_settings(menu_system_->graphics_settings());
 }
 
 void Game::apply_controls_settings() {

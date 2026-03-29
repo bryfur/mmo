@@ -28,6 +28,11 @@ struct AnimationChannel {
     std::vector<glm::quat> rotations;
     std::vector<float> scale_times;
     std::vector<glm::vec3> scales;
+
+    // Per-channel keyframe cursor caches (mutable so const channels can be sampled)
+    mutable size_t pos_cursor = 0;
+    mutable size_t rot_cursor = 0;
+    mutable size_t scale_cursor = 0;
 };
 
 struct AnimationClip {
@@ -48,6 +53,20 @@ struct Joint {
 struct Skeleton {
     std::vector<Joint> joints;
     std::vector<int> joint_node_indices;  // Map from joint index to glTF node index
+};
+
+// Per-entity smoothed foot IK offsets to eliminate jitter from terrain sampling.
+struct FootIKSmoother {
+    float smoothed_left_offset = 0.0f;
+    float smoothed_right_offset = 0.0f;
+    float smooth_rate = 15.0f;  // higher = more responsive, lower = smoother
+
+    // Smooth raw terrain offsets toward targets. Call once per frame.
+    void update(float left_target, float right_target, float dt) {
+        float blend = std::min(1.0f, dt * smooth_rate);
+        smoothed_left_offset += (left_target - smoothed_left_offset) * blend;
+        smoothed_right_offset += (right_target - smoothed_right_offset) * blend;
+    }
 };
 
 struct FootIKData {
@@ -112,15 +131,25 @@ struct ProceduralConfig {
 };
 
 // Helper to interpolate between keyframes (linear for vec3, slerp for quat)
+// last_cursor is a per-channel cache that avoids binary search when playback is sequential.
 template<typename T>
-T interpolate_keyframes(const std::vector<float>& times, const std::vector<T>& values, float t) {
+T interpolate_keyframes(const std::vector<float>& times, const std::vector<T>& values,
+                        float t, size_t& last_cursor) {
     if (times.empty() || values.empty()) return T{};
-    if (times.size() == 1 || t <= times.front()) return values.front();
-    if (t >= times.back()) return values.back();
+    if (times.size() == 1 || t <= times.front()) { last_cursor = 0; return values.front(); }
+    if (t >= times.back()) { last_cursor = times.size() - 2; return values.back(); }
 
-    // Binary search for the interval containing t
-    auto it = std::upper_bound(times.begin(), times.end(), t);
-    size_t i = static_cast<size_t>(std::distance(times.begin(), it)) - 1;
+    size_t i = 0;
+    // Fast path: check if cached cursor still brackets the current time (O(1))
+    if (last_cursor < times.size() - 1 &&
+        times[last_cursor] <= t && t < times[last_cursor + 1]) {
+        i = last_cursor;
+    } else {
+        // Fallback: binary search and update cursor
+        auto it = std::upper_bound(times.begin(), times.end(), t);
+        i = static_cast<size_t>(std::distance(times.begin(), it)) - 1;
+        last_cursor = i;
+    }
 
     float t0 = times[i], t1 = times[i + 1];
     float f = (t - t0) / (t1 - t0);
@@ -130,6 +159,13 @@ T interpolate_keyframes(const std::vector<float>& times, const std::vector<T>& v
     } else {
         return glm::mix(values[i], values[i + 1], f);
     }
+}
+
+// Convenience overload without cursor (for callers that don't need caching)
+template<typename T>
+T interpolate_keyframes(const std::vector<float>& times, const std::vector<T>& values, float t) {
+    size_t cursor = 0;
+    return interpolate_keyframes(times, values, t, cursor);
 }
 
 } // namespace mmo::engine::animation

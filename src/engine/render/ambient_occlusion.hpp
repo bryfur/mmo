@@ -41,11 +41,15 @@ public:
                           const glm::mat4& projection, const glm::mat4& inv_projection);
     void render_blur_pass(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& pipelines);
     void render_composite_pass(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& pipelines,
-                               SDL_GPUTexture* swapchain_target);
+                               SDL_GPUTexture* swapchain_target,
+                               SDL_GPUTexture* bloom_texture = nullptr,
+                               float bloom_strength = 0.35f,
+                               SDL_GPUTexture* fog_texture = nullptr);
 
     bool is_ready() const;
 
-    // Offscreen depth for shadow/other systems that need the depth texture
+    // Offscreen targets for other systems (bloom, shadows, etc.)
+    gpu::GPUTexture* offscreen_color() { return offscreen_color_.get(); }
     gpu::GPUTexture* offscreen_depth() { return offscreen_depth_.get(); }
 
 private:

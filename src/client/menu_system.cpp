@@ -1,7 +1,7 @@
 #include "menu_system.hpp"
 #include "client/menu_types.hpp"
 #include "engine/input_handler.hpp"
-#include "engine/render_constants.hpp"
+#include "client/ui_colors.hpp"
 #include "engine/scene/ui_scene.hpp"
 #include <algorithm>
 #include <cstdint>
@@ -183,6 +183,39 @@ void MenuSystem::init_graphics_menu() {
     ao.slider_max = 2;
     ao.slider_labels = {"Off", "SSAO", "GTAO"};
     menu_items_.push_back(ao);
+
+    MenuItem bloom_toggle;
+    bloom_toggle.label = "Bloom";
+    bloom_toggle.type = MenuItemType::Toggle;
+    bloom_toggle.toggle_value = &graphics_settings_.bloom_enabled;
+    menu_items_.push_back(bloom_toggle);
+
+    MenuItem bloom_strength;
+    bloom_strength.label = "Bloom Strength";
+    bloom_strength.type = MenuItemType::FloatSlider;
+    bloom_strength.float_value = &graphics_settings_.bloom_strength;
+    bloom_strength.float_min = 0.0f;
+    bloom_strength.float_max = 1.0f;
+    bloom_strength.float_step = 0.05f;
+    menu_items_.push_back(bloom_strength);
+
+    MenuItem vfog_toggle;
+    vfog_toggle.label = "Volumetric Fog";
+    vfog_toggle.type = MenuItemType::Toggle;
+    vfog_toggle.toggle_value = &graphics_settings_.volumetric_fog;
+    menu_items_.push_back(vfog_toggle);
+
+    MenuItem god_rays_toggle;
+    god_rays_toggle.label = "God Rays";
+    god_rays_toggle.type = MenuItemType::Toggle;
+    god_rays_toggle.toggle_value = &graphics_settings_.god_rays;
+    menu_items_.push_back(god_rays_toggle);
+
+    MenuItem depth_prepass_toggle;
+    depth_prepass_toggle.label = "Depth Pre-Pass";
+    depth_prepass_toggle.type = MenuItemType::Toggle;
+    depth_prepass_toggle.toggle_value = &graphics_settings_.depth_prepass;
+    menu_items_.push_back(depth_prepass_toggle);
 
     MenuItem shadow_casc;
     shadow_casc.label = "Shadow Cascades";

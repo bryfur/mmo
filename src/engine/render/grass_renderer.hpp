@@ -41,6 +41,7 @@ struct alignas(16) GrassVertexUniforms {
     float heightmap_max_height;      // 4 bytes
     float world_width;               // 4 bytes
     float world_height;              // 4 bytes
+    float _padding0;                 // 4 bytes - align camera_forward to 8-byte boundary
     glm::vec2 camera_forward;        // 8 bytes (XZ direction camera is looking)
 };
 

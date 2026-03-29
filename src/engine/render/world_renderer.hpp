@@ -105,7 +105,7 @@ private:
     
     // Lighting
     glm::vec3 sun_direction_ = glm::normalize(glm::vec3(0.5f, 0.8f, 0.3f));
-    glm::vec3 light_dir_ = glm::vec3(-0.5f, -0.8f, -0.3f);
+    glm::vec3 light_dir_ = glm::normalize(glm::vec3(-0.5f, -0.8f, -0.3f));
 
     // Fog settings
     glm::vec3 fog_color_ = glm::vec3(0.35f, 0.45f, 0.6f);

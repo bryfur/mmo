@@ -98,7 +98,7 @@ void EffectRenderer::draw_model_effect(SDL_GPURenderPass* pass, SDL_GPUCommandBu
 
     // Set up fragment uniforms (fog disabled for effects)
     gpu::ModelLightingUniforms frag_uniforms = {};
-    frag_uniforms.lightDir = glm::vec3(-0.3f, -1.0f, -0.5f);
+    frag_uniforms.lightDir = glm::normalize(glm::vec3(-0.3f, -1.0f, -0.5f));
     frag_uniforms.lightColor = light_color;
     frag_uniforms.ambientColor = ambient_color;
     frag_uniforms.tintColor = tint_color;
@@ -177,7 +177,8 @@ void EffectRenderer::draw_particle(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer
     }
 
     // Get the model for this particle
-    Model* model = model_manager_->get_model(particle.model);
+    if (!particle.model) return;
+    Model* model = model_manager_->get_model(*particle.model);
     if (!model) {
         return;
     }

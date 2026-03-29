@@ -441,4 +441,27 @@ void TerrainRenderer::render_shadow(SDL_GPURenderPass* pass, SDL_GPUCommandBuffe
     SDL_DrawGPUIndexedPrimitives(pass, index_count_, 1, 0, 0, 0);
 }
 
+void TerrainRenderer::render_depth_prepass(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
+                                            const glm::mat4& view_projection) {
+    if (!pipeline_registry_ || !vertex_buffer_ || !index_buffer_ || !pass || !cmd) return;
+
+    auto* pipeline = pipeline_registry_->get_depth_prepass_terrain_pipeline();
+    if (!pipeline) return;
+
+    pipeline->bind(pass);
+
+    // Reuse ShadowTerrainUniforms layout (just a single mat4 VP)
+    gpu::ShadowTerrainUniforms uniforms = {};
+    uniforms.lightViewProjection = view_projection;
+    SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
+
+    SDL_GPUBufferBinding vb_binding = { vertex_buffer_->handle(), 0 };
+    SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
+
+    SDL_GPUBufferBinding ib_binding = { index_buffer_->handle(), 0 };
+    SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+
+    SDL_DrawGPUIndexedPrimitives(pass, index_count_, 1, 0, 0, 0);
+}
+
 } // namespace mmo::engine::render

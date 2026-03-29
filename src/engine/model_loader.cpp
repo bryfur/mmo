@@ -226,47 +226,47 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
             out_mesh.vertices.reserve(vertex_count);
             for (int i = 0; i < vertex_count; i++) {
                 Vertex3D v;
-                v.x = positions[i * 3 + 0];
-                v.y = positions[i * 3 + 1];
-                v.z = positions[i * 3 + 2];
+                v.position.x = positions[i * 3 + 0];
+                v.position.y = positions[i * 3 + 1];
+                v.position.z = positions[i * 3 + 2];
 
-                model.min_x = std::min(model.min_x, v.x);
-                model.min_y = std::min(model.min_y, v.y);
-                model.min_z = std::min(model.min_z, v.z);
-                model.max_x = std::max(model.max_x, v.x);
-                model.max_y = std::max(model.max_y, v.y);
-                model.max_z = std::max(model.max_z, v.z);
+                model.min_x = std::min(model.min_x, v.position.x);
+                model.min_y = std::min(model.min_y, v.position.y);
+                model.min_z = std::min(model.min_z, v.position.z);
+                model.max_x = std::max(model.max_x, v.position.x);
+                model.max_y = std::max(model.max_y, v.position.y);
+                model.max_z = std::max(model.max_z, v.position.z);
 
                 if (normals) {
-                    v.nx = normals[i * 3 + 0];
-                    v.ny = normals[i * 3 + 1];
-                    v.nz = normals[i * 3 + 2];
+                    v.normal.x = normals[i * 3 + 0];
+                    v.normal.y = normals[i * 3 + 1];
+                    v.normal.z = normals[i * 3 + 2];
                 } else {
-                    v.nx = 0; v.ny = 1; v.nz = 0;
+                    v.normal = {0, 1, 0};
                 }
 
                 if (uvs) {
-                    v.u = uvs[i * 2 + 0];
-                    v.v = uvs[i * 2 + 1];
+                    v.texcoord.x = uvs[i * 2 + 0];
+                    v.texcoord.y = uvs[i * 2 + 1];
                 } else {
-                    v.u = 0; v.v = 0;
+                    v.texcoord = {0, 0};
                 }
 
                 if (colors_f) {
-                    v.r = colors_f[i * 4 + 0];
-                    v.g = colors_f[i * 4 + 1];
-                    v.b = colors_f[i * 4 + 2];
-                    v.a = colors_f[i * 4 + 3];
+                    v.color.r = colors_f[i * 4 + 0];
+                    v.color.g = colors_f[i * 4 + 1];
+                    v.color.b = colors_f[i * 4 + 2];
+                    v.color.a = colors_f[i * 4 + 3];
                 } else if (colors_u8) {
-                    v.r = colors_u8[i * 4 + 0] / 255.0f;
-                    v.g = colors_u8[i * 4 + 1] / 255.0f;
-                    v.b = colors_u8[i * 4 + 2] / 255.0f;
-                    v.a = colors_u8[i * 4 + 3] / 255.0f;
+                    v.color.r = colors_u8[i * 4 + 0] / 255.0f;
+                    v.color.g = colors_u8[i * 4 + 1] / 255.0f;
+                    v.color.b = colors_u8[i * 4 + 2] / 255.0f;
+                    v.color.a = colors_u8[i * 4 + 3] / 255.0f;
                 } else {
-                    v.r = (out_mesh.base_color & 0xFF) / 255.0f;
-                    v.g = ((out_mesh.base_color >> 8) & 0xFF) / 255.0f;
-                    v.b = ((out_mesh.base_color >> 16) & 0xFF) / 255.0f;
-                    v.a = ((out_mesh.base_color >> 24) & 0xFF) / 255.0f;
+                    v.color.r = (out_mesh.base_color & 0xFF) / 255.0f;
+                    v.color.g = ((out_mesh.base_color >> 8) & 0xFF) / 255.0f;
+                    v.color.b = ((out_mesh.base_color >> 16) & 0xFF) / 255.0f;
+                    v.color.a = ((out_mesh.base_color >> 24) & 0xFF) / 255.0f;
                 }
 
                 out_mesh.vertices.push_back(v);
@@ -322,10 +322,10 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
                     SkinnedVertex sv;
                     // Copy base vertex data
                     const auto& v = out_mesh.vertices[i];
-                    sv.x = v.x; sv.y = v.y; sv.z = v.z;
-                    sv.nx = v.nx; sv.ny = v.ny; sv.nz = v.nz;
-                    sv.u = v.u; sv.v = v.v;
-                    sv.r = v.r; sv.g = v.g; sv.b = v.b; sv.a = v.a;
+                    sv.position = v.position;
+                    sv.normal = v.normal;
+                    sv.texcoord = v.texcoord;
+                    sv.color = v.color;
 
                     // Copy joint indices and weights
                     for (int j = 0; j < 4; j++) {
@@ -603,34 +603,56 @@ void ModelLoader::free_gpu_resources(Model& model) {
     }
 }
 
+ModelManager::ModelManager() {
+    // Reserve slot 0 as INVALID_MODEL_HANDLE
+    models_.push_back(nullptr);
+}
+
 ModelManager::~ModelManager() {
     unload_all();
 }
 
-bool ModelManager::load_model(const std::string& name, const std::string& path) {
-    Model model;
-    if (ModelLoader::load_glb(path, model)) {
+ModelHandle ModelManager::load_model(const std::string& name, const std::string& path) {
+    auto model = std::make_unique<Model>();
+    if (ModelLoader::load_glb(path, *model)) {
         // Upload to GPU if device is available
         if (device_) {
-            ModelLoader::upload_to_gpu(*device_, model);
+            ModelLoader::upload_to_gpu(*device_, *model);
         }
 
-        models_[name] = std::move(model);
-        return true;
+        ModelHandle handle = static_cast<ModelHandle>(models_.size());
+        models_.push_back(std::move(model));
+        name_to_handle_[name] = handle;
+        return handle;
     }
-    return false;
+    return INVALID_MODEL_HANDLE;
 }
 
-Model* ModelManager::get_model(const std::string& name) {
-    auto it = models_.find(name);
-    return it != models_.end() ? &it->second : nullptr;
+Model* ModelManager::get_model(ModelHandle handle) const {
+    if (handle == INVALID_MODEL_HANDLE || handle >= models_.size()) return nullptr;
+    return models_[handle].get();
+}
+
+Model* ModelManager::get_model(const std::string& name) const {
+    auto it = name_to_handle_.find(name);
+    if (it == name_to_handle_.end()) return nullptr;
+    return models_[it->second].get();
+}
+
+ModelHandle ModelManager::get_handle(const std::string& name) const {
+    auto it = name_to_handle_.find(name);
+    return it != name_to_handle_.end() ? it->second : INVALID_MODEL_HANDLE;
 }
 
 void ModelManager::unload_all() {
-    for (auto& [name, model] : models_) {
-        ModelLoader::free_gpu_resources(model);
+    for (size_t i = 1; i < models_.size(); ++i) {
+        if (models_[i]) {
+            ModelLoader::free_gpu_resources(*models_[i]);
+        }
     }
     models_.clear();
+    models_.push_back(nullptr);  // Re-reserve slot 0
+    name_to_handle_.clear();
 }
 
 } // namespace mmo::engine

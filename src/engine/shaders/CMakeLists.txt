@@ -17,6 +17,12 @@ set(SDLSHADERCROSS_VENDORED ON CACHE BOOL "" FORCE)
 set(SDLSHADERCROSS_SPIRVCROSS_SHARED ON CACHE BOOL "" FORCE)
 set(SDLSHADERCROSS_DXC ON CACHE BOOL "" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON CACHE BOOL "" FORCE)
+# Disable tests from vendored dependencies (SPIRV-Tools, DXC, etc.)
+set(SPIRV_SKIP_TESTS ON CACHE BOOL "" FORCE)
+set(SPIRV_SKIP_EXECUTABLES ON CACHE BOOL "" FORCE)
+set(SKIP_SPIRV_TOOLS_INSTALL ON CACHE BOOL "" FORCE)
+set(SPIRV_WERROR OFF CACHE BOOL "" FORCE)
+set(LLVM_INCLUDE_TESTS OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(SDL_shadercross)
 
 # Find system shadercross or use the one we just built
@@ -37,6 +43,11 @@ file(MAKE_DIRECTORY "${SHADER_OUTPUT_DIR}")
 # Collect all HLSL source files (CONFIGURE_DEPENDS re-runs CMake when files change)
 file(GLOB_RECURSE SHADER_SOURCES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/*.hlsl"
+)
+
+# Collect shared include files (.hlsli) as dependencies for recompilation
+file(GLOB SHADER_INCLUDES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.hlsli"
 )
 
 set(COMPILED_SHADERS "")
@@ -70,8 +81,9 @@ foreach(SHADER_SOURCE IN LISTS SHADER_SOURCES)
             -d SPIRV
             -t ${SHADER_STAGE}
             -e ${ENTRY_POINT}
+            -I "${CMAKE_CURRENT_SOURCE_DIR}"
             -o "${OUTPUT_PATH}"
-        DEPENDS "${SHADER_SOURCE}" ${SHADERCROSS_DEPENDS}
+        DEPENDS "${SHADER_SOURCE}" ${SHADER_INCLUDES} ${SHADERCROSS_DEPENDS}
         COMMENT "Compiling ${SHADER_NAME}"
         VERBATIM
     )

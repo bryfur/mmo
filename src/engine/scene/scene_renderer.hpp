@@ -2,31 +2,47 @@
 
 #include "engine/scene/render_scene.hpp"
 #include "engine/scene/ui_scene.hpp"
-#include "engine/render/render_context.hpp"
-#include "engine/render/terrain_renderer.hpp"
-#include "engine/render/world_renderer.hpp"
-#include "engine/render/ui_renderer.hpp"
-#include "engine/render/effect_renderer.hpp"
-#include "engine/render/grass_renderer.hpp"
-#include "engine/render/shadow_map.hpp"
-#include "engine/render/ambient_occlusion.hpp"
-#include "engine/gpu/gpu_buffer.hpp"
-#include "engine/gpu/gpu_texture.hpp"
-#include "engine/gpu/pipeline_registry.hpp"
-#include "engine/model_loader.hpp"
-#include "engine/graphics_settings.hpp"
 #include "engine/scene/camera_state.hpp"
 #include "engine/scene/frustum.hpp"
+#include "engine/graphics_settings.hpp"
 #include "engine/render_stats.hpp"
+#include "engine/gpu/gpu_buffer.hpp"
+#include "engine/gpu/gpu_texture.hpp"
 #include "engine/gpu/gpu_uniforms.hpp"
-#include "engine/heightmap.hpp"
-#include "engine/systems/effect_system.hpp"
 #include <glm/glm.hpp>
 #include <functional>
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+// Forward declarations for types only used in private implementation
+namespace mmo::engine::render {
+    class RenderContext;
+    class TerrainRenderer;
+    class WorldRenderer;
+    class UIRenderer;
+    class EffectRenderer;
+    class GrassRenderer;
+    class ShadowMap;
+    class AmbientOcclusion;
+    class Bloom;
+    class VolumetricFog;
+}
+
+namespace mmo::engine::gpu {
+    class PipelineRegistry;
+}
+
+namespace mmo::engine::systems {
+    class EffectSystem;
+}
+
+namespace mmo::engine {
+    class ModelManager;
+    struct Heightmap;
+    struct EffectDefinition;
+}
 
 namespace mmo::engine::scene {
 
@@ -82,11 +98,11 @@ public:
 
     // ========== Accessors ==========
 
-    render::RenderContext* context() { return context_; }
-    render::TerrainRenderer& terrain() { return terrain_; }
-    ModelManager& models() { return *model_manager_; }
-    render::GrassRenderer* grass() { return grass_renderer_.get(); }
-    float get_terrain_height(float x, float z) { return terrain_.get_height(x, z); }
+    render::RenderContext* context();
+    render::TerrainRenderer& terrain();
+    ModelManager& models();
+    render::GrassRenderer* grass();
+    float get_terrain_height(float x, float z);
 
     // Post-UI callback: called after UI rendering, before end_frame.
     // Receives (command_buffer, swapchain_texture) for additional render passes (e.g. ImGui).
@@ -116,12 +132,14 @@ private:
                                          const glm::mat4& light_view_projection);
     void render_ui_commands(const UIScene& ui_scene, const CameraState& camera);
     void draw_billboard_3d(const Billboard3DCommand& cmd, const CameraState& camera);
+    void render_debug_lines(const RenderScene& scene, const CameraState& camera);
 
     // Shadow rendering
     void render_shadow_passes(const RenderScene& scene, const CameraState& camera);
-    void render_shadow_models(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                               const RenderScene& scene, int cascade_index);
     void bind_shadow_data(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, int sampler_slot);
+
+    // Depth pre-pass (renders depth-only before main pass to eliminate overdraw)
+    void render_depth_prepass(const RenderScene& scene, const CameraState& camera);
 
     // Setup
     void init_pipelines();
@@ -129,33 +147,37 @@ private:
 
 
     // Effect spawning (internal - consumes scene commands)
-    int spawn_effect(const ::engine::EffectDefinition* definition,
+    int spawn_effect(const mmo::engine::EffectDefinition* definition,
                      const glm::vec3& position,
                      const glm::vec3& direction = {1, 0, 0},
                      float range = -1.0f);
 
     // ========== Sub-renderers ==========
     render::RenderContext* context_ = nullptr;
-    gpu::PipelineRegistry pipeline_registry_;
-    render::TerrainRenderer terrain_;
-    render::WorldRenderer world_;
-    render::UIRenderer ui_;
-    render::EffectRenderer effects_;
-    mmo::engine::systems::EffectSystem effect_system_;  // Particle effect system
+    std::unique_ptr<gpu::PipelineRegistry> pipeline_registry_;
+    std::unique_ptr<render::TerrainRenderer> terrain_;
+    std::unique_ptr<render::WorldRenderer> world_;
+    std::unique_ptr<render::UIRenderer> ui_;
+    std::unique_ptr<render::EffectRenderer> effects_;
+    std::unique_ptr<mmo::engine::systems::EffectSystem> effect_system_;
     std::unique_ptr<ModelManager> model_manager_;
     std::unique_ptr<render::GrassRenderer> grass_renderer_;
-    render::ShadowMap shadow_map_;
-    render::AmbientOcclusion ao_;
+    std::unique_ptr<render::ShadowMap> shadow_map_;
+    std::unique_ptr<render::AmbientOcclusion> ao_;
+    std::unique_ptr<render::Bloom> bloom_;
+    std::unique_ptr<render::VolumetricFog> volumetric_fog_;
 
     // ========== GPU Resources ==========
     std::unique_ptr<gpu::GPUBuffer> billboard_vertex_buffer_;
+    std::unique_ptr<gpu::GPUBuffer> debug_line_vertex_buffer_;
+    size_t debug_line_buffer_capacity_ = 0;  // max line count the buffer can hold
     std::unique_ptr<gpu::GPUTexture> depth_texture_;
     SDL_GPUSampler* default_sampler_ = nullptr;
 
     // ========== Instanced Rendering ==========
-    // Per-model-type batched instance data, rebuilt each frame
-    std::unordered_map<std::string, std::vector<gpu::InstanceData>> instance_batches_;
-    std::unordered_map<std::string, std::vector<gpu::ShadowInstanceData>> shadow_instance_batches_;
+    // Per-model batched instance data, rebuilt each frame (keyed by ModelHandle for O(1) lookup)
+    std::unordered_map<ModelHandle, std::vector<gpu::InstanceData>> instance_batches_;
+    std::unordered_map<ModelHandle, std::vector<gpu::ShadowInstanceData>> shadow_instance_batches_;
     std::vector<const ModelCommand*> non_instanced_commands_;  // individual draw fallback
     std::vector<const SkinnedModelCommand*> shadow_skinned_commands_;  // pre-collected for shadow passes
     std::unique_ptr<gpu::GPUBuffer> instance_storage_buffer_;
@@ -172,14 +194,17 @@ private:
     SDL_GPURenderPass* main_render_pass_ = nullptr;
     SDL_GPUTexture* current_swapchain_ = nullptr;
     bool had_main_pass_this_frame_ = false;
-    glm::vec3 light_dir_ = glm::vec3(-0.5f, -0.8f, -0.3f);
+    bool depth_prepass_ran_ = false;  // true if depth pre-pass wrote to depth_texture_ this frame
+    glm::vec3 light_dir_ = glm::normalize(glm::vec3(-0.5f, -0.8f, -0.3f));
     float skybox_time_ = 0.0f;
     GraphicsSettings* graphics_ = nullptr;
     GraphicsSettings default_graphics_;
 
     // ========== Per-Frame Caches ==========
-    // Model pointer cache: avoids repeated hash lookups across render passes
-    std::unordered_map<std::string, Model*> frame_model_cache_;
+    // Model pointer cache: O(1) by handle, avoids repeated lookups across render passes
+    std::unordered_map<ModelHandle, Model*> frame_model_cache_;
+    // Legacy string-based cache for commands that only have model_name
+    std::unordered_map<std::string, Model*> frame_model_name_cache_;
 
     // Cached frame state (computed once in render_frame, reused everywhere)
     gpu::ShadowDataUniforms frame_shadow_uniforms_{};

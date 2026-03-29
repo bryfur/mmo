@@ -20,6 +20,7 @@ public:
     bool is_open() const { return menu_open_; }
 
     const engine::GraphicsSettings& graphics_settings() const { return graphics_settings_; }
+    engine::GraphicsSettings& graphics_settings() { return graphics_settings_; }
 
     struct ResolutionOption { int w, h; };
     void set_available_resolutions(const std::vector<ResolutionOption>& resolutions) {

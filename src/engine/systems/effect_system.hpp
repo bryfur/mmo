@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../effect_definition.hpp"
+#include "engine/effect_definition.hpp"
 #include <glm/glm.hpp>
 #include <vector>
 #include <functional>
@@ -8,12 +8,12 @@
 
 namespace mmo::engine::systems {
 
-// Import definition types from engine namespace
-using ::engine::EffectDefinition;
-using ::engine::EmitterDefinition;
-using ::engine::VelocityDefinition;
-using ::engine::RotationDefinition;
-using ::engine::AppearanceDefinition;
+// Types from mmo::engine (parent namespace) are directly accessible
+using mmo::engine::EffectDefinition;
+using mmo::engine::EmitterDefinition;
+using mmo::engine::VelocityDefinition;
+using mmo::engine::RotationDefinition;
+using mmo::engine::AppearanceDefinition;
 
 // Runtime particle instance
 struct Particle {
@@ -32,8 +32,8 @@ struct Particle {
     float age = 0.0f;           // How long this particle has been alive
     float lifetime = 1.0f;      // Total lifetime before death
 
-    // Model reference
-    std::string model;
+    // Model reference (points to the stable string in EmitterDefinition)
+    const std::string* model = nullptr;
 
     // For orbital particles
     float orbit_angle = 0.0f;

@@ -41,7 +41,7 @@ void AnimationPlayer::update(const Skeleton& skeleton,
 
     // Update current clip time
     time += dt * speed;
-    if (time > clip.duration) {
+    if (time >= clip.duration) {
         if (loop) {
             time = std::fmod(time, clip.duration);
         } else {
@@ -90,11 +90,11 @@ static void sample_clip_joint(const AnimationClip* clip,
     if (!ch) return;
 
     if (!ch->position_times.empty())
-        out_translation = interpolate_keyframes(ch->position_times, ch->positions, time);
+        out_translation = interpolate_keyframes(ch->position_times, ch->positions, time, ch->pos_cursor);
     if (!ch->rotation_times.empty())
-        out_rotation = interpolate_keyframes(ch->rotation_times, ch->rotations, time);
+        out_rotation = interpolate_keyframes(ch->rotation_times, ch->rotations, time, ch->rot_cursor);
     if (!ch->scale_times.empty())
-        out_scale = interpolate_keyframes(ch->scale_times, ch->scales, time);
+        out_scale = interpolate_keyframes(ch->scale_times, ch->scales, time, ch->scale_cursor);
 }
 
 void AnimationPlayer::compute_bone_matrices(const Skeleton& skeleton,

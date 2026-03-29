@@ -76,6 +76,8 @@ FetchContent_MakeAvailable(glm)
 add_subdirectory(shaders)
 
 file(GLOB_RECURSE ENGINE_SOURCES CONFIGURE_DEPENDS "*.cpp")
+# Exclude test files from the engine library
+list(FILTER ENGINE_SOURCES EXCLUDE REGEX ".*\\.test\\.cpp$")
 add_library(mmo_engine STATIC ${ENGINE_SOURCES})
 
 target_include_directories(mmo_engine PUBLIC
@@ -113,3 +115,15 @@ function(mmo_engine_copy_shaders target)
     add_dependencies(${target} ${target}_copy_shaders)
 endfunction()
 
+# Unit tests
+if(MMO_BUILD_TESTS)
+    file(GLOB_RECURSE ENGINE_TEST_SOURCES CONFIGURE_DEPENDS "*.test.cpp")
+    if(ENGINE_TEST_SOURCES)
+        add_executable(mmo_engine_tests ${ENGINE_TEST_SOURCES})
+        target_link_libraries(mmo_engine_tests PRIVATE mmo_engine GTest::gtest_main)
+        target_include_directories(mmo_engine_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+
+        include(GoogleTest)
+        gtest_discover_tests(mmo_engine_tests)
+    endif()
+endif()

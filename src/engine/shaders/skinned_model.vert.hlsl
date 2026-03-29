@@ -1,7 +1,7 @@
 /**
  * Skinned Model Vertex Shader - SDL3 GPU API
  *
- * Transforms 3D model vertices with skeletal animation support.
+ * Transforms 3D model vertices with skeletal animation.
  * Applies bone matrices for skinned mesh deformation.
  */
 
@@ -50,20 +50,15 @@ cbuffer BoneUniforms {
 VSOutput VSMain(VSInput input) {
     VSOutput output;
 
-    float4 localPos = float4(input.position, 1.0);
-    float4 localNormal = float4(input.normal, 0.0);
+    // Always apply skeletal animation (this pipeline is only used for skinned models)
+    float4x4 skinMatrix =
+        input.weights.x * boneMatrices[input.joints.x] +
+        input.weights.y * boneMatrices[input.joints.y] +
+        input.weights.z * boneMatrices[input.joints.z] +
+        input.weights.w * boneMatrices[input.joints.w];
 
-    if (useSkinning == 1) {
-        // Apply skeletal animation
-        float4x4 skinMatrix =
-            input.weights.x * boneMatrices[input.joints.x] +
-            input.weights.y * boneMatrices[input.joints.y] +
-            input.weights.z * boneMatrices[input.joints.z] +
-            input.weights.w * boneMatrices[input.joints.w];
-
-        localPos = mul(skinMatrix, float4(input.position, 1.0));
-        localNormal = mul(skinMatrix, float4(input.normal, 0.0));
-    }
+    float4 localPos = mul(skinMatrix, float4(input.position, 1.0));
+    float4 localNormal = mul(skinMatrix, float4(input.normal, 0.0));
 
     float4 worldPos = mul(model, localPos);
     output.fragPos = worldPos.xyz;

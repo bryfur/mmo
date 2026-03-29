@@ -41,7 +41,7 @@ struct PipelineConfig {
     // Depth/stencil state
     bool depth_test_enable = true;
     bool depth_write_enable = true;
-    SDL_GPUCompareOp depth_compare_op = SDL_GPU_COMPAREOP_LESS;
+    SDL_GPUCompareOp depth_compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
     bool stencil_test_enable = false;
 
     // Color targets

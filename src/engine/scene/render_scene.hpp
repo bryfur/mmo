@@ -1,13 +1,13 @@
 #pragma once
 
+#include "engine/model_loader.hpp"  // ModelHandle
 #include <glm/glm.hpp>
 #include <cstdint>
 #include <string>
 #include <vector>
 #include <array>
-#include <variant>
 
-namespace engine {
+namespace mmo::engine {
     struct EffectDefinition;
 }
 
@@ -18,33 +18,29 @@ namespace mmo::engine::systems {
 namespace mmo::engine::scene {
 
 /**
- * Model render command data
+ * Model render command data (~140 bytes)
  */
 struct ModelCommand {
-    std::string model_name;
+    mmo::engine::ModelHandle model_handle = mmo::engine::INVALID_MODEL_HANDLE;
+    std::string model_name;  // kept for debug display; not used in hot path lookups
     glm::mat4 transform;
     glm::vec4 tint = {1.0f, 1.0f, 1.0f, 1.0f};
-    float attack_tilt = 0.0f;
+    bool force_non_instanced = false;
     bool no_fog = false;
 };
 
 /**
- * Skinned/animated model render command data
+ * Skinned/animated model render command data.
+ * Bone matrices are stored as a const pointer to avoid copying 4KB per entity.
+ * The pointed-to data must remain valid until the frame is rendered.
  */
 struct SkinnedModelCommand {
-    std::string model_name;
+    mmo::engine::ModelHandle model_handle = mmo::engine::INVALID_MODEL_HANDLE;
+    std::string model_name;  // kept for debug display; not used in hot path lookups
     glm::mat4 transform;
-    std::array<glm::mat4, 64> bone_matrices;
+    const std::array<glm::mat4, 64>* bone_matrices = nullptr;
     glm::vec4 tint = {1.0f, 1.0f, 1.0f, 1.0f};
 };
-
-/**
- * Generic render command using std::variant for type-safe storage
- */
-using RenderCommandData = std::variant<
-    ModelCommand,
-    SkinnedModelCommand
->;
 
 /**
  * Billboard UI element positioned in 3D world space.
@@ -64,31 +60,27 @@ struct Billboard3DCommand {
  * Tells the renderer to spawn a particle effect this frame.
  */
 struct ParticleEffectSpawnCommand {
-    const ::engine::EffectDefinition* definition = nullptr;
+    const mmo::engine::EffectDefinition* definition = nullptr;
     glm::vec3 position = {0, 0, 0};
     glm::vec3 direction = {1, 0, 0};
     float range = -1.0f;
 };
 
-struct RenderCommand {
-    RenderCommandData data;
-
-    template<typename T>
-    bool is() const { return std::holds_alternative<T>(data); }
-
-    template<typename T>
-    const T& get() const { return std::get<T>(data); }
-
-    template<typename T>
-    T& get() { return std::get<T>(data); }
+/**
+ * Debug line command: a single colored line segment in world space.
+ */
+struct DebugLineCommand {
+    glm::vec3 start;
+    glm::vec3 end;
+    uint32_t color;  // RGBA packed
 };
 
 /**
  * RenderScene collects all 3D world render commands.
  * Game logic populates this, then the Renderer consumes it to draw.
  *
- * Contains only engine-level types. Game-specific entity rendering
- * is handled by the game layer outside of RenderScene.
+ * Model and skinned model commands are stored in separate vectors
+ * for cache efficiency and to avoid variant size overhead.
  */
 class RenderScene {
 public:
@@ -103,14 +95,30 @@ public:
     // ========== 3D World Commands ==========
 
     /**
-     * Add a static 3D model to the scene
+     * Add a static 3D model to the scene (handle-based fast path, zero string alloc)
+     */
+    void add_model(mmo::engine::ModelHandle handle, const glm::mat4& transform,
+                   const glm::vec4& tint = {1.0f, 1.0f, 1.0f, 1.0f},
+                   bool force_non_instanced = false, bool no_fog = false);
+
+    /**
+     * Add a static 3D model to the scene (string-based, backward compat)
      */
     void add_model(std::string model_name, const glm::mat4& transform,
                    const glm::vec4& tint = {1.0f, 1.0f, 1.0f, 1.0f},
-                   float attack_tilt = 0.0f, bool no_fog = false);
+                   bool force_non_instanced = false, bool no_fog = false);
 
     /**
-     * Add a skinned/animated model to the scene
+     * Add a skinned/animated model (handle-based fast path, zero string alloc).
+     * bone_matrices must remain valid until the frame is rendered.
+     */
+    void add_skinned_model(mmo::engine::ModelHandle handle, const glm::mat4& transform,
+                           const std::array<glm::mat4, 64>& bone_matrices,
+                           const glm::vec4& tint = {1.0f, 1.0f, 1.0f, 1.0f});
+
+    /**
+     * Add a skinned/animated model (string-based, backward compat).
+     * bone_matrices must remain valid until the frame is rendered.
      */
     void add_skinned_model(std::string model_name, const glm::mat4& transform,
                            const std::array<glm::mat4, 64>& bone_matrices,
@@ -118,12 +126,8 @@ public:
 
     /**
      * Add a particle effect spawn command
-     * @param definition Effect definition (from EffectRegistry)
-     * @param position World position to spawn effect
-     * @param direction Direction vector for directional effects
-     * @param range Effect range/scale (-1 = use definition default)
      */
-    void add_particle_effect_spawn(const ::engine::EffectDefinition* definition,
+    void add_particle_effect_spawn(const mmo::engine::EffectDefinition* definition,
                                     const glm::vec3& position,
                                     const glm::vec3& direction = {1, 0, 0},
                                     float range = -1.0f);
@@ -149,6 +153,28 @@ public:
                           float width, float fill_ratio,
                           uint32_t fill_color, uint32_t bg_color, uint32_t frame_color);
 
+    // ========== Debug Drawing ==========
+
+    /**
+     * Add a single debug line in world space.
+     */
+    void add_debug_line(const glm::vec3& start, const glm::vec3& end, uint32_t color);
+
+    /**
+     * Add a wireframe sphere (3 circle outlines in XY, XZ, YZ planes).
+     */
+    void add_debug_sphere(const glm::vec3& center, float radius, uint32_t color, int segments = 16);
+
+    /**
+     * Add a wireframe axis-aligned box from min/max corners.
+     */
+    void add_debug_box(const glm::vec3& min, const glm::vec3& max, uint32_t color);
+
+    /**
+     * Get all debug line commands for this frame.
+     */
+    const std::vector<DebugLineCommand>& debug_lines() const { return debug_lines_; }
+
     // ========== World Element Flags ==========
 
     void set_draw_skybox(bool draw) { draw_skybox_ = draw; }
@@ -164,18 +190,21 @@ public:
 
     bool has_3d_content() const {
         return draw_skybox_ || draw_ground_ || draw_grass_ ||
-               !commands_.empty();
+               !model_commands_.empty() || !skinned_commands_.empty();
     }
 
     // ========== Command Access ==========
 
-    const std::vector<RenderCommand>& commands() const { return commands_; }
+    const std::vector<ModelCommand>& model_commands() const { return model_commands_; }
+    const std::vector<SkinnedModelCommand>& skinned_commands() const { return skinned_commands_; }
     const std::vector<Billboard3DCommand>& billboards() const { return billboards_; }
 
 private:
-    std::vector<RenderCommand> commands_;
+    std::vector<ModelCommand> model_commands_;
+    std::vector<SkinnedModelCommand> skinned_commands_;
     std::vector<Billboard3DCommand> billboards_;
     std::vector<ParticleEffectSpawnCommand> particle_effect_spawns_;
+    std::vector<DebugLineCommand> debug_lines_;
 
     bool draw_skybox_ = false;
     bool draw_rocks_ = false;

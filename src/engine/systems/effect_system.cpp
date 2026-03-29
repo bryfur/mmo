@@ -5,9 +5,8 @@
 
 namespace mmo::engine::systems {
 
-// Import types from engine namespace
-using ::engine::SpawnMode;
-using ::engine::VelocityType;
+using mmo::engine::SpawnMode;
+using mmo::engine::VelocityType;
 
 namespace {
 
@@ -137,7 +136,7 @@ void EffectSystem::spawn_particles(EmitterInstance& emitter, int count) {
         particle.position = emitter.origin;
 
         // Model
-        particle.model = def.model;
+        particle.model = &def.model;
 
         // Lifetime
         particle.lifetime = def.particle_lifetime;

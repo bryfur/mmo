@@ -1,5 +1,6 @@
 #include "application.hpp"
 #include "SDL3/SDL_error.h"
+#include "SDL3/SDL_filesystem.h"
 #include "SDL3/SDL_init.h"
 #include "SDL3/SDL_timer.h"
 #include "engine/render/render_context.hpp"
@@ -90,10 +91,25 @@ bool Application::init_renderer(int width, int height, const std::string& title,
 
     camera_ = std::make_unique<CameraSystem>();
 
+    // Auto-load settings from disk
+    auto path = settings_file_path();
+    if (!path.empty()) {
+        graphics_settings_.load(path);
+    }
+    apply_all_graphics_settings(graphics_settings_);
+
     return true;
 }
 
 void Application::shutdown_renderer() {
+    // Auto-save settings on shutdown
+    auto path = settings_file_path();
+    if (!path.empty()) {
+        if (!graphics_settings_.save(path)) {
+            std::cerr << "Failed to save settings to " << path << '\n';
+        }
+    }
+
     camera_.reset();
     if (scene_renderer_) scene_renderer_->shutdown();
     if (context_) context_->shutdown();
@@ -164,6 +180,22 @@ const RenderStats& Application::render_stats() const {
 
 std::string Application::gpu_driver_name() const {
     return context_->device().driver_name();
+}
+
+void Application::apply_all_graphics_settings(const GraphicsSettings& settings) {
+    graphics_settings_ = settings;
+    set_graphics_settings(settings);
+    set_anisotropic_filter(settings.anisotropic_filter);
+    set_vsync_mode(settings.vsync_mode);
+    set_window_mode(settings.window_mode, settings.resolution_index);
+}
+
+std::string Application::settings_file_path() const {
+    char* pref_path = SDL_GetPrefPath("mmo4", "mmo4");
+    if (!pref_path) return {};
+    std::string result = std::string(pref_path) + "settings.cfg";
+    SDL_free(pref_path);
+    return result;
 }
 
 // ========== Camera facade ==========

@@ -7,6 +7,7 @@
 #include "engine/model_loader.hpp"
 #include "engine/heightmap.hpp"
 #include "engine/render/render_context.hpp"
+#include "engine/render/terrain_renderer.hpp"
 #include "engine/scene/scene_renderer.hpp"
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
@@ -1303,9 +1304,9 @@ bool EditorApplication::load_models(const std::string& assets_path) {
         std::string file = entry["file"];
         std::string fallback = entry.value("fallback", "");
 
-        bool ok = mdl.load_model(id, models_path + file);
+        bool ok = mdl.load_model(id, models_path + file) != mmo::engine::INVALID_MODEL_HANDLE;
         if (!ok && !fallback.empty()) {
-            ok = mdl.load_model(id, models_path + fallback);
+            ok = mdl.load_model(id, models_path + fallback) != mmo::engine::INVALID_MODEL_HANDLE;
         }
 
         if (ok) {

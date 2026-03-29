@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/scene/camera_state.hpp"
 #include <glm/glm.hpp>
 #include <functional>
 
@@ -74,6 +75,16 @@ public:
     virtual glm::mat4 get_projection_matrix() const = 0;
     virtual glm::vec3 get_position() const = 0;
     virtual glm::vec3 get_forward() const = 0;
+
+    // Convenience: build a complete CameraState from current matrices/position
+    virtual scene::CameraState get_camera_state() const {
+        scene::CameraState state;
+        state.view = get_view_matrix();
+        state.projection = get_projection_matrix();
+        state.view_projection = state.projection * state.view;
+        state.position = get_position();
+        return state;
+    }
 };
 
 } // namespace mmo::engine::systems

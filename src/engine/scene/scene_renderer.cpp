@@ -4,8 +4,18 @@
 #include "engine/gpu/gpu_buffer.hpp"
 #include "engine/gpu/gpu_pipeline.hpp"
 #include "engine/gpu/gpu_texture.hpp"
+#include "engine/gpu/pipeline_registry.hpp"
 #include "engine/model_loader.hpp"
+#include "engine/render/terrain_renderer.hpp"
+#include "engine/render/world_renderer.hpp"
+#include "engine/render/ui_renderer.hpp"
+#include "engine/render/effect_renderer.hpp"
 #include "engine/render/grass_renderer.hpp"
+#include "engine/render/shadow_map.hpp"
+#include "engine/render/ambient_occlusion.hpp"
+#include "engine/render/bloom.hpp"
+#include "engine/render/volumetric_fog.hpp"
+#include "engine/systems/effect_system.hpp"
 #include "engine/render_constants.hpp"
 #include "engine/gpu/gpu_uniforms.hpp"
 #include "engine/heightmap.hpp"
@@ -16,7 +26,6 @@
 #include <cstring>
 #include <memory>
 #include <type_traits>
-#include <variant>
 
 #include "engine/graphics_settings.hpp"
 #include "engine/scene/camera_state.hpp"
@@ -34,67 +43,120 @@ namespace gpu = mmo::engine::gpu;
 namespace render = mmo::engine::render;
 using namespace mmo::engine::render;
 
-// Inline helper: look up Model* from per-frame cache, falling back to ModelManager
+// O(1) handle-based model lookup with per-frame cache
 static inline Model* get_model_cached(
-    std::unordered_map<std::string, Model*>& cache,
+    std::unordered_map<ModelHandle, Model*>& cache,
     ModelManager& mgr,
-    const std::string& name)
+    ModelHandle handle)
 {
-    auto it = cache.find(name);
+    if (handle == INVALID_MODEL_HANDLE) return nullptr;
+    auto it = cache.find(handle);
     if (it != cache.end()) return it->second;
-    Model* m = mgr.get_model(name);
-    cache[name] = m;
+    Model* m = mgr.get_model(handle);
+    cache[handle] = m;
     return m;
 }
 
+static inline Model* get_model_cached_by_name(
+    std::unordered_map<std::string, Model*>& name_cache,
+    ModelManager& mgr,
+    const std::string& name)
+{
+    if (name.empty()) return nullptr;
+    auto it = name_cache.find(name);
+    if (it != name_cache.end()) return it->second;
+    Model* m = mgr.get_model(name);
+    name_cache[name] = m;
+    return m;
+}
+
+static inline Model* resolve_model(
+    std::unordered_map<ModelHandle, Model*>& handle_cache,
+    std::unordered_map<std::string, Model*>& name_cache,
+    ModelManager& mgr,
+    ModelHandle handle,
+    const std::string& name)
+{
+    if (handle != INVALID_MODEL_HANDLE)
+        return get_model_cached(handle_cache, mgr, handle);
+    return get_model_cached_by_name(name_cache, mgr, name);
+}
+
+static inline ModelHandle resolve_handle(
+    ModelManager& mgr,
+    ModelHandle handle,
+    const std::string& name)
+{
+    if (handle != INVALID_MODEL_HANDLE) return handle;
+    return mgr.get_handle(name);
+}
+
 SceneRenderer::SceneRenderer()
-    : model_manager_(std::make_unique<ModelManager>()),
-      grass_renderer_(std::make_unique<GrassRenderer>()) {
+    : pipeline_registry_(std::make_unique<gpu::PipelineRegistry>()),
+      terrain_(std::make_unique<render::TerrainRenderer>()),
+      world_(std::make_unique<render::WorldRenderer>()),
+      ui_(std::make_unique<render::UIRenderer>()),
+      effects_(std::make_unique<render::EffectRenderer>()),
+      effect_system_(std::make_unique<mmo::engine::systems::EffectSystem>()),
+      model_manager_(std::make_unique<ModelManager>()),
+      grass_renderer_(std::make_unique<render::GrassRenderer>()),
+      shadow_map_(std::make_unique<render::ShadowMap>()),
+      ao_(std::make_unique<render::AmbientOcclusion>()),
+      bloom_(std::make_unique<render::Bloom>()),
+      volumetric_fog_(std::make_unique<render::VolumetricFog>()) {
 }
 
 SceneRenderer::~SceneRenderer() {
     shutdown();
 }
 
+// ========== Accessors (out-of-line for forward-declared types) ==========
+
+render::RenderContext* SceneRenderer::context() { return context_; }
+render::TerrainRenderer& SceneRenderer::terrain() { return *terrain_; }
+ModelManager& SceneRenderer::models() { return *model_manager_; }
+render::GrassRenderer* SceneRenderer::grass() { return grass_renderer_.get(); }
+float SceneRenderer::get_terrain_height(float x, float z) { return terrain_->get_height(x, z); }
+
 bool SceneRenderer::init(RenderContext& context, float world_width, float world_height) {
     context_ = &context;
 
-    if (!pipeline_registry_.init(context_->device())) {
+    if (!pipeline_registry_->init(context_->device())) {
         std::cerr << "Failed to initialize pipeline registry" << std::endl;
         return false;
     }
-    pipeline_registry_.set_swapchain_format(context_->swapchain_format());
+    pipeline_registry_->set_swapchain_format(context_->swapchain_format());
 
     model_manager_->set_device(&context_->device());
 
-    if (!terrain_.init(context_->device(), pipeline_registry_, world_width, world_height)) {
+    if (!terrain_->init(context_->device(), *pipeline_registry_, world_width, world_height)) {
         std::cerr << "Failed to initialize terrain renderer" << std::endl;
         return false;
     }
 
-    if (!world_.init(context_->device(), pipeline_registry_, world_width, world_height, model_manager_.get())) {
+    if (!world_->init(context_->device(), *pipeline_registry_, world_width, world_height, model_manager_.get())) {
         std::cerr << "Failed to initialize world renderer" << std::endl;
         return false;
     }
 
-    world_.set_terrain_height_func([this](float x, float z) {
-        return terrain_.get_height(x, z);
+    world_->set_terrain_height_func([this](float x, float z) {
+        return terrain_->get_height(x, z);
     });
 
     int w = context_->width();
     int h = context_->height();
 
-    if (!ui_.init(context_->device(), pipeline_registry_, w, h)) {
+    if (!ui_->init(context_->device(), *pipeline_registry_, w, h)) {
         std::cerr << "Failed to initialize UI renderer" << std::endl;
         return false;
     }
 
-    if (!effects_.init(context_->device(), pipeline_registry_, model_manager_.get())) {
+    if (!effects_->init(context_->device(), *pipeline_registry_, model_manager_.get())) {
         std::cerr << "Failed to initialize effect renderer" << std::endl;
         return false;
     }
-    effects_.set_terrain_height_func([this](float x, float z) {
-        return terrain_.get_height(x, z);
+    effects_->set_terrain_height_func([this](float x, float z) {
+        return terrain_->get_height(x, z);
     });
 
     depth_texture_ = gpu::GPUTexture::create_depth(context_->device(), w, h);
@@ -107,24 +169,32 @@ bool SceneRenderer::init(RenderContext& context, float world_width, float world_
     init_billboard_buffers();
 
     // Preload all pipelines upfront to avoid hitching during gameplay
-    if (!pipeline_registry_.preload_all_pipelines()) {
+    if (!pipeline_registry_->preload_all_pipelines()) {
         std::cerr << "Warning: Some pipelines failed to preload" << std::endl;
     }
 
     if (grass_renderer_) {
-        grass_renderer_->init(context_->device(), pipeline_registry_, world_width, world_height);
+        grass_renderer_->init(context_->device(), *pipeline_registry_, world_width, world_height);
     }
 
     const GraphicsSettings& gfx = graphics_ ? *graphics_ : default_graphics_;
     static constexpr int resolution_table[] = {512, 1024, 2048, 4096};
     int shadow_res = resolution_table[std::clamp(gfx.shadow_resolution, 0, 3)];
-    shadow_map_.set_active_cascades(gfx.shadow_cascades + 1);
-    if (!shadow_map_.init(context_->device(), shadow_res)) {
+    shadow_map_->set_active_cascades(gfx.shadow_cascades + 1);
+    if (!shadow_map_->init(context_->device(), shadow_res)) {
         std::cerr << "Warning: Failed to initialize shadow map (shadows disabled)" << std::endl;
     }
 
-    if (!ao_.init(context_->device(), w, h)) {
+    if (!ao_->init(context_->device(), w, h)) {
         std::cerr << "Warning: Failed to initialize GTAO (AO disabled)" << std::endl;
+    }
+
+    if (!bloom_->init(context_->device(), w, h)) {
+        std::cerr << "Warning: Failed to initialize Bloom (bloom disabled)" << std::endl;
+    }
+
+    if (!volumetric_fog_->init(context_->device(), w, h)) {
+        std::cerr << "Warning: Failed to initialize Volumetric Fog (fog disabled)" << std::endl;
     }
 
     return true;
@@ -147,19 +217,21 @@ void SceneRenderer::shutdown() {
         default_sampler_ = nullptr;
     }
 
-    ao_.shutdown();
-    shadow_map_.shutdown();
-    effects_.shutdown();
-    ui_.shutdown();
-    world_.shutdown();
-    terrain_.shutdown();
-    pipeline_registry_.shutdown();
+    volumetric_fog_->shutdown();
+    bloom_->shutdown();
+    ao_->shutdown();
+    shadow_map_->shutdown();
+    effects_->shutdown();
+    ui_->shutdown();
+    world_->shutdown();
+    terrain_->shutdown();
+    pipeline_registry_->shutdown();
 }
 
 void SceneRenderer::init_pipelines() {
-    auto* model_pipeline = pipeline_registry_.get_model_pipeline();
-    auto* skinned_pipeline = pipeline_registry_.get_skinned_model_pipeline();
-    auto* billboard_pipeline = pipeline_registry_.get_billboard_pipeline();
+    auto* model_pipeline = pipeline_registry_->get_model_pipeline();
+    auto* skinned_pipeline = pipeline_registry_->get_skinned_model_pipeline();
+    auto* billboard_pipeline = pipeline_registry_->get_billboard_pipeline();
 
     if (!model_pipeline || !skinned_pipeline || !billboard_pipeline) {
         std::cerr << "Warning: Some pipelines failed to preload" << std::endl;
@@ -199,9 +271,12 @@ void SceneRenderer::init_billboard_buffers() {
 // ============================================================================
 
 void SceneRenderer::set_screen_size(int width, int height) {
-    ui_.set_screen_size(width, height);
-    if (ao_.is_ready()) {
-        ao_.resize(width, height);
+    ui_->set_screen_size(width, height);
+    if (ao_->is_ready()) {
+        ao_->resize(width, height);
+    }
+    if (volumetric_fog_->is_ready()) {
+        volumetric_fog_->resize(width, height);
     }
 }
 
@@ -212,11 +287,11 @@ void SceneRenderer::set_graphics_settings(const GraphicsSettings& settings) {
         int new_res = resolution_table[std::clamp(settings.shadow_resolution, 0, 3)];
         int new_cascades = settings.shadow_cascades + 1;
 
-        if (new_res != shadow_map_.resolution()) {
-            shadow_map_.reinit(new_res);
+        if (new_res != shadow_map_->resolution()) {
+            shadow_map_->reinit(new_res);
         }
-        if (new_cascades != shadow_map_.active_cascades()) {
-            shadow_map_.set_active_cascades(new_cascades);
+        if (new_cascades != shadow_map_->active_cascades()) {
+            shadow_map_->set_active_cascades(new_cascades);
         }
     }
 
@@ -241,7 +316,7 @@ void SceneRenderer::set_anisotropic_filter(int level) {
     }
     aniso_value = std::min(aniso_value, 16.0f);
 
-    terrain_.set_anisotropic_filter(aniso_value);
+    terrain_->set_anisotropic_filter(aniso_value);
 
     if (default_sampler_ && context_) {
         context_->device().release_sampler(default_sampler_);
@@ -265,26 +340,26 @@ void SceneRenderer::set_anisotropic_filter(int level) {
 }
 
 void SceneRenderer::set_heightmap(const Heightmap& heightmap) {
-    terrain_.set_heightmap(heightmap);
+    terrain_->set_heightmap(heightmap);
 
-    if (grass_renderer_ && terrain_.heightmap_texture()) {
+    if (grass_renderer_ && terrain_->heightmap_texture()) {
         render::HeightmapParams hm_params;
         hm_params.world_origin_x = heightmap.world_origin_x;
         hm_params.world_origin_z = heightmap.world_origin_z;
         hm_params.world_size = heightmap.world_size;
         hm_params.min_height = heightmap.min_height;
         hm_params.max_height = heightmap.max_height;
-        grass_renderer_->set_heightmap(terrain_.heightmap_texture(), hm_params);
+        grass_renderer_->set_heightmap(terrain_->heightmap_texture(), hm_params);
     }
 
     std::cout << "[Renderer] Heightmap set for terrain rendering" << std::endl;
 }
 
-int SceneRenderer::spawn_effect(const ::engine::EffectDefinition* definition,
+int SceneRenderer::spawn_effect(const mmo::engine::EffectDefinition* definition,
                                   const glm::vec3& position,
                                   const glm::vec3& direction,
                                   float range) {
-    return effect_system_.spawn_effect(definition, position, direction, range);
+    return effect_system_->spawn_effect(definition, position, direction, range);
 }
 
 // ============================================================================
@@ -294,7 +369,8 @@ int SceneRenderer::spawn_effect(const ::engine::EffectDefinition* definition,
 void SceneRenderer::begin_frame() {
     context_->begin_frame();
     had_main_pass_this_frame_ = false;
-    ui_.set_screen_size(context_->width(), context_->height());
+    depth_prepass_ran_ = false;
+    ui_->set_screen_size(context_->width(), context_->height());
 }
 
 void SceneRenderer::end_frame() {
@@ -333,7 +409,8 @@ void SceneRenderer::begin_main_pass() {
 
     SDL_GPUDepthStencilTargetInfo depth_target = {};
     depth_target.texture = depth_texture_ ? depth_texture_->handle() : nullptr;
-    depth_target.load_op = SDL_GPU_LOADOP_CLEAR;
+    // If depth pre-pass already wrote depth, preserve it (LOAD) instead of clearing
+    depth_target.load_op = depth_prepass_ran_ ? SDL_GPU_LOADOP_LOAD : SDL_GPU_LOADOP_CLEAR;
     depth_target.store_op = SDL_GPU_STOREOP_STORE;
     depth_target.clear_depth = 1.0f;
     depth_target.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
@@ -371,16 +448,16 @@ void SceneRenderer::begin_ui() {
         }
     }
 
-    ui_.begin(cmd);
+    ui_->begin(cmd);
 }
 
 void SceneRenderer::end_ui() {
-    ui_.end();
+    ui_->end();
 
     SDL_GPUCommandBuffer* cmd = context_->current_command_buffer();
     if (cmd && current_swapchain_) {
         bool clear_background = !had_main_pass_this_frame_;
-        ui_.execute(cmd, current_swapchain_, clear_background);
+        ui_->execute(cmd, current_swapchain_, clear_background);
     }
 }
 
@@ -400,14 +477,14 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
 
     // Update particle effect system
     auto get_terrain_height = [this](float x, float z) -> float {
-        return terrain_.get_height(x, z);
+        return terrain_->get_height(x, z);
     };
-    effect_system_.update(dt, get_terrain_height);
+    effect_system_->update(dt, get_terrain_height);
 
     begin_frame();
 
-    bool has_content = scene.has_3d_content() || !scene.commands().empty();
-    bool use_ao = gfx.ao_mode > 0 && ao_.is_ready();
+    bool has_content = scene.has_3d_content();
+    bool use_ao = gfx.ao_mode > 0 && ao_->is_ready();
 
     if (has_content) {
         // Build instance batches (cull + group) and upload storage buffers
@@ -417,13 +494,13 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
         build_instance_batches(scene, camera, frame_frustum_);
         upload_instance_buffers();
 
-        if (shadow_map_.is_ready() && gfx.shadow_mode > 0) {
+        if (shadow_map_->is_ready() && gfx.shadow_mode > 0) {
             render_shadow_passes(scene, camera);
         }
 
         // Cache shadow uniforms AFTER render_shadow_passes updates cascade matrices
-        if (shadow_map_.is_ready()) {
-            frame_shadow_uniforms_ = shadow_map_.get_shadow_uniforms(gfx.shadow_mode);
+        if (shadow_map_->is_ready()) {
+            frame_shadow_uniforms_ = shadow_map_->get_shadow_uniforms(gfx.shadow_mode);
         }
 
         SDL_GPUCommandBuffer* cmd = context_->current_command_buffer();
@@ -435,34 +512,64 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
             uint32_t sw_width, sw_height;
             current_swapchain_ = context_->acquire_swapchain_texture(cmd, &sw_width, &sw_height);
 
-            // Resize GTAO textures if window size changed
+            // Resize GTAO + bloom + volumetric fog textures if window size changed
             if (current_swapchain_) {
-                ao_.resize(static_cast<int>(sw_width), static_cast<int>(sw_height));
+                ao_->resize(static_cast<int>(sw_width), static_cast<int>(sw_height));
+                bloom_->resize(static_cast<int>(sw_width), static_cast<int>(sw_height));
+                volumetric_fog_->resize(static_cast<int>(sw_width), static_cast<int>(sw_height));
             }
 
             // Render scene to offscreen RT
-            main_render_pass_ = ao_.begin_offscreen_pass(cmd);
+            main_render_pass_ = ao_->begin_offscreen_pass(cmd);
             had_main_pass_this_frame_ = (main_render_pass_ != nullptr);
 
             if (main_render_pass_ && cmd) {
                 render_3d_scene(scene, camera, dt);
-                ao_.end_offscreen_pass();
+                ao_->end_offscreen_pass();
                 main_render_pass_ = nullptr;
             }
 
-            // AO computation + blur + composite to swapchain
+            // AO computation + blur + bloom + composite to swapchain
             if (current_swapchain_) {
                 glm::mat4 inv_proj = glm::inverse(camera.projection);
                 if (gfx.ao_mode == 1) {
-                    ao_.render_ssao_pass(cmd, pipeline_registry_, camera.projection, inv_proj);
+                    ao_->render_ssao_pass(cmd, *pipeline_registry_, camera.projection, inv_proj);
                 } else {
-                    ao_.render_gtao_pass(cmd, pipeline_registry_, camera.projection, inv_proj);
+                    ao_->render_gtao_pass(cmd, *pipeline_registry_, camera.projection, inv_proj);
                 }
-                ao_.render_blur_pass(cmd, pipeline_registry_);
-                ao_.render_composite_pass(cmd, pipeline_registry_, current_swapchain_);
+                ao_->render_blur_pass(cmd, *pipeline_registry_);
+
+                // Bloom: downsample + upsample chain on offscreen color
+                SDL_GPUTexture* bloom_tex = nullptr;
+                if (gfx.bloom_enabled && bloom_->is_ready()) {
+                    bloom_->render(cmd, *pipeline_registry_, ao_->offscreen_color()->handle());
+                    bloom_tex = bloom_->bloom_texture();
+                }
+
+                // Volumetric fog: ray march through fog volume using depth + shadow map
+                SDL_GPUTexture* fog_tex = nullptr;
+                if ((gfx.volumetric_fog || gfx.god_rays) && volumetric_fog_->is_ready() && shadow_map_->is_ready() &&
+                    ao_->offscreen_depth()) {
+                    volumetric_fog_->render(cmd, *pipeline_registry_,
+                                           ao_->offscreen_depth()->handle(),
+                                           *shadow_map_, camera, light_dir_,
+                                           gfx.god_rays, gfx.volumetric_fog);
+                    fog_tex = volumetric_fog_->fog_texture();
+                }
+
+                ao_->render_composite_pass(cmd, *pipeline_registry_, current_swapchain_,
+                                          bloom_tex, gfx.bloom_enabled ? gfx.bloom_strength : 0.0f,
+                                          fog_tex);
             }
         } else {
             // === NORMAL PATH: render directly to swapchain ===
+
+            // Depth pre-pass: render depth-only before the main color pass
+            // to eliminate overdraw (fragments behind existing depth are rejected early)
+            if (gfx.depth_prepass) {
+                render_depth_prepass(scene, camera);
+            }
+
             begin_main_pass();
 
             if (main_render_pass_ && context_->current_command_buffer()) {
@@ -498,24 +605,24 @@ void SceneRenderer::render_3d_scene(const RenderScene& scene, const CameraState&
 
     if (scene.should_draw_skybox() && gfx.skybox_enabled) {
         skybox_time_ += dt;
-        world_.update(dt);
-        world_.render_skybox(main_render_pass_, cmd, camera.view, camera.projection);
+        world_->update(dt);
+        world_->render_skybox(main_render_pass_, cmd, camera.view, camera.projection);
     }
 
     // Prepare shadow bindings for terrain/grass
     SDL_GPUTextureSamplerBinding shadow_bindings[4] = {};
     int shadow_binding_count = 0;
-    if (shadow_map_.is_ready()) {
+    if (shadow_map_->is_ready()) {
         for (int i = 0; i < render::CSM_MAX_CASCADES; ++i) {
-            shadow_bindings[i].texture = shadow_map_.shadow_texture(i);
-            shadow_bindings[i].sampler = shadow_map_.shadow_sampler();
+            shadow_bindings[i].texture = shadow_map_->shadow_texture(i);
+            shadow_bindings[i].sampler = shadow_map_->shadow_sampler();
         }
         shadow_binding_count = render::CSM_MAX_CASCADES;
     }
 
     if (scene.should_draw_ground()) {
         SDL_PushGPUFragmentUniformData(cmd, 1, &frame_shadow_uniforms_, sizeof(frame_shadow_uniforms_));
-        terrain_.render(main_render_pass_, cmd, camera.view, camera.projection,
+        terrain_->render(main_render_pass_, cmd, camera.view, camera.projection,
                        camera.position, light_dir_,
                        shadow_binding_count > 0 ? shadow_bindings : nullptr,
                        shadow_binding_count);
@@ -540,7 +647,7 @@ void SceneRenderer::render_3d_scene(const RenderScene& scene, const CameraState&
 
     // Render non-instanced static models (attack animations, no-fog, etc.)
     if (!non_instanced_commands_.empty()) {
-        gpu::GPUPipeline* model_pipeline = pipeline_registry_.get_model_pipeline();
+        gpu::GPUPipeline* model_pipeline = pipeline_registry_->get_model_pipeline();
         if (model_pipeline && main_render_pass_) {
             model_pipeline->bind(main_render_pass_);
             bind_shadow_data(main_render_pass_, context_->current_command_buffer(), 1);
@@ -557,10 +664,7 @@ void SceneRenderer::render_3d_scene(const RenderScene& scene, const CameraState&
         SDL_GPUTexture* last_skinned_texture = nullptr;
         int last_skinned_has_texture = -1;
 
-        for (const auto& render_cmd : scene.commands()) {
-            if (!render_cmd.is<SkinnedModelCommand>()) continue;
-            const auto& data = render_cmd.get<SkinnedModelCommand>();
-
+        for (const auto& data : scene.skinned_commands()) {
             const glm::mat4& t = data.transform;
             glm::vec3 world_pos(t[3][0], t[3][1], t[3][2]);
 
@@ -572,7 +676,7 @@ void SceneRenderer::render_3d_scene(const RenderScene& scene, const CameraState&
             }
 
             if (do_frustum_cull) {
-                Model* model = get_model_cached(frame_model_cache_, *model_manager_,data.model_name);
+                Model* model = resolve_model(frame_model_cache_, frame_model_name_cache_, *model_manager_, data.model_handle, data.model_name);
                 if (model) {
                     glm::vec3 world_center = glm::vec3(t * glm::vec4(model->bounding_center, 1.0f));
                     float max_scale = std::max({
@@ -591,7 +695,7 @@ void SceneRenderer::render_3d_scene(const RenderScene& scene, const CameraState&
 
             // Bind pipeline + shadow data once for all skinned models
             if (!skinned_pipeline_bound) {
-                gpu::GPUPipeline* skinned_pipeline = pipeline_registry_.get_skinned_model_pipeline();
+                gpu::GPUPipeline* skinned_pipeline = pipeline_registry_->get_skinned_model_pipeline();
                 if (!skinned_pipeline) break;
                 skinned_pipeline->bind(main_render_pass_);
                 bind_shadow_data(main_render_pass_, context_->current_command_buffer(), 1);
@@ -606,7 +710,7 @@ void SceneRenderer::render_3d_scene(const RenderScene& scene, const CameraState&
     auto& spawns = scene.particle_effect_spawns();
     for (const auto& spawn_cmd : spawns) {
         if (spawn_cmd.definition) {
-            effect_system_.spawn_effect(spawn_cmd.definition, spawn_cmd.position,
+            effect_system_->spawn_effect(spawn_cmd.definition, spawn_cmd.position,
                                        spawn_cmd.direction, spawn_cmd.range);
         }
     }
@@ -616,14 +720,17 @@ void SceneRenderer::render_3d_scene(const RenderScene& scene, const CameraState&
     const_cast<RenderScene&>(scene).clear_particle_effect_spawns();
 
     // Render new particle-based effects
-    effects_.draw_particle_effects(
+    effects_->draw_particle_effects(
         main_render_pass_,
         context_->current_command_buffer(),
-        effect_system_,
+        *effect_system_,
         camera.view,
         camera.projection,
         camera.position
     );
+
+    // Debug line rendering (only if game submitted any)
+    render_debug_lines(scene, camera);
 }
 
 // ============================================================================
@@ -633,7 +740,7 @@ void SceneRenderer::render_3d_scene(const RenderScene& scene, const CameraState&
 void SceneRenderer::render_model_command(const ModelCommand& cmd, const CameraState& camera) {
     // Standalone path: binds pipeline + shadows itself
     if (!main_render_pass_) return;
-    gpu::GPUPipeline* pipeline = pipeline_registry_.get_model_pipeline();
+    gpu::GPUPipeline* pipeline = pipeline_registry_->get_model_pipeline();
     if (!pipeline) return;
     pipeline->bind(main_render_pass_);
     bind_shadow_data(main_render_pass_, context_->current_command_buffer(), 1);
@@ -641,7 +748,7 @@ void SceneRenderer::render_model_command(const ModelCommand& cmd, const CameraSt
 }
 
 void SceneRenderer::render_model_command_inner(const ModelCommand& cmd, const CameraState& camera) {
-    Model* model = get_model_cached(frame_model_cache_, *model_manager_,cmd.model_name);
+    Model* model = resolve_model(frame_model_cache_, frame_model_name_cache_, *model_manager_, cmd.model_handle, cmd.model_name);
     if (!model || !main_render_pass_) return;
 
     SDL_GPUCommandBuffer* gpu_cmd = context_->current_command_buffer();
@@ -703,8 +810,8 @@ void SceneRenderer::render_model_command_inner(const ModelCommand& cmd, const Ca
 void SceneRenderer::build_instance_batches(const RenderScene& scene, const CameraState& camera, const Frustum& frustum) {
     // Clear vectors but preserve map keys + vector capacity to avoid re-hashing
     // and re-allocating every frame.
-    for (auto& [name, vec] : instance_batches_) vec.clear();
-    for (auto& [name, vec] : shadow_instance_batches_) vec.clear();
+    for (auto& [handle, vec] : instance_batches_) vec.clear();
+    for (auto& [handle, vec] : shadow_instance_batches_) vec.clear();
     non_instanced_commands_.clear();
 
     // Model pointer cache is persistent - models are never unloaded during gameplay
@@ -713,10 +820,7 @@ void SceneRenderer::build_instance_batches(const RenderScene& scene, const Camer
     bool do_frustum_cull = frame_do_frustum_cull_;
     float draw_dist_sq = frame_draw_dist_sq_;
 
-    for (const auto& render_cmd : scene.commands()) {
-        if (!render_cmd.is<ModelCommand>()) continue;
-        const auto& cmd = render_cmd.get<ModelCommand>();
-
+    for (const auto& cmd : scene.model_commands()) {
         const glm::mat4& t = cmd.transform;
         glm::vec3 world_pos(t[3][0], t[3][1], t[3][2]);
 
@@ -728,9 +832,12 @@ void SceneRenderer::build_instance_batches(const RenderScene& scene, const Camer
             continue;
         }
 
+        // Resolve handle for this command (O(1) if handle set, hash lookup fallback)
+        ModelHandle h = resolve_handle(*model_manager_, cmd.model_handle, cmd.model_name);
+
         // Frustum culling using pre-computed bounding sphere
         if (do_frustum_cull) {
-            Model* model = get_model_cached(frame_model_cache_, *model_manager_,cmd.model_name);
+            Model* model = get_model_cached(frame_model_cache_, *model_manager_, h);
             if (model) {
                 glm::vec3 world_center = glm::vec3(t * glm::vec4(model->bounding_center, 1.0f));
                 float max_scale = std::max({
@@ -747,8 +854,8 @@ void SceneRenderer::build_instance_batches(const RenderScene& scene, const Camer
 
         if (collect_stats_) render_stats_.entities_rendered++;
 
-        // Models with attack animation need individual draws (per-instance tilt).
-        if (cmd.attack_tilt != 0.0f) {
+        // Models flagged for individual draws (e.g. per-instance transform variation).
+        if (cmd.force_non_instanced) {
             non_instanced_commands_.push_back(&cmd);
             continue;
         }
@@ -758,11 +865,11 @@ void SceneRenderer::build_instance_batches(const RenderScene& scene, const Camer
         inst.normalMatrix = glm::transpose(glm::inverse(cmd.transform));
         inst.tint = cmd.tint;
         inst.noFog = cmd.no_fog ? 1.0f : 0.0f;
-        instance_batches_[cmd.model_name].push_back(inst);
+        instance_batches_[h].push_back(inst);
 
         gpu::ShadowInstanceData shadow_inst;
         shadow_inst.model = cmd.transform;
-        shadow_instance_batches_[cmd.model_name].push_back(shadow_inst);
+        shadow_instance_batches_[h].push_back(shadow_inst);
     }
 }
 
@@ -826,7 +933,7 @@ void SceneRenderer::render_instanced_models(const CameraState& camera) {
     SDL_GPUCommandBuffer* gpu_cmd = context_->current_command_buffer();
     if (!gpu_cmd) return;
 
-    gpu::GPUPipeline* pipeline = pipeline_registry_.get_instanced_model_pipeline();
+    gpu::GPUPipeline* pipeline = pipeline_registry_->get_instanced_model_pipeline();
     if (!pipeline || !instance_storage_buffer_) return;
 
     bool fog_active = frame_fog_active_;
@@ -867,10 +974,10 @@ void SceneRenderer::render_instanced_models(const CameraState& camera) {
 
     // Draw each model type as a single instanced draw call per mesh
     uint32_t base_instance = 0;
-    for (const auto& [model_name, instances] : instance_batches_) {
+    for (const auto& [batch_handle, instances] : instance_batches_) {
         if (instances.empty()) continue;
 
-        Model* model = get_model_cached(frame_model_cache_, *model_manager_,model_name);
+        Model* model = get_model_cached(frame_model_cache_, *model_manager_, batch_handle);
         if (!model) {
             base_instance += static_cast<uint32_t>(instances.size());
             continue;
@@ -918,7 +1025,7 @@ void SceneRenderer::render_instanced_shadow_models(SDL_GPURenderPass* pass, SDL_
                                                      const glm::mat4& light_view_projection) {
     if (shadow_instance_batches_.empty() || !pass || !shadow_instance_storage_buffer_) return;
 
-    auto* pipeline = pipeline_registry_.get_instanced_shadow_model_pipeline();
+    auto* pipeline = pipeline_registry_->get_instanced_shadow_model_pipeline();
     if (!pipeline) return;
 
     pipeline->bind(pass);
@@ -931,10 +1038,10 @@ void SceneRenderer::render_instanced_shadow_models(SDL_GPURenderPass* pass, SDL_
     SDL_BindGPUVertexStorageBuffers(pass, 0, &storage_buf, 1);
 
     uint32_t base_instance = 0;
-    for (const auto& [model_name, instances] : shadow_instance_batches_) {
+    for (const auto& [batch_handle, instances] : shadow_instance_batches_) {
         if (instances.empty()) continue;
 
-        Model* model = get_model_cached(frame_model_cache_, *model_manager_,model_name);
+        Model* model = get_model_cached(frame_model_cache_, *model_manager_, batch_handle);
         if (!model) {
             base_instance += static_cast<uint32_t>(instances.size());
             continue;
@@ -963,7 +1070,7 @@ void SceneRenderer::render_instanced_shadow_models(SDL_GPURenderPass* pass, SDL_
 void SceneRenderer::render_skinned_model_command(const SkinnedModelCommand& cmd, const CameraState& camera) {
     // Standalone path (used by non-batched callers): binds pipeline + shadows itself
     if (!main_render_pass_) return;
-    gpu::GPUPipeline* pipeline = pipeline_registry_.get_skinned_model_pipeline();
+    gpu::GPUPipeline* pipeline = pipeline_registry_->get_skinned_model_pipeline();
     if (!pipeline) return;
     pipeline->bind(main_render_pass_);
     bind_shadow_data(main_render_pass_, context_->current_command_buffer(), 1);
@@ -974,7 +1081,7 @@ void SceneRenderer::render_skinned_model_command(const SkinnedModelCommand& cmd,
 
 void SceneRenderer::render_skinned_model_command_inner(const SkinnedModelCommand& cmd, const CameraState& camera,
                                                         SDL_GPUTexture*& last_texture, int& last_has_texture) {
-    Model* model = get_model_cached(frame_model_cache_, *model_manager_,cmd.model_name);
+    Model* model = resolve_model(frame_model_cache_, frame_model_name_cache_, *model_manager_, cmd.model_handle, cmd.model_name);
     if (!model || !main_render_pass_) return;
 
     SDL_GPUCommandBuffer* gpu_cmd = context_->current_command_buffer();
@@ -1004,7 +1111,7 @@ void SceneRenderer::render_skinned_model_command_inner(const SkinnedModelCommand
     lighting_uniforms.cameraPos = camera.position;
 
     SDL_PushGPUVertexUniformData(gpu_cmd, 0, &transform_uniforms, sizeof(transform_uniforms));
-    SDL_PushGPUVertexUniformData(gpu_cmd, 1, cmd.bone_matrices.data(),
+    SDL_PushGPUVertexUniformData(gpu_cmd, 1, cmd.bone_matrices->data(),
                                   MAX_BONES * sizeof(glm::mat4));
 
     for (auto& mesh : model->meshes) {
@@ -1049,26 +1156,26 @@ void SceneRenderer::render_ui_commands(const UIScene& ui_scene, const CameraStat
             using T = std::decay_t<decltype(data)>;
 
             if constexpr (std::is_same_v<T, FilledRectCommand>) {
-                ui_.draw_filled_rect(data.x, data.y, data.w, data.h, data.color);
+                ui_->draw_filled_rect(data.x, data.y, data.w, data.h, data.color);
             }
             else if constexpr (std::is_same_v<T, RectOutlineCommand>) {
-                ui_.draw_rect_outline(data.x, data.y, data.w, data.h, data.color, data.line_width);
+                ui_->draw_rect_outline(data.x, data.y, data.w, data.h, data.color, data.line_width);
             }
             else if constexpr (std::is_same_v<T, CircleCommand>) {
-                ui_.draw_circle(data.x, data.y, data.radius, data.color, data.segments);
+                ui_->draw_circle(data.x, data.y, data.radius, data.color, data.segments);
             }
             else if constexpr (std::is_same_v<T, CircleOutlineCommand>) {
-                ui_.draw_circle_outline(data.x, data.y, data.radius, data.color,
+                ui_->draw_circle_outline(data.x, data.y, data.radius, data.color,
                                        data.line_width, data.segments);
             }
             else if constexpr (std::is_same_v<T, LineCommand>) {
-                ui_.draw_line(data.x1, data.y1, data.x2, data.y2, data.color, data.line_width);
+                ui_->draw_line(data.x1, data.y1, data.x2, data.y2, data.color, data.line_width);
             }
             else if constexpr (std::is_same_v<T, TextCommand>) {
-                ui_.draw_text(data.text, data.x, data.y, data.color, data.scale);
+                ui_->draw_text(data.text, data.x, data.y, data.color, data.scale);
             }
             else if constexpr (std::is_same_v<T, ButtonCommand>) {
-                ui_.draw_button(data.x, data.y, data.w, data.h, data.label, data.color, data.selected);
+                ui_->draw_button(data.x, data.y, data.w, data.h, data.label, data.color, data.selected);
             }
         }, cmd.data);
     }
@@ -1097,10 +1204,248 @@ void SceneRenderer::draw_billboard_3d(const Billboard3DCommand& cmd,
     float x = screen_x - bar_w * 0.5f;
     float y = screen_y - bar_h * 0.5f;
 
-    ui_.draw_filled_rect(x - 1, y - 1, bar_w + 2, bar_h + 2, cmd.frame_color);
-    ui_.draw_filled_rect(x, y, bar_w, bar_h, cmd.bg_color);
+    ui_->draw_filled_rect(x - 1, y - 1, bar_w + 2, bar_h + 2, cmd.frame_color);
+    ui_->draw_filled_rect(x, y, bar_w, bar_h, cmd.bg_color);
     float fill_w = bar_w * cmd.fill_ratio;
-    ui_.draw_filled_rect(x, y, fill_w, bar_h, cmd.fill_color);
+    ui_->draw_filled_rect(x, y, fill_w, bar_h, cmd.fill_color);
+}
+
+// ============================================================================
+// Debug Line Rendering
+// ============================================================================
+
+void SceneRenderer::render_debug_lines(const RenderScene& scene, const CameraState& camera) {
+    const auto& lines = scene.debug_lines();
+    if (lines.empty() || !main_render_pass_) return;
+
+    SDL_GPUCommandBuffer* cmd = context_->current_command_buffer();
+    if (!cmd) return;
+
+    gpu::GPUPipeline* pipeline = pipeline_registry_->get_grid_pipeline();
+    if (!pipeline) return;
+
+    const size_t line_count = lines.size();
+    const size_t vertex_count = line_count * 2;
+    // Grid vertex format: float3 position + float4 color = 7 floats per vertex
+    const size_t vertex_stride = sizeof(float) * 7;
+    const size_t buffer_size = vertex_count * vertex_stride;
+
+    // Recreate buffer if too small
+    if (!debug_line_vertex_buffer_ || debug_line_buffer_capacity_ < line_count) {
+        // Round up to avoid frequent reallocations
+        size_t new_capacity = std::max(line_count, size_t(256));
+        if (debug_line_buffer_capacity_ > 0) {
+            new_capacity = std::max(new_capacity, debug_line_buffer_capacity_ * 2);
+        }
+        debug_line_vertex_buffer_ = gpu::GPUBuffer::create_dynamic(
+            context_->device(),
+            gpu::GPUBuffer::Type::Vertex,
+            new_capacity * 2 * vertex_stride
+        );
+        if (!debug_line_vertex_buffer_) return;
+        debug_line_buffer_capacity_ = new_capacity;
+    }
+
+    // Build vertex data: position(3) + color(4) per vertex
+    // Unpack RGBA packed uint32 to float4
+    std::vector<float> vertices(vertex_count * 7);
+    float* dst = vertices.data();
+    for (const auto& line : lines) {
+        float r = static_cast<float>((line.color >> 24) & 0xFF) / 255.0f;
+        float g = static_cast<float>((line.color >> 16) & 0xFF) / 255.0f;
+        float b = static_cast<float>((line.color >> 8) & 0xFF) / 255.0f;
+        float a = static_cast<float>((line.color >> 0) & 0xFF) / 255.0f;
+
+        // Start vertex
+        *dst++ = line.start.x; *dst++ = line.start.y; *dst++ = line.start.z;
+        *dst++ = r; *dst++ = g; *dst++ = b; *dst++ = a;
+
+        // End vertex
+        *dst++ = line.end.x; *dst++ = line.end.y; *dst++ = line.end.z;
+        *dst++ = r; *dst++ = g; *dst++ = b; *dst++ = a;
+    }
+
+    // Upload vertex data
+    debug_line_vertex_buffer_->update(cmd, vertices.data(), buffer_size);
+
+    // Bind pipeline and draw
+    pipeline->bind(main_render_pass_);
+
+    // Push view-projection matrix as vertex uniform (same as grid rendering)
+    glm::mat4 vp = camera.projection * camera.view;
+    SDL_PushGPUVertexUniformData(cmd, 0, &vp, sizeof(vp));
+
+    // Bind vertex buffer
+    SDL_GPUBufferBinding binding = {};
+    binding.buffer = debug_line_vertex_buffer_->handle();
+    binding.offset = 0;
+    SDL_BindGPUVertexBuffers(main_render_pass_, 0, &binding, 1);
+
+    // Draw all lines
+    SDL_DrawGPUPrimitives(main_render_pass_, static_cast<uint32_t>(vertex_count), 1, 0, 0);
+
+    if (collect_stats_) {
+        render_stats_.draw_calls++;
+    }
+}
+
+// ============================================================================
+// Depth Pre-Pass
+// ============================================================================
+
+void SceneRenderer::render_depth_prepass(const RenderScene& scene, const CameraState& camera) {
+    SDL_GPUCommandBuffer* cmd = context_->current_command_buffer();
+    if (!cmd || !depth_texture_) return;
+
+    // Ensure depth texture matches current window size
+    int w = context_->width();
+    int h = context_->height();
+    if (depth_texture_->width() != w || depth_texture_->height() != h) {
+        depth_texture_ = gpu::GPUTexture::create_depth(context_->device(), w, h);
+        if (!depth_texture_) return;
+    }
+
+    // Begin a depth-only render pass (no color attachment)
+    SDL_GPUDepthStencilTargetInfo depth_target = {};
+    depth_target.texture = depth_texture_->handle();
+    depth_target.load_op = SDL_GPU_LOADOP_CLEAR;
+    depth_target.store_op = SDL_GPU_STOREOP_STORE;
+    depth_target.clear_depth = 1.0f;
+    depth_target.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
+    depth_target.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
+
+    SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, nullptr, 0, &depth_target);
+    if (!pass) return;
+
+    const glm::mat4 vp = camera.projection * camera.view;
+
+    // --- Instanced models ---
+    if (!shadow_instance_batches_.empty() && shadow_instance_storage_buffer_) {
+        auto* pipeline = pipeline_registry_->get_depth_prepass_instanced_pipeline();
+        if (pipeline) {
+            pipeline->bind(pass);
+
+            gpu::InstancedShadowUniforms uniforms = {};
+            uniforms.lightViewProjection = vp;  // reusing struct, but it's camera VP
+            SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
+
+            SDL_GPUBuffer* storage_buf = shadow_instance_storage_buffer_->handle();
+            SDL_BindGPUVertexStorageBuffers(pass, 0, &storage_buf, 1);
+
+            uint32_t base_instance = 0;
+            for (const auto& [batch_handle, instances] : shadow_instance_batches_) {
+                if (instances.empty()) continue;
+
+                Model* model = get_model_cached(frame_model_cache_, *model_manager_, batch_handle);
+                if (!model) {
+                    base_instance += static_cast<uint32_t>(instances.size());
+                    continue;
+                }
+
+                uint32_t instance_count = static_cast<uint32_t>(instances.size());
+
+                for (auto& mesh : model->meshes) {
+                    if (!mesh.uploaded) ModelLoader::upload_to_gpu(context_->device(), *model);
+                    if (!mesh.vertex_buffer || !mesh.index_buffer || mesh.index_count() == 0) continue;
+
+                    mesh.bind_buffers(pass);
+                    SDL_DrawGPUIndexedPrimitives(pass, mesh.index_count(),
+                                                  instance_count, 0, 0, base_instance);
+                }
+
+                base_instance += instance_count;
+            }
+        }
+    }
+
+    // --- Non-instanced static models ---
+    if (!non_instanced_commands_.empty()) {
+        auto* pipeline = pipeline_registry_->get_depth_prepass_pipeline();
+        if (pipeline) {
+            pipeline->bind(pass);
+
+            for (const auto* model_cmd : non_instanced_commands_) {
+                Model* model = resolve_model(frame_model_cache_, frame_model_name_cache_, *model_manager_, model_cmd->model_handle, model_cmd->model_name);
+                if (!model) continue;
+
+                gpu::ShadowTransformUniforms uniforms = {};
+                uniforms.lightViewProjection = vp;  // camera VP
+                uniforms.model = model_cmd->transform;
+                SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
+
+                for (auto& mesh : model->meshes) {
+                    if (!mesh.uploaded) ModelLoader::upload_to_gpu(context_->device(), *model);
+                    if (!mesh.vertex_buffer || !mesh.index_buffer || mesh.index_count() == 0) continue;
+
+                    mesh.bind_buffers(pass);
+                    SDL_DrawGPUIndexedPrimitives(pass, mesh.index_count(), 1, 0, 0, 0);
+                }
+            }
+        }
+    }
+
+    // --- Skinned models ---
+    {
+        auto* pipeline = pipeline_registry_->get_depth_prepass_skinned_pipeline();
+        if (pipeline) {
+            bool bound = false;
+            for (const auto& skinned_cmd : scene.skinned_commands()) {
+                // Distance + frustum culling already done in build_instance_batches for static,
+                // but skinned models are checked inline in render_3d_scene. Re-check here.
+                const glm::mat4& t = skinned_cmd.transform;
+                glm::vec3 world_pos(t[3][0], t[3][1], t[3][2]);
+                float dx = world_pos.x - camera.position.x;
+                float dz = world_pos.z - camera.position.z;
+                if (dx * dx + dz * dz > frame_draw_dist_sq_) continue;
+
+                if (frame_do_frustum_cull_) {
+                    Model* model = resolve_model(frame_model_cache_, frame_model_name_cache_, *model_manager_, skinned_cmd.model_handle, skinned_cmd.model_name);
+                    if (model) {
+                        glm::vec3 world_center = glm::vec3(t * glm::vec4(model->bounding_center, 1.0f));
+                        float max_scale = std::max({
+                            glm::length(glm::vec3(t[0])),
+                            glm::length(glm::vec3(t[1])),
+                            glm::length(glm::vec3(t[2]))
+                        });
+                        if (!frame_frustum_.intersects_sphere(world_center, model->bounding_half_diag * max_scale)) {
+                            continue;
+                        }
+                    }
+                }
+
+                if (!bound) {
+                    pipeline->bind(pass);
+                    bound = true;
+                }
+
+                Model* model = resolve_model(frame_model_cache_, frame_model_name_cache_, *model_manager_, skinned_cmd.model_handle, skinned_cmd.model_name);
+                if (!model) continue;
+
+                gpu::ShadowTransformUniforms uniforms = {};
+                uniforms.lightViewProjection = vp;  // camera VP
+                uniforms.model = skinned_cmd.transform;
+                SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
+                SDL_PushGPUVertexUniformData(cmd, 1, skinned_cmd.bone_matrices->data(),
+                                              MAX_BONES * sizeof(glm::mat4));
+
+                for (auto& mesh : model->meshes) {
+                    if (!mesh.uploaded) ModelLoader::upload_to_gpu(context_->device(), *model);
+                    if (!mesh.vertex_buffer || !mesh.index_buffer || mesh.index_count() == 0) continue;
+
+                    mesh.bind_buffers(pass);
+                    SDL_DrawGPUIndexedPrimitives(pass, mesh.index_count(), 1, 0, 0, 0);
+                }
+            }
+        }
+    }
+
+    // --- Terrain ---
+    if (scene.should_draw_ground()) {
+        terrain_->render_depth_prepass(pass, cmd, vp);
+    }
+
+    SDL_EndGPURenderPass(pass);
+    depth_prepass_ran_ = true;
 }
 
 // ============================================================================
@@ -1112,32 +1457,30 @@ void SceneRenderer::render_shadow_passes(const RenderScene& scene, const CameraS
     if (!cmd) return;
 
     // Update cascade matrices
-    shadow_map_.update(camera.view, camera.projection, light_dir_, 5.0f, 2000.0f);
+    shadow_map_->update(camera.view, camera.projection, light_dir_, 5.0f, 2000.0f);
 
-    // Pre-collect skinned model commands once instead of scanning all commands per cascade
+    // Pre-collect skinned model commands for shadow rendering
     shadow_skinned_commands_.clear();
-    for (const auto& render_cmd : scene.commands()) {
-        if (render_cmd.is<SkinnedModelCommand>()) {
-            shadow_skinned_commands_.push_back(&render_cmd.get<SkinnedModelCommand>());
-        }
+    for (const auto& skinned_cmd : scene.skinned_commands()) {
+        shadow_skinned_commands_.push_back(&skinned_cmd);
     }
 
-    for (int cascade = 0; cascade < shadow_map_.active_cascades(); ++cascade) {
-        SDL_GPURenderPass* shadow_pass = shadow_map_.begin_shadow_pass(cmd, cascade);
+    for (int cascade = 0; cascade < shadow_map_->active_cascades(); ++cascade) {
+        SDL_GPURenderPass* shadow_pass = shadow_map_->begin_shadow_pass(cmd, cascade);
         if (!shadow_pass) continue;
 
-        const auto& cascade_data = shadow_map_.cascades()[cascade];
+        const auto& cascade_data = shadow_map_->cascades()[cascade];
 
         // Render static models into shadow map (instanced)
         render_instanced_shadow_models(shadow_pass, cmd, cascade_data.light_view_projection);
 
         // Render non-instanced static models into shadow map
         if (!non_instanced_commands_.empty()) {
-            auto* shadow_pipeline = pipeline_registry_.get_shadow_model_pipeline();
+            auto* shadow_pipeline = pipeline_registry_->get_shadow_model_pipeline();
             if (shadow_pipeline) {
                 shadow_pipeline->bind(shadow_pass);
                 for (const auto* model_cmd : non_instanced_commands_) {
-                    Model* model = get_model_cached(frame_model_cache_, *model_manager_,model_cmd->model_name);
+                    Model* model = resolve_model(frame_model_cache_, frame_model_name_cache_, *model_manager_, model_cmd->model_handle, model_cmd->model_name);
                     if (!model) continue;
 
                     gpu::ShadowTransformUniforms shadow_uniforms = {};
@@ -1158,21 +1501,21 @@ void SceneRenderer::render_shadow_passes(const RenderScene& scene, const CameraS
             }
         }
 
-        // Render skinned models into shadow map (using pre-collected list)
+        // Render skinned models into shadow map
         if (!shadow_skinned_commands_.empty()) {
-            auto* shadow_skinned_pipeline = pipeline_registry_.get_shadow_skinned_model_pipeline();
+            auto* shadow_skinned_pipeline = pipeline_registry_->get_shadow_skinned_model_pipeline();
             if (shadow_skinned_pipeline) {
                 shadow_skinned_pipeline->bind(shadow_pass);
 
                 for (const auto* data : shadow_skinned_commands_) {
-                    Model* model = get_model_cached(frame_model_cache_, *model_manager_,data->model_name);
+                    Model* model = resolve_model(frame_model_cache_, frame_model_name_cache_, *model_manager_, data->model_handle, data->model_name);
                     if (!model) continue;
 
                     gpu::ShadowTransformUniforms shadow_uniforms = {};
                     shadow_uniforms.lightViewProjection = cascade_data.light_view_projection;
                     shadow_uniforms.model = data->transform;
                     SDL_PushGPUVertexUniformData(cmd, 0, &shadow_uniforms, sizeof(shadow_uniforms));
-                    SDL_PushGPUVertexUniformData(cmd, 1, data->bone_matrices.data(),
+                    SDL_PushGPUVertexUniformData(cmd, 1, data->bone_matrices->data(),
                                                   MAX_BONES * sizeof(glm::mat4));
 
                     for (auto& mesh : model->meshes) {
@@ -1190,25 +1533,21 @@ void SceneRenderer::render_shadow_passes(const RenderScene& scene, const CameraS
         }
 
         // Render terrain into shadow map
-        terrain_.render_shadow(shadow_pass, cmd, cascade_data.light_view_projection);
+        terrain_->render_shadow(shadow_pass, cmd, cascade_data.light_view_projection);
 
-        shadow_map_.end_shadow_pass();
+        shadow_map_->end_shadow_pass();
     }
 }
 
-void SceneRenderer::render_shadow_models(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                           const RenderScene& scene, int cascade_index) {
-    // Currently handled inline in render_shadow_passes
-}
 
 void SceneRenderer::bind_shadow_data(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, int sampler_slot) {
-    if (!shadow_map_.is_ready()) return;
+    if (!shadow_map_->is_ready()) return;
 
     // Bind 4 individual cascade shadow textures starting at sampler_slot
     SDL_GPUTextureSamplerBinding shadow_bindings[4];
     for (int i = 0; i < render::CSM_MAX_CASCADES; ++i) {
-        shadow_bindings[i].texture = shadow_map_.shadow_texture(i);
-        shadow_bindings[i].sampler = shadow_map_.shadow_sampler();
+        shadow_bindings[i].texture = shadow_map_->shadow_texture(i);
+        shadow_bindings[i].sampler = shadow_map_->shadow_sampler();
     }
     SDL_BindGPUFragmentSamplers(pass, sampler_slot, shadow_bindings, render::CSM_MAX_CASCADES);
 

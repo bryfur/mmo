@@ -10,6 +10,7 @@
 #include "SDL3/SDL_stdinc.h"
 #include <cmath>
 #include <algorithm>
+#include <cstring>
 #include <cstdint>
 #include <cstdio>
 
@@ -190,6 +191,12 @@ void InputHandler::process_event(const SDL_Event& event) {
     }
 }
 
+bool InputHandler::was_key_just_pressed(SDL_Scancode scancode) const {
+    if (scancode < 0 || scancode >= SDL_SCANCODE_COUNT) return false;
+    const bool* keys = SDL_GetKeyboardState(nullptr);
+    return keys[scancode] && !key_state_buffer_[scancode];
+}
+
 void InputHandler::post_process_events() {
     // Save previous input for change detection
     last_input_ = current_input_;
@@ -238,6 +245,10 @@ void InputHandler::post_process_events() {
                       current_input_.attacking != last_input_.attacking ||
                       std::abs(current_input_.attack_dir_x - last_input_.attack_dir_x) > 0.01f ||
                       std::abs(current_input_.attack_dir_y - last_input_.attack_dir_y) > 0.01f);
+
+    // Snapshot keyboard state for was_key_just_pressed() edge detection
+    const bool* keys = SDL_GetKeyboardState(nullptr);
+    std::memcpy(key_state_buffer_, keys, SDL_SCANCODE_COUNT * sizeof(bool));
 }
 
 bool InputHandler::process_events() {
@@ -336,13 +347,8 @@ void InputHandler::update_camera_from_mouse() {
         }
     }
     
-    // Normalize movement direction
-    float move_len = std::sqrt(move_x * move_x + move_z * move_z);
-    if (move_len > 1.0f) {
-        // Only normalize if magnitude > 1 (allow controller to have partial movement)
-        move_x /= move_len;
-        move_z /= move_len;
-    }
+    // Normalize movement direction (clamp magnitude to 1, preserve partial analog tilt)
+    float move_len = normalize_move_dir(move_x, move_z);
     
     // Send continuous movement direction for perfectly smooth movement
     // In the 2D game world: X stays X, Z becomes Y

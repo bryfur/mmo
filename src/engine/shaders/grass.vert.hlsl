@@ -41,6 +41,7 @@ cbuffer GrassUniforms {
     float heightmapMaxHeight;
     float worldWidth;
     float worldHeight;
+    float _grassPad0;
     float2 cameraForward;
 };
 

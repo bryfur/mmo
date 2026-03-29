@@ -1,6 +1,7 @@
 #pragma once
 
 #include "protocol/protocol.hpp"
+#include "engine/model_loader.hpp"  // ModelHandle
 #include "engine/animation/animation_player.hpp"
 #include "engine/animation/animation_state_machine.hpp"
 #include <string>
@@ -54,6 +55,7 @@ struct EntityInfo {
 
     // Server-provided render data
     std::string model_name;
+    mmo::engine::ModelHandle model_handle = mmo::engine::INVALID_MODEL_HANDLE;
     float target_size = 0.0f;
     std::string effect_type;
     std::string animation;     // Animation config name (e.g. "humanoid")
@@ -144,6 +146,7 @@ struct AnimationInstance {
     mmo::engine::animation::AnimationPlayer player;
     mmo::engine::animation::AnimationStateMachine state_machine;
     mmo::engine::animation::ProceduralConfig procedural;
+    mmo::engine::animation::FootIKSmoother foot_ik_smoother;
     bool bound = false;
     float attack_tilt = 0.0f;
 };

@@ -187,7 +187,47 @@ struct alignas(16) BlurUniforms {
  */
 struct alignas(16) CompositeUniforms {
     float aoStrength = 1.0f;
-    float _padding[3] = {0.0f, 0.0f, 0.0f};
+    float bloomStrength = 0.35f;
+    float volumetricFogEnabled = 0.0f;
+    float _padding = 0.0f;
+};
+
+/**
+ * Bloom downsample pass fragment uniforms (set 3, b0)
+ */
+struct alignas(16) BloomDownsampleUniforms {
+    glm::vec2 srcTexelSize;
+    float threshold = 0.8f;
+    float isFirstPass = 1.0f;
+};
+
+/**
+ * Bloom upsample pass fragment uniforms (set 3, b0)
+ */
+struct alignas(16) BloomUpsampleUniforms {
+    glm::vec2 srcTexelSize;
+    float bloomRadius = 1.0f;
+    float _padding = 0.0f;
+};
+
+/**
+ * Volumetric fog pass fragment uniforms (set 3, b0)
+ */
+struct alignas(16) VolumetricFogUniforms {
+    glm::mat4 invViewProjection;
+    glm::mat4 shadowLightViewProjection;
+    glm::vec3 lightDir;
+    float fogDensity = 0.02f;
+    glm::vec3 lightColor;
+    float scatterStrength = 0.3f;
+    glm::vec3 fogColor;
+    float fogHeight = 50.0f;
+    glm::vec3 cameraPos;
+    float fogFalloff = 0.01f;
+    float nearPlane = 0.1f;
+    float farPlane = 5000.0f;
+    float shadowMapResolution = 2048.0f;
+    float godRaysEnabled = 1.0f;
 };
 
 } // namespace mmo::engine::gpu

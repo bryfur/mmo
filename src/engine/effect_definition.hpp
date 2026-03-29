@@ -4,7 +4,7 @@
 #include <vector>
 #include <glm/glm.hpp>
 
-namespace engine {
+namespace mmo::engine {
 
 // Curve types for animating properties over particle lifetime
 enum class CurveType {
@@ -151,4 +151,4 @@ inline float Curve::evaluate(float t) const {
     return start_value;
 }
 
-} // namespace engine
+} // namespace mmo::engine

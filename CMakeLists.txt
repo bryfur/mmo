@@ -34,6 +34,22 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
+# Unit tests
+option(MMO_BUILD_TESTS "Build unit tests" ON)
+if(MMO_BUILD_TESTS)
+    enable_testing()
+
+    FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG v1.15.2
+    )
+    set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(googletest)
+endif()
+
+
 # Generate model bounds header from GLB files
 add_subdirectory(assets/models)
 
@@ -42,3 +58,4 @@ add_subdirectory(src/engine)
 add_subdirectory(src/server)
 add_subdirectory(src/client)
 add_subdirectory(src/editor)
+

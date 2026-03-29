@@ -41,11 +41,20 @@ enum class PipelineType {
     ShadowSkinnedModel, ///< Shadow depth pass for skinned models
     ShadowTerrain,      ///< Shadow depth pass for terrain
 
+    // Depth pre-pass pipelines (depth-only, camera VP, eliminates overdraw)
+    DepthPrePass,           ///< Depth pre-pass for static models
+    DepthPrePassInstanced,  ///< Depth pre-pass for instanced models
+    DepthPrePassSkinned,    ///< Depth pre-pass for skinned models
+    DepthPrePassTerrain,    ///< Depth pre-pass for terrain
+
     // Post-processing pipelines (fullscreen triangle, no vertex input)
     SSAO,               ///< SSAO ambient occlusion calculation
     GTAO,               ///< GTAO ambient occlusion calculation
     BlurAO,             ///< Bilateral blur for AO
-    Composite,          ///< Final composite (color * AO) to swapchain
+    Composite,          ///< Final composite (color * AO + bloom) to swapchain
+    BloomDownsample,    ///< Bloom brightness extract + downsample
+    BloomUpsample,      ///< Bloom tent-filter upsample
+    VolumetricFog,      ///< Volumetric fog with god rays
 
     // Count for iteration
     Count
@@ -71,10 +80,17 @@ inline const char* pipeline_type_to_string(PipelineType type) {
         case PipelineType::ShadowModel:        return "ShadowModel";
         case PipelineType::ShadowSkinnedModel: return "ShadowSkinnedModel";
         case PipelineType::ShadowTerrain:      return "ShadowTerrain";
+        case PipelineType::DepthPrePass:       return "DepthPrePass";
+        case PipelineType::DepthPrePassInstanced: return "DepthPrePassInstanced";
+        case PipelineType::DepthPrePassSkinned: return "DepthPrePassSkinned";
+        case PipelineType::DepthPrePassTerrain: return "DepthPrePassTerrain";
         case PipelineType::SSAO:               return "SSAO";
         case PipelineType::GTAO:               return "GTAO";
         case PipelineType::BlurAO:             return "BlurAO";
         case PipelineType::Composite:          return "Composite";
+        case PipelineType::BloomDownsample:    return "BloomDownsample";
+        case PipelineType::BloomUpsample:      return "BloomUpsample";
+        case PipelineType::VolumetricFog:      return "VolumetricFog";
         default:                               return "Unknown";
     }
 }
@@ -160,10 +176,17 @@ public:
     GPUPipeline* get_shadow_model_pipeline() { return get_pipeline(PipelineType::ShadowModel); }
     GPUPipeline* get_shadow_skinned_model_pipeline() { return get_pipeline(PipelineType::ShadowSkinnedModel); }
     GPUPipeline* get_shadow_terrain_pipeline() { return get_pipeline(PipelineType::ShadowTerrain); }
+    GPUPipeline* get_depth_prepass_pipeline() { return get_pipeline(PipelineType::DepthPrePass); }
+    GPUPipeline* get_depth_prepass_instanced_pipeline() { return get_pipeline(PipelineType::DepthPrePassInstanced); }
+    GPUPipeline* get_depth_prepass_skinned_pipeline() { return get_pipeline(PipelineType::DepthPrePassSkinned); }
+    GPUPipeline* get_depth_prepass_terrain_pipeline() { return get_pipeline(PipelineType::DepthPrePassTerrain); }
     GPUPipeline* get_ssao_pipeline() { return get_pipeline(PipelineType::SSAO); }
     GPUPipeline* get_gtao_pipeline() { return get_pipeline(PipelineType::GTAO); }
     GPUPipeline* get_blur_ao_pipeline() { return get_pipeline(PipelineType::BlurAO); }
     GPUPipeline* get_composite_pipeline() { return get_pipeline(PipelineType::Composite); }
+    GPUPipeline* get_bloom_downsample_pipeline() { return get_pipeline(PipelineType::BloomDownsample); }
+    GPUPipeline* get_bloom_upsample_pipeline() { return get_pipeline(PipelineType::BloomUpsample); }
+    GPUPipeline* get_volumetric_fog_pipeline() { return get_pipeline(PipelineType::VolumetricFog); }
 
     /**
      * @brief Pre-create all pipelines
@@ -218,10 +241,17 @@ private:
     std::unique_ptr<GPUPipeline> create_shadow_model_pipeline();
     std::unique_ptr<GPUPipeline> create_shadow_skinned_model_pipeline();
     std::unique_ptr<GPUPipeline> create_shadow_terrain_pipeline();
+    std::unique_ptr<GPUPipeline> create_depth_prepass_pipeline();
+    std::unique_ptr<GPUPipeline> create_depth_prepass_instanced_pipeline();
+    std::unique_ptr<GPUPipeline> create_depth_prepass_skinned_pipeline();
+    std::unique_ptr<GPUPipeline> create_depth_prepass_terrain_pipeline();
     std::unique_ptr<GPUPipeline> create_ssao_pipeline();
     std::unique_ptr<GPUPipeline> create_gtao_pipeline();
     std::unique_ptr<GPUPipeline> create_blur_ao_pipeline();
     std::unique_ptr<GPUPipeline> create_composite_pipeline();
+    std::unique_ptr<GPUPipeline> create_bloom_downsample_pipeline();
+    std::unique_ptr<GPUPipeline> create_bloom_upsample_pipeline();
+    std::unique_ptr<GPUPipeline> create_volumetric_fog_pipeline();
 
     GPUDevice* device_ = nullptr;
     SDL_GPUTextureFormat swapchain_format_ = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;

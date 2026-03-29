@@ -265,11 +265,16 @@ void AmbientOcclusion::render_blur_pass(SDL_GPUCommandBuffer* cmd, gpu::Pipeline
 }
 
 void AmbientOcclusion::render_composite_pass(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& pipelines,
-                                  SDL_GPUTexture* swapchain_target) {
+                                  SDL_GPUTexture* swapchain_target,
+                                  SDL_GPUTexture* bloom_texture,
+                                  float bloom_strength,
+                                  SDL_GPUTexture* fog_texture) {
     auto* pipeline = pipelines.get_composite_pipeline();
     if (!pipeline || !swapchain_target) return;
 
     gpu::CompositeUniforms uniforms = {};
+    uniforms.bloomStrength = bloom_texture ? bloom_strength : 0.0f;
+    uniforms.volumetricFogEnabled = fog_texture ? 1.0f : 0.0f;
 
     SDL_GPUColorTargetInfo color_target = {};
     color_target.texture = swapchain_target;
@@ -282,12 +287,21 @@ void AmbientOcclusion::render_composite_pass(SDL_GPUCommandBuffer* cmd, gpu::Pip
     pipeline->bind(pass);
     SDL_PushGPUFragmentUniformData(cmd, 0, &uniforms, sizeof(uniforms));
 
-    SDL_GPUTextureSamplerBinding bindings[2] = {};
+    // Bind bloom texture (or AO texture as fallback for slot 2 - shader reads 0.0 strength)
+    SDL_GPUTexture* bloom_tex = bloom_texture ? bloom_texture : ao_texture_->handle();
+    // Bind fog texture (or AO texture as fallback for slot 3 - shader checks enabled flag)
+    SDL_GPUTexture* fog_tex = fog_texture ? fog_texture : ao_texture_->handle();
+
+    SDL_GPUTextureSamplerBinding bindings[4] = {};
     bindings[0].texture = offscreen_color_->handle();
     bindings[0].sampler = linear_clamp_sampler_;
     bindings[1].texture = ao_texture_->handle();  // After blur, result is back in ao_texture_
     bindings[1].sampler = linear_clamp_sampler_;
-    SDL_BindGPUFragmentSamplers(pass, 0, bindings, 2);
+    bindings[2].texture = bloom_tex;
+    bindings[2].sampler = linear_clamp_sampler_;
+    bindings[3].texture = fog_tex;
+    bindings[3].sampler = linear_clamp_sampler_;
+    SDL_BindGPUFragmentSamplers(pass, 0, bindings, 4);
 
     SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
     SDL_EndGPURenderPass(pass);

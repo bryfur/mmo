@@ -17,7 +17,7 @@ public:
     bool load_effects_directory(const std::string& directory_path);
 
     // Get an effect definition by name
-    const ::engine::EffectDefinition* get_effect(const std::string& name) const;
+    const mmo::engine::EffectDefinition* get_effect(const std::string& name) const;
 
     // Check if an effect exists
     bool has_effect(const std::string& name) const;
@@ -26,7 +26,7 @@ public:
     void clear();
 
 private:
-    std::unordered_map<std::string, ::engine::EffectDefinition> effects_;
+    std::unordered_map<std::string, mmo::engine::EffectDefinition> effects_;
 };
 
 } // namespace mmo

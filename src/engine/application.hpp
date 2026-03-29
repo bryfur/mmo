@@ -1,5 +1,6 @@
 #pragma once
 
+#include "engine/graphics_settings.hpp"
 #include "engine/input_handler.hpp"
 #include <SDL3/SDL.h>
 #include <cstdint>
@@ -25,7 +26,6 @@ namespace systems {
 }
 
 class ModelManager;
-struct GraphicsSettings;
 struct Heightmap;
 
 /**
@@ -94,6 +94,16 @@ protected:
     int max_vsync_mode() const;
     void set_window_mode(int window_mode, int resolution_index = 0);
 
+    /** Apply all graphics settings (scene renderer, vsync, anisotropic, window mode). */
+    void apply_all_graphics_settings(const GraphicsSettings& settings);
+
+    /** Access the persisted graphics settings. */
+    GraphicsSettings& graphics_settings() { return graphics_settings_; }
+    const GraphicsSettings& graphics_settings() const { return graphics_settings_; }
+
+    /** Get the platform-appropriate settings file path. */
+    std::string settings_file_path() const;
+
     struct DisplayMode { int w, h; };
     std::vector<DisplayMode> available_resolutions() const;
 
@@ -126,6 +136,8 @@ private:
     std::unique_ptr<render::RenderContext> context_;
     std::unique_ptr<scene::SceneRenderer> scene_renderer_;
     std::unique_ptr<systems::CameraSystem> camera_;
+
+    GraphicsSettings graphics_settings_;
 };
 
 } // namespace mmo::engine

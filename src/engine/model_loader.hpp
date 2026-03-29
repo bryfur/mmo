@@ -12,6 +12,7 @@
 // Include GPU abstraction headers for proper type definitions
 #include "gpu/gpu_buffer.hpp"
 #include "gpu/gpu_texture.hpp"
+#include "gpu/gpu_types.hpp"
 
 // Animation types from the dedicated animation module
 #include "animation/animation_types.hpp"
@@ -21,6 +22,10 @@ struct SDL_GPUDevice;
 struct SDL_GPUCommandBuffer;
 
 namespace mmo::engine {
+
+// Integer handle for O(1) model lookup (replaces string-based lookups in hot paths)
+using ModelHandle = uint32_t;
+static constexpr ModelHandle INVALID_MODEL_HANDLE = 0;
 
 // Re-export animation types into mmo::engine for backward compatibility
 using animation::MAX_BONES;
@@ -32,22 +37,9 @@ using animation::Joint;
 using animation::Skeleton;
 using animation::FootIKData;
 
-struct Vertex3D {
-    float x, y, z;       // Position
-    float nx, ny, nz;    // Normal
-    float u, v;          // Texture coords
-    float r, g, b, a;    // Vertex color
-};
-
-// Skinned vertex with bone weights
-struct SkinnedVertex {
-    float x, y, z;       // Position
-    float nx, ny, nz;    // Normal
-    float u, v;          // Texture coords
-    float r, g, b, a;    // Vertex color
-    uint8_t joints[4];   // Bone indices (up to 4 influences)
-    float weights[4];    // Bone weights (sum to 1.0)
-};
+// Use canonical vertex types from gpu module
+using gpu::Vertex3D;
+using gpu::SkinnedVertex;
 
 struct Mesh {
     std::vector<Vertex3D> vertices;
@@ -135,18 +127,30 @@ public:
 
 class ModelManager {
 public:
-    ModelManager() = default;
+    ModelManager();
     ~ModelManager();
 
     void set_device(gpu::GPUDevice* device) { device_ = device; }
 
-    bool load_model(const std::string& name, const std::string& path);
-    Model* get_model(const std::string& name);
+    /// Load a model and return its handle (INVALID_MODEL_HANDLE on failure)
+    ModelHandle load_model(const std::string& name, const std::string& path);
+
+    /// O(1) lookup by handle
+    Model* get_model(ModelHandle handle) const;
+
+    /// Name-based lookup (backward compat, uses hash map)
+    Model* get_model(const std::string& name) const;
+
+    /// Resolve a name to a handle (INVALID_MODEL_HANDLE if not found)
+    ModelHandle get_handle(const std::string& name) const;
+
     void unload_all();
 
 private:
     gpu::GPUDevice* device_ = nullptr;
-    std::unordered_map<std::string, Model> models_;
+    // Slot 0 is reserved (INVALID_MODEL_HANDLE), models start at index 1
+    std::vector<std::unique_ptr<Model>> models_;
+    std::unordered_map<std::string, ModelHandle> name_to_handle_;
 };
 
 } // namespace mmo::engine

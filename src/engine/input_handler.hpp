@@ -75,6 +75,10 @@ public:
         menu_select_pressed_ = false;
     }
 
+    // Generic one-shot key press detection (true only on the frame the key was first pressed)
+    bool was_key_just_pressed(SDL_Scancode scancode) const;
+
+    // TODO: Move to client-side key binding system
     // Gameplay UI key presses
     bool inventory_pressed() const { return inventory_pressed_; }
     bool quest_log_pressed() const { return quest_log_pressed_; }
@@ -159,6 +163,11 @@ private:
     bool menu_select_pressed_ = false;
     bool game_input_enabled_ = true;
 
+    // Key state tracking for was_key_just_pressed()
+    const bool* prev_key_state_ = nullptr;
+    bool key_state_buffer_[SDL_SCANCODE_COUNT] = {};
+
+    // TODO: Move to client-side key binding system
     // Gameplay UI input state
     bool inventory_pressed_ = false;
     bool quest_log_pressed_ = false;

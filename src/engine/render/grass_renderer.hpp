@@ -43,6 +43,13 @@ struct alignas(16) GrassVertexUniforms {
     float world_height;              // 4 bytes
     float _padding0;                 // 4 bytes - align camera_forward to 8-byte boundary
     glm::vec2 camera_forward;        // 8 bytes (XZ direction camera is looking)
+    // New fields
+    glm::vec3 camera_right;          // 12 bytes
+    float curve_factor;              // 4 bytes
+    float width_expansion_max;       // 4 bytes
+    float width_expansion_start;     // 4 bytes
+    float full_density_distance;     // 4 bytes
+    float heightmap_texel_size;      // 4 bytes
 };
 
 /**
@@ -99,7 +106,7 @@ public:
     float wind_magnitude = 0.8f;
 
     // Grass parameters
-    float grass_spacing = 8.0f;
+    float grass_spacing = 4.0f;       // Tighter spacing for denser grass near camera
     float grass_view_distance = 2000.0f;
 
 private:

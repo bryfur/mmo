@@ -119,17 +119,9 @@ GPUPipeline* PipelineRegistry::get_pipeline(PipelineType type) {
         case PipelineType::ShadowTerrain:
             pipeline = create_shadow_terrain_pipeline();
             break;
-        case PipelineType::DepthPrePass:
-            pipeline = create_depth_prepass_pipeline();
             break;
-        case PipelineType::DepthPrePassInstanced:
-            pipeline = create_depth_prepass_instanced_pipeline();
             break;
-        case PipelineType::DepthPrePassSkinned:
-            pipeline = create_depth_prepass_skinned_pipeline();
             break;
-        case PipelineType::DepthPrePassTerrain:
-            pipeline = create_depth_prepass_terrain_pipeline();
             break;
         case PipelineType::SSAO:
             pipeline = create_ssao_pipeline();
@@ -263,7 +255,8 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_instanced_shadow_model_pip
     vs_resources.num_storage_buffers = 1;  // instance model matrices
 
     ShaderResources fs_resources;
-    // Empty fragment shader: no uniforms, no samplers
+    fs_resources.num_uniform_buffers = 1;  // hasTexture flag
+    fs_resources.num_samplers = 1;         // alpha texture for transparency
 
     auto* vs = shader_manager_->get(shader_path_ + "shadow_depth_instanced.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
@@ -570,7 +563,8 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_shadow_model_pipeline() {
     vs_resources.num_uniform_buffers = 1;  // lightVP + model
 
     ShaderResources fs_resources;
-    // Empty fragment shader: no uniforms, no samplers
+    fs_resources.num_uniform_buffers = 1;  // hasTexture flag
+    fs_resources.num_samplers = 1;         // alpha texture for transparency
 
     auto* vs = shader_manager_->get(shader_path_ + "shadow_depth.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
@@ -594,6 +588,8 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_shadow_skinned_model_pipel
     vs_resources.num_uniform_buffers = 2;  // lightVP+model, bones
 
     ShaderResources fs_resources;
+    fs_resources.num_uniform_buffers = 1;  // hasTexture flag
+    fs_resources.num_samplers = 1;         // alpha texture for transparency
 
     auto* vs = shader_manager_->get(shader_path_ + "shadow_skinned.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
@@ -617,6 +613,8 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_shadow_terrain_pipeline() 
     vs_resources.num_uniform_buffers = 1;  // lightVP
 
     ShaderResources fs_resources;
+    fs_resources.num_uniform_buffers = 1;  // hasTexture flag
+    fs_resources.num_samplers = 1;         // alpha texture for transparency
 
     auto* vs = shader_manager_->get(shader_path_ + "shadow_terrain.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
@@ -647,127 +645,6 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_shadow_terrain_pipeline() 
     // Terrain is single-sided (upward-facing only), so no_cull is needed
     // to ensure terrain triangles are written to the shadow map.
     config.opaque().no_cull().with_depth_bias(4.0f, 2.0f);
-    config.color_format = SDL_GPU_TEXTUREFORMAT_INVALID;
-    config.depth_format = depth_format_;
-
-    return GPUPipeline::create(*device_, config);
-}
-
-// =============================================================================
-// Depth Pre-Pass Pipelines
-// =============================================================================
-// These reuse the same depth-only shaders as shadow pipelines but:
-// - Use the camera VP instead of light VP (passed via the same uniform slot)
-// - Use back-face culling (not front-face like shadow pipelines)
-// - No depth bias
-// - No color attachment (depth-only)
-
-std::unique_ptr<GPUPipeline> PipelineRegistry::create_depth_prepass_pipeline() {
-    ShaderResources vs_resources;
-    vs_resources.num_uniform_buffers = 1;  // VP + model (ShadowTransformUniforms layout)
-
-    ShaderResources fs_resources;
-    // Empty fragment shader
-
-    auto* vs = shader_manager_->get(shader_path_ + "shadow_depth.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "shadow_depth.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
-
-    if (!vs || !fs) return nullptr;
-
-    PipelineConfig config;
-    config.vertex_shader = vs->handle();
-    config.fragment_shader = fs->handle();
-    config.with_vertex3d().opaque();
-    config.color_format = SDL_GPU_TEXTUREFORMAT_INVALID;  // depth-only
-    config.depth_format = depth_format_;
-    // Default cull_mode is BACK, no depth bias needed
-
-    return GPUPipeline::create(*device_, config);
-}
-
-std::unique_ptr<GPUPipeline> PipelineRegistry::create_depth_prepass_instanced_pipeline() {
-    ShaderResources vs_resources;
-    vs_resources.num_uniform_buffers = 1;  // VP (InstancedShadowUniforms layout)
-    vs_resources.num_storage_buffers = 1;  // instance model matrices
-
-    ShaderResources fs_resources;
-    // Empty fragment shader
-
-    auto* vs = shader_manager_->get(shader_path_ + "shadow_depth_instanced.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "shadow_depth.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
-
-    if (!vs || !fs) return nullptr;
-
-    PipelineConfig config;
-    config.vertex_shader = vs->handle();
-    config.fragment_shader = fs->handle();
-    config.with_vertex3d().opaque();
-    config.color_format = SDL_GPU_TEXTUREFORMAT_INVALID;  // depth-only
-    config.depth_format = depth_format_;
-
-    return GPUPipeline::create(*device_, config);
-}
-
-std::unique_ptr<GPUPipeline> PipelineRegistry::create_depth_prepass_skinned_pipeline() {
-    ShaderResources vs_resources;
-    vs_resources.num_uniform_buffers = 2;  // VP+model, bones
-
-    ShaderResources fs_resources;
-
-    auto* vs = shader_manager_->get(shader_path_ + "shadow_skinned.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "shadow_depth.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
-
-    if (!vs || !fs) return nullptr;
-
-    PipelineConfig config;
-    config.vertex_shader = vs->handle();
-    config.fragment_shader = fs->handle();
-    config.with_skinned_vertex().opaque();
-    config.color_format = SDL_GPU_TEXTUREFORMAT_INVALID;  // depth-only
-    config.depth_format = depth_format_;
-
-    return GPUPipeline::create(*device_, config);
-}
-
-std::unique_ptr<GPUPipeline> PipelineRegistry::create_depth_prepass_terrain_pipeline() {
-    ShaderResources vs_resources;
-    vs_resources.num_uniform_buffers = 1;  // VP (ShadowTerrainUniforms layout)
-
-    ShaderResources fs_resources;
-
-    auto* vs = shader_manager_->get(shader_path_ + "shadow_terrain.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "shadow_depth.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
-
-    if (!vs || !fs) return nullptr;
-
-    // Terrain vertex format: position(3), texcoord(2), color(4), normal(3)
-    PipelineConfig config;
-    config.vertex_shader = vs->handle();
-    config.fragment_shader = fs->handle();
-
-    config.vertex_buffers = {{
-        .slot = 0,
-        .pitch = sizeof(float) * 12,
-        .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
-        .instance_step_rate = 0
-    }};
-
-    config.vertex_attributes = {
-        { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, 0 },
-        { 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, sizeof(float) * 3 },
-        { 2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, sizeof(float) * 5 },
-        { 3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, sizeof(float) * 9 },
-    };
-
-    config.opaque().no_cull();  // terrain is single-sided upward-facing
     config.color_format = SDL_GPU_TEXTUREFORMAT_INVALID;
     config.depth_format = depth_format_;
 

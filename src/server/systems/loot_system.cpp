@@ -167,28 +167,18 @@ bool use_consumable(entt::registry& registry, entt::entity player, const std::st
         }
     }
 
-    // Fix #6: Apply buff effects from consumable potions
+    // Apply buff effects from consumable potions
     if (item->stats.buff_duration > 0.0f && item->stats.buff_multiplier != 0.0f) {
-        ecs::StatusEffect buff;
-        buff.duration = item->stats.buff_duration;
-        buff.tick_timer = 0.0f;
-        buff.tick_interval = 0.0f;
-        buff.value = item->stats.buff_multiplier;
-        buff.source_id = 0;
-
         // Determine buff type from item subtype
+        ecs::StatusEffect::Type buff_type = ecs::StatusEffect::Type::DamageBoost;
         if (item->subtype == "speed_potion" || item->subtype == "speed") {
-            buff.type = ecs::StatusEffect::Type::SpeedBoost;
-        } else if (item->subtype == "damage_potion" || item->subtype == "damage") {
-            buff.type = ecs::StatusEffect::Type::DamageBoost;
+            buff_type = ecs::StatusEffect::Type::SpeedBoost;
         } else if (item->subtype == "defense_potion" || item->subtype == "defense") {
-            buff.type = ecs::StatusEffect::Type::DefenseBoost;
-        } else {
-            // Default to damage boost for unrecognized buff potions
-            buff.type = ecs::StatusEffect::Type::DamageBoost;
+            buff_type = ecs::StatusEffect::Type::DefenseBoost;
         }
 
-        apply_effect(registry, player, buff);
+        apply_effect(registry, player,
+            ecs::make_status_effect(buff_type, item->stats.buff_duration, item->stats.buff_multiplier));
     }
 
     // Remove 1 from inventory

@@ -28,7 +28,7 @@ struct EntityDeltaUpdate : Serializable<EntityDeltaUpdate> {
     static constexpr uint8_t FLAG_MANA = 0x40;
     static constexpr uint8_t FLAG_MAX_HEALTH = 0x80;
 
-    // Variable size based on flags
+    // Variable size based on flags: min 5 bytes (id+flags), max 5+3*4+2*4+4+4+1+2*4+4+4 = 50 bytes
     static size_t serialized_size(uint8_t flags) {
         size_t size = sizeof(uint32_t) + sizeof(uint8_t);  // id + flags
         if (flags & FLAG_POSITION) size += sizeof(float) * 3;

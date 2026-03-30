@@ -139,7 +139,6 @@ private:
     void bind_shadow_data(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, int sampler_slot);
 
     // Depth pre-pass (renders depth-only before main pass to eliminate overdraw)
-    void render_depth_prepass(const RenderScene& scene, const CameraState& camera);
 
     // Setup
     void init_pipelines();
@@ -173,6 +172,7 @@ private:
     size_t debug_line_buffer_capacity_ = 0;  // max line count the buffer can hold
     std::unique_ptr<gpu::GPUTexture> depth_texture_;
     SDL_GPUSampler* default_sampler_ = nullptr;
+    std::unique_ptr<gpu::GPUTexture> dummy_white_texture_;  // 1x1 white for binding slots that need a texture
 
     // ========== Instanced Rendering ==========
     // Per-model batched instance data, rebuilt each frame (keyed by ModelHandle for O(1) lookup)
@@ -194,7 +194,6 @@ private:
     SDL_GPURenderPass* main_render_pass_ = nullptr;
     SDL_GPUTexture* current_swapchain_ = nullptr;
     bool had_main_pass_this_frame_ = false;
-    bool depth_prepass_ran_ = false;  // true if depth pre-pass wrote to depth_texture_ this frame
     glm::vec3 light_dir_ = glm::normalize(glm::vec3(-0.5f, -0.8f, -0.3f));
     float skybox_time_ = 0.0f;
     GraphicsSettings* graphics_ = nullptr;

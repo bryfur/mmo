@@ -18,6 +18,7 @@
 #include "systems/skill_system.hpp"
 #include "systems/zone_system.hpp"
 #include "systems/talent_passive_system.hpp"
+#include "systems/death_system.hpp"
 #include "entity_config.hpp"
 #include <nlohmann/json.hpp>
 #include <cstdint>
@@ -41,6 +42,14 @@ World::World(const GameConfig& config)
     , zone_system_(config)
     , spatial_grid_(config.network().spatial_grid_cell_size)
     , rng_(std::random_device{}()) {
+    // Cache town center from zone config
+    for (const auto& zone : config.zones()) {
+        if (zone.id == "town_safe_zone") {
+            town_center_ = glm::vec2(zone.center_x, zone.center_z);
+            break;
+        }
+    }
+
     // Load heightmap from editor save
     load_heightmap();
 
@@ -137,19 +146,10 @@ uint32_t World::add_player(const std::string& name, PlayerClass player_class) {
     auto entity = registry_.create();
     uint32_t net_id = next_network_id();
     
-    // Spawn players in the town (safe zone) - read center from zone config
-    float town_center_x = 4000.0f;
-    float town_center_z = 4000.0f;
-    for (const auto& zone : config_->zones()) {
-        if (zone.id == "town_safe_zone") {
-            town_center_x = zone.center_x;
-            town_center_z = zone.center_z;
-            break;
-        }
-    }
+    // Spawn players in the town (safe zone)
     std::uniform_real_distribution<float> dist_offset(-50.0f, 50.0f);
-    float spawn_x = town_center_x + dist_offset(rng_);
-    float spawn_z = town_center_z + dist_offset(rng_);
+    float spawn_x = town_center_.x + dist_offset(rng_);
+    float spawn_z = town_center_.y + dist_offset(rng_);
 
     // Get terrain height at spawn position (y = height/elevation)
     float spawn_y = get_terrain_height(spawn_x, spawn_z);
@@ -195,6 +195,8 @@ uint32_t World::add_player(const std::string& name, PlayerClass player_class) {
     registry_.emplace<ecs::QuestState>(entity);
     registry_.emplace<ecs::SkillState>(entity);
     registry_.emplace<ecs::TalentState>(entity);
+    registry_.emplace<ecs::TalentStats>(entity);
+    registry_.emplace<ecs::TalentRuntimeState>(entity);
 
     // Add physics collider for player (dynamic body for collision response)
     // Size matches visual scale from client rendering
@@ -273,7 +275,7 @@ void World::update(float dt) {
 
     // Update game systems
     systems::update_movement(registry_, dt, *config_);
-    systems::update_ai(registry_, dt, *config_);
+    systems::update_ai(registry_, dt, *config_, town_center_);
     auto combat_hits = systems::update_combat(registry_, dt, *config_);
 
     // Generate CombatEvent and EntityDeath events from combat hits
@@ -348,292 +350,16 @@ void World::update(float dt) {
         }
     }
 
-    // Check for dead monsters - award XP/loot and respawn
-    {
-        auto dead_npcs = registry_.view<ecs::NPCTag, ecs::Health, ecs::MonsterTypeId>();
-        for (auto entity : dead_npcs) {
-            auto& health = dead_npcs.get<ecs::Health>(entity);
-            if (health.is_alive()) continue;
+    // Handle dead monsters - award XP/loot, talent kill effects, respawn
+    systems::handle_monster_deaths(
+        registry_, *config_, pending_events_, spatial_grid_,
+        zone_system_, physics_, rng_,
+        [this](float x, float z) { return get_terrain_height(x, z); });
 
-            auto& monster_info = dead_npcs.get<ecs::MonsterTypeId>(entity);
-
-            // Award XP/loot to nearest player who killed it
-            auto& transform = registry_.get<ecs::Transform>(entity);
-            float best_dist = 1000.0f;
-            entt::entity killer = entt::null;
-            auto players = registry_.view<ecs::PlayerTag, ecs::Transform, ecs::Health>();
-            for (auto player : players) {
-                auto& ph = players.get<ecs::Health>(player);
-                if (!ph.is_alive()) continue;
-                auto& pt = players.get<ecs::Transform>(player);
-                float dx = pt.x - transform.x;
-                float dz = pt.z - transform.z;
-                float dist = std::sqrt(dx * dx + dz * dz);
-                if (dist < best_dist) {
-                    best_dist = dist;
-                    killer = player;
-                }
-            }
-
-            if (killer != entt::null) {
-                // Snapshot XP/level before awarding so we can compute the gain
-                auto& killer_level_pre = registry_.get<ecs::PlayerLevel>(killer);
-                int xp_before = killer_level_pre.xp;
-                int level_before = killer_level_pre.level;
-
-                systems::award_kill_xp(registry_, killer, entity, *config_);
-
-                // Apply kill-based talent effects
-                if (registry_.all_of<ecs::TalentPassiveState>(killer)) {
-                    auto& tp = registry_.get<ecs::TalentPassiveState>(killer);
-                    const auto& dead_transform = registry_.get<ecs::Transform>(entity);
-                    float dead_max_hp = registry_.all_of<ecs::Health>(entity)
-                        ? registry_.get<ecs::Health>(entity).max : 0.0f;
-
-                    // Kill heal (Bloodlust, etc.)
-                    if (tp.kill_heal_pct > 0.0f && registry_.all_of<ecs::Health>(killer)) {
-                        auto& kh = registry_.get<ecs::Health>(killer);
-                        kh.current = std::min(kh.max, kh.current + kh.max * tp.kill_heal_pct);
-                    }
-
-                    // Kill explosion (Inferno)
-                    if (tp.kill_explosion_pct > 0.0f && tp.kill_explosion_radius > 0.0f &&
-                        dead_max_hp > 0.0f) {
-                        float explosion_dmg = dead_max_hp * tp.kill_explosion_pct;
-                        auto npc_explode_view = registry_.view<ecs::NPCTag, ecs::Health, ecs::Transform>();
-                        for (auto npc : npc_explode_view) {
-                            if (npc == entity) continue;
-                            auto& nh = npc_explode_view.get<ecs::Health>(npc);
-                            if (!nh.is_alive()) continue;
-                            const auto& nt = npc_explode_view.get<ecs::Transform>(npc);
-                            float dx = nt.x - dead_transform.x, dz = nt.z - dead_transform.z;
-                            if (std::sqrt(dx * dx + dz * dz) <= tp.kill_explosion_radius) {
-                                nh.current = std::max(0.0f, nh.current - explosion_dmg);
-                            }
-                        }
-                    }
-
-                    // Burn spread on kill (Living Bomb)
-                    if (tp.burn_spread_radius > 0.0f && registry_.all_of<ecs::Combat>(killer)) {
-                        float spread_dmg = registry_.get<ecs::Combat>(killer).damage * 0.03f;
-                        uint32_t killer_net_id2 = registry_.all_of<ecs::NetworkId>(killer)
-                            ? registry_.get<ecs::NetworkId>(killer).id : 0;
-                        auto npc_burn_view = registry_.view<ecs::NPCTag, ecs::Health, ecs::Transform>();
-                        for (auto npc : npc_burn_view) {
-                            if (npc == entity) continue;
-                            auto& nh = npc_burn_view.get<ecs::Health>(npc);
-                            if (!nh.is_alive()) continue;
-                            const auto& nt = npc_burn_view.get<ecs::Transform>(npc);
-                            float dx = nt.x - dead_transform.x, dz = nt.z - dead_transform.z;
-                            if (std::sqrt(dx * dx + dz * dz) <= tp.burn_spread_radius) {
-                                ecs::StatusEffect burn;
-                                burn.type = ecs::StatusEffect::Type::Burn;
-                                burn.duration = 4.0f;
-                                burn.tick_timer = burn.tick_interval = 1.0f;
-                                burn.value = spread_dmg;
-                                burn.source_id = killer_net_id2;
-                                systems::apply_effect(registry_, npc, burn);
-                            }
-                        }
-                    }
-
-                    // Poison death explosion (Death Zone)
-                    if (tp.poison_death_explosion_pct > 0.0f && tp.poison_explosion_radius > 0.0f &&
-                        dead_max_hp > 0.0f) {
-                        float explosion_dmg = dead_max_hp * tp.poison_death_explosion_pct;
-                        uint32_t killer_net_id3 = registry_.all_of<ecs::NetworkId>(killer)
-                            ? registry_.get<ecs::NetworkId>(killer).id : 0;
-                        auto npc_poison_view = registry_.view<ecs::NPCTag, ecs::Health, ecs::Transform>();
-                        for (auto npc : npc_poison_view) {
-                            if (npc == entity) continue;
-                            auto& nh = npc_poison_view.get<ecs::Health>(npc);
-                            if (!nh.is_alive()) continue;
-                            const auto& nt = npc_poison_view.get<ecs::Transform>(npc);
-                            float dx = nt.x - dead_transform.x, dz = nt.z - dead_transform.z;
-                            if (std::sqrt(dx * dx + dz * dz) <= tp.poison_explosion_radius) {
-                                ecs::StatusEffect poison;
-                                poison.type = ecs::StatusEffect::Type::Poison;
-                                poison.duration = 5.0f;
-                                poison.tick_timer = poison.tick_interval = 1.0f;
-                                poison.value = explosion_dmg / 5.0f;
-                                poison.source_id = killer_net_id3;
-                                systems::apply_effect(registry_, npc, poison);
-                            }
-                        }
-                    }
-
-                    // Kill damage/speed buffs (Conqueror)
-                    if (tp.kill_damage_bonus > 0.0f && tp.kill_damage_dur > 0.0f) {
-                        ecs::StatusEffect dmg_buff;
-                        dmg_buff.type = ecs::StatusEffect::Type::DamageBoost;
-                        dmg_buff.duration = tp.kill_damage_dur;
-                        dmg_buff.tick_timer = dmg_buff.tick_interval = 0.0f;
-                        dmg_buff.value = tp.kill_damage_bonus;
-                        dmg_buff.source_id = 0;
-                        systems::apply_effect(registry_, killer, dmg_buff);
-                    }
-                    if (tp.kill_speed_bonus > 0.0f && tp.kill_speed_dur > 0.0f) {
-                        ecs::StatusEffect spd_buff;
-                        spd_buff.type = ecs::StatusEffect::Type::SpeedBoost;
-                        spd_buff.duration = tp.kill_speed_dur;
-                        spd_buff.tick_timer = spd_buff.tick_interval = 0.0f;
-                        spd_buff.value = tp.kill_speed_bonus;
-                        spd_buff.source_id = 0;
-                        systems::apply_effect(registry_, killer, spd_buff);
-                    }
-                }
-
-                auto loot = systems::roll_loot(monster_info.type_id, *config_);
-                systems::give_loot(registry_, killer, loot);
-
-                // Process quest kill objectives and generate events
-                auto quest_kill_changes = systems::on_monster_killed(registry_, killer, monster_info.type_id, *config_);
-                auto& killer_net_id = registry_.get<ecs::NetworkId>(killer);
-
-                for (auto& change : quest_kill_changes) {
-                    if (change.quest_complete) {
-                        GameplayEvent evt;
-                        evt.type = GameplayEvent::Type::QuestComplete;
-                        evt.player_id = killer_net_id.id;
-                        evt.quest_id = change.quest_id;
-                        evt.quest_name = change.quest_name;
-                        pending_events_.push_back(evt);
-                    } else {
-                        GameplayEvent evt;
-                        evt.type = GameplayEvent::Type::QuestProgress;
-                        evt.player_id = killer_net_id.id;
-                        evt.quest_id = change.quest_id;
-                        evt.objective_index = change.objective_index;
-                        evt.obj_current = change.current;
-                        evt.obj_required = change.required;
-                        evt.obj_complete = change.objective_complete;
-                        pending_events_.push_back(evt);
-                    }
-                }
-
-                // Generate gameplay events for the client
-                auto& killer_level = registry_.get<ecs::PlayerLevel>(killer);
-
-                // XP gain event
-                {
-                    GameplayEvent evt;
-                    evt.type = GameplayEvent::Type::XPGain;
-                    evt.player_id = killer_net_id.id;
-                    evt.xp_gained = killer_level.xp - xp_before;
-                    evt.total_xp = killer_level.xp;
-                    // Calculate XP to next level
-                    const auto& xp_curve = config_->leveling().xp_curve;
-                    int level_idx = killer_level.level;
-                    evt.xp_to_next = (level_idx < static_cast<int>(xp_curve.size())) ? xp_curve[level_idx] : 99999;
-                    evt.new_level = killer_level.level;
-                    pending_events_.push_back(evt);
-                }
-
-                // Level up event (if level changed)
-                if (killer_level.level > level_before) {
-                    auto& killer_health = registry_.get<ecs::Health>(killer);
-                    auto& killer_combat = registry_.get<ecs::Combat>(killer);
-
-                    GameplayEvent evt;
-                    evt.type = GameplayEvent::Type::LevelUp;
-                    evt.player_id = killer_net_id.id;
-                    evt.new_level = killer_level.level;
-                    evt.new_max_health = killer_health.max;
-                    evt.new_damage = killer_combat.damage;
-                    evt.total_xp = killer_level.xp;
-                    const auto& xp_curve = config_->leveling().xp_curve;
-                    int level_idx = killer_level.level;
-                    evt.xp_to_next = (level_idx < static_cast<int>(xp_curve.size())) ? xp_curve[level_idx] : 99999;
-                    pending_events_.push_back(evt);
-                }
-
-                // Loot event
-                if (loot.gold > 0 || !loot.items.empty()) {
-                    GameplayEvent evt;
-                    evt.type = GameplayEvent::Type::LootDrop;
-                    evt.player_id = killer_net_id.id;
-                    evt.loot_gold = loot.gold;
-                    evt.total_gold = killer_level.gold;
-                    for (auto& [item_id, count] : loot.items) {
-                        const auto* item_cfg = config_->find_item(item_id);
-                        std::string name = item_cfg ? item_cfg->name : item_id;
-                        std::string rarity = item_cfg ? item_cfg->rarity : "common";
-                        evt.loot_items.push_back({name, rarity, count});
-                    }
-                    pending_events_.push_back(evt);
-                }
-
-                // Inventory update after loot
-                {
-                    GameplayEvent evt;
-                    evt.type = GameplayEvent::Type::InventoryUpdate;
-                    evt.player_id = killer_net_id.id;
-                    pending_events_.push_back(evt);
-                }
-            }
-
-            // Respawn monster in its zone
-            zone_system_.respawn_monster(
-                registry_, entity,
-                [this](float x, float z) { return get_terrain_height(x, z); }
-            );
-
-            // Update Jolt body shape to match new collider dimensions after respawn
-            if (registry_.all_of<ecs::Collider, ecs::PhysicsBody>(entity)) {
-                const auto& collider = registry_.get<ecs::Collider>(entity);
-                physics_.update_body_shape(registry_, entity, collider.radius, collider.half_height);
-            }
-        }
-    }
-
-    // Handle player death: apply death penalty, reset health, teleport to town spawn
-    {
-        float town_cx = 4000.0f;
-        float town_cz = 4000.0f;
-        for (const auto& zone : config_->zones()) {
-            if (zone.id == "town_safe_zone") {
-                town_cx = zone.center_x;
-                town_cz = zone.center_z;
-                break;
-            }
-        }
-        std::uniform_real_distribution<float> offset_dist(-50.0f, 50.0f);
-
-        auto death_view = registry_.view<ecs::PlayerTag, ecs::Health, ecs::Transform>();
-        for (auto entity : death_view) {
-            auto& health = death_view.get<ecs::Health>(entity);
-            if (health.current > 0.0f) continue;
-
-            // Apply death XP penalty
-            systems::apply_death_penalty(registry_, entity, *config_);
-
-            // Reset health to max
-            health.current = health.max;
-
-            // Restore mana to full
-            if (auto* pl = registry_.try_get<ecs::PlayerLevel>(entity)) {
-                pl->mana = pl->max_mana;
-            }
-
-            // Teleport back to town spawn
-            auto& transform = death_view.get<ecs::Transform>(entity);
-            transform.x = town_cx + offset_dist(rng_);
-            transform.z = town_cz + offset_dist(rng_);
-            transform.y = get_terrain_height(transform.x, transform.z);
-
-            // Stop all movement
-            if (auto* vel = registry_.try_get<ecs::Velocity>(entity)) {
-                vel->x = 0.0f;
-                vel->y = 0.0f;
-                vel->z = 0.0f;
-            }
-
-            // Mark physics body for teleport
-            if (auto* body = registry_.try_get<ecs::PhysicsBody>(entity)) {
-                body->needs_teleport = true;
-            }
-        }
-    }
+    // Handle player deaths - death penalty, reset, teleport to town
+    systems::handle_player_deaths(
+        registry_, *config_, town_center_, physics_, rng_,
+        [this](float x, float z) { return get_terrain_height(x, z); });
 
     // Update buff/debuff system (tick durations, apply DoT/HoT, remove expired)
     systems::update_buffs(registry_, dt);
@@ -676,14 +402,8 @@ void World::update(float dt) {
     }
 }
 
-NetEntityState World::get_entity_state(uint32_t network_id) const {
-    std::lock_guard<std::mutex> lock(mutex_);
-
-    auto entity = find_entity_by_network_id(network_id);
-    if (entity == entt::null) {
-        return NetEntityState{};  // Return empty state if not found
-    }
-
+// Internal helper: build NetEntityState from an entity (caller must hold mutex_)
+NetEntityState World::build_entity_state(entt::entity entity) const {
     const auto& net_id = registry_.get<ecs::NetworkId>(entity);
     const auto& transform = registry_.get<ecs::Transform>(entity);
     const auto& velocity = registry_.get<ecs::Velocity>(entity);
@@ -737,6 +457,17 @@ NetEntityState World::get_entity_state(uint32_t network_id) const {
     return state;
 }
 
+NetEntityState World::get_entity_state(uint32_t network_id) const {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    auto entity = find_entity_by_network_id(network_id);
+    if (entity == entt::null) {
+        return NetEntityState{};  // Return empty state if not found
+    }
+
+    return build_entity_state(entity);
+}
+
 std::vector<NetEntityState> World::get_all_entities() const {
     std::lock_guard<std::mutex> lock(mutex_);
 
@@ -746,57 +477,7 @@ std::vector<NetEntityState> World::get_all_entities() const {
                                ecs::Health, ecs::Combat, ecs::EntityInfo, ecs::Name>();
 
     for (auto entity : view) {
-        const auto& net_id = view.get<ecs::NetworkId>(entity);
-        const auto& transform = view.get<ecs::Transform>(entity);
-        const auto& velocity = view.get<ecs::Velocity>(entity);
-        const auto& health = view.get<ecs::Health>(entity);
-        const auto& combat = view.get<ecs::Combat>(entity);
-        const auto& info = view.get<ecs::EntityInfo>(entity);
-        const auto& name = view.get<ecs::Name>(entity);
-        
-        NetEntityState state;
-        state.id = net_id.id;
-        state.type = info.type;
-        state.player_class = info.player_class;
-        state.npc_type = info.npc_type;
-        state.building_type = info.building_type;
-        state.environment_type = info.environment_type;
-        state.x = transform.x;
-        state.y = transform.y;
-        state.z = transform.z;
-        state.rotation = transform.rotation;
-        state.vx = velocity.x;
-        state.vy = velocity.z;
-        state.health = health.current;
-        state.max_health = health.max;
-        state.color = info.color;
-        state.is_attacking = combat.is_attacking;
-        state.attack_cooldown = combat.current_cooldown;
-        
-        // Include attack direction if available
-        if (const auto* attack_dir = registry_.try_get<ecs::AttackDirection>(entity)) {
-            state.attack_dir_x = attack_dir->x;
-            state.attack_dir_y = attack_dir->y;
-        }
-
-        // Include per-instance scale if available
-        if (const auto* scale = registry_.try_get<ecs::Scale>(entity)) {
-            state.scale = scale->value;
-        }
-
-        // Include mana for players
-        if (const auto* player_level = registry_.try_get<ecs::PlayerLevel>(entity)) {
-            state.mana = player_level->mana;
-            state.max_mana = player_level->max_mana;
-        }
-
-        std::strncpy(state.name, name.value.c_str(), 31);
-        state.name[31] = '\0';
-
-        // Populate rendering data so client can render without game knowledge
-        populate_render_data(state, info, combat);
-
-        result.push_back(state);
+        result.push_back(build_entity_state(entity));
     }
 
     return result;
@@ -865,10 +546,13 @@ void World::populate_render_data(NetEntityState& state, const ecs::EntityInfo& i
             strncpy_safe(state.model_name, config::get_building_model_name(static_cast<BuildingType>(info.building_type)), 32);
             state.target_size = config::get_building_target_size(static_cast<BuildingType>(info.building_type));
             break;
-        case EntityType::Environment:
-            strncpy_safe(state.model_name, config::get_environment_model_name(static_cast<EnvironmentType>(info.environment_type)), 32);
-            state.target_size = config::get_environment_target_scale(static_cast<EnvironmentType>(info.environment_type));
+        case EntityType::Environment: {
+            auto env_type = static_cast<EnvironmentType>(info.environment_type);
+            std::string model_str = config::get_environment_model_name(env_type, info.tree_variant);
+            strncpy_safe(state.model_name, model_str.c_str(), 32);
+            state.target_size = config::get_environment_target_scale(env_type);
             break;
+        }
     }
 }
 
@@ -1036,14 +720,38 @@ bool World::spawn_from_world_data() {
             }
             case EntityType::Environment: {
                 EnvironmentType et = config::environment_type_from_model(model);
-                float scale = target_size; // editor target_size = per-instance scale
+                float scale = target_size;
+
+                // For trees from the editor, randomly diversify the tree type
+                // so forests have a natural mix of species
+                if (config::is_tree_type(et)) {
+                    static const EnvironmentType tree_types[] = {
+                        EnvironmentType::TreeOak, EnvironmentType::TreePine,
+                        EnvironmentType::TreeWillow, EnvironmentType::TreeBirch,
+                        EnvironmentType::TreeMaple, EnvironmentType::TreeAspen,
+                    };
+                    // Use position as seed for deterministic but varied assignment
+                    uint32_t hash = static_cast<uint32_t>(px * 73.0f + pz * 137.0f);
+                    // 50% chance to keep original type, 50% chance to diversify
+                    if ((hash % 2) == 0 && et != EnvironmentType::TreeDead) {
+                        et = tree_types[hash % 6];
+                    }
+                }
 
                 registry_.emplace<ecs::Health>(entity, 9999.0f, 9999.0f);
                 registry_.emplace<ecs::Combat>(entity, 0.0f, 0.0f, 0.0f, 0.0f, false);
 
+                // Pick a random visual variant for this tree
+                uint8_t variant = 0;
+                if (config::is_tree_type(et)) {
+                    uint32_t vseed = static_cast<uint32_t>(px * 31.0f + pz * 97.0f);
+                    variant = static_cast<uint8_t>(vseed % config::TREE_VARIANTS);
+                }
+
                 ecs::EntityInfo info;
                 info.type = EntityType::Environment;
                 info.environment_type = static_cast<uint8_t>(et);
+                info.tree_variant = variant;
                 info.color = config::is_tree_type(et) ? 0xFF228822 : 0xFF666666;
                 registry_.emplace<ecs::EntityInfo>(entity, info);
 

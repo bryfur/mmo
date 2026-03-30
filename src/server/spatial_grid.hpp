@@ -66,8 +66,8 @@ private:
 
     float cell_size_;
 
-    // Map: GridCell -> set of entity IDs in that cell
-    std::unordered_map<GridCell, std::unordered_set<uint32_t>, GridCellHash> grid_;
+    // Map: GridCell -> vector of entity IDs in that cell (cache-friendly, swap-and-pop removal)
+    std::unordered_map<GridCell, std::vector<uint32_t>, GridCellHash> grid_;
 
     // Track which cell and type each entity is in
     std::unordered_map<uint32_t, EntityInfo> entity_info_;

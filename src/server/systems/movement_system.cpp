@@ -67,14 +67,13 @@ void update_movement(entt::registry& registry, float dt, const GameConfig& confi
         }
 
         // Track stationary state for stationary-based talent effects
-        if (registry.all_of<ecs::TalentPassiveState>(entity)) {
-            auto& tp = registry.get<ecs::TalentPassiveState>(entity);
+        if (auto* tr = registry.try_get<ecs::TalentRuntimeState>(entity)) {
             if (move_len > 0.1f) {
-                tp.stationary_timer = 0.0f;
-                tp.was_moving_last_tick = true;
+                tr->stationary_timer = 0.0f;
+                tr->was_moving_last_tick = true;
             } else {
-                tp.stationary_timer += dt;
-                tp.was_moving_last_tick = false;
+                tr->stationary_timer += dt;
+                tr->was_moving_last_tick = false;
             }
         }
 

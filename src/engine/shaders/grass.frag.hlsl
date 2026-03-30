@@ -1,7 +1,8 @@
 /**
  * Grass Fragment Shader - SDL3 GPU API
  *
- * Renders grass blades using vertex colors with PCSS shadows and fog support.
+ * Renders grass blades with half-Lambert diffuse, specular highlights on tips,
+ * PCSS shadows, and fog support. AO baked into vertex color from vertex shader.
  */
 
 struct PSInput {
@@ -72,12 +73,25 @@ float4 PSMain(PSInput input) : SV_Target {
 
     float3 norm = normalize(input.normal);
     float3 ld = normalize(lightDir);
-    float diff = max(dot(norm, -ld), 0.0);
+
+    // Half-Lambert diffuse: wraps lighting around the surface for softer shading
+    float halfLambert = dot(norm, -ld) * 0.5 + 0.5;
+    float diff = halfLambert * halfLambert;
+
+    // Specular highlight on grass tips
+    // Stronger at the tip (texCoord.y = 1), absent at base
+    float tipFactor = input.texCoord.y * input.texCoord.y;
+    float3 viewDir = normalize(cameraPos - input.worldPos);
+    float3 halfVec = normalize(viewDir - ld);
+    float spec = pow(max(dot(norm, halfVec), 0.0), 32.0) * 0.3 * tipFactor;
 
     float shadow = calcShadow(input.worldPos, input.viewDepth);
 
     float3 ambient = float3(0.3, 0.35, 0.3);
-    float3 lighting = ambient * lerp(0.5, 1.0, shadow) + diff * float3(1.0, 0.95, 0.9) * shadow;
+    float3 lightColor = float3(1.0, 0.95, 0.9);
+    float3 lighting = ambient * lerp(0.5, 1.0, shadow)
+                    + diff * lightColor * shadow
+                    + spec * lightColor * shadow;
     color *= lighting;
 
     if (fogEnabled != 0) {

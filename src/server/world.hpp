@@ -9,6 +9,7 @@
 #include "systems/zone_system.hpp"
 #include "spatial_grid.hpp"
 #include <entt/entt.hpp>
+#include <glm/vec2.hpp>
 #include <unordered_map>
 #include <vector>
 #include <mutex>
@@ -94,12 +95,16 @@ public:
     // Heightmap access
     const mmo::protocol::HeightmapChunk& heightmap() const { return heightmap_; }
     float get_terrain_height(float x, float z) const { return heightmap_get_world(heightmap_, x, z); }
+
+    // Cached town center position (from "town_safe_zone" config)
+    const glm::vec2& town_center() const { return town_center_; }
     
 private:
     void load_heightmap();
     bool spawn_from_world_data();
     void setup_collision_callbacks();
     void populate_render_data(mmo::protocol::NetEntityState& state, const ecs::EntityInfo& info, const ecs::Combat& combat) const;
+    mmo::protocol::NetEntityState build_entity_state(entt::entity entity) const;
     uint32_t generate_color(PlayerClass player_class);
     uint32_t next_network_id();
     
@@ -115,6 +120,7 @@ private:
     std::mt19937 rng_;
     std::vector<GameplayEvent> pending_events_;
     std::unordered_map<uint32_t, std::string> player_zones_;  // track last zone per player
+    glm::vec2 town_center_{4000.0f, 4000.0f};  // cached from "town_safe_zone" config
 };
 
 } // namespace mmo::server

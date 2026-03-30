@@ -28,7 +28,6 @@ struct GraphicsSettings {
     int ao_mode = 1;         // 0=off, 1=SSAO, 2=GTAO
     bool bloom_enabled = true;       // Bloom post-processing
     float bloom_strength = 0.20f;    // Bloom intensity (0.0 - 1.0)
-    bool depth_prepass = true;       // Depth pre-pass for overdraw reduction (when implemented)
     bool volumetric_fog = false;     // Atmospheric fog haze (expensive, off by default)
     bool god_rays = false;           // Light shafts through shadows (requires volumetric_fog)
     int window_mode = 0;     // 0=windowed, 1=borderless fullscreen, 2=exclusive fullscreen
@@ -60,7 +59,6 @@ struct GraphicsSettings {
         out << "ao_mode=" << ao_mode << "\n";
         out << "bloom_enabled=" << bloom_enabled << "\n";
         out << "bloom_strength=" << bloom_strength << "\n";
-        out << "depth_prepass=" << depth_prepass << "\n";
         out << "volumetric_fog=" << volumetric_fog << "\n";
         out << "god_rays=" << god_rays << "\n";
         out << "window_mode=" << window_mode << "\n";
@@ -117,7 +115,6 @@ struct GraphicsSettings {
         read_int("ao_mode", ao_mode);
         read_bool("bloom_enabled", bloom_enabled);
         read_float("bloom_strength", bloom_strength);
-        read_bool("depth_prepass", depth_prepass);
         read_bool("volumetric_fog", volumetric_fog);
         read_bool("god_rays", god_rays);
         read_int("window_mode", window_mode);

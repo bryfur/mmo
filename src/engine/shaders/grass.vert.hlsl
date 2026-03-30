@@ -4,6 +4,9 @@
  * Single blade mesh instanced across a grid around the camera.
  * Per-instance position derived from SV_InstanceID.
  * Terrain height sampled from heightmap texture.
+ *
+ * Features: billboard facing, blade curving, distance-based width expansion,
+ * layered wind, slope-aware tilt, distance-based density culling, base AO.
  */
 
 struct VSInput {
@@ -43,6 +46,13 @@ cbuffer GrassUniforms {
     float worldHeight;
     float _grassPad0;
     float2 cameraForward;
+    // New fields
+    float3 cameraRight;
+    float curveFactor;
+    float widthExpansionMax;
+    float widthExpansionStart;
+    float fullDensityDistance;
+    float heightmapTexelSize;
 };
 
 // Heightmap texture + sampler (set 0 for SDL3 GPU vertex samplers)
@@ -51,26 +61,44 @@ Texture2D heightmapTexture;
 [[vk::combinedImageSampler]][[vk::binding(0, 0)]]
 SamplerState heightmapSampler;
 
-// Hash functions for deterministic per-instance variation
-float hash1(float2 p) {
-    return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+// Murmur-inspired hash for better distribution and performance
+uint murmurHash(uint seed) {
+    seed ^= seed >> 16;
+    seed *= 0x85ebca6bu;
+    seed ^= seed >> 13;
+    seed *= 0xc2b2ae35u;
+    seed ^= seed >> 16;
+    return seed;
 }
 
-float2 hash2(float2 p) {
-    return frac(sin(float2(
-        dot(p, float2(127.1, 311.7)),
-        dot(p, float2(269.5, 183.3))
-    )) * 43758.5453);
+uint murmurHash2(uint a, uint b) {
+    return murmurHash(a ^ (b * 0x9e3779b9u));
 }
 
-float3x3 rotateY(float angle) {
-    float s = sin(angle);
-    float c = cos(angle);
-    float3x3 m;
-    m[0] = float3(c, 0.0, s);
-    m[1] = float3(0.0, 1.0, 0.0);
-    m[2] = float3(-s, 0.0, c);
-    return m;
+// Returns a float in [0, 1) from two integer coordinates
+float hashFloat(int2 p) {
+    uint h = murmurHash2(asuint(p.x), asuint(p.y));
+    return float(h & 0x00FFFFFFu) / float(0x01000000u);
+}
+
+float2 hashFloat2(int2 p) {
+    uint h1 = murmurHash2(asuint(p.x), asuint(p.y));
+    uint h2 = murmurHash(h1);
+    return float2(
+        float(h1 & 0x00FFFFFFu) / float(0x01000000u),
+        float(h2 & 0x00FFFFFFu) / float(0x01000000u)
+    );
+}
+
+// Sample terrain height at a world XZ position
+float sampleTerrainHeight(float2 worldXZ) {
+    float2 hmUV = float2(
+        (worldXZ.x - heightmapOriginX) / heightmapWorldSize,
+        (worldXZ.y - heightmapOriginZ) / heightmapWorldSize
+    );
+    hmUV = saturate(hmUV);
+    float rawHeight = heightmapTexture.SampleLevel(heightmapSampler, hmUV, 0).r;
+    return rawHeight * (heightmapMaxHeight - heightmapMinHeight) + heightmapMinHeight;
 }
 
 VSOutput VSMain(VSInput input) {
@@ -83,23 +111,21 @@ VSOutput VSMain(VSInput input) {
     // World position for this grid cell
     float2 cellPos = float2(cameraGrid.x, cameraGrid.z) + float2(gx, gz) * grassSpacing;
 
-    // Seed from grid cell for deterministic properties
-    float2 seed = floor(cellPos / grassSpacing);
+    // Integer seed from grid cell for deterministic properties
+    int2 seed = int2(floor(cellPos / grassSpacing));
 
     // Density: cull some cells for sporadic coverage
-    float density = hash1(seed + float2(7.3, 13.1));
+    float density = hashFloat(seed + int2(7, 13));
     // Use a threshold curve so grass forms clumps
-    // Nearby cells share similar density via low-freq noise
-    float2 clumpSeed = floor(cellPos / (grassSpacing * 5.0));
-    float clumpNoise = hash1(clumpSeed + float2(42.0, 17.0));
-    // Combine: high clumpNoise = dense patch, low = sparse
+    int2 clumpSeed = int2(floor(cellPos / (grassSpacing * 5.0)));
+    float clumpNoise = hashFloat(clumpSeed + int2(42, 17));
     bool culled = density > (clumpNoise * 0.85 + 0.15);
 
-    // Jitter within cell - larger range for more organic placement
-    float2 jitter = (hash2(seed) - 0.5) * grassSpacing * 1.2;
+    // Jitter within cell
+    float2 jitter = (hashFloat2(seed) - 0.5) * grassSpacing * 1.2;
     float2 worldXZ = cellPos + jitter;
 
-    // World bounds check - move off-screen if out of bounds
+    // World bounds check
     float margin = 50.0;
     float2 townCenter = float2(worldWidth * 0.5, worldHeight * 0.5);
     bool outOfBounds = worldXZ.x < margin || worldXZ.x > worldWidth - margin ||
@@ -111,60 +137,116 @@ VSOutput VSMain(VSInput input) {
     float dist = length(toCell);
     bool tooFar = dist > grassViewDistance;
 
-    // Cull blades behind camera (dot < -0.2 gives ~100 degree behind-camera cone)
+    // Cull blades behind camera
     bool behindCamera = dist > 50.0 && dot(normalize(toCell), cameraForward) < -0.2;
 
-    if (outOfBounds || inTown || tooFar || culled || behindCamera) {
-        // Degenerate - place at origin with zero scale
+    // Distance-based density reduction:
+    // Beyond fullDensityDistance, halve density at each distance band.
+    // d = 1 << floor(distance / fullDensityDistance), cull if hash % d != 0
+    bool distanceCulled = false;
+    if (fullDensityDistance > 0.0 && dist > fullDensityDistance) {
+        uint band = (uint)floor(dist / fullDensityDistance);
+        uint d = 1u << min(band, 5u); // cap at 32x reduction
+        uint distHash = murmurHash2(asuint(seed.x), asuint(seed.y));
+        distanceCulled = (distHash % d) != 0u;
+    }
+
+    if (outOfBounds || inTown || tooFar || culled || behindCamera || distanceCulled) {
         output.position = float4(0, 0, 0, 0);
         output.normal = float3(0, 1, 0);
         output.texCoord = float2(0, 0);
         output.worldPos = float3(0, 0, 0);
         output.color = float4(0, 0, 0, 0);
+        output.viewDepth = 0;
         return output;
     }
 
     // Sample heightmap for terrain Y
-    float2 hmUV = float2(
-        (worldXZ.x - heightmapOriginX) / heightmapWorldSize,
-        (worldXZ.y - heightmapOriginZ) / heightmapWorldSize
-    );
-    hmUV = saturate(hmUV);
-    float rawHeight = heightmapTexture.SampleLevel(heightmapSampler, hmUV, 0).r;
-    float terrainY = rawHeight * (heightmapMaxHeight - heightmapMinHeight) + heightmapMinHeight;
+    float terrainY = sampleTerrainHeight(worldXZ);
+
+    // --- Slope-aware grass direction ---
+    // Sample neighboring heights to compute terrain normal
+    float texelWorld = heightmapTexelSize;
+    float hL = sampleTerrainHeight(worldXZ + float2(-texelWorld, 0.0));
+    float hR = sampleTerrainHeight(worldXZ + float2( texelWorld, 0.0));
+    float hD = sampleTerrainHeight(worldXZ + float2(0.0, -texelWorld));
+    float hU = sampleTerrainHeight(worldXZ + float2(0.0,  texelWorld));
+
+    float3 terrainNormal = normalize(float3(hL - hR, 2.0 * texelWorld, hD - hU));
+
+    // Build a TBN-like frame from the terrain normal (blade "up" = terrain normal)
+    float3 bladeUp = terrainNormal;
 
     // Per-instance properties from hash
-    float h1 = hash1(seed);
-    float h2 = hash1(seed + float2(1.0, 0.0));
-    float h5 = hash1(seed + float2(3.0, 3.0));
+    float h1 = hashFloat(seed);
+    float h2 = hashFloat(seed + int2(1, 0));
+    float h5 = hashFloat(seed + int2(3, 3));
 
-    float rotation = h1 * 3.14159;
     float heightMult = h5 * h5;
     float bladeHeight = 3.0 + h2 * 6.0 + heightMult * 8.0;
-    float bladeWidth = 0.8 + hash1(seed + float2(0.0, 1.0)) * 0.6;
+    float bladeWidth = 0.8 + hashFloat(seed + int2(0, 1)) * 0.6;
 
-    // Transform blade vertex
-    float3 localPos = input.position * float3(bladeWidth, bladeHeight, bladeWidth);
-    float3 localNormal = input.normal;
+    // --- Distance-based width expansion ---
+    // Far-away blades get wider to maintain visual density and avoid shimmer
+    float distFactor = saturate((dist - widthExpansionStart) / (grassViewDistance - widthExpansionStart));
+    bladeWidth += widthExpansionMax * distFactor;
 
-    // Rotate around Y
-    float3 rotatedPos = mul(rotateY(rotation), localPos);
-    float3 rotatedNormal = mul(rotateY(rotation), localNormal);
+    // --- Billboard facing camera ---
+    // Compute a right-tangent perpendicular to camera forward and blade up direction.
+    // This ensures the blade always faces the camera, eliminating thin slivers.
+    float3 camFwd3 = float3(cameraForward.x, 0.0, cameraForward.y);
+    float3 bladeRight = normalize(cross(bladeUp, camFwd3));
+    // Add a small per-instance rotation offset to avoid uniformity
+    float rotOffset = (h1 - 0.5) * 0.6; // +/- ~17 degrees variation
+    float cosR = cos(rotOffset);
+    float sinR = sin(rotOffset);
+    // Rotate bladeRight around bladeUp by rotOffset
+    bladeRight = bladeRight * cosR + cross(bladeUp, bladeRight) * sinR;
+    bladeRight = normalize(bladeRight);
 
-    // Wind (stronger at tip, using texCoord.y as height factor)
-    float windFactor = input.texCoord.y;
-    float windTime = time * 2.0 + worldXZ.x * 0.1 + worldXZ.y * 0.1;
-    float2 windOffset = windDirection * windStrength * windFactor * sin(windTime);
+    // Recompute a forward direction from up and right
+    float3 bladeFwd = normalize(cross(bladeRight, bladeUp));
+
+    // Transform blade vertex using the billboard frame
+    // position.x = width offset, position.y = height along blade
+    float3 localPos = bladeRight * (input.position.x * bladeWidth)
+                    + bladeUp * (input.position.y * bladeHeight)
+                    + bladeFwd * (input.position.z * bladeWidth);
+
+    // --- Blade curving ---
+    // Offset the blade tip in a random XZ direction, scaled by height^2
+    float heightT = input.position.y; // 0 at base, 1 at tip (in local blade space)
+    float curveMagnitude = curveFactor * bladeHeight;
+    float2 curveDir = normalize(hashFloat2(seed + int2(5, 7)) - 0.5);
+    float curveAmount = heightT * heightT * curveMagnitude;
+    float3 curveOffset = float3(curveDir.x, 0.0, curveDir.y) * curveAmount;
+
+    // --- Better wind ---
+    // Two layered sine waves at different frequencies for organic motion
+    float windFactor = heightT; // wind affects tip more
+    float windPhase1 = time * 2.0 + worldXZ.x * 0.1 + worldXZ.y * 0.1;
+    float windPhase2 = time * 3.7 + worldXZ.x * 0.07 - worldXZ.y * 0.13;
+    float windWave = sin(windPhase1) * 0.7 + sin(windPhase2) * 0.3;
+    float2 windOffset = windDirection * windStrength * windFactor * windWave;
 
     // Final world position
-    float3 worldPos = float3(worldXZ.x, terrainY, worldXZ.y) + rotatedPos;
+    float3 worldPos = float3(worldXZ.x, terrainY, worldXZ.y) + localPos + curveOffset;
     worldPos.x += windOffset.x;
     worldPos.z += windOffset.y;
 
+    // Compute normal: tilt blade normal slightly toward the camera for better lighting
+    float3 bladeNormal = bladeFwd;
+
+    // --- AO at blade base ---
+    // Darken the bottom of each blade using a lerp based on texCoord.y
+    float ao = lerp(0.45, 1.0, heightT);
+    float4 vertColor = input.color;
+    vertColor.rgb *= ao;
+
     output.worldPos = worldPos;
-    output.normal = rotatedNormal;
+    output.normal = bladeNormal;
     output.texCoord = input.texCoord;
-    output.color = input.color;
+    output.color = vertColor;
     output.viewDepth = length(worldPos - cameraGrid);
     output.position = mul(viewProjection, float4(worldPos, 1.0));
 

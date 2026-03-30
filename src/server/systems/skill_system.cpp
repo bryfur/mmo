@@ -189,76 +189,40 @@ bool use_skill(entt::registry& registry, entt::entity player, const std::string&
 
             // Apply stun
             if (skill->stun_duration > 0.0f) {
-                ecs::StatusEffect stun;
-                stun.type = ecs::StatusEffect::Type::Stun;
-                stun.duration = skill->stun_duration;
-                stun.tick_timer = 0.0f;
-                stun.tick_interval = 0.0f;
-                stun.value = 0.0f;
-                stun.source_id = player_net_id;
-                apply_effect(registry, entity, stun);
+                apply_effect(registry, entity,
+                    ecs::make_status_effect(ecs::StatusEffect::Type::Stun, skill->stun_duration, 0.0f, player_net_id));
             }
 
             // Apply slow
             if (skill->slow_duration > 0.0f && skill->slow_percent > 0.0f) {
-                ecs::StatusEffect slow;
-                slow.type = ecs::StatusEffect::Type::Slow;
-                slow.duration = skill->slow_duration;
-                slow.tick_timer = 0.0f;
-                slow.tick_interval = 0.0f;
-                slow.value = skill->slow_percent;
-                slow.source_id = player_net_id;
-                apply_effect(registry, entity, slow);
+                apply_effect(registry, entity,
+                    ecs::make_status_effect(ecs::StatusEffect::Type::Slow, skill->slow_duration, skill->slow_percent, player_net_id));
             }
 
             // Apply freeze
             if (skill->freeze_duration > 0.0f) {
-                ecs::StatusEffect freeze;
-                freeze.type = ecs::StatusEffect::Type::Freeze;
-                freeze.duration = skill->freeze_duration;
-                freeze.tick_timer = 0.0f;
-                freeze.tick_interval = 0.0f;
-                freeze.value = 0.0f;
-                freeze.source_id = player_net_id;
-                apply_effect(registry, entity, freeze);
+                apply_effect(registry, entity,
+                    ecs::make_status_effect(ecs::StatusEffect::Type::Freeze, skill->freeze_duration, 0.0f, player_net_id));
             }
 
             // Apply burn (DoT from fire skills)
             if (skill->burn_duration > 0.0f && skill->burn_damage > 0.0f) {
-                ecs::StatusEffect burn;
-                burn.type = ecs::StatusEffect::Type::Burn;
-                burn.duration = skill->burn_duration;
-                burn.tick_timer = 1.0f;
-                burn.tick_interval = 1.0f;
-                burn.value = skill->burn_damage;
-                burn.source_id = player_net_id;
-                apply_effect(registry, entity, burn);
+                apply_effect(registry, entity,
+                    ecs::make_status_effect(ecs::StatusEffect::Type::Burn, skill->burn_duration, skill->burn_damage, player_net_id, 1.0f));
             }
 
             // Apply root
             if (skill->root_duration > 0.0f) {
-                ecs::StatusEffect root;
-                root.type = ecs::StatusEffect::Type::Root;
-                root.duration = skill->root_duration;
-                root.tick_timer = 0.0f;
-                root.tick_interval = 0.0f;
-                root.value = 0.0f;
-                root.source_id = player_net_id;
-                apply_effect(registry, entity, root);
+                apply_effect(registry, entity,
+                    ecs::make_status_effect(ecs::StatusEffect::Type::Root, skill->root_duration, 0.0f, player_net_id));
             }
 
             // Apply enemy outgoing damage reduction debuff.
             // Use DamageBoost with a negative value so their outgoing damage is reduced.
             // (DefenseBoost would incorrectly reduce their incoming damage instead.)
             if (skill->debuff_duration > 0.0f && skill->enemy_damage_reduction > 0.0f) {
-                ecs::StatusEffect debuff;
-                debuff.type = ecs::StatusEffect::Type::DamageBoost;
-                debuff.duration = skill->debuff_duration;
-                debuff.tick_timer = 0.0f;
-                debuff.tick_interval = 0.0f;
-                debuff.value = -skill->enemy_damage_reduction;  // Negative = reduce outgoing damage
-                debuff.source_id = player_net_id;
-                apply_effect(registry, entity, debuff);
+                apply_effect(registry, entity,
+                    ecs::make_status_effect(ecs::StatusEffect::Type::DamageBoost, skill->debuff_duration, -skill->enemy_damage_reduction, player_net_id));
             }
         } // end entity loop
         } // end echo_pass loop
@@ -272,52 +236,28 @@ bool use_skill(entt::registry& registry, entt::entity player, const std::string&
 
     // Self-buff: damage reduction
     if (skill->buff_duration > 0.0f && skill->damage_reduction > 0.0f) {
-        ecs::StatusEffect def_buff;
-        def_buff.type = ecs::StatusEffect::Type::DefenseBoost;
-        def_buff.duration = skill->buff_duration;
-        def_buff.tick_timer = 0.0f;
-        def_buff.tick_interval = 0.0f;
-        def_buff.value = skill->damage_reduction;
-        def_buff.source_id = player_net_id;
-        apply_effect(registry, player, def_buff);
+        apply_effect(registry, player,
+            ecs::make_status_effect(ecs::StatusEffect::Type::DefenseBoost, skill->buff_duration, skill->damage_reduction, player_net_id));
     }
 
     // Self-buff: invulnerability
     if (skill->invulnerable_duration > 0.0f) {
-        ecs::StatusEffect invuln;
-        invuln.type = ecs::StatusEffect::Type::Invulnerable;
-        invuln.duration = skill->invulnerable_duration;
-        invuln.tick_timer = 0.0f;
-        invuln.tick_interval = 0.0f;
-        invuln.value = 0.0f;
-        invuln.source_id = player_net_id;
-        apply_effect(registry, player, invuln);
+        apply_effect(registry, player,
+            ecs::make_status_effect(ecs::StatusEffect::Type::Invulnerable, skill->invulnerable_duration, 0.0f, player_net_id));
     }
 
     // Self-buff: speed boost
     if (skill->speed_boost_duration > 0.0f && skill->speed_boost > 0.0f) {
-        ecs::StatusEffect speed;
-        speed.type = ecs::StatusEffect::Type::SpeedBoost;
-        speed.duration = skill->speed_boost_duration;
-        speed.tick_timer = 0.0f;
-        speed.tick_interval = 0.0f;
-        speed.value = skill->speed_boost;
-        speed.source_id = player_net_id;
-        apply_effect(registry, player, speed);
+        apply_effect(registry, player,
+            ecs::make_status_effect(ecs::StatusEffect::Type::SpeedBoost, skill->speed_boost_duration, skill->speed_boost, player_net_id));
     }
 
     // Self-buff: lifesteal
     if (skill->lifesteal_percent > 0.0f) {
         // Lifesteal lasts for the skill's buff_duration or a default of 5s
         float ls_duration = skill->buff_duration > 0.0f ? skill->buff_duration : 5.0f;
-        ecs::StatusEffect ls;
-        ls.type = ecs::StatusEffect::Type::Lifesteal;
-        ls.duration = ls_duration;
-        ls.tick_timer = 0.0f;
-        ls.tick_interval = 0.0f;
-        ls.value = skill->lifesteal_percent;
-        ls.source_id = player_net_id;
-        apply_effect(registry, player, ls);
+        apply_effect(registry, player,
+            ecs::make_status_effect(ecs::StatusEffect::Type::Lifesteal, ls_duration, skill->lifesteal_percent, player_net_id));
     }
 
     // Set attacking flag for visual feedback
@@ -599,11 +539,14 @@ void apply_talent_effects(entt::registry& registry, entt::entity player, const G
         pl.mana = new_max * ratio;
     }
 
-    // Update or create TalentPassiveState - preserve runtime state fields
-    if (!registry.all_of<ecs::TalentPassiveState>(player)) {
-        registry.emplace<ecs::TalentPassiveState>(player);
+    // Update or create TalentStats and TalentRuntimeState
+    if (!registry.all_of<ecs::TalentStats>(player)) {
+        registry.emplace<ecs::TalentStats>(player);
     }
-    auto& tp = registry.get<ecs::TalentPassiveState>(player);
+    if (!registry.all_of<ecs::TalentRuntimeState>(player)) {
+        registry.emplace<ecs::TalentRuntimeState>(player);
+    }
+    auto& tp = registry.get<ecs::TalentStats>(player);
 
     // Update computed fields (do NOT reset runtime state like timers/counters)
     tp.speed_mult = effects.speed_mult;
@@ -692,7 +635,7 @@ void apply_talent_effects(entt::registry& registry, entt::entity player, const G
     tp.trap_cloud_radius = effects.trap_cloud_radius;
     tp.poison_death_explosion_pct = effects.poison_death_explosion_pct;
     tp.poison_explosion_radius = effects.poison_explosion_radius;
-    // Runtime state (timers, stacks, counters) is intentionally NOT reset here
+    // TalentRuntimeState (timers, stacks, counters) is intentionally NOT reset here
 }
 
 } // namespace mmo::server::systems

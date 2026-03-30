@@ -6,6 +6,8 @@
 #include "engine/scene/ui_scene.hpp"
 #include "engine/systems/camera_controller.hpp"
 #include "engine/model_loader.hpp"
+#include "engine/procedural/tree_generator.hpp"
+#include "engine/procedural/rock_generator.hpp"
 #include "engine/model_utils.hpp"
 #include "engine/animation/animation_state_machine.hpp"
 #include "engine/animation/ik_solver.hpp"
@@ -32,6 +34,7 @@
 #include <cmath>
 #include <vector>
 #include <SDL3/SDL.h>
+#include <sys/stat.h>
 
 namespace mmo::client {
 
@@ -39,6 +42,23 @@ using namespace mmo::protocol;
 using namespace mmo::engine;
 using namespace mmo::engine::scene;
 using namespace mmo::engine::systems;
+
+// Try to locate a data directory by searching current, parent, and grandparent dirs.
+// Returns the first path where the directory exists, or the original relative path as fallback.
+static std::string find_data_path(const std::string& relative) {
+    static const char* prefixes[] = {"", "../", "../../"};
+    for (const char* prefix : prefixes) {
+        std::string candidate = std::string(prefix) + relative;
+        // Use SDL_GetBasePath-agnostic stat check via fopen of a sentinel
+        // but since these are directories, just try them - the caller validates
+        // We use a simple approach: return the first prefix where the path exists
+        struct stat st;
+        if (::stat(candidate.c_str(), &st) == 0 && S_ISDIR(st.st_mode)) {
+            return candidate;
+        }
+    }
+    return relative;  // fallback: return as-is
+}
 
 static std::string generate_random_name() {
     static const char* adjectives[] = {"Swift", "Brave", "Clever", "Mighty", "Silent", "Bold", "Wild", "Fierce"};
@@ -120,34 +140,21 @@ bool Game::on_init() {
         return false;
     }
 
-    std::string assets_path = "assets";
-    if (!load_models(assets_path)) {
-        assets_path = "../assets";
-        if (!load_models(assets_path)) {
-            assets_path = "../../assets";
-            load_models(assets_path);
-        }
-    }
+    load_models(find_data_path("assets"));
 
     // Load effect definitions
-    std::string effects_path = "data/effects";
-    if (!effect_registry_.load_effects_directory(effects_path)) {
-        effects_path = "../data/effects";
-        if (!effect_registry_.load_effects_directory(effects_path)) {
-            effects_path = "../../data/effects";
-            effect_registry_.load_effects_directory(effects_path);
-        }
-    }
+    effect_registry_.load_effects_directory(find_data_path("data/effects"));
 
     // Load animation configs
-    std::string anims_path = "data/animations";
-    if (!animation_registry_.load_directory(anims_path)) {
-        anims_path = "../data/animations";
-        if (!animation_registry_.load_directory(anims_path)) {
-            anims_path = "../../data/animations";
-            animation_registry_.load_directory(anims_path);
-        }
-    }
+    animation_registry_.load_directory(find_data_path("data/animations"));
+
+    // Create network message handler for gameplay messages
+    msg_handler_ = std::make_unique<NetworkMessageHandler>(
+        NetworkMessageHandler::Context{
+            hud_state_, panel_state_, npc_interaction_,
+            npcs_with_quests_, npcs_with_turnins_,
+            local_player_id_, player_dead_
+        });
 
     network_.set_message_callback(
         [this](MessageType type, const std::vector<uint8_t>& payload) {
@@ -275,23 +282,18 @@ void Game::update_class_select(float dt) {
     if (num_classes == 0) return;
 
     auto& input_state = input().get_input();
-    static bool key_pressed = false;
+    bool any_key = input_state.move_left || input_state.move_right || input_state.attacking;
 
-    if (input_state.move_left && !key_pressed) {
-        selected_class_index_ = (selected_class_index_ + num_classes - 1) % num_classes;
-        key_pressed = true;
-    } else if (input_state.move_right && !key_pressed) {
-        selected_class_index_ = (selected_class_index_ + 1) % num_classes;
-        key_pressed = true;
-    } else if (input_state.attacking && !key_pressed) {
-        network_.send_class_select(static_cast<uint8_t>(selected_class_index_));
-        game_state_ = GameState::Spawning;
-        connecting_timer_ = 0.0f;
-        key_pressed = true;
-    }
-
-    if (!input_state.move_left && !input_state.move_right && !input_state.attacking) {
-        key_pressed = false;
+    if (key_class_select_.just_pressed(any_key)) {
+        if (input_state.move_left) {
+            selected_class_index_ = (selected_class_index_ + num_classes - 1) % num_classes;
+        } else if (input_state.move_right) {
+            selected_class_index_ = (selected_class_index_ + 1) % num_classes;
+        } else if (input_state.attacking) {
+            network_.send_class_select(static_cast<uint8_t>(selected_class_index_));
+            game_state_ = GameState::Spawning;
+            connecting_timer_ = 0.0f;
+        }
     }
 }
 
@@ -397,31 +399,30 @@ void Game::update_playing(float dt) {
         net_input.sprinting = eng_input.sprinting;
         net_input.attack_dir_x = eng_input.attack_dir_x;
         net_input.attack_dir_y = eng_input.attack_dir_y;
-        network_.send_input(net_input);
+
+        // Only send if input actually changed (reduces bandwidth)
+        if (std::memcmp(&net_input, &last_sent_input_, sizeof(PlayerInput)) != 0) {
+            network_.send_input(net_input);
+            last_sent_input_ = net_input;
+        }
         input().consume_attack();
     }
     input().reset_changed();
 
     // Panel key toggles (check SDL key state directly)
     {
-        static bool prev_i = false, prev_l = false, prev_t = false, prev_m = false;
         const bool* keys = SDL_GetKeyboardState(nullptr);
-        bool i_down = keys[SDL_SCANCODE_I];
-        bool l_down = keys[SDL_SCANCODE_L];
-        bool t_down = keys[SDL_SCANCODE_T];
-        bool m_down = keys[SDL_SCANCODE_M];
 
-        if (i_down && !prev_i && !menu_system_->is_open()) { panel_state_.toggle_inventory(); panel_state_.active_panel = panel_state_.inventory_open ? ActivePanel::Inventory : ActivePanel::None; }
-        if (l_down && !prev_l && !menu_system_->is_open()) { panel_state_.toggle_quest_log(); panel_state_.active_panel = panel_state_.quest_log_open ? ActivePanel::QuestLog : ActivePanel::None; }
-        if (t_down && !prev_t && !menu_system_->is_open()) { panel_state_.toggle_talent_tree(); panel_state_.active_panel = panel_state_.talent_tree_open ? ActivePanel::Talents : ActivePanel::None; }
-        if (m_down && !prev_m && !menu_system_->is_open()) { panel_state_.toggle_world_map(); panel_state_.active_panel = ActivePanel::None; }
-
-        prev_i = i_down; prev_l = l_down; prev_t = t_down; prev_m = m_down;
+        if (key_i_.just_pressed(keys[SDL_SCANCODE_I]) && !menu_system_->is_open()) { panel_state_.toggle_panel(ActivePanel::Inventory); }
+        if (key_l_.just_pressed(keys[SDL_SCANCODE_L]) && !menu_system_->is_open()) { panel_state_.toggle_panel(ActivePanel::QuestLog); }
+        if (key_t_.just_pressed(keys[SDL_SCANCODE_T]) && !menu_system_->is_open()) { panel_state_.toggle_panel(ActivePanel::Talents); }
+        if (key_m_.just_pressed(keys[SDL_SCANCODE_M]) && !menu_system_->is_open()) { panel_state_.toggle_panel(ActivePanel::WorldMap); }
     }
 
     // Helper: accept currently selected quest from NPC dialog
     auto accept_selected_quest = [&]() {
         if (npc_interaction_.available_quests.empty()) return;
+        if (npc_interaction_.selected_quest >= static_cast<int>(npc_interaction_.available_quests.size())) return;
         auto& quest = npc_interaction_.available_quests[npc_interaction_.selected_quest];
 
         QuestAcceptMsg accept_msg;
@@ -522,50 +523,38 @@ void Game::update_playing(float dt) {
 
         // W/S to navigate quest list (use raw SDL keys since menu_up/down only work when game input disabled)
         if (!npc_interaction_.showing_quest_detail && !npc_interaction_.available_quests.empty()) {
-            static bool prev_w = false, prev_s = false;
             const bool* keys = SDL_GetKeyboardState(nullptr);
-            bool w_down = keys[SDL_SCANCODE_W];
-            bool s_down = keys[SDL_SCANCODE_S];
 
-            if (w_down && !prev_w) {
+            if (key_npc_w_.just_pressed(keys[SDL_SCANCODE_W])) {
                 npc_interaction_.selected_quest = std::max(0, npc_interaction_.selected_quest - 1);
             }
-            if (s_down && !prev_s) {
+            if (key_npc_s_.just_pressed(keys[SDL_SCANCODE_S])) {
                 npc_interaction_.selected_quest = std::min(static_cast<int>(npc_interaction_.available_quests.size()) - 1, npc_interaction_.selected_quest + 1);
             }
-
-            prev_w = w_down;
-            prev_s = s_down;
         }
 
         // Enter key to view quest detail / accept quest
         {
-            static bool prev_enter = false;
             const bool* keys = SDL_GetKeyboardState(nullptr);
-            bool enter_down = keys[SDL_SCANCODE_RETURN];
-            if (enter_down && !prev_enter) {
+            if (key_npc_enter_.just_pressed(keys[SDL_SCANCODE_RETURN])) {
                 if (npc_interaction_.showing_quest_detail) {
                     accept_selected_quest();
                 } else if (!npc_interaction_.available_quests.empty()) {
                     npc_interaction_.showing_quest_detail = true;
                 }
             }
-            prev_enter = enter_down;
         }
 
         // Q key to decline/go back from detail view
         {
-            static bool prev_q = false;
             const bool* keys = SDL_GetKeyboardState(nullptr);
-            bool q_down = keys[SDL_SCANCODE_Q];
-            if (q_down && !prev_q) {
+            if (key_npc_q_.just_pressed(keys[SDL_SCANCODE_Q])) {
                 if (npc_interaction_.showing_quest_detail) {
                     npc_interaction_.showing_quest_detail = false;
                 } else {
                     npc_interaction_.close();
                 }
             }
-            prev_q = q_down;
         }
     }
 
@@ -935,8 +924,10 @@ void Game::add_entity_to_scene(entt::entity entity, bool is_local) {
     if (!model) return;
 
     // Read rotation (already smoothed in update_playing)
-    float rotation = transform.rotation;
+    // Buildings and environment objects use fixed rotation (no smooth rotation, no dynamic updates)
+    float rotation = 0.0f;
     if (info.type != EntityType::Building && info.type != EntityType::Environment) {
+        rotation = transform.rotation;
         if (auto* smooth = registry_.try_get<ecs::SmoothRotation>(entity)) {
             rotation = smooth->current;
         }
@@ -987,6 +978,12 @@ void Game::add_entity_to_scene(entt::entity entity, bool is_local) {
 // ============================================================================
 
 void Game::handle_network_message(MessageType type, const std::vector<uint8_t>& payload) {
+    // Delegate gameplay messages (combat, quests, inventory, skills, talents, dialogue)
+    if (msg_handler_->try_handle(type, payload)) {
+        return;
+    }
+
+    // Handle connection, world-setup, and entity messages here
     switch (type) {
         case MessageType::ConnectionAccepted:
             on_connection_accepted(payload);
@@ -1020,178 +1017,6 @@ void Game::handle_network_message(MessageType type, const std::vector<uint8_t>& 
             break;
         case MessageType::EntityExit:
             on_entity_exit(payload);
-            break;
-        case MessageType::XPGain: {
-            if (payload.size() >= 4 * sizeof(int32_t)) {
-                BufferReader r(payload);
-                int32_t xp_gained = r.read<int32_t>();
-                int32_t total_xp = r.read<int32_t>();
-                int32_t xp_to_next = r.read<int32_t>();
-                int32_t level = r.read<int32_t>();
-                (void)xp_gained;
-
-                int old_level = hud_state_.level;
-                hud_state_.xp = total_xp;
-                hud_state_.xp_to_next_level = xp_to_next;
-                hud_state_.level = level;
-
-                if (level > old_level) {
-                    hud_state_.show_level_up(level);
-                }
-            }
-            break;
-        }
-        case MessageType::LevelUp: {
-            if (payload.size() >= LevelUpMsg::serialized_size()) {
-                LevelUpMsg msg;
-                msg.deserialize(payload);
-                hud_state_.show_level_up(msg.new_level);
-                hud_state_.level = msg.new_level;
-                hud_state_.max_health = msg.new_max_health;
-            }
-            break;
-        }
-        case MessageType::GoldChange: {
-            if (payload.size() >= 2 * sizeof(int32_t)) {
-                BufferReader r(payload);
-                int32_t gold_change = r.read<int32_t>();
-                int32_t total_gold = r.read<int32_t>();
-                hud_state_.gold = total_gold;
-                if (gold_change > 0) {
-                    char buf[64];
-                    snprintf(buf, sizeof(buf), "+%d Gold", gold_change);
-                    hud_state_.add_loot(buf, 0xFF00DDFF);
-                }
-            }
-            break;
-        }
-        case MessageType::LootDrop: {
-            if (payload.size() >= sizeof(int32_t) + 1) {
-                BufferReader r(payload);
-                int32_t gold = r.read<int32_t>();
-                uint8_t item_count = r.read<uint8_t>();
-
-                if (gold > 0) {
-                    // Gold total is set authoritatively by GoldChange messages
-                    char buf[64];
-                    snprintf(buf, sizeof(buf), "+%d Gold", gold);
-                    hud_state_.add_loot(buf, 0xFF00DDFF);
-                }
-
-                for (uint8_t i = 0; i < item_count && r.remaining_size() >= 49; ++i) {
-                    std::string name = r.read_fixed_string(32);
-                    std::string rarity = r.read_fixed_string(16);
-                    uint8_t count = r.read<uint8_t>();
-
-                    // Determine color from rarity
-                    uint32_t color = 0xFFAAAAAA; // common
-                    if (rarity == "uncommon") color = 0xFF00CC00;
-                    else if (rarity == "rare") color = 0xFF0088FF;
-                    else if (rarity == "epic") color = 0xFFCC00CC;
-                    else if (rarity == "legendary") color = 0xFF00AAFF;
-
-                    char buf[64];
-                    if (count > 1)
-                        snprintf(buf, sizeof(buf), "Received: %s x%d", name.c_str(), count);
-                    else
-                        snprintf(buf, sizeof(buf), "Received: %s", name.c_str());
-                    hud_state_.add_loot(buf, color);
-                }
-            }
-            break;
-        }
-        case MessageType::QuestOffer: {
-            if (payload.size() >= QuestOfferMsg::serialized_size()) {
-                QuestOfferMsg msg;
-                msg.deserialize(payload);
-
-                QuestOfferData offer;
-                offer.quest_id = std::string(msg.quest_id, strnlen(msg.quest_id, 32));
-                offer.quest_name = std::string(msg.quest_name, strnlen(msg.quest_name, 64));
-                offer.description = std::string(msg.description, strnlen(msg.description, 256));
-                offer.dialogue = std::string(msg.dialogue, strnlen(msg.dialogue, 256));
-                offer.xp_reward = msg.xp_reward;
-                offer.gold_reward = msg.gold_reward;
-
-                for (uint8_t i = 0; i < msg.objective_count && i < QuestOfferMsg::MAX_OBJECTIVES; ++i) {
-                    offer.objectives.push_back({
-                        std::string(msg.objectives[i].description, strnlen(msg.objectives[i].description, 64)),
-                        msg.objectives[i].count,
-                        msg.objectives[i].location_x,
-                        msg.objectives[i].location_z,
-                        msg.objectives[i].radius
-                    });
-                }
-
-                npc_interaction_.available_quests.push_back(std::move(offer));
-            }
-            break;
-        }
-        case MessageType::ZoneChange: {
-            if (payload.size() >= 64) {
-                char zone_buf[64] = {};
-                std::memcpy(zone_buf, payload.data(), 64);
-                hud_state_.set_zone(std::string(zone_buf, strnlen(zone_buf, 64)));
-            }
-            break;
-        }
-        case MessageType::QuestList: {
-            if (payload.size() >= sizeof(uint16_t)) {
-                npcs_with_quests_.clear();
-                npcs_with_turnins_.clear();
-                size_t offset = 0;
-                uint16_t count;
-                std::memcpy(&count, payload.data(), sizeof(uint16_t));
-                offset += sizeof(uint16_t);
-                for (uint16_t i = 0; i < count && offset + sizeof(uint32_t) <= payload.size(); ++i) {
-                    uint32_t encoded;
-                    std::memcpy(&encoded, payload.data() + offset, sizeof(uint32_t));
-                    offset += sizeof(uint32_t);
-                    uint32_t npc_id = encoded & 0x7FFFFFFF;
-                    bool has_turnin = (encoded & 0x80000000) != 0;
-                    if (has_turnin) {
-                        npcs_with_turnins_.insert(npc_id);
-                    } else {
-                        npcs_with_quests_.insert(npc_id);
-                    }
-                }
-            }
-            break;
-        }
-        case MessageType::CombatEvent:
-            on_combat_event(payload);
-            break;
-        case MessageType::EntityDeath:
-            on_entity_death(payload);
-            break;
-        case MessageType::QuestProgress:
-            on_quest_progress(payload);
-            break;
-        case MessageType::QuestComplete:
-            on_quest_complete(payload);
-            break;
-        case MessageType::InventoryUpdate:
-            on_inventory_update(payload);
-            break;
-        case MessageType::ItemEquip:
-        case MessageType::ItemUnequip:
-            // Server sends back InventoryUpdate after equip/unequip
-            on_inventory_update(payload);
-            break;
-        case MessageType::SkillCooldown:
-            on_skill_cooldown(payload);
-            break;
-        case MessageType::SkillUnlock:
-            on_skill_unlock(payload);
-            break;
-        case MessageType::TalentSync:
-            on_talent_sync(payload);
-            break;
-        case MessageType::TalentTree:
-            on_talent_tree(payload);
-            break;
-        case MessageType::NPCDialogue:
-            on_npc_dialogue(payload);
             break;
         default:
             break;
@@ -1336,7 +1161,7 @@ void Game::update_entity_from_state(entt::entity entity, const NetEntityState& s
     transform.rotation = state.rotation;
 
     velocity.x = state.vx;
-    velocity.z = state.vy;
+    velocity.z = state.vy;  // protocol vy = velocity on Z axis (ground plane), not vertical (Y-up world)
 
     health.current = state.health;
     health.max = state.max_health;
@@ -1451,15 +1276,36 @@ bool Game::load_models(const std::string& assets_path) {
     mdl.load_model("spell_fireball", models_path + "spell_fireball.glb");
     mdl.load_model("spell_bible", models_path + "spell_bible.glb");
 
-    mdl.load_model("rock_boulder", models_path + "rock_boulder.glb");
-    mdl.load_model("rock_slate", models_path + "rock_slate.glb");
-    mdl.load_model("rock_spire", models_path + "rock_spire.glb");
-    mdl.load_model("rock_cluster", models_path + "rock_cluster.glb");
-    mdl.load_model("rock_mossy", models_path + "rock_mossy.glb");
+    // Procedural rocks (SDF + marching cubes, based on Unity-Procedural-Rock-Generation, MIT)
+    mdl.register_model("rock_boulder", procedural::RockGenerator::generate_boulder(42));
+    mdl.register_model("rock_slate", procedural::RockGenerator::generate_slate(42));
+    mdl.register_model("rock_spire", procedural::RockGenerator::generate_spire(42));
+    mdl.register_model("rock_cluster", procedural::RockGenerator::generate_cluster(42));
+    mdl.register_model("rock_mossy", procedural::RockGenerator::generate_mossy(42));
 
-    mdl.load_model("tree_oak", models_path + "tree_oak.glb");
-    mdl.load_model("tree_pine", models_path + "tree_pine.glb");
-    mdl.load_model("tree_dead", models_path + "tree_dead.glb");
+    // Procedural trees - 3 variants per type for visual diversity
+    // (ez-tree algorithm with textures from ez-tree project, MIT licensed)
+    std::string tex_path = assets_path + "/textures";
+    struct TreePreset {
+        const char* name;
+        std::unique_ptr<Model>(*gen)(uint32_t, const std::string&);
+    };
+    TreePreset presets[] = {
+        {"tree_oak",    procedural::TreeGenerator::generate_oak},
+        {"tree_pine",   procedural::TreeGenerator::generate_pine},
+        {"tree_dead",   procedural::TreeGenerator::generate_dead},
+        {"tree_willow", procedural::TreeGenerator::generate_willow},
+        {"tree_birch",  procedural::TreeGenerator::generate_birch},
+        {"tree_maple",  procedural::TreeGenerator::generate_maple},
+        {"tree_aspen",  procedural::TreeGenerator::generate_aspen},
+    };
+    for (auto& preset : presets) {
+        for (int v = 0; v < 3; v++) {
+            std::string variant_name = std::string(preset.name) + "_" + std::to_string(v);
+            uint32_t seed = static_cast<uint32_t>(v * 1000 + 42);
+            mdl.register_model(variant_name, preset.gen(seed, tex_path));
+        }
+    }
 
     if (success) {
         std::cout << "All 3D models loaded successfully" << std::endl;
@@ -1851,6 +1697,9 @@ void Game::build_playing_ui(UIScene& ui) {
         case ActivePanel::QuestLog:
             build_quest_log_panel_ui(ui);
             break;
+        case ActivePanel::WorldMap:
+            // Handled by build_gameplay_panels above
+            break;
         case ActivePanel::None:
             break;
     }
@@ -2037,213 +1886,11 @@ void Game::apply_delta_to_entity(entt::entity entity, const mmo::protocol::Entit
 }
 
 // ============================================================================
-// Gameplay Message Handlers
-// ============================================================================
-
-void Game::on_combat_event(const std::vector<uint8_t>& payload) {
-    if (payload.size() < CombatEventMsg::serialized_size()) return;
-
-    CombatEventMsg msg;
-    msg.deserialize(payload);
-
-    // Add floating damage number
-    DamageNumber dn;
-    dn.x = msg.target_x;
-    dn.y = msg.target_y + 30.0f;  // Offset above target
-    dn.z = msg.target_z;
-    dn.damage = msg.damage;
-    dn.timer = DamageNumber::DURATION;
-    dn.is_heal = (msg.is_heal != 0);
-    hud_state_.damage_numbers.push_back(dn);
-}
-
-void Game::on_entity_death(const std::vector<uint8_t>& payload) {
-    if (payload.size() < EntityDeathMsg::serialized_size()) return;
-
-    EntityDeathMsg msg;
-    msg.deserialize(payload);
-
-    // Check if local player died
-    if (msg.entity_id == local_player_id_) {
-        player_dead_ = true;
-    }
-}
-
-void Game::on_quest_progress(const std::vector<uint8_t>& payload) {
-    if (payload.size() < QuestProgressMsg::serialized_size()) return;
-
-    QuestProgressMsg msg;
-    msg.deserialize(payload);
-
-    // Find matching quest and update objective
-    std::string qid(msg.quest_id, strnlen(msg.quest_id, sizeof(msg.quest_id)));
-    for (auto& quest : hud_state_.tracked_quests) {
-        if (quest.quest_id == qid) {
-            if (msg.objective_index < quest.objectives.size()) {
-                quest.objectives[msg.objective_index].current = msg.current;
-                quest.objectives[msg.objective_index].required = msg.required;
-                quest.objectives[msg.objective_index].complete = (msg.complete != 0);
-            }
-            break;
-        }
-    }
-}
-
-void Game::on_quest_complete(const std::vector<uint8_t>& payload) {
-    if (payload.size() < QuestCompleteMsg::serialized_size()) return;
-
-    QuestCompleteMsg msg;
-    msg.deserialize(payload);
-
-    // Remove from tracked quests
-    std::string qid(msg.quest_id, strnlen(msg.quest_id, sizeof(msg.quest_id)));
-    auto& quests = hud_state_.tracked_quests;
-    quests.erase(
-        std::remove_if(quests.begin(), quests.end(),
-            [&](const QuestTrackerEntry& q) { return q.quest_id == qid; }),
-        quests.end());
-
-    // Show completion notification
-    Notification notif;
-    notif.text = std::string("Quest Complete: ") + msg.quest_name;
-    notif.timer = Notification::DURATION;
-    notif.color = 0xFF00FFFF;  // Yellow
-    hud_state_.notifications.push_back(notif);
-}
-
-void Game::on_inventory_update(const std::vector<uint8_t>& payload) {
-    if (payload.size() < InventoryUpdateMsg::serialized_size()) return;
-
-    InventoryUpdateMsg msg;
-    msg.deserialize(payload);
-
-    for (int i = 0; i < PanelState::MAX_INVENTORY_SLOTS; ++i) {
-        panel_state_.inventory_slots[i].item_id = msg.slots[i].item_id;
-        panel_state_.inventory_slots[i].count = msg.slots[i].count;
-    }
-    panel_state_.equipped_weapon = msg.equipped_weapon;
-    panel_state_.equipped_armor = msg.equipped_armor;
-}
-
-void Game::on_skill_cooldown(const std::vector<uint8_t>& payload) {
-    if (payload.size() < SkillCooldownMsg::serialized_size()) return;
-
-    SkillCooldownMsg msg;
-    msg.deserialize(payload);
-
-    // Find matching skill slot and override cooldown
-    // SkillCooldownMsg has uint16_t skill_id - match by index
-    for (int i = 0; i < 5; ++i) {
-        if (i == msg.skill_id) {
-            hud_state_.skill_slots[i].cooldown = msg.cooldown_remaining;
-            hud_state_.skill_slots[i].max_cooldown = msg.cooldown_total;
-            break;
-        }
-    }
-}
-
-void Game::on_skill_unlock(const std::vector<uint8_t>& payload) {
-    // Server sends one SkillResultMsg per unlocked skill via SkillUnlock message type
-    if (payload.size() < SkillResultMsg::serialized_size()) return;
-
-    SkillResultMsg msg;
-    msg.deserialize(payload);
-
-    std::string sid(msg.skill_id, strnlen(msg.skill_id, sizeof(msg.skill_id)));
-
-    // Find existing slot or first empty
-    for (int i = 0; i < 5; ++i) {
-        if (hud_state_.skill_slots[i].skill_id == sid) {
-            hud_state_.skill_slots[i].max_cooldown = msg.cooldown;
-            return;
-        }
-    }
-    for (int i = 0; i < 5; ++i) {
-        if (!hud_state_.skill_slots[i].available) {
-            hud_state_.skill_slots[i].skill_id = sid;
-            hud_state_.skill_slots[i].name = sid;
-            hud_state_.skill_slots[i].max_cooldown = msg.cooldown;
-            hud_state_.skill_slots[i].available = true;
-            hud_state_.skill_slots[i].key_number = i + 1;
-            return;
-        }
-    }
-}
-
-void Game::on_talent_sync(const std::vector<uint8_t>& payload) {
-    if (payload.size() < TalentSyncMsg::serialized_size()) return;
-
-    TalentSyncMsg msg;
-    msg.deserialize(payload);
-
-    panel_state_.talent_points = msg.talent_points;
-    panel_state_.talent_points_display = msg.talent_points;
-    panel_state_.unlocked_talents.clear();
-    for (int i = 0; i < msg.unlocked_count && i < TalentSyncMsg::MAX_TALENTS; ++i) {
-        std::string id(msg.unlocked_ids[i], strnlen(msg.unlocked_ids[i], 32));
-        if (!id.empty()) {
-            panel_state_.unlocked_talents.push_back(id);
-        }
-    }
-}
-
-void Game::on_talent_tree(const std::vector<uint8_t>& payload) {
-    if (payload.size() < TalentTreeMsg::serialized_size()) {
-        std::cout << "[TalentTree] Payload too small: " << payload.size()
-                  << " < " << TalentTreeMsg::serialized_size() << std::endl;
-        return;
-    }
-
-    TalentTreeMsg msg;
-    msg.deserialize(payload);
-
-    panel_state_.talent_tree.clear();
-    for (int i = 0; i < msg.talent_count && i < TalentTreeMsg::MAX_TALENTS; ++i) {
-        PanelState::ClientTalent t;
-        t.id = std::string(msg.talents[i].id, strnlen(msg.talents[i].id, 32));
-        t.name = std::string(msg.talents[i].name, strnlen(msg.talents[i].name, 32));
-        t.description = std::string(msg.talents[i].description, strnlen(msg.talents[i].description, 128));
-        t.tier = msg.talents[i].tier;
-        t.prerequisite = std::string(msg.talents[i].prerequisite, strnlen(msg.talents[i].prerequisite, 32));
-        t.branch_name = std::string(msg.talents[i].branch_name, strnlen(msg.talents[i].branch_name, 32));
-        panel_state_.talent_tree.push_back(std::move(t));
-    }
-    std::cout << "[TalentTree] Received " << panel_state_.talent_tree.size() << " talents" << std::endl;
-}
-
-void Game::on_npc_dialogue(const std::vector<uint8_t>& payload) {
-    if (payload.size() < NPCDialogueMsg::serialized_size()) return;
-
-    NPCDialogueMsg msg;
-    msg.deserialize(payload);
-
-    auto& dlg = hud_state_.dialogue;
-    dlg.visible = true;
-    dlg.npc_id = msg.npc_id;
-    dlg.npc_name = msg.npc_name;
-    dlg.dialogue = msg.dialogue;
-    dlg.quest_count = msg.quest_count;
-    dlg.selected_option = 0;
-    for (int i = 0; i < 4; ++i) {
-        dlg.quest_ids[i] = msg.quest_ids[i];
-        dlg.quest_names[i] = msg.quest_names[i];
-    }
-}
-
-// ============================================================================
 // Panel Interaction
 // ============================================================================
 
 void Game::update_panel_input(float /*dt*/) {
     const bool* keys = SDL_GetKeyboardState(nullptr);
-
-    // Panel toggle keys (only on key-down edge)
-    static bool i_was_down = false;
-    static bool t_was_down = false;
-    static bool l_was_down = false;
-    static bool e_was_down = false;
-    static bool esc_was_down = false;
-    static bool space_was_down = false;
 
     bool i_down = keys[SDL_SCANCODE_I];
     bool t_down = keys[SDL_SCANCODE_T];
@@ -2253,40 +1900,33 @@ void Game::update_panel_input(float /*dt*/) {
     bool space_down = keys[SDL_SCANCODE_SPACE];
 
     // Handle death respawn
-    if (player_dead_ && space_down && !space_was_down) {
+    if (player_dead_ && panel_space_.just_pressed(space_down)) {
         player_dead_ = false;
         // Respawn is handled server-side; just clear the overlay
     }
 
     // Close dialogue on ESC or E
     if (hud_state_.dialogue.visible) {
-        if ((esc_down && !esc_was_down) || (e_down && !e_was_down)) {
+        if (panel_esc_.just_pressed(esc_down) || panel_e_.just_pressed(e_down)) {
             hud_state_.dialogue.visible = false;
         }
 
         // Navigate dialogue options
         if (hud_state_.dialogue.quest_count > 0) {
-            {
-                static bool dlg_up_was = false, dlg_down_was = false;
-                bool dlg_up_now = keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_W];
-                bool dlg_down_now = keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_S];
-                if (dlg_up_now && !dlg_up_was && hud_state_.dialogue.selected_option > 0) {
-                    hud_state_.dialogue.selected_option--;
-                }
-                if (dlg_down_now && !dlg_down_was && hud_state_.dialogue.selected_option < hud_state_.dialogue.quest_count - 1) {
-                    hud_state_.dialogue.selected_option++;
-                }
-                dlg_up_was = dlg_up_now;
-                dlg_down_was = dlg_down_now;
+            bool dlg_up_now = keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_W];
+            bool dlg_down_now = keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_S];
+            if (panel_dlg_up_.just_pressed(dlg_up_now) && hud_state_.dialogue.selected_option > 0) {
+                hud_state_.dialogue.selected_option--;
+            }
+            if (panel_dlg_down_.just_pressed(dlg_down_now) && hud_state_.dialogue.selected_option < hud_state_.dialogue.quest_count - 1) {
+                hud_state_.dialogue.selected_option++;
             }
 
             // Accept quest on Enter/Space
-            if ((keys[SDL_SCANCODE_RETURN] || (space_down && !space_was_down)) &&
+            if ((keys[SDL_SCANCODE_RETURN] || panel_space_.just_pressed(space_down)) &&
                 hud_state_.dialogue.selected_option < hud_state_.dialogue.quest_count) {
                 uint16_t qid = hud_state_.dialogue.quest_ids[hud_state_.dialogue.selected_option];
                 if (qid > 0) {
-                    // QuestAcceptMsg uses the same quest_id format as QuestOffer
-                    // For now send the quest name as the ID
                     QuestAcceptMsg msg;
                     std::strncpy(msg.quest_id,
                         hud_state_.dialogue.quest_names[hud_state_.dialogue.selected_option].c_str(),
@@ -2297,44 +1937,40 @@ void Game::update_panel_input(float /*dt*/) {
             }
         }
 
-        // Dialogue consumes input, skip panel toggles
-        e_was_down = e_down;
-        i_was_down = i_down;
-        t_was_down = t_down;
-        l_was_down = l_down;
-        esc_was_down = esc_down;
-        space_was_down = space_down;
+        // Dialogue consumes input, skip panel toggles -- still update edges
+        panel_i_.just_pressed(i_down);
+        panel_t_.just_pressed(t_down);
+        panel_l_.just_pressed(l_down);
         return;
     }
+
+    // Update edges for keys not consumed above
+    panel_esc_.just_pressed(esc_down);
+    panel_e_.just_pressed(e_down);
 
     // Panel toggles are handled in update_playing's key block above
     // This function only handles panel-specific interactions
 
     // Close panel on ESC
-    if (esc_down && !esc_was_down && panel_state_.is_panel_open()) {
+    if (esc_down && !panel_esc_.prev && panel_state_.is_panel_open()) {
         panel_state_.active_panel = ActivePanel::None;
     }
 
     // Panel-specific interaction
     if (panel_state_.active_panel == ActivePanel::Inventory) {
         // Navigate inventory with arrow keys
-        static bool up_was = false, down_was = false;
         bool up_now = keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_W];
         bool down_now = keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_S];
 
-        if (up_now && !up_was && panel_state_.inventory_cursor > 0) {
+        if (panel_inv_up_.just_pressed(up_now) && panel_state_.inventory_cursor > 0) {
             panel_state_.inventory_cursor--;
         }
-        if (down_now && !down_was && panel_state_.inventory_cursor < PanelState::MAX_INVENTORY_SLOTS - 1) {
+        if (panel_inv_down_.just_pressed(down_now) && panel_state_.inventory_cursor < PanelState::MAX_INVENTORY_SLOTS - 1) {
             panel_state_.inventory_cursor++;
         }
-        up_was = up_now;
-        down_was = down_now;
 
         // Equip item on Enter
-        static bool enter_was = false;
-        bool enter_now = keys[SDL_SCANCODE_RETURN];
-        if (enter_now && !enter_was) {
+        if (panel_inv_enter_.just_pressed(keys[SDL_SCANCODE_RETURN])) {
             auto& slot = panel_state_.inventory_slots[panel_state_.inventory_cursor];
             if (!slot.empty()) {
                 ItemEquipMsg msg;
@@ -2342,29 +1978,21 @@ void Game::update_panel_input(float /*dt*/) {
                 network_.send_raw(build_packet(MessageType::ItemEquip, msg));
             }
         }
-        enter_was = enter_now;
 
         // Unequip weapon on 1, armor on 2
-        static bool key1_was = false, key2_was = false;
-        bool key1_now = keys[SDL_SCANCODE_1];
-        bool key2_now = keys[SDL_SCANCODE_2];
-        if (key1_now && !key1_was && panel_state_.equipped_weapon > 0) {
+        if (panel_inv_key1_.just_pressed(keys[SDL_SCANCODE_1]) && panel_state_.equipped_weapon > 0) {
             ItemUnequipMsg msg;
             msg.equip_slot = 0;
             network_.send_raw(build_packet(MessageType::ItemUnequip, msg));
         }
-        if (key2_now && !key2_was && panel_state_.equipped_armor > 0) {
+        if (panel_inv_key2_.just_pressed(keys[SDL_SCANCODE_2]) && panel_state_.equipped_armor > 0) {
             ItemUnequipMsg msg;
             msg.equip_slot = 1;
             network_.send_raw(build_packet(MessageType::ItemUnequip, msg));
         }
-        key1_was = key1_now;
-        key2_was = key2_now;
 
         // Use consumable on U
-        static bool u_was = false;
-        bool u_now = keys[SDL_SCANCODE_U];
-        if (u_now && !u_was) {
+        if (panel_inv_u_.just_pressed(keys[SDL_SCANCODE_U])) {
             auto& slot = panel_state_.inventory_slots[panel_state_.inventory_cursor];
             if (!slot.empty()) {
                 ItemUseMsg msg;
@@ -2372,11 +2000,9 @@ void Game::update_panel_input(float /*dt*/) {
                 network_.send_raw(build_packet(MessageType::ItemUse, msg));
             }
         }
-        u_was = u_now;
     }
 
     if (panel_state_.active_panel == ActivePanel::Talents) {
-        static bool up_was = false, down_was = false, enter_was = false;
         bool up_now = keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_W];
         bool down_now = keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_S];
         bool enter_now = keys[SDL_SCANCODE_RETURN];
@@ -2384,17 +2010,15 @@ void Game::update_panel_input(float /*dt*/) {
         int max_cursor = static_cast<int>(panel_state_.talent_tree.size()) - 1;
         if (max_cursor < 0) max_cursor = 0;
 
-        if (up_now && !up_was && panel_state_.talent_cursor > 0) {
+        if (panel_talent_up_.just_pressed(up_now) && panel_state_.talent_cursor > 0) {
             panel_state_.talent_cursor--;
         }
-        if (down_now && !down_was && panel_state_.talent_cursor < max_cursor) {
+        if (panel_talent_down_.just_pressed(down_now) && panel_state_.talent_cursor < max_cursor) {
             panel_state_.talent_cursor++;
         }
-        up_was = up_now;
-        down_was = down_now;
 
         // Unlock talent on Enter if we have points and a valid selection
-        if (enter_now && !enter_was && panel_state_.talent_points > 0
+        if (panel_talent_enter_.just_pressed(enter_now) && panel_state_.talent_points > 0
             && panel_state_.talent_cursor < static_cast<int>(panel_state_.talent_tree.size())) {
             const auto& talent = panel_state_.talent_tree[panel_state_.talent_cursor];
             // Only unlock if not already unlocked
@@ -2408,27 +2032,23 @@ void Game::update_panel_input(float /*dt*/) {
                 network_.send_raw(build_packet(MessageType::TalentUnlock, msg));
             }
         }
-        enter_was = enter_now;
     }
 
     if (panel_state_.active_panel == ActivePanel::QuestLog) {
-        static bool up_was = false, down_was = false, del_was = false;
         bool up_now = keys[SDL_SCANCODE_UP] || keys[SDL_SCANCODE_W];
         bool down_now = keys[SDL_SCANCODE_DOWN] || keys[SDL_SCANCODE_S];
         bool del_now = keys[SDL_SCANCODE_DELETE] || keys[SDL_SCANCODE_X];
 
-        if (up_now && !up_was && panel_state_.quest_cursor > 0) {
+        if (panel_quest_up_.just_pressed(up_now) && panel_state_.quest_cursor > 0) {
             panel_state_.quest_cursor--;
         }
-        if (down_now && !down_was &&
+        if (panel_quest_down_.just_pressed(down_now) &&
             panel_state_.quest_cursor < static_cast<int>(hud_state_.tracked_quests.size()) - 1) {
             panel_state_.quest_cursor++;
         }
-        up_was = up_now;
-        down_was = down_now;
 
         // Abandon quest on Delete/X (local removal)
-        if (del_now && !del_was &&
+        if (panel_quest_del_.just_pressed(del_now) &&
             panel_state_.quest_cursor < static_cast<int>(hud_state_.tracked_quests.size())) {
             hud_state_.tracked_quests.erase(
                 hud_state_.tracked_quests.begin() + panel_state_.quest_cursor);
@@ -2437,15 +2057,13 @@ void Game::update_panel_input(float /*dt*/) {
                 panel_state_.quest_cursor--;
             }
         }
-        del_was = del_now;
     }
 
-    i_was_down = i_down;
-    t_was_down = t_down;
-    l_was_down = l_down;
-    e_was_down = e_down;
-    esc_was_down = esc_down;
-    space_was_down = space_down;
+    // Update remaining key edges that weren't consumed by specific panels
+    panel_i_.just_pressed(i_down);
+    panel_t_.just_pressed(t_down);
+    panel_l_.just_pressed(l_down);
+    panel_space_.just_pressed(space_down);
 }
 
 void Game::update_damage_numbers(float dt) {

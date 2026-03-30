@@ -2,7 +2,7 @@
  * Shadow Depth Vertex Shader - Static Models
  *
  * Transforms vertices into light space for shadow map generation.
- * Depth-only pass: no color output, no lighting.
+ * Passes through UVs for alpha-tested shadows (leaf transparency).
  */
 
 struct VSInput {
@@ -14,6 +14,7 @@ struct VSInput {
 
 struct VSOutput {
     float4 position : SV_Position;
+    float2 texCoord : TEXCOORD0;
 };
 
 [[vk::binding(0, 1)]]
@@ -26,5 +27,6 @@ VSOutput VSMain(VSInput input) {
     VSOutput output;
     float4 worldPos = mul(model, float4(input.position, 1.0));
     output.position = mul(lightViewProjection, worldPos);
+    output.texCoord = input.texCoord;
     return output;
 }

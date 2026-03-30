@@ -25,7 +25,6 @@ TEST_F(GraphicsSettingsTest, DefaultValues) {
     EXPECT_FLOAT_EQ(s.bloom_strength, 0.20f);
     EXPECT_FALSE(s.volumetric_fog);
     EXPECT_FALSE(s.god_rays);
-    EXPECT_TRUE(s.depth_prepass);
     EXPECT_FALSE(s.show_fps);
 }
 
@@ -72,7 +71,6 @@ TEST_F(GraphicsSettingsTest, SaveLoadRoundTripsAllFields) {
     original.ao_mode = 2;
     original.bloom_enabled = false;
     original.bloom_strength = 0.77f;
-    original.depth_prepass = false;
     original.volumetric_fog = true;
     original.god_rays = true;
     original.vsync_mode = 2;
@@ -99,7 +97,6 @@ TEST_F(GraphicsSettingsTest, SaveLoadRoundTripsAllFields) {
     EXPECT_EQ(loaded.ao_mode, 2);
     EXPECT_EQ(loaded.bloom_enabled, false);
     EXPECT_NEAR(loaded.bloom_strength, 0.77f, 0.01f);
-    EXPECT_EQ(loaded.depth_prepass, false);
     EXPECT_EQ(loaded.volumetric_fog, true);
     EXPECT_EQ(loaded.god_rays, true);
     EXPECT_EQ(loaded.vsync_mode, 2);
@@ -194,7 +191,6 @@ TEST_F(GraphicsSettingsTest, LoadEmptyFileKeepsDefaults) {
     EXPECT_EQ(s.ao_mode, 1);
     EXPECT_TRUE(s.bloom_enabled);
     EXPECT_FLOAT_EQ(s.bloom_strength, 0.20f);
-    EXPECT_TRUE(s.depth_prepass);
     EXPECT_FALSE(s.volumetric_fog);
     EXPECT_FALSE(s.god_rays);
     EXPECT_EQ(s.window_mode, 0);

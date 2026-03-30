@@ -251,6 +251,13 @@ void SceneRenderer::init_pipelines() {
     if (!default_sampler_) {
         std::cerr << "Warning: Failed to create default GPU sampler" << std::endl;
     }
+
+    // Create 1x1 white dummy texture for binding slots that require a texture
+    {
+        uint32_t white_pixel = 0xFFFFFFFF;
+        dummy_white_texture_ = gpu::GPUTexture::create_2d(
+            context_->device(), 1, 1, gpu::TextureFormat::RGBA8, &white_pixel);
+    }
 }
 
 void SceneRenderer::init_billboard_buffers() {
@@ -369,7 +376,6 @@ int SceneRenderer::spawn_effect(const mmo::engine::EffectDefinition* definition,
 void SceneRenderer::begin_frame() {
     context_->begin_frame();
     had_main_pass_this_frame_ = false;
-    depth_prepass_ran_ = false;
     ui_->set_screen_size(context_->width(), context_->height());
 }
 
@@ -410,7 +416,6 @@ void SceneRenderer::begin_main_pass() {
     SDL_GPUDepthStencilTargetInfo depth_target = {};
     depth_target.texture = depth_texture_ ? depth_texture_->handle() : nullptr;
     // If depth pre-pass already wrote depth, preserve it (LOAD) instead of clearing
-    depth_target.load_op = depth_prepass_ran_ ? SDL_GPU_LOADOP_LOAD : SDL_GPU_LOADOP_CLEAR;
     depth_target.store_op = SDL_GPU_STOREOP_STORE;
     depth_target.clear_depth = 1.0f;
     depth_target.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
@@ -564,12 +569,6 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
         } else {
             // === NORMAL PATH: render directly to swapchain ===
 
-            // Depth pre-pass: render depth-only before the main color pass
-            // to eliminate overdraw (fragments behind existing depth are rejected early)
-            if (gfx.depth_prepass) {
-                render_depth_prepass(scene, camera);
-            }
-
             begin_main_pass();
 
             if (main_render_pass_ && context_->current_command_buffer()) {
@@ -629,6 +628,7 @@ void SceneRenderer::render_3d_scene(const RenderScene& scene, const CameraState&
     }
 
     if (scene.should_draw_grass() && gfx.grass_enabled && grass_renderer_) {
+        grass_renderer_->grass_view_distance = gfx.get_draw_distance();
         SDL_PushGPUFragmentUniformData(cmd, 1, &frame_shadow_uniforms_, sizeof(frame_shadow_uniforms_));
         grass_renderer_->update(dt, skybox_time_);
         grass_renderer_->render(main_render_pass_, cmd, camera.view, camera.projection,
@@ -1053,6 +1053,20 @@ void SceneRenderer::render_instanced_shadow_models(SDL_GPURenderPass* pass, SDL_
             if (!mesh.uploaded) ModelLoader::upload_to_gpu(context_->device(), *model);
             if (!mesh.vertex_buffer || !mesh.index_buffer || mesh.index_count() == 0) continue;
 
+            // Push alpha test state for transparent shadow support
+            struct { int hasTexture; float _pad[3]; } shadow_frag = {};
+            shadow_frag.hasTexture = (mesh.has_texture && mesh.texture) ? 1 : 0;
+            SDL_PushGPUFragmentUniformData(cmd, 0, &shadow_frag, sizeof(shadow_frag));
+
+            // Must always bind a sampler (SDL3 GPU validates all declared bindings)
+            if (mesh.has_texture && mesh.texture && default_sampler_) {
+                SDL_GPUTextureSamplerBinding tex_binding = { mesh.texture->handle(), default_sampler_ };
+                SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
+            } else if (default_sampler_ && dummy_white_texture_) {
+                SDL_GPUTextureSamplerBinding dummy = { dummy_white_texture_->handle(), default_sampler_ };
+                SDL_BindGPUFragmentSamplers(pass, 0, &dummy, 1);
+            }
+
             mesh.bind_buffers(pass);
             if (collect_stats_) {
                 render_stats_.draw_calls++;
@@ -1290,165 +1304,6 @@ void SceneRenderer::render_debug_lines(const RenderScene& scene, const CameraSta
 }
 
 // ============================================================================
-// Depth Pre-Pass
-// ============================================================================
-
-void SceneRenderer::render_depth_prepass(const RenderScene& scene, const CameraState& camera) {
-    SDL_GPUCommandBuffer* cmd = context_->current_command_buffer();
-    if (!cmd || !depth_texture_) return;
-
-    // Ensure depth texture matches current window size
-    int w = context_->width();
-    int h = context_->height();
-    if (depth_texture_->width() != w || depth_texture_->height() != h) {
-        depth_texture_ = gpu::GPUTexture::create_depth(context_->device(), w, h);
-        if (!depth_texture_) return;
-    }
-
-    // Begin a depth-only render pass (no color attachment)
-    SDL_GPUDepthStencilTargetInfo depth_target = {};
-    depth_target.texture = depth_texture_->handle();
-    depth_target.load_op = SDL_GPU_LOADOP_CLEAR;
-    depth_target.store_op = SDL_GPU_STOREOP_STORE;
-    depth_target.clear_depth = 1.0f;
-    depth_target.stencil_load_op = SDL_GPU_LOADOP_DONT_CARE;
-    depth_target.stencil_store_op = SDL_GPU_STOREOP_DONT_CARE;
-
-    SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, nullptr, 0, &depth_target);
-    if (!pass) return;
-
-    const glm::mat4 vp = camera.projection * camera.view;
-
-    // --- Instanced models ---
-    if (!shadow_instance_batches_.empty() && shadow_instance_storage_buffer_) {
-        auto* pipeline = pipeline_registry_->get_depth_prepass_instanced_pipeline();
-        if (pipeline) {
-            pipeline->bind(pass);
-
-            gpu::InstancedShadowUniforms uniforms = {};
-            uniforms.lightViewProjection = vp;  // reusing struct, but it's camera VP
-            SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
-
-            SDL_GPUBuffer* storage_buf = shadow_instance_storage_buffer_->handle();
-            SDL_BindGPUVertexStorageBuffers(pass, 0, &storage_buf, 1);
-
-            uint32_t base_instance = 0;
-            for (const auto& [batch_handle, instances] : shadow_instance_batches_) {
-                if (instances.empty()) continue;
-
-                Model* model = get_model_cached(frame_model_cache_, *model_manager_, batch_handle);
-                if (!model) {
-                    base_instance += static_cast<uint32_t>(instances.size());
-                    continue;
-                }
-
-                uint32_t instance_count = static_cast<uint32_t>(instances.size());
-
-                for (auto& mesh : model->meshes) {
-                    if (!mesh.uploaded) ModelLoader::upload_to_gpu(context_->device(), *model);
-                    if (!mesh.vertex_buffer || !mesh.index_buffer || mesh.index_count() == 0) continue;
-
-                    mesh.bind_buffers(pass);
-                    SDL_DrawGPUIndexedPrimitives(pass, mesh.index_count(),
-                                                  instance_count, 0, 0, base_instance);
-                }
-
-                base_instance += instance_count;
-            }
-        }
-    }
-
-    // --- Non-instanced static models ---
-    if (!non_instanced_commands_.empty()) {
-        auto* pipeline = pipeline_registry_->get_depth_prepass_pipeline();
-        if (pipeline) {
-            pipeline->bind(pass);
-
-            for (const auto* model_cmd : non_instanced_commands_) {
-                Model* model = resolve_model(frame_model_cache_, frame_model_name_cache_, *model_manager_, model_cmd->model_handle, model_cmd->model_name);
-                if (!model) continue;
-
-                gpu::ShadowTransformUniforms uniforms = {};
-                uniforms.lightViewProjection = vp;  // camera VP
-                uniforms.model = model_cmd->transform;
-                SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
-
-                for (auto& mesh : model->meshes) {
-                    if (!mesh.uploaded) ModelLoader::upload_to_gpu(context_->device(), *model);
-                    if (!mesh.vertex_buffer || !mesh.index_buffer || mesh.index_count() == 0) continue;
-
-                    mesh.bind_buffers(pass);
-                    SDL_DrawGPUIndexedPrimitives(pass, mesh.index_count(), 1, 0, 0, 0);
-                }
-            }
-        }
-    }
-
-    // --- Skinned models ---
-    {
-        auto* pipeline = pipeline_registry_->get_depth_prepass_skinned_pipeline();
-        if (pipeline) {
-            bool bound = false;
-            for (const auto& skinned_cmd : scene.skinned_commands()) {
-                // Distance + frustum culling already done in build_instance_batches for static,
-                // but skinned models are checked inline in render_3d_scene. Re-check here.
-                const glm::mat4& t = skinned_cmd.transform;
-                glm::vec3 world_pos(t[3][0], t[3][1], t[3][2]);
-                float dx = world_pos.x - camera.position.x;
-                float dz = world_pos.z - camera.position.z;
-                if (dx * dx + dz * dz > frame_draw_dist_sq_) continue;
-
-                if (frame_do_frustum_cull_) {
-                    Model* model = resolve_model(frame_model_cache_, frame_model_name_cache_, *model_manager_, skinned_cmd.model_handle, skinned_cmd.model_name);
-                    if (model) {
-                        glm::vec3 world_center = glm::vec3(t * glm::vec4(model->bounding_center, 1.0f));
-                        float max_scale = std::max({
-                            glm::length(glm::vec3(t[0])),
-                            glm::length(glm::vec3(t[1])),
-                            glm::length(glm::vec3(t[2]))
-                        });
-                        if (!frame_frustum_.intersects_sphere(world_center, model->bounding_half_diag * max_scale)) {
-                            continue;
-                        }
-                    }
-                }
-
-                if (!bound) {
-                    pipeline->bind(pass);
-                    bound = true;
-                }
-
-                Model* model = resolve_model(frame_model_cache_, frame_model_name_cache_, *model_manager_, skinned_cmd.model_handle, skinned_cmd.model_name);
-                if (!model) continue;
-
-                gpu::ShadowTransformUniforms uniforms = {};
-                uniforms.lightViewProjection = vp;  // camera VP
-                uniforms.model = skinned_cmd.transform;
-                SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
-                SDL_PushGPUVertexUniformData(cmd, 1, skinned_cmd.bone_matrices->data(),
-                                              MAX_BONES * sizeof(glm::mat4));
-
-                for (auto& mesh : model->meshes) {
-                    if (!mesh.uploaded) ModelLoader::upload_to_gpu(context_->device(), *model);
-                    if (!mesh.vertex_buffer || !mesh.index_buffer || mesh.index_count() == 0) continue;
-
-                    mesh.bind_buffers(pass);
-                    SDL_DrawGPUIndexedPrimitives(pass, mesh.index_count(), 1, 0, 0, 0);
-                }
-            }
-        }
-    }
-
-    // --- Terrain ---
-    if (scene.should_draw_ground()) {
-        terrain_->render_depth_prepass(pass, cmd, vp);
-    }
-
-    SDL_EndGPURenderPass(pass);
-    depth_prepass_ran_ = true;
-}
-
-// ============================================================================
 // Shadow Rendering
 // ============================================================================
 
@@ -1491,6 +1346,18 @@ void SceneRenderer::render_shadow_passes(const RenderScene& scene, const CameraS
                     for (auto& mesh : model->meshes) {
                         if (!mesh.uploaded) ModelLoader::upload_to_gpu(context_->device(), *model);
                         if (!mesh.vertex_buffer || !mesh.index_buffer || mesh.index_count() == 0) continue;
+
+                        struct { int hasTexture; float _pad[3]; } shadow_frag = {};
+                        shadow_frag.hasTexture = (mesh.has_texture && mesh.texture) ? 1 : 0;
+                        SDL_PushGPUFragmentUniformData(cmd, 0, &shadow_frag, sizeof(shadow_frag));
+                        if (mesh.has_texture && mesh.texture && default_sampler_) {
+                            SDL_GPUTextureSamplerBinding tex_binding = { mesh.texture->handle(), default_sampler_ };
+                            SDL_BindGPUFragmentSamplers(shadow_pass, 0, &tex_binding, 1);
+                        } else if (default_sampler_ && dummy_white_texture_) {
+                            SDL_GPUTextureSamplerBinding dummy = { dummy_white_texture_->handle(), default_sampler_ };
+                            SDL_BindGPUFragmentSamplers(shadow_pass, 0, &dummy, 1);
+                        }
+
                         mesh.bind_buffers(shadow_pass);
                         if (collect_stats_) { render_stats_.draw_calls++; render_stats_.triangle_count += mesh.index_count() / 3; }
                         SDL_DrawGPUIndexedPrimitives(shadow_pass,
@@ -1522,6 +1389,17 @@ void SceneRenderer::render_shadow_passes(const RenderScene& scene, const CameraS
                         if (!mesh.uploaded) ModelLoader::upload_to_gpu(context_->device(), *model);
                         if (!mesh.vertex_buffer || !mesh.index_buffer || mesh.index_count() == 0) continue;
 
+                        struct { int hasTexture; float _pad[3]; } shadow_frag = {};
+                        shadow_frag.hasTexture = (mesh.has_texture && mesh.texture) ? 1 : 0;
+                        SDL_PushGPUFragmentUniformData(cmd, 0, &shadow_frag, sizeof(shadow_frag));
+                        if (mesh.has_texture && mesh.texture && default_sampler_) {
+                            SDL_GPUTextureSamplerBinding tex_binding = { mesh.texture->handle(), default_sampler_ };
+                            SDL_BindGPUFragmentSamplers(shadow_pass, 0, &tex_binding, 1);
+                        } else if (default_sampler_ && dummy_white_texture_) {
+                            SDL_GPUTextureSamplerBinding dummy = { dummy_white_texture_->handle(), default_sampler_ };
+                            SDL_BindGPUFragmentSamplers(shadow_pass, 0, &dummy, 1);
+                        }
+
                         mesh.bind_buffers(shadow_pass);
                         if (collect_stats_) { render_stats_.draw_calls++; render_stats_.triangle_count += mesh.index_count() / 3; }
                         SDL_DrawGPUIndexedPrimitives(shadow_pass,
@@ -1532,7 +1410,15 @@ void SceneRenderer::render_shadow_passes(const RenderScene& scene, const CameraS
             }
         }
 
-        // Render terrain into shadow map
+        // Render terrain into shadow map (push no-texture fragment state)
+        {
+            struct { int ht; float _p[3]; } tf = {0, {}};
+            SDL_PushGPUFragmentUniformData(cmd, 0, &tf, sizeof(tf));
+            if (default_sampler_ && dummy_white_texture_) {
+                SDL_GPUTextureSamplerBinding db = { dummy_white_texture_->handle(), default_sampler_ };
+                SDL_BindGPUFragmentSamplers(shadow_pass, 0, &db, 1);
+            }
+        }
         terrain_->render_shadow(shadow_pass, cmd, cascade_data.light_view_projection);
 
         shadow_map_->end_shadow_pass();

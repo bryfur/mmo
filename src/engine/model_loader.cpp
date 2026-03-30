@@ -639,6 +639,16 @@ Model* ModelManager::get_model(const std::string& name) const {
     return models_[it->second].get();
 }
 
+ModelHandle ModelManager::register_model(const std::string& name, std::unique_ptr<Model> model) {
+    if (device_) {
+        ModelLoader::upload_to_gpu(*device_, *model);
+    }
+    ModelHandle handle = static_cast<ModelHandle>(models_.size());
+    models_.push_back(std::move(model));
+    name_to_handle_[name] = handle;
+    return handle;
+}
+
 ModelHandle ModelManager::get_handle(const std::string& name) const {
     auto it = name_to_handle_.find(name);
     return it != name_to_handle_.end() ? it->second : INVALID_MODEL_HANDLE;

@@ -14,6 +14,7 @@
 #include "menu_system.hpp"
 #include "gameplay_hud.hpp"
 #include "gameplay_panels.hpp"
+#include "network_message_handler.hpp"
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
 #include <string>
@@ -23,6 +24,12 @@
 #include <memory>
 
 namespace mmo::client {
+
+// Edge detector for key press events (replaces static bool prev_X patterns)
+struct KeyEdge {
+    bool prev = false;
+    bool just_pressed(bool current) { bool r = current && !prev; prev = current; return r; }
+};
 
 class Game : public engine::Application {
 public:
@@ -65,18 +72,6 @@ private:
     void on_entity_update(const std::vector<uint8_t>& payload);
     void on_entity_exit(const std::vector<uint8_t>& payload);
     void apply_delta_to_entity(entt::entity entity, const mmo::protocol::EntityDeltaUpdate& delta);
-
-    // Gameplay message handlers
-    void on_combat_event(const std::vector<uint8_t>& payload);
-    void on_entity_death(const std::vector<uint8_t>& payload);
-    void on_quest_progress(const std::vector<uint8_t>& payload);
-    void on_quest_complete(const std::vector<uint8_t>& payload);
-    void on_inventory_update(const std::vector<uint8_t>& payload);
-    void on_skill_cooldown(const std::vector<uint8_t>& payload);
-    void on_skill_unlock(const std::vector<uint8_t>& payload);
-    void on_talent_sync(const std::vector<uint8_t>& payload);
-    void on_talent_tree(const std::vector<uint8_t>& payload);
-    void on_npc_dialogue(const std::vector<uint8_t>& payload);
 
     // Panel interaction
     void update_panel_input(float dt);
@@ -150,6 +145,7 @@ private:
     bool heightmap_received_ = false;
 
     float input_send_timer_ = 0.0f;
+    mmo::protocol::PlayerInput last_sent_input_;
 
     // Camera state
     float player_x_ = 0.0f;
@@ -168,30 +164,11 @@ private:
     HUDState hud_state_;
     PanelState panel_state_;
 
-    // NPC Quest interaction state
-    struct QuestOfferData {
-        std::string quest_id;
-        std::string quest_name;
-        std::string description;
-        std::string dialogue;
-        int xp_reward = 0;
-        int gold_reward = 0;
-        struct Objective { std::string description; int count; float loc_x = 0; float loc_z = 0; float radius = 0; };
-        std::vector<Objective> objectives;
-    };
-
-    struct NPCInteractionState {
-        bool showing_dialogue = false;
-        uint32_t npc_id = 0;
-        std::string npc_name;
-        std::vector<QuestOfferData> available_quests;
-        int selected_quest = 0;
-        bool showing_quest_detail = false;
-
-        void close() { showing_dialogue = false; available_quests.clear(); selected_quest = 0; showing_quest_detail = false; }
-    };
-
+    // NPC Quest interaction state (defined in network_message_handler.hpp)
     NPCInteractionState npc_interaction_;
+
+    // Network message handler (handles gameplay messages: combat, quests, inventory, etc.)
+    std::unique_ptr<NetworkMessageHandler> msg_handler_;
 
     // NPC quest availability (updated by server)
     std::unordered_set<uint32_t> npcs_with_quests_;      // NPCs that have "!" (available quest)
@@ -206,6 +183,21 @@ private:
     std::vector<uint32_t> to_remove_buffer_;
 
     bool player_dead_ = false;
+
+    // Key edge detectors (replaces static bool patterns for key-down detection)
+    KeyEdge key_class_select_;          // class select screen any-key
+    KeyEdge key_i_, key_l_, key_t_, key_m_;  // panel toggles in update_playing
+    KeyEdge key_npc_w_, key_npc_s_;     // NPC dialogue navigation W/S
+    KeyEdge key_npc_enter_;             // NPC dialogue enter
+    KeyEdge key_npc_q_;                 // NPC dialogue Q (decline/back)
+
+    // Panel input key edges (update_panel_input)
+    KeyEdge panel_i_, panel_t_, panel_l_, panel_e_, panel_esc_, panel_space_;
+    KeyEdge panel_dlg_up_, panel_dlg_down_;
+    KeyEdge panel_inv_up_, panel_inv_down_, panel_inv_enter_;
+    KeyEdge panel_inv_key1_, panel_inv_key2_, panel_inv_u_;
+    KeyEdge panel_talent_up_, panel_talent_down_, panel_talent_enter_;
+    KeyEdge panel_quest_up_, panel_quest_down_, panel_quest_del_;
 };
 
 } // namespace mmo::client

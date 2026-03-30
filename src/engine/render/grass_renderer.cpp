@@ -134,12 +134,15 @@ void GrassRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
     pipeline->bind(pass);
 
     // Compute grid parameters
-    int grid_radius = static_cast<int>(grass_view_distance / grass_spacing);
+    // Use spacing=6 as a good balance between density and performance
+    // At draw distance 4000: radius=666, ~1.7M instances, shader culls ~70% = ~500K drawn
+    float effective_spacing = 6.0f;
+    int grid_radius = std::min(static_cast<int>(grass_view_distance / effective_spacing), 700);
     int grid_width = 2 * grid_radius + 1;
     uint32_t instance_count = static_cast<uint32_t>(grid_width * grid_width);
 
     // Snap camera to grid
-    glm::vec2 camera_grid = glm::floor(glm::vec2(camera_pos.x, camera_pos.z) / grass_spacing) * grass_spacing;
+    glm::vec2 camera_grid = glm::floor(glm::vec2(camera_pos.x, camera_pos.z) / effective_spacing) * effective_spacing;
 
     // Vertex uniforms
     GrassVertexUniforms vu{};
@@ -147,7 +150,7 @@ void GrassRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
     vu.camera_grid = glm::vec3(camera_grid.x, 0.0f, camera_grid.y);
     vu.time = current_time_;
     vu.wind_strength = wind_magnitude;
-    vu.grass_spacing = grass_spacing;
+    vu.grass_spacing = effective_spacing;
     vu.grass_view_distance = grass_view_distance;
     vu.grid_radius = grid_radius;
     vu.wind_direction = glm::vec2(1.0f, 0.3f);
@@ -161,6 +164,14 @@ void GrassRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
     // Extract camera forward from view matrix (negative Z row in view space)
     glm::vec3 fwd = -glm::vec3(view[0][2], view[1][2], view[2][2]);
     vu.camera_forward = glm::normalize(glm::vec2(fwd.x, fwd.z));
+    // Extract camera right from view matrix (X row)
+    glm::vec3 right = glm::vec3(view[0][0], view[1][0], view[2][0]);
+    vu.camera_right = glm::normalize(right);
+    vu.curve_factor = 0.15f;
+    vu.width_expansion_max = 1.5f;
+    vu.width_expansion_start = grass_view_distance * 0.4f;
+    vu.full_density_distance = grass_view_distance * 0.6f;  // Full density for 60%, thin the rest
+    vu.heightmap_texel_size = heightmap_params_.world_size / 512.0f;
 
     SDL_PushGPUVertexUniformData(cmd, 0, &vu, sizeof(vu));
 

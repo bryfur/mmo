@@ -94,6 +94,8 @@ float4 PSMain(PSInput input) : SV_Target {
     float4 baseColor;
     if (hasTexture == 1) {
         baseColor = baseColorTexture.Sample(baseColorSampler, input.texCoord);
+        // Alpha test for transparent textures (leaf billboards, etc.)
+        if (baseColor.a < 0.5) discard;
     } else {
         baseColor = input.vertexColor * tintColor;
     }

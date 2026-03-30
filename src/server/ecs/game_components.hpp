@@ -53,6 +53,7 @@ struct EntityInfo {
     uint8_t npc_type = 0;
     uint8_t building_type = 0;
     uint8_t environment_type = 0;
+    uint8_t tree_variant = 0;  // visual variant index for tree diversity
     uint32_t color = 0xFFFFFFFF;
 
     // Render data (sent to client via protocol)
@@ -396,6 +397,14 @@ struct StatusEffect {
     uint32_t source_id;  // who applied this
 };
 
+// Helper to construct a StatusEffect in one call.
+// For non-DoT effects, tick_interval defaults to 0 (no ticking).
+// For DoT/HoT effects, pass the tick interval explicitly.
+inline StatusEffect make_status_effect(StatusEffect::Type type, float duration, float value,
+                                       uint32_t source_id = 0, float tick_interval = 0.0f) {
+    return StatusEffect{type, duration, tick_interval, tick_interval, value, source_id};
+}
+
 struct BuffState {
     std::vector<StatusEffect> effects;
 
@@ -453,11 +462,10 @@ struct BuffState {
     }
 };
 // ============================================================================
-// Talent Passive State - runtime state for talent effects
-// Updated by apply_talent_effects; runtime mutable fields updated by systems
+// Talent Stats - aggregated read-only stats recomputed when talents change.
+// Set by apply_talent_effects; consumed by combat, movement, and passive systems.
 // ============================================================================
-struct TalentPassiveState {
-    // --- Aggregated talent stats (set by apply_talent_effects) ---
+struct TalentStats {
     float speed_mult = 1.0f;
     float defense_mult = 1.0f;
     float crit_chance = 0.0f;
@@ -586,8 +594,13 @@ struct TalentPassiveState {
     float trap_cloud_radius = 0.0f;
     float poison_death_explosion_pct = 0.0f;
     float poison_explosion_radius = 0.0f;
+};
 
-    // --- Runtime mutable state (updated by gameplay systems) ---
+// ============================================================================
+// Talent Runtime State - timers, counters, cooldowns updated every tick.
+// Preserved across talent changes (apply_talent_effects does NOT reset these).
+// ============================================================================
+struct TalentRuntimeState {
     float cheat_death_timer = 0.0f;
     float shield_regen_timer = 0.0f;
     float panic_freeze_timer = 0.0f;
@@ -599,5 +612,10 @@ struct TalentPassiveState {
     float combo_decay_timer = 0.0f;
     int empowered_counter = 0;
 };
+
+// Backward-compatible alias so existing code using TalentPassiveState still compiles.
+// Systems that only need stats should migrate to TalentStats; systems that need
+// runtime state should query TalentRuntimeState separately.
+using TalentPassiveState = TalentStats;
 
 } // namespace mmo::server::ecs

@@ -211,11 +211,6 @@ void MenuSystem::init_graphics_menu() {
     god_rays_toggle.toggle_value = &graphics_settings_.god_rays;
     menu_items_.push_back(god_rays_toggle);
 
-    MenuItem depth_prepass_toggle;
-    depth_prepass_toggle.label = "Depth Pre-Pass";
-    depth_prepass_toggle.type = MenuItemType::Toggle;
-    depth_prepass_toggle.toggle_value = &graphics_settings_.depth_prepass;
-    menu_items_.push_back(depth_prepass_toggle);
 
     MenuItem shadow_casc;
     shadow_casc.label = "Shadow Cascades";

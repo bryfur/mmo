@@ -44,6 +44,22 @@ enum class EnvironmentType : uint8_t {
     TreeOak = 5,
     TreePine = 6,
     TreeDead = 7,
+    TreeWillow = 8,
+    TreeBirch = 9,
+    TreeMaple = 10,
+    TreeAspen = 11,
 };
+
+/// Map NPC type index to string for quest/dialogue lookup.
+inline const char* npc_type_to_string(int npc_type) {
+    switch (npc_type) {
+        case 1: return "merchant";
+        case 2: return "guard";
+        case 3: return "blacksmith";
+        case 4: return "innkeeper";
+        case 5: return "villager";
+        default: return "villager";
+    }
+}
 
 } // namespace mmo::server

@@ -54,6 +54,12 @@ void Session::read_header() {
         [this, self](asio::error_code ec, std::size_t /*length*/) {
             if (!ec) {
                 current_header_.deserialize(header_buffer_);
+                constexpr uint32_t MAX_PAYLOAD_SIZE = 4 * 1024 * 1024; // 4 MB
+                if (current_header_.payload_size > MAX_PAYLOAD_SIZE) {
+                    std::cerr << "Session: payload too large (" << current_header_.payload_size << " bytes), disconnecting" << std::endl;
+                    close();
+                    return;
+                }
                 if (current_header_.payload_size > 0) {
                     payload_buffer_.resize(current_header_.payload_size);
                     read_payload();
@@ -89,6 +95,12 @@ void Session::handle_packet() {
             ConnectMsg msg;
             if (current_header_.payload_size >= ConnectMsg::serialized_size()) {
                 msg.deserialize(payload_buffer_);
+            }
+            if (msg.protocol_version != PROTOCOL_VERSION) {
+                std::cout << "Protocol version mismatch: client=" << msg.protocol_version
+                          << " server=" << PROTOCOL_VERSION << ", disconnecting" << std::endl;
+                close();
+                break;
             }
             std::string name(msg.name, strnlen(msg.name, sizeof(msg.name)));
             if (name.empty()) name = "Player";
@@ -194,6 +206,11 @@ void Session::handle_packet() {
                 msg.deserialize(payload_buffer_);
                 server_.on_item_use(player_id_, msg.slot_index);
             }
+            break;
+        }
+
+        case MessageType::Pong: {
+            mark_pong();
             break;
         }
 

@@ -42,6 +42,7 @@ struct NetEntityState : Serializable<NetEntityState> {
     float cone_angle = 0.0f;         // Attack cone angle for hit detection and visualization
     bool shows_reticle = false;      // Whether to show targeting reticle
 
+    // Expected wire size: 4+1+4*1 + 13*4 + 4+32 + 1+4 + 32+4+16+16+4+1 = 174 bytes
     static constexpr size_t serialized_size() {
         return sizeof(uint32_t) + sizeof(EntityType) + sizeof(uint8_t) * 4 +
                sizeof(float) * 13 + sizeof(uint32_t) + 32 + sizeof(uint8_t) +

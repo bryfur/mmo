@@ -2,6 +2,7 @@
 
 #include "protocol/protocol.hpp"
 #include <asio.hpp>
+#include <chrono>
 #include <memory>
 #include <functional>
 #include <array>
@@ -28,6 +29,10 @@ public:
     void set_player_name(const std::string& name) { player_name_ = name; }
 
     bool is_open() const { return socket_.is_open(); }
+
+    // Keepalive tracking
+    void mark_pong() { last_pong_time_ = std::chrono::steady_clock::now(); }
+    std::chrono::steady_clock::time_point last_pong_time() const { return last_pong_time_; }
     
 private:
     void read_header();
@@ -39,6 +44,7 @@ private:
     Server& server_;
     uint32_t player_id_ = 0;
     std::string player_name_;
+    std::chrono::steady_clock::time_point last_pong_time_{std::chrono::steady_clock::now()};
     
     // Read buffer
     std::array<uint8_t, mmo::protocol::PacketHeader::serialized_size()> header_buffer_;

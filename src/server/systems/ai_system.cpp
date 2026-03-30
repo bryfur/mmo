@@ -5,6 +5,7 @@
 #include "server/game_config.hpp"
 #include <cmath>
 #include <random>
+#include <glm/vec2.hpp>
 
 namespace mmo::server::systems {
 
@@ -24,18 +25,10 @@ bool is_in_safe_zone(float x, float z, float center_x, float center_z, float rad
 
 } // anonymous namespace
 
-void update_ai(entt::registry& registry, float dt, const GameConfig& config) {
-    // Use the town_safe_zone center from zone config instead of computing from world size.
-    // The world may be 32000x32000 but the town is at (4000, 4000).
-    float town_center_x = 4000.0f;  // fallback
-    float town_center_z = 4000.0f;
-    for (const auto& zone : config.zones()) {
-        if (zone.id == "town_safe_zone") {
-            town_center_x = zone.center_x;
-            town_center_z = zone.center_z;
-            break;
-        }
-    }
+void update_ai(entt::registry& registry, float dt, const GameConfig& config,
+               const glm::vec2& town_center) {
+    const float town_center_x = town_center.x;
+    const float town_center_z = town_center.y;
     const float safe_radius = config.safe_zone_radius();
 
     // Thread-local RNG for town NPC wander behavior (replaces std::rand)

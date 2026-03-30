@@ -65,9 +65,13 @@ float sampleShadow(float3 worldPos) {
     return (shadowDepth < projCoords.z - 0.005) ? 0.0 : 1.0;
 }
 
-// Height-based fog density
+// Height-based fog density - smooth exponential falloff from ground level
 float getFogDensity(float3 pos) {
-    float heightFactor = exp(-max(pos.y - fogHeight, 0.0) * fogFalloff);
+    // Smooth falloff: densest at y=0, fades exponentially with height
+    // fogHeight controls the scale (higher = fog extends higher)
+    // No hard cutoff - just a continuous gradient
+    float normalizedHeight = pos.y / max(fogHeight, 1.0);
+    float heightFactor = exp(-normalizedHeight * normalizedHeight * fogFalloff * 10.0);
     return fogDensity * heightFactor;
 }
 

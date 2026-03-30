@@ -90,6 +90,11 @@ private:
 
     std::chrono::steady_clock::time_point last_tick_;
     std::chrono::steady_clock::time_point next_tick_time_{};
+
+    // Heartbeat: send Ping every 5s, disconnect if no Pong within 15s
+    float ping_timer_ = 0.0f;
+    static constexpr float PING_INTERVAL = 5.0f;
+    static constexpr float PONG_TIMEOUT = 15.0f;
 };
 
 } // namespace mmo::server

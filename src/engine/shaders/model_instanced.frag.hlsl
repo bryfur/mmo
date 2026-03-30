@@ -95,6 +95,7 @@ float4 PSMain(PSInput input) : SV_Target {
     float4 baseColor;
     if (hasTexture == 1) {
         baseColor = baseColorTexture.Sample(baseColorSampler, input.texCoord);
+        if (baseColor.a < 0.5) discard;
     } else {
         baseColor = input.vertexColor * input.instanceTint;
     }

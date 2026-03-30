@@ -40,6 +40,7 @@ bool GameConfig::load(const std::string& data_dir) {
     load_skills(data_dir + "/skills.json");
     load_talents(data_dir + "/talents.json");
     load_quests(data_dir + "/quests.json");
+    build_indexes();
     return ok;
 }
 
@@ -780,11 +781,22 @@ bool GameConfig::load_quests(const std::string& path) {
 // Lookup helpers
 // ============================================================================
 
+void GameConfig::build_indexes() {
+    monster_type_index_.clear();
+    for (const auto& mt : monster_types_) monster_type_index_[mt.id] = &mt;
+    item_index_.clear();
+    for (const auto& item : items_) item_index_[item.id] = &item;
+    loot_table_index_.clear();
+    for (const auto& lt : loot_tables_) loot_table_index_[lt.monster_type] = &lt;
+    skill_index_.clear();
+    for (const auto& sk : skills_) skill_index_[sk.id] = &sk;
+    quest_index_.clear();
+    for (const auto& q : quests_) quest_index_[q.id] = &q;
+}
+
 const MonsterTypeConfig* GameConfig::find_monster_type(const std::string& id) const {
-    for (const auto& mt : monster_types_) {
-        if (mt.id == id) return &mt;
-    }
-    return nullptr;
+    auto it = monster_type_index_.find(id);
+    return it != monster_type_index_.end() ? it->second : nullptr;
 }
 
 const ZoneConfig* GameConfig::find_zone_at(float x, float z) const {
@@ -803,17 +815,13 @@ const ZoneConfig* GameConfig::find_zone_at(float x, float z) const {
 }
 
 const ItemConfig* GameConfig::find_item(const std::string& id) const {
-    for (const auto& item : items_) {
-        if (item.id == id) return &item;
-    }
-    return nullptr;
+    auto it = item_index_.find(id);
+    return it != item_index_.end() ? it->second : nullptr;
 }
 
 const LootTableConfig* GameConfig::find_loot_table(const std::string& monster_type) const {
-    for (const auto& lt : loot_tables_) {
-        if (lt.monster_type == monster_type) return &lt;
-    }
-    return nullptr;
+    auto it = loot_table_index_.find(monster_type);
+    return it != loot_table_index_.end() ? it->second : nullptr;
 }
 
 std::vector<const SkillConfig*> GameConfig::skills_for_class(const std::string& class_name) const {
@@ -825,10 +833,8 @@ std::vector<const SkillConfig*> GameConfig::skills_for_class(const std::string& 
 }
 
 const SkillConfig* GameConfig::find_skill(const std::string& id) const {
-    for (const auto& sk : skills_) {
-        if (sk.id == id) return &sk;
-    }
-    return nullptr;
+    auto it = skill_index_.find(id);
+    return it != skill_index_.end() ? it->second : nullptr;
 }
 
 const TalentConfig* GameConfig::find_talent(const std::string& id) const {
@@ -843,10 +849,8 @@ const TalentConfig* GameConfig::find_talent(const std::string& id) const {
 }
 
 const QuestConfig* GameConfig::find_quest(const std::string& id) const {
-    for (const auto& q : quests_) {
-        if (q.id == id) return &q;
-    }
-    return nullptr;
+    auto it = quest_index_.find(id);
+    return it != quest_index_.end() ? it->second : nullptr;
 }
 
 std::vector<const QuestConfig*> GameConfig::quests_for_npc(const std::string& npc_type) const {

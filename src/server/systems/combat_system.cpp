@@ -59,22 +59,24 @@ bool apply_damage(entt::registry& registry, entt::entity target, float damage,
     if (!registry.all_of<ecs::Health>(target)) return false;
 
     // Moving dodge check for players
-    if (attacker != entt::null && registry.all_of<ecs::TalentPassiveState>(target)) {
-        auto& tp = registry.get<ecs::TalentPassiveState>(target);
-        if (tp.moving_dodge_chance > 0.0f && tp.was_moving_last_tick) {
+    if (attacker != entt::null && registry.all_of<ecs::TalentStats>(target)) {
+        auto& ts = registry.get<ecs::TalentStats>(target);
+        auto* tr = registry.try_get<ecs::TalentRuntimeState>(target);
+        if (ts.moving_dodge_chance > 0.0f && tr && tr->was_moving_last_tick) {
             static thread_local std::mt19937 rng_dodge{std::random_device{}()};
             static thread_local std::uniform_real_distribution<float> dist_dodge(0.0f, 1.0f);
-            if (dist_dodge(rng_dodge) < tp.moving_dodge_chance) {
+            if (dist_dodge(rng_dodge) < ts.moving_dodge_chance) {
                 return false; // Dodged
             }
         }
     }
 
     // Stationary damage reduction for target
-    if (registry.all_of<ecs::TalentPassiveState>(target)) {
-        auto& tp = registry.get<ecs::TalentPassiveState>(target);
-        if (tp.stationary_damage_reduction > 0.0f && tp.stationary_timer >= tp.stationary_delay) {
-            damage *= (1.0f - tp.stationary_damage_reduction);
+    if (registry.all_of<ecs::TalentStats>(target)) {
+        auto& ts = registry.get<ecs::TalentStats>(target);
+        auto* tr = registry.try_get<ecs::TalentRuntimeState>(target);
+        if (ts.stationary_damage_reduction > 0.0f && tr && tr->stationary_timer >= ts.stationary_delay) {
+            damage *= (1.0f - ts.stationary_damage_reduction);
         }
     }
 
@@ -113,20 +115,15 @@ bool apply_damage(entt::registry& registry, entt::entity target, float damage,
     health.current = std::max(0.0f, health.current - damage);
 
     // Cheat death: survive a killing blow
-    if (was_alive && !health.is_alive() && registry.all_of<ecs::TalentPassiveState>(target)) {
-        auto& tp = registry.get<ecs::TalentPassiveState>(target);
-        if (tp.has_cheat_death && tp.cheat_death_timer <= 0.0f) {
-            health.current = health.max * tp.cheat_death_hp;
-            tp.cheat_death_timer = tp.cheat_death_cooldown_max;
+    if (was_alive && !health.is_alive() && registry.all_of<ecs::TalentStats>(target)) {
+        auto& ts = registry.get<ecs::TalentStats>(target);
+        auto* tr = registry.try_get<ecs::TalentRuntimeState>(target);
+        if (ts.has_cheat_death && tr && tr->cheat_death_timer <= 0.0f) {
+            health.current = health.max * ts.cheat_death_hp;
+            tr->cheat_death_timer = ts.cheat_death_cooldown_max;
             // Grant brief invulnerability
-            ecs::StatusEffect invuln;
-            invuln.type = ecs::StatusEffect::Type::Invulnerable;
-            invuln.duration = 2.0f;
-            invuln.tick_timer = 0.0f;
-            invuln.tick_interval = 0.0f;
-            invuln.value = 0.0f;
-            invuln.source_id = 0;
-            apply_effect(registry, target, invuln);
+            apply_effect(registry, target,
+                ecs::make_status_effect(ecs::StatusEffect::Type::Invulnerable, 2.0f, 0.0f));
         }
     }
 
@@ -255,8 +252,9 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
         // Determine attack cone from class config
         float cone_angle = config.get_class(info.player_class).cone_angle;
 
-        // Get talent passive state for this attacker
-        ecs::TalentPassiveState* tp = registry.try_get<ecs::TalentPassiveState>(entity);
+        // Get talent stats and runtime state for this attacker
+        ecs::TalentStats* tp = registry.try_get<ecs::TalentStats>(entity);
+        ecs::TalentRuntimeState* tr = registry.try_get<ecs::TalentRuntimeState>(entity);
 
         static thread_local std::mt19937 rng_combat{std::random_device{}()};
         static thread_local std::uniform_real_distribution<float> dist01(0.0f, 1.0f);
@@ -287,16 +285,16 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
         }
 
         // Combo stack damage bonus
-        if (tp && tp->combo_max_stacks > 0 && tp->combo_stacks > 0) {
-            effective_damage *= (1.0f + tp->combo_damage_bonus * static_cast<float>(tp->combo_stacks));
+        if (tp && tp->combo_max_stacks > 0 && tr && tr->combo_stacks > 0) {
+            effective_damage *= (1.0f + tp->combo_damage_bonus * static_cast<float>(tr->combo_stacks));
         }
 
         // Empowered attack tracking
         bool is_empowered = false;
-        if (tp && tp->empowered_every > 0) {
-            tp->empowered_counter++;
-            if (tp->empowered_counter >= tp->empowered_every) {
-                tp->empowered_counter = 0;
+        if (tp && tp->empowered_every > 0 && tr) {
+            tr->empowered_counter++;
+            if (tr->empowered_counter >= tp->empowered_every) {
+                tr->empowered_counter = 0;
                 is_empowered = true;
             }
         }
@@ -330,7 +328,7 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
 
             // Stationary damage multiplier
             if (tp && tp->stationary_damage_mult > 1.0f &&
-                tp->stationary_timer >= tp->stationary_delay) {
+                tr && tr->stationary_timer >= tp->stationary_delay) {
                 hit_damage *= tp->stationary_damage_mult;
             }
 
@@ -367,57 +365,33 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
             if (tp && tp->slow_on_hit_value > 0.0f && tp->slow_on_hit_dur > 0.0f) {
                 float chance = tp->slow_on_hit_chance > 0.0f ? tp->slow_on_hit_chance : 1.0f;
                 if (dist01(rng_combat) < chance) {
-                    ecs::StatusEffect slow_fx;
-                    slow_fx.type = ecs::StatusEffect::Type::Slow;
-                    slow_fx.duration = tp->slow_on_hit_dur;
-                    slow_fx.tick_timer = 0.0f;
-                    slow_fx.tick_interval = 0.0f;
-                    slow_fx.value = tp->slow_on_hit_value;
-                    slow_fx.source_id = player_net_id;
-                    apply_effect(registry, target, slow_fx);
+                    apply_effect(registry, target,
+                        ecs::make_status_effect(ecs::StatusEffect::Type::Slow, tp->slow_on_hit_dur, tp->slow_on_hit_value, player_net_id));
                 }
             }
 
             // On-hit burn
             if (tp && tp->burn_on_hit_pct > 0.0f && tp->burn_on_hit_dur > 0.0f) {
-                ecs::StatusEffect burn_fx;
-                burn_fx.type = ecs::StatusEffect::Type::Burn;
-                burn_fx.duration = tp->burn_on_hit_dur;
-                burn_fx.tick_timer = 1.0f;
-                burn_fx.tick_interval = 1.0f;
-                burn_fx.value = effective_damage * tp->burn_on_hit_pct;
-                burn_fx.source_id = player_net_id;
-                apply_effect(registry, target, burn_fx);
+                apply_effect(registry, target,
+                    ecs::make_status_effect(ecs::StatusEffect::Type::Burn, tp->burn_on_hit_dur, effective_damage * tp->burn_on_hit_pct, player_net_id, 1.0f));
             }
 
             // On-hit poison
             if (tp && tp->poison_on_hit_pct > 0.0f && tp->poison_on_hit_dur > 0.0f) {
-                ecs::StatusEffect poison_fx;
-                poison_fx.type = ecs::StatusEffect::Type::Poison;
-                poison_fx.duration = tp->poison_on_hit_dur;
-                poison_fx.tick_timer = 1.0f;
-                poison_fx.tick_interval = 1.0f;
-                poison_fx.value = effective_damage * tp->poison_on_hit_pct;
-                poison_fx.source_id = player_net_id;
-                apply_effect(registry, target, poison_fx);
+                apply_effect(registry, target,
+                    ecs::make_status_effect(ecs::StatusEffect::Type::Poison, tp->poison_on_hit_dur, effective_damage * tp->poison_on_hit_pct, player_net_id, 1.0f));
             }
 
             // Empowered stun
             if (is_empowered && tp && tp->empowered_stun_dur > 0.0f) {
-                ecs::StatusEffect stun_fx;
-                stun_fx.type = ecs::StatusEffect::Type::Stun;
-                stun_fx.duration = tp->empowered_stun_dur;
-                stun_fx.tick_timer = 0.0f;
-                stun_fx.tick_interval = 0.0f;
-                stun_fx.value = 0.0f;
-                stun_fx.source_id = player_net_id;
-                apply_effect(registry, target, stun_fx);
+                apply_effect(registry, target,
+                    ecs::make_status_effect(ecs::StatusEffect::Type::Stun, tp->empowered_stun_dur, 0.0f, player_net_id));
             }
 
             // Combo stack increment
-            if (tp && tp->combo_max_stacks > 0) {
-                tp->combo_stacks = std::min(tp->combo_max_stacks, tp->combo_stacks + 1);
-                tp->combo_decay_timer = tp->combo_window;
+            if (tp && tp->combo_max_stacks > 0 && tr) {
+                tr->combo_stacks = std::min(tp->combo_max_stacks, tr->combo_stacks + 1);
+                tr->combo_decay_timer = tp->combo_window;
             }
 
             CombatHit hit;
@@ -439,14 +413,8 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
 
             // Hit speed boost
             if (tp && tp->hit_speed_bonus > 0.0f && tp->hit_speed_dur > 0.0f) {
-                ecs::StatusEffect speed_fx;
-                speed_fx.type = ecs::StatusEffect::Type::SpeedBoost;
-                speed_fx.duration = tp->hit_speed_dur;
-                speed_fx.tick_timer = 0.0f;
-                speed_fx.tick_interval = 0.0f;
-                speed_fx.value = tp->hit_speed_bonus;
-                speed_fx.source_id = player_net_id;
-                apply_effect(registry, entity, speed_fx);
+                apply_effect(registry, entity,
+                    ecs::make_status_effect(ecs::StatusEffect::Type::SpeedBoost, tp->hit_speed_dur, tp->hit_speed_bonus, player_net_id));
             }
         }
     }

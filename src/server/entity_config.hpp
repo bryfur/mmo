@@ -49,6 +49,10 @@ inline float get_environment_target_scale(EnvironmentType type) {
         case EnvironmentType::TreeOak:      return 320.0f;
         case EnvironmentType::TreePine:     return 360.0f;
         case EnvironmentType::TreeDead:     return 280.0f;
+        case EnvironmentType::TreeWillow:   return 340.0f;
+        case EnvironmentType::TreeBirch:    return 300.0f;
+        case EnvironmentType::TreeMaple:    return 310.0f;
+        case EnvironmentType::TreeAspen:    return 290.0f;
         default:                            return 25.0f;
     }
 }
@@ -87,7 +91,10 @@ inline const char* get_building_model_name(BuildingType type) {
 }
 
 /// Get the model filename (without extension) for an environment type
-inline const char* get_environment_model_name(EnvironmentType type) {
+constexpr int TREE_VARIANTS = 3;
+
+/// Get the base model name for an environment type (no variant suffix)
+inline const char* get_environment_base_model(EnvironmentType type) {
     switch (type) {
         case EnvironmentType::RockBoulder:  return "rock_boulder";
         case EnvironmentType::RockSlate:    return "rock_slate";
@@ -97,8 +104,23 @@ inline const char* get_environment_model_name(EnvironmentType type) {
         case EnvironmentType::TreeOak:      return "tree_oak";
         case EnvironmentType::TreePine:     return "tree_pine";
         case EnvironmentType::TreeDead:     return "tree_dead";
+        case EnvironmentType::TreeWillow:   return "tree_willow";
+        case EnvironmentType::TreeBirch:    return "tree_birch";
+        case EnvironmentType::TreeMaple:    return "tree_maple";
+        case EnvironmentType::TreeAspen:    return "tree_aspen";
         default:                            return "rock_boulder";
     }
+}
+
+/// Get a model name with variant suffix for trees (e.g. "tree_oak_1")
+/// Rocks return the base name (no variants). variant should be 0..TREE_VARIANTS-1.
+inline std::string get_environment_model_name(EnvironmentType type, int variant = 0) {
+    const char* base = get_environment_base_model(type);
+    // Check if this is a tree type (can't call is_tree_type yet - defined later)
+    if (type >= EnvironmentType::TreeOak && type <= EnvironmentType::TreeAspen) {
+        return std::string(base) + "_" + std::to_string(variant % TREE_VARIANTS);
+    }
+    return base;
 }
 
 /// Get the model filename for an NPC type
@@ -214,9 +236,13 @@ inline void get_building_collision_size(BuildingType type,
 
 /// Check if an environment type is a tree (vs rock)
 inline bool is_tree_type(EnvironmentType type) {
-    return type == EnvironmentType::TreeOak || 
-           type == EnvironmentType::TreePine || 
-           type == EnvironmentType::TreeDead;
+    return type == EnvironmentType::TreeOak ||
+           type == EnvironmentType::TreePine ||
+           type == EnvironmentType::TreeDead ||
+           type == EnvironmentType::TreeWillow ||
+           type == EnvironmentType::TreeBirch ||
+           type == EnvironmentType::TreeMaple ||
+           type == EnvironmentType::TreeAspen;
 }
 
 /// Calculate collision size for environment objects (rocks and trees)
@@ -227,7 +253,7 @@ inline bool is_tree_type(EnvironmentType type) {
 /// @param half_z Output: half extent in Z
 inline void get_environment_collision_size(EnvironmentType type, float scale,
                                            float& half_x, float& half_y, float& half_z) {
-    const char* model_name = get_environment_model_name(type);
+    const char* model_name = get_environment_base_model(type);
     const ModelBounds* bounds = get_model_bounds(model_name);
     
     if (bounds) {
@@ -247,10 +273,14 @@ inline void get_environment_collision_size(EnvironmentType type, float scale,
 inline float get_tree_collision_radius(EnvironmentType type, float scale) {
     // Trees use smaller radius (just trunk area)
     switch (type) {
-        case EnvironmentType::TreeOak:   return scale * 0.08f;
-        case EnvironmentType::TreePine:  return scale * 0.06f;
-        case EnvironmentType::TreeDead:  return scale * 0.05f;
-        default:                         return scale * 0.07f;
+        case EnvironmentType::TreeOak:    return scale * 0.08f;
+        case EnvironmentType::TreePine:   return scale * 0.06f;
+        case EnvironmentType::TreeDead:   return scale * 0.05f;
+        case EnvironmentType::TreeWillow: return scale * 0.07f;
+        case EnvironmentType::TreeBirch:  return scale * 0.05f;
+        case EnvironmentType::TreeMaple:  return scale * 0.07f;
+        case EnvironmentType::TreeAspen:  return scale * 0.05f;
+        default:                          return scale * 0.07f;
     }
 }
 
@@ -272,14 +302,20 @@ inline BuildingType building_type_from_model(const std::string& model) {
 }
 
 inline EnvironmentType environment_type_from_model(const std::string& model) {
+    // Match with or without variant suffix (e.g., "tree_oak" or "tree_oak_2")
+    auto starts = [&](const char* prefix) { return model.compare(0, strlen(prefix), prefix) == 0; };
     if (model == "rock_boulder")  return EnvironmentType::RockBoulder;
     if (model == "rock_slate")    return EnvironmentType::RockSlate;
     if (model == "rock_spire")    return EnvironmentType::RockSpire;
     if (model == "rock_cluster")  return EnvironmentType::RockCluster;
     if (model == "rock_mossy")    return EnvironmentType::RockMossy;
-    if (model == "tree_oak")      return EnvironmentType::TreeOak;
-    if (model == "tree_pine")     return EnvironmentType::TreePine;
-    if (model == "tree_dead")     return EnvironmentType::TreeDead;
+    if (starts("tree_oak"))       return EnvironmentType::TreeOak;
+    if (starts("tree_pine"))      return EnvironmentType::TreePine;
+    if (starts("tree_dead"))      return EnvironmentType::TreeDead;
+    if (starts("tree_willow"))    return EnvironmentType::TreeWillow;
+    if (starts("tree_birch"))     return EnvironmentType::TreeBirch;
+    if (starts("tree_maple"))     return EnvironmentType::TreeMaple;
+    if (starts("tree_aspen"))     return EnvironmentType::TreeAspen;
     return EnvironmentType::RockBoulder;
 }
 

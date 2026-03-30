@@ -103,35 +103,12 @@ struct AttackEffect {
     float target_y = 0.0f;
 };
 
-// Facing direction for entities (used for attack direction)
-struct Facing {
-    float x = 0.0f;
-    float y = 1.0f;  // Default facing down
-};
-
 // Smooth visual rotation — thin alias for engine type so it works as an ECS component
 using SmoothRotation = mmo::engine::animation::RotationSmoother;
 
 // Per-instance scale multiplier
 struct Scale {
     float value = 1.0f;
-};
-
-// Marks an entity as renderable with a 3D model
-struct ModelRenderable {
-    std::string model_name;  // Key in ModelManager
-    float tint_r = 1.0f;
-    float tint_g = 1.0f;
-    float tint_b = 1.0f;
-    float tint_a = 1.0f;
-    float scale = 1.0f;
-};
-
-// For 2D sprites/billboards
-struct SpriteRenderable {
-    std::string texture_name;
-    float width = 1.0f;
-    float height = 1.0f;
 };
 
 // Health bar display component

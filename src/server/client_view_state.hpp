@@ -33,6 +33,17 @@ public:
     bool can_send_update(uint32_t entity_id, float min_interval_sec) const;
     void mark_sent(uint32_t entity_id);
 
+    // Per-tick scratch buffers (reused across ticks to avoid heap allocations)
+    std::unordered_map<uint32_t, mmo::protocol::NetEntityState> state_cache;
+    std::vector<uint32_t> visible_now;
+    std::vector<uint32_t> to_remove;
+
+    void clear_scratch() {
+        state_cache.clear();
+        visible_now.clear();
+        to_remove.clear();
+    }
+
 private:
     uint32_t client_id_;
     std::unordered_set<uint32_t> known_entities_;

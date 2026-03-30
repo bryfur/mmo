@@ -3,6 +3,7 @@
  *
  * Transforms vertices into light space for shadow map generation.
  * Per-instance model matrices read from a storage buffer.
+ * Passes through UVs for alpha-tested shadows.
  */
 
 struct VSInput {
@@ -14,6 +15,7 @@ struct VSInput {
 
 struct VSOutput {
     float4 position : SV_Position;
+    float2 texCoord : TEXCOORD0;
 };
 
 [[vk::binding(0, 1)]]
@@ -32,5 +34,6 @@ VSOutput VSMain(VSInput input, uint instanceID : SV_InstanceID) {
     VSOutput output;
     float4 worldPos = mul(instances[instanceID].model, float4(input.position, 1.0));
     output.position = mul(lightViewProjection, worldPos);
+    output.texCoord = input.texCoord;
     return output;
 }

@@ -599,6 +599,15 @@ private:
     std::vector<TalentTreeConfig> talent_trees_;
     TalentGlobalConfig talent_config_;
     std::vector<QuestConfig> quests_;
+
+    // O(1) lookup indexes (built after loading)
+    std::unordered_map<std::string, const MonsterTypeConfig*> monster_type_index_;
+    std::unordered_map<std::string, const ItemConfig*> item_index_;
+    std::unordered_map<std::string, const LootTableConfig*> loot_table_index_;
+    std::unordered_map<std::string, const SkillConfig*> skill_index_;
+    std::unordered_map<std::string, const QuestConfig*> quest_index_;
+
+    void build_indexes();
 };
 
 } // namespace mmo::server

@@ -188,14 +188,7 @@ void Server::on_npc_interact(std::shared_ptr<Session> session, uint32_t player_i
     if (npc_info.type != protocol::EntityType::TownNPC) return;
 
     // Map npc_type index to string for quest lookup
-    std::string npc_type;
-    switch (npc_info.npc_type) {
-        case 1: npc_type = "merchant"; break;
-        case 2: npc_type = "guard"; break;
-        case 3: npc_type = "blacksmith"; break;
-        case 4: npc_type = "innkeeper"; break;
-        default: npc_type = "villager"; break;
-    }
+    std::string npc_type = npc_type_to_string(npc_info.npc_type);
 
     // Auto turn-in any completable quests from this NPC type
     if (registry.all_of<ecs::QuestState>(player_entity)) {
@@ -402,6 +395,31 @@ void Server::game_loop() {
 
     world_.update(dt);
 
+    // Heartbeat: send Ping and check for Pong timeouts
+    ping_timer_ += dt;
+    if (ping_timer_ >= PING_INTERVAL) {
+        ping_timer_ -= PING_INTERVAL;
+        auto ping_packet = build_packet(MessageType::Ping, std::vector<uint8_t>{});
+        std::lock_guard<std::mutex> lock(sessions_mutex_);
+        std::vector<uint32_t> timed_out;
+        for (auto& [id, session] : sessions_) {
+            if (!session->is_open()) continue;
+            auto elapsed = std::chrono::steady_clock::now() - session->last_pong_time();
+            if (std::chrono::duration<float>(elapsed).count() > PONG_TIMEOUT) {
+                std::cout << "Player " << id << " timed out (no Pong), disconnecting" << std::endl;
+                timed_out.push_back(id);
+            } else {
+                session->send(ping_packet);
+            }
+        }
+        for (uint32_t id : timed_out) {
+            auto it = sessions_.find(id);
+            if (it != sessions_.end()) {
+                it->second->close();
+            }
+        }
+    }
+
     // Send progression events (XP, loot, level ups, zone changes) to clients
     send_progression_updates();
 
@@ -437,15 +455,7 @@ void Server::send_quest_availability(uint32_t player_id) {
         if (info.type != protocol::EntityType::TownNPC) continue;
 
         // Map NPC type to quest giver type string
-        std::string npc_type;
-        switch (info.npc_type) {
-            case 1: npc_type = "merchant"; break;
-            case 2: npc_type = "guard"; break;
-            case 3: npc_type = "blacksmith"; break;
-            case 4: npc_type = "innkeeper"; break;
-            case 5: npc_type = "villager"; break;
-            default: npc_type = "villager"; break;
-        }
+        std::string npc_type = npc_type_to_string(info.npc_type);
 
         auto available = systems::get_available_quests(registry, player, npc_type, config_);
 
@@ -929,9 +939,9 @@ float Server::get_update_interval(protocol::EntityType type) const {
     switch(type) {
         case protocol::EntityType::Building:    return 999.0f;  // Never (static)
         case protocol::EntityType::Environment: return 999.0f;  // Never (static)
-        case protocol::EntityType::Player:      return 0.0167f;   // 20 Hz max
-        case protocol::EntityType::NPC:         return 0.0167f;   // 60 Hz max
-        case protocol::EntityType::TownNPC:     return 0.0167f;    // 5 Hz max
+        case protocol::EntityType::Player:      return 0.0167f;   // 60 Hz
+        case protocol::EntityType::NPC:         return 0.033f;    // 30 Hz
+        case protocol::EntityType::TownNPC:     return 0.2f;      // 5 Hz
         default: return 0.05f;
     }
 }

@@ -107,9 +107,9 @@ void VolumetricFog::render(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& reg
         uniforms.shadowLightViewProjection = shadow_map.cascades()[0].light_view_projection;
     }
     uniforms.lightDir = light_dir;
-    uniforms.fogDensity = 0.003f;
-    uniforms.lightColor = glm::vec3(1.4f, 1.2f, 0.9f);
-    uniforms.scatterStrength = 0.5f;
+    uniforms.fogDensity = 0.0015f;
+    uniforms.lightColor = glm::vec3(1.0f, 0.9f, 0.7f);
+    uniforms.scatterStrength = 0.25f;
     uniforms.fogColor = glm::vec3(0.5f, 0.6f, 0.7f);
     uniforms.fogHeight = 100.0f;
     uniforms.cameraPos = camera.position;

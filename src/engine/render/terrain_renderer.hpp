@@ -113,12 +113,6 @@ public:
                        const glm::mat4& light_view_projection);
 
     /**
-     * Render terrain into a depth pre-pass (camera VP, no color output).
-     */
-    void render_depth_prepass(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                              const glm::mat4& view_projection);
-
-    /**
      * Get terrain height at any world position.
      * Samples from CPU-side heightmap data (for physics, placement, etc.)
      */

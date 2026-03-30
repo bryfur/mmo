@@ -89,14 +89,15 @@ void NetworkClient::disconnect() {
     if (!connected_) return;
     
     connected_ = false;
-    
-    // Send disconnect message
-    auto data = build_packet(MessageType::Disconnect, {});
-    
-    asio::error_code ec;
-    asio::write(socket_, asio::buffer(data), ec);
-    
-    socket_.close(ec);
+
+    // Post disconnect to IO thread to avoid data race with async operations
+    asio::post(io_context_, [this]() {
+        auto data = build_packet(MessageType::Disconnect, {});
+        asio::error_code ec;
+        asio::write(socket_, asio::buffer(data), ec);
+        socket_.close(ec);
+    });
+
     work_.reset();
     io_context_.stop();
     
@@ -166,7 +167,14 @@ void NetworkClient::read_header() {
         [this](asio::error_code ec, std::size_t /*length*/) {
             if (!ec) {
                 current_header_.deserialize(header_buffer_);
-                
+
+                constexpr uint32_t MAX_PAYLOAD_SIZE = 4 * 1024 * 1024; // 4 MB
+                if (current_header_.payload_size > MAX_PAYLOAD_SIZE) {
+                    std::cerr << "Network: payload too large (" << current_header_.payload_size << " bytes), disconnecting" << std::endl;
+                    connected_ = false;
+                    return;
+                }
+
                 if (current_header_.payload_size > 0) {
                     payload_buffer_.resize(current_header_.payload_size);
                     read_payload();
@@ -198,6 +206,18 @@ void NetworkClient::read_payload() {
 }
 
 void NetworkClient::handle_message() {
+    // Respond to Ping immediately on the IO thread (no need to queue to main thread)
+    if (current_header_.type == MessageType::Ping) {
+        auto pong = build_packet(MessageType::Pong, std::vector<uint8_t>{});
+        std::lock_guard<std::mutex> lock(write_mutex_);
+        write_queue_.push(pong);
+        if (!writing_) {
+            writing_ = true;
+            do_write();
+        }
+        return;
+    }
+
     // Handle connection accepted immediately to get player ID
     if (current_header_.type == MessageType::ConnectionAccepted &&
         payload_buffer_.size() >= ConnectionAcceptedMsg::serialized_size()) {

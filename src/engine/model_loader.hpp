@@ -144,6 +144,10 @@ public:
     /// Resolve a name to a handle (INVALID_MODEL_HANDLE if not found)
     ModelHandle get_handle(const std::string& name) const;
 
+    /// Register a pre-built model (e.g. procedurally generated). Takes ownership.
+    /// Uploads to GPU if device is set. Returns handle.
+    ModelHandle register_model(const std::string& name, std::unique_ptr<Model> model);
+
     void unload_all();
 
 private:

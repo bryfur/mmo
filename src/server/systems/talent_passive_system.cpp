@@ -8,25 +8,26 @@
 namespace mmo::server::systems {
 
 void update_talent_passives(entt::registry& registry, float dt, const GameConfig& config) {
-    auto view = registry.view<ecs::PlayerTag, ecs::TalentPassiveState, ecs::Health, ecs::Transform>();
+    auto view = registry.view<ecs::PlayerTag, ecs::TalentStats, ecs::TalentRuntimeState, ecs::Health, ecs::Transform>();
 
     for (auto entity : view) {
-        auto& tp = view.get<ecs::TalentPassiveState>(entity);
+        const auto& tp = view.get<ecs::TalentStats>(entity);
+        auto& tr = view.get<ecs::TalentRuntimeState>(entity);
         auto& health = view.get<ecs::Health>(entity);
 
         if (!health.is_alive()) continue;
 
         // Tick down cooldown timers
-        if (tp.cheat_death_timer > 0.0f)  tp.cheat_death_timer  = std::max(0.0f, tp.cheat_death_timer  - dt);
-        if (tp.shield_regen_timer > 0.0f) tp.shield_regen_timer = std::max(0.0f, tp.shield_regen_timer - dt);
-        if (tp.panic_freeze_timer > 0.0f) tp.panic_freeze_timer = std::max(0.0f, tp.panic_freeze_timer - dt);
+        if (tr.cheat_death_timer > 0.0f)  tr.cheat_death_timer  = std::max(0.0f, tr.cheat_death_timer  - dt);
+        if (tr.shield_regen_timer > 0.0f) tr.shield_regen_timer = std::max(0.0f, tr.shield_regen_timer - dt);
+        if (tr.panic_freeze_timer > 0.0f) tr.panic_freeze_timer = std::max(0.0f, tr.panic_freeze_timer - dt);
 
         // Combo stack decay
-        if (tp.combo_max_stacks > 0 && tp.combo_stacks > 0) {
-            tp.combo_decay_timer -= dt;
-            if (tp.combo_decay_timer <= 0.0f) {
-                tp.combo_stacks = 0;
-                tp.combo_decay_timer = 0.0f;
+        if (tp.combo_max_stacks > 0 && tr.combo_stacks > 0) {
+            tr.combo_decay_timer -= dt;
+            if (tr.combo_decay_timer <= 0.0f) {
+                tr.combo_stacks = 0;
+                tr.combo_decay_timer = 0.0f;
             }
         }
 
@@ -50,41 +51,29 @@ void update_talent_passives(entt::registry& registry, float dt, const GameConfig
         }
 
         // Stationary heal (Holy Ground)
-        if (tp.stationary_heal_pct > 0.0f && tp.stationary_timer >= tp.stationary_delay) {
+        if (tp.stationary_heal_pct > 0.0f && tr.stationary_timer >= tp.stationary_delay) {
             health.current = std::min(health.max, health.current + health.max * tp.stationary_heal_pct * dt);
         }
 
         // Periodic shield regeneration (Ice Barrier)
-        if (tp.shield_regen_pct > 0.0f && tp.shield_regen_timer <= 0.0f) {
+        if (tp.shield_regen_pct > 0.0f && tr.shield_regen_timer <= 0.0f) {
             float shield_value = health.max * tp.shield_regen_pct;
-            ecs::StatusEffect shield;
-            shield.type = ecs::StatusEffect::Type::Shield;
-            shield.duration = tp.shield_regen_cooldown_max + 0.1f;  // lasts until next refresh
-            shield.tick_timer = 0.0f;
-            shield.tick_interval = 0.0f;
-            shield.value = shield_value;
-            shield.source_id = 0;
-            apply_effect(registry, entity, shield);
-            tp.shield_regen_timer = tp.shield_regen_cooldown_max;
+            apply_effect(registry, entity,
+                ecs::make_status_effect(ecs::StatusEffect::Type::Shield, tp.shield_regen_cooldown_max + 0.1f, shield_value));
+            tr.shield_regen_timer = tp.shield_regen_cooldown_max;
         }
 
         // Fury state: maintain DamageBoost buff when at low HP (Undying Fury)
         if (tp.fury_threshold > 0.0f && tp.fury_damage_mult > 1.0f) {
             if (health.ratio() <= tp.fury_threshold) {
-                ecs::StatusEffect fury;
-                fury.type = ecs::StatusEffect::Type::DamageBoost;
-                fury.duration = dt * 2.0f;  // refreshed each tick while in fury
-                fury.tick_timer = 0.0f;
-                fury.tick_interval = 0.0f;
-                fury.value = tp.fury_damage_mult - 1.0f;
-                fury.source_id = 1;  // special fury source id
-                apply_effect(registry, entity, fury);
+                apply_effect(registry, entity,
+                    ecs::make_status_effect(ecs::StatusEffect::Type::DamageBoost, dt * 2.0f, tp.fury_damage_mult - 1.0f, 1));
             }
         }
 
         // Panic freeze at low HP (Frozen Heart)
         if (tp.panic_freeze_radius > 0.0f && tp.panic_freeze_threshold > 0.0f &&
-            tp.panic_freeze_timer <= 0.0f && health.ratio() < tp.panic_freeze_threshold) {
+            tr.panic_freeze_timer <= 0.0f && health.ratio() < tp.panic_freeze_threshold) {
             const auto& transform = view.get<ecs::Transform>(entity);
             auto npc_view = registry.view<ecs::NPCTag, ecs::Transform, ecs::Health>();
             for (auto npc : npc_view) {
@@ -93,24 +82,18 @@ void update_talent_passives(entt::registry& registry, float dt, const GameConfig
                 const auto& nt = npc_view.get<ecs::Transform>(npc);
                 float dx = nt.x - transform.x, dz = nt.z - transform.z;
                 if (std::sqrt(dx * dx + dz * dz) <= tp.panic_freeze_radius) {
-                    ecs::StatusEffect freeze;
-                    freeze.type = ecs::StatusEffect::Type::Freeze;
-                    freeze.duration = tp.panic_freeze_duration;
-                    freeze.tick_timer = 0.0f;
-                    freeze.tick_interval = 0.0f;
-                    freeze.value = 0.0f;
-                    freeze.source_id = 0;
-                    apply_effect(registry, npc, freeze);
+                    apply_effect(registry, npc,
+                        ecs::make_status_effect(ecs::StatusEffect::Type::Freeze, tp.panic_freeze_duration, 0.0f));
                 }
             }
-            tp.panic_freeze_timer = tp.panic_freeze_cooldown_max;
+            tr.panic_freeze_timer = tp.panic_freeze_cooldown_max;
         }
 
         // Passive damage aura (Radiant Aura)
         if (tp.aura_damage_pct > 0.0f && tp.aura_range > 0.0f) {
-            tp.aura_tick_timer -= dt;
-            if (tp.aura_tick_timer <= 0.0f) {
-                tp.aura_tick_timer = 0.5f;  // tick every 0.5 seconds
+            tr.aura_tick_timer -= dt;
+            if (tr.aura_tick_timer <= 0.0f) {
+                tr.aura_tick_timer = 0.5f;  // tick every 0.5 seconds
                 const auto& transform = view.get<ecs::Transform>(entity);
                 float aura_dmg = 0.0f;
                 if (registry.all_of<ecs::Combat>(entity)) {
@@ -133,9 +116,9 @@ void update_talent_passives(entt::registry& registry, float dt, const GameConfig
 
         // Nearby enemy debuff aura (Menacing Presence)
         if (tp.nearby_debuff_range > 0.0f && tp.nearby_damage_reduction > 0.0f) {
-            tp.debuff_aura_timer -= dt;
-            if (tp.debuff_aura_timer <= 0.0f) {
-                tp.debuff_aura_timer = 1.0f;  // refresh every second
+            tr.debuff_aura_timer -= dt;
+            if (tr.debuff_aura_timer <= 0.0f) {
+                tr.debuff_aura_timer = 1.0f;  // refresh every second
                 const auto& transform = view.get<ecs::Transform>(entity);
                 uint32_t player_net_id = registry.all_of<ecs::NetworkId>(entity)
                     ? registry.get<ecs::NetworkId>(entity).id : 0;
@@ -147,14 +130,8 @@ void update_talent_passives(entt::registry& registry, float dt, const GameConfig
                     float dx = nt.x - transform.x, dz = nt.z - transform.z;
                     if (std::sqrt(dx * dx + dz * dz) <= tp.nearby_debuff_range) {
                         // Reduce outgoing damage (negative DamageBoost = debuff)
-                        ecs::StatusEffect debuff;
-                        debuff.type = ecs::StatusEffect::Type::DamageBoost;
-                        debuff.duration = 1.1f;  // slightly longer than refresh interval
-                        debuff.tick_timer = 0.0f;
-                        debuff.tick_interval = 0.0f;
-                        debuff.value = -tp.nearby_damage_reduction;
-                        debuff.source_id = player_net_id;
-                        apply_effect(registry, npc, debuff);
+                        apply_effect(registry, npc,
+                            ecs::make_status_effect(ecs::StatusEffect::Type::DamageBoost, 1.1f, -tp.nearby_damage_reduction, player_net_id));
                     }
                 }
             }

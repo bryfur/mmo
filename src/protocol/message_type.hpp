@@ -77,6 +77,10 @@ enum class MessageType : uint8_t {
 
     // World events
     ZoneChange = 85,          // Player entered a new zone
+
+    // Keepalive
+    Ping = 86,                // Server -> client: heartbeat probe
+    Pong = 87,                // Client -> server: heartbeat reply
 };
 
 } // namespace mmo::protocol

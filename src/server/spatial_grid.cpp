@@ -54,16 +54,21 @@ void SpatialGrid::update_entity(uint32_t entity_id, float x, float y, protocol::
         // Remove from old cell
         auto old_cell_it = grid_.find(old_cell);
         if (old_cell_it != grid_.end()) {
-            old_cell_it->second.erase(entity_id);
-            // Remove cell from grid if empty
-            if (old_cell_it->second.empty()) {
+            // Swap-and-pop removal for vector
+            auto& vec = old_cell_it->second;
+            auto pos = std::find(vec.begin(), vec.end(), entity_id);
+            if (pos != vec.end()) {
+                *pos = vec.back();
+                vec.pop_back();
+            }
+            if (vec.empty()) {
                 grid_.erase(old_cell_it);
             }
         }
     }
 
     // Add to new cell
-    grid_[new_cell].insert(entity_id);
+    grid_[new_cell].push_back(entity_id);
     entity_info_[entity_id] = {new_cell, type};
 }
 
@@ -78,9 +83,13 @@ void SpatialGrid::remove_entity(uint32_t entity_id) {
     // Remove from cell
     auto cell_it = grid_.find(cell);
     if (cell_it != grid_.end()) {
-        cell_it->second.erase(entity_id);
-        // Remove cell from grid if empty
-        if (cell_it->second.empty()) {
+        auto& vec = cell_it->second;
+        auto pos = std::find(vec.begin(), vec.end(), entity_id);
+        if (pos != vec.end()) {
+            *pos = vec.back();
+            vec.pop_back();
+        }
+        if (vec.empty()) {
             grid_.erase(cell_it);
         }
     }

@@ -275,6 +275,16 @@ void Session::handle_packet() {
             break;
         }
 
+        case MessageType::CraftRequest: {
+            if (current_header_.payload_size >= CraftRequestMsg::serialized_size() && player_id_ != 0) {
+                CraftRequestMsg msg;
+                msg.deserialize(payload_buffer_);
+                std::string rid(msg.recipe_id, strnlen(msg.recipe_id, sizeof(msg.recipe_id)));
+                server_.on_craft_request(player_id_, rid);
+            }
+            break;
+        }
+
         default:
             std::cout << "Unknown message type: " << static_cast<int>(current_header_.type) << std::endl;
             break;

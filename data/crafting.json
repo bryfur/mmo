@@ -1,0 +1,92 @@
+{
+  "recipes": [
+    {
+      "id": "craft_iron_sword",
+      "name": "Iron Sword",
+      "output_item_id": "iron_sword",
+      "output_count": 1,
+      "gold_cost": 5,
+      "required_level": 1,
+      "station": "blacksmith",
+      "ingredients": [
+        { "item_id": "iron_ore", "count": 2 },
+        { "item_id": "rough_wood", "count": 1 }
+      ]
+    },
+    {
+      "id": "craft_steel_sword",
+      "name": "Steel Sword",
+      "output_item_id": "steel_sword",
+      "output_count": 1,
+      "gold_cost": 30,
+      "required_level": 5,
+      "station": "blacksmith",
+      "ingredients": [
+        { "item_id": "iron_ore", "count": 4 },
+        { "item_id": "rough_wood", "count": 1 }
+      ]
+    },
+    {
+      "id": "craft_chain_mail",
+      "name": "Chain Mail",
+      "output_item_id": "chain_mail",
+      "output_count": 1,
+      "gold_cost": 30,
+      "required_level": 4,
+      "station": "blacksmith",
+      "ingredients": [
+        { "item_id": "iron_ore", "count": 6 }
+      ]
+    },
+    {
+      "id": "craft_iron_helmet",
+      "name": "Iron Helmet",
+      "output_item_id": "iron_helmet",
+      "output_count": 1,
+      "gold_cost": 10,
+      "required_level": 2,
+      "station": "blacksmith",
+      "ingredients": [
+        { "item_id": "iron_ore", "count": 3 }
+      ]
+    },
+    {
+      "id": "craft_small_health_potion",
+      "name": "Small Health Potion",
+      "output_item_id": "small_health_potion",
+      "output_count": 1,
+      "gold_cost": 2,
+      "required_level": 1,
+      "station": "any",
+      "ingredients": [
+        { "item_id": "wild_herbs", "count": 2 }
+      ]
+    },
+    {
+      "id": "craft_medium_health_potion",
+      "name": "Medium Health Potion",
+      "output_item_id": "medium_health_potion",
+      "output_count": 1,
+      "gold_cost": 5,
+      "required_level": 3,
+      "station": "any",
+      "ingredients": [
+        { "item_id": "wild_herbs", "count": 3 },
+        { "item_id": "monster_fang", "count": 1 }
+      ]
+    },
+    {
+      "id": "craft_apprentice_robes",
+      "name": "Apprentice Robes",
+      "output_item_id": "apprentice_robes",
+      "output_count": 1,
+      "gold_cost": 20,
+      "required_level": 3,
+      "station": "any",
+      "ingredients": [
+        { "item_id": "spider_silk", "count": 4 },
+        { "item_id": "enchanted_dust", "count": 1 }
+      ]
+    }
+  ]
+}

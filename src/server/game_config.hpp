@@ -457,6 +457,26 @@ struct QuestConfig {
 };
 
 // ============================================================================
+// Crafting recipes (from crafting.json)
+// ============================================================================
+
+struct CraftIngredientConfig {
+    std::string item_id;
+    int count = 1;
+};
+
+struct CraftRecipeConfig {
+    std::string id;
+    std::string name;
+    std::string output_item_id;
+    int output_count = 1;
+    int gold_cost = 0;
+    int required_level = 1;
+    std::string station;    // "blacksmith", "any" - which NPC type (or area) is required
+    std::vector<CraftIngredientConfig> ingredients;
+};
+
+// ============================================================================
 // Vendors (NPC merchants) - per-NPC-type stock lists
 // ============================================================================
 
@@ -588,6 +608,10 @@ public:
     const std::vector<VendorConfig>& vendors() const { return vendors_; }
     const VendorConfig* find_vendor(const std::string& npc_type) const;
 
+    // Crafting
+    const std::vector<CraftRecipeConfig>& recipes() const { return recipes_; }
+    const CraftRecipeConfig* find_recipe(const std::string& id) const;
+
     // Build a ClassInfo for sending to clients
     mmo::protocol::ClassInfo build_class_info(int index) const;
 
@@ -607,6 +631,7 @@ private:
     bool load_talents(const std::string& path);
     bool load_quests(const std::string& path);
     bool load_vendors(const std::string& path);
+    bool load_recipes(const std::string& path);
 
     static uint32_t parse_color(const std::string& s);
 
@@ -642,6 +667,7 @@ private:
     TalentGlobalConfig talent_config_;
     std::vector<QuestConfig> quests_;
     std::vector<VendorConfig> vendors_;
+    std::vector<CraftRecipeConfig> recipes_;
 
     // O(1) lookup indexes (built after loading)
     std::unordered_map<std::string, const MonsterTypeConfig*> monster_type_index_;
@@ -650,6 +676,7 @@ private:
     std::unordered_map<std::string, const SkillConfig*> skill_index_;
     std::unordered_map<std::string, const QuestConfig*> quest_index_;
     std::unordered_map<std::string, const VendorConfig*> vendor_index_;
+    std::unordered_map<std::string, const CraftRecipeConfig*> recipe_index_;
 
     void build_indexes();
 };

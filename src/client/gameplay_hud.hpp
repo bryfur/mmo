@@ -195,6 +195,32 @@ struct VendorStockSlot {
 };
 
 // ============================================================================
+// Crafting
+// ============================================================================
+
+struct CraftIngredientClient {
+    std::string item_id;
+    int count = 0;
+};
+
+struct CraftRecipe {
+    std::string id;
+    std::string name;
+    std::string output_item_id;
+    int output_count = 1;
+    int gold_cost = 0;
+    int required_level = 1;
+    std::vector<CraftIngredientClient> ingredients;
+};
+
+struct CraftingState {
+    std::vector<CraftRecipe> recipes;
+    std::string last_result;
+    float last_result_timer = 0.0f;
+    uint32_t last_result_color = 0xFFFFFFFF;
+};
+
+// ============================================================================
 // Party
 // ============================================================================
 
@@ -309,6 +335,9 @@ struct HUDState {
 
     // Party
     PartyState party;
+
+    // Crafting
+    CraftingState crafting;
 
     void update(float dt) {
         if (zone_display_timer > 0) zone_display_timer -= dt;

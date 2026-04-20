@@ -99,6 +99,11 @@ enum class MessageType : uint8_t {
     PartyLeave = 103,         // Client -> server: leave current party
     PartyKick = 104,          // Client -> server: kick a member (leader only)
     PartyState = 105,         // Server -> client: full state of player's party
+
+    // Crafting
+    CraftRecipes = 110,       // Server -> client: list of recipes available to the player
+    CraftRequest = 111,       // Client -> server: craft one unit of a recipe
+    CraftResult = 112,        // Server -> client: success/fail with reason
 };
 
 } // namespace mmo::protocol

@@ -186,6 +186,12 @@ bool NetworkMessageHandler::try_handle(MessageType type, const std::vector<uint8
         case MessageType::PartyState:
             on_party_state(payload);
             return true;
+        case MessageType::CraftRecipes:
+            on_craft_recipes(payload);
+            return true;
+        case MessageType::CraftResult:
+            on_craft_result(payload);
+            return true;
         default:
             return false;
     }
@@ -404,6 +410,55 @@ void NetworkMessageHandler::on_party_state(const std::vector<uint8_t>& payload) 
         pm.max_mana = m.max_mana;
         p.members.push_back(std::move(pm));
     }
+}
+
+void NetworkMessageHandler::on_craft_recipes(const std::vector<uint8_t>& payload) {
+    if (payload.size() < sizeof(uint16_t)) return;
+    BufferReader r(payload);
+    uint16_t count = r.read<uint16_t>();
+    ctx_.hud_state.crafting.recipes.clear();
+    for (uint16_t i = 0; i < count; ++i) {
+        CraftRecipeInfo info;
+        info.deserialize(r);
+        CraftRecipe recipe;
+        recipe.id = std::string(info.id, strnlen(info.id, sizeof(info.id)));
+        recipe.name = std::string(info.name, strnlen(info.name, sizeof(info.name)));
+        recipe.output_item_id = std::string(info.output_item_id, strnlen(info.output_item_id, sizeof(info.output_item_id)));
+        recipe.output_count = info.output_count;
+        recipe.gold_cost = info.gold_cost;
+        recipe.required_level = info.required_level;
+        for (int j = 0; j < info.ingredient_count && j < CraftRecipeInfo::MAX_INGREDIENTS; ++j) {
+            CraftIngredientClient c;
+            c.item_id = std::string(info.ingredients[j].item_id,
+                                    strnlen(info.ingredients[j].item_id, sizeof(info.ingredients[j].item_id)));
+            c.count = info.ingredients[j].count;
+            recipe.ingredients.push_back(std::move(c));
+        }
+        ctx_.hud_state.crafting.recipes.push_back(std::move(recipe));
+    }
+}
+
+void NetworkMessageHandler::on_craft_result(const std::vector<uint8_t>& payload) {
+    if (payload.size() < CraftResultMsg::serialized_size()) return;
+    CraftResultMsg msg;
+    msg.deserialize(payload);
+    auto& cs = ctx_.hud_state.crafting;
+    std::string rid(msg.recipe_id, strnlen(msg.recipe_id, sizeof(msg.recipe_id)));
+    std::string reason(msg.reason, strnlen(msg.reason, sizeof(msg.reason)));
+    if (msg.success) {
+        cs.last_result = "Crafted: " + rid;
+        cs.last_result_color = 0xFF00CC00;
+    } else {
+        cs.last_result = "Craft failed: " + (reason.empty() ? rid : reason);
+        cs.last_result_color = 0xFF0000CC;
+    }
+    cs.last_result_timer = 3.0f;
+
+    Notification notif;
+    notif.text = cs.last_result;
+    notif.timer = Notification::DURATION;
+    notif.color = cs.last_result_color;
+    ctx_.hud_state.notifications.push_back(notif);
 }
 
 void NetworkMessageHandler::on_vendor_open(const std::vector<uint8_t>& payload) {

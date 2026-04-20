@@ -145,6 +145,9 @@ void Server::on_class_select(std::shared_ptr<Session> session, uint8_t class_ind
     // Tell client which NPCs have quests available for them
     send_quest_availability(player_id);
 
+    // Send craftable recipes (level-gated) so the client can populate a UI.
+    send_craft_recipes(player_id);
+
     // Send available skills for this class
     send_skill_list(player_id);
 
@@ -418,28 +421,77 @@ void Server::on_chat_send(uint32_t player_id, uint8_t channel_raw, const std::st
     auto player = world_.find_entity_by_network_id(player_id);
     if (player == entt::null) return;
 
-    // Slash-command shortcuts (e.g. "/who", "/zone"). Non-chat commands never go on the wire.
+    // Slash-command shortcuts. Non-chat commands never go on the wire as chat.
+    auto send_system_to = [this](uint32_t pid, const std::string& text) {
+        ChatBroadcastMsg out;
+        out.channel = static_cast<uint8_t>(ChatChannel::System);
+        out.sender_id = 0;
+        std::strncpy(out.sender_name, "Server", sizeof(out.sender_name) - 1);
+        std::strncpy(out.message, text.c_str(), sizeof(out.message) - 1);
+        std::lock_guard<std::mutex> lock(sessions_mutex_);
+        auto sit = sessions_.find(pid);
+        if (sit != sessions_.end() && sit->second->is_open()) {
+            sit->second->send(build_packet(MessageType::ChatBroadcast, out));
+        }
+    };
+
     if (!message.empty() && message[0] == '/') {
-        // For now, handle only a small set. Unknown commands broadcast as-is after the slash.
         auto space = message.find(' ');
         std::string cmd = message.substr(1, space == std::string::npos ? std::string::npos : space - 1);
+        std::string rest = (space == std::string::npos) ? std::string{} : message.substr(space + 1);
+
         if (cmd == "who") {
-            std::lock_guard<std::mutex> lock(sessions_mutex_);
             std::string reply = "Online: ";
-            for (auto& [id, s] : sessions_) {
-                if (!s || !s->is_open()) continue;
-                if (!reply.empty() && reply.back() != ' ') reply += ", ";
-                reply += s->player_name();
+            {
+                std::lock_guard<std::mutex> lock(sessions_mutex_);
+                bool first = true;
+                for (auto& [id, s] : sessions_) {
+                    if (!s || !s->is_open()) continue;
+                    if (!first) reply += ", ";
+                    reply += s->player_name();
+                    first = false;
+                }
             }
+            send_system_to(player_id, reply);
+            return;
+        }
+
+        // /w <name> <message>  (also /whisper, /tell)
+        if (cmd == "w" || cmd == "whisper" || cmd == "tell") {
+            auto sp = rest.find(' ');
+            if (sp == std::string::npos || sp == 0) {
+                send_system_to(player_id, "Usage: /w <player> <message>");
+                return;
+            }
+            std::string target_name = rest.substr(0, sp);
+            std::string body = rest.substr(sp + 1);
+            uint32_t target_id = 0;
+            std::string sender_name;
+            {
+                std::lock_guard<std::mutex> lock(sessions_mutex_);
+                for (auto& [id, s] : sessions_) {
+                    if (!s || !s->is_open()) continue;
+                    if (s->player_name() == target_name) target_id = id;
+                    if (id == player_id) sender_name = s->player_name();
+                }
+            }
+            if (target_id == 0) {
+                send_system_to(player_id, target_name + " is not online.");
+                return;
+            }
+
+            ChatBroadcastMsg out;
+            out.channel = static_cast<uint8_t>(ChatChannel::Whisper);
+            out.sender_id = player_id;
+            std::strncpy(out.sender_name, sender_name.c_str(), sizeof(out.sender_name) - 1);
+            std::strncpy(out.message, body.c_str(), sizeof(out.message) - 1);
+            auto packet = build_packet(MessageType::ChatBroadcast, out);
+            std::lock_guard<std::mutex> lock(sessions_mutex_);
+            auto tit = sessions_.find(target_id);
+            if (tit != sessions_.end() && tit->second->is_open()) tit->second->send(packet);
+            // Also echo back to sender so they see the whisper in their log.
             auto sit = sessions_.find(player_id);
-            if (sit != sessions_.end() && sit->second->is_open()) {
-                ChatBroadcastMsg out;
-                out.channel = static_cast<uint8_t>(ChatChannel::System);
-                out.sender_id = 0;
-                std::strncpy(out.sender_name, "Server", sizeof(out.sender_name) - 1);
-                std::strncpy(out.message, reply.c_str(), sizeof(out.message) - 1);
-                sit->second->send(build_packet(MessageType::ChatBroadcast, out));
-            }
+            if (sit != sessions_.end() && sit->second->is_open()) sit->second->send(packet);
             return;
         }
     }
@@ -1474,6 +1526,117 @@ void Server::on_party_leave(uint32_t player_id) {
 
     disband_party_if_small(party_id);
     if (parties_.find(party_id) != parties_.end()) send_party_state_to_all(party_id);
+}
+
+void Server::send_craft_recipes(uint32_t player_id) {
+    std::shared_ptr<Session> session;
+    {
+        std::lock_guard<std::mutex> lock(sessions_mutex_);
+        auto sit = sessions_.find(player_id);
+        if (sit == sessions_.end() || !sit->second->is_open()) return;
+        session = sit->second;
+    }
+
+    int player_level = 1;
+    auto& registry = world_.registry();
+    auto ent = world_.find_entity_by_network_id(player_id);
+    if (ent != entt::null) {
+        if (auto* lvl = registry.try_get<ecs::PlayerLevel>(ent)) player_level = lvl->level;
+    }
+
+    std::vector<CraftRecipeInfo> recipes;
+    for (const auto& r : config_.recipes()) {
+        if (r.required_level > player_level) continue;
+        CraftRecipeInfo info;
+        std::strncpy(info.id, r.id.c_str(), sizeof(info.id) - 1);
+        std::strncpy(info.name, r.name.c_str(), sizeof(info.name) - 1);
+        std::strncpy(info.output_item_id, r.output_item_id.c_str(), sizeof(info.output_item_id) - 1);
+        info.output_count = static_cast<uint16_t>(r.output_count);
+        info.gold_cost = r.gold_cost;
+        info.required_level = static_cast<uint8_t>(r.required_level);
+        uint8_t n = 0;
+        for (const auto& ing : r.ingredients) {
+            if (n >= CraftRecipeInfo::MAX_INGREDIENTS) break;
+            std::strncpy(info.ingredients[n].item_id, ing.item_id.c_str(),
+                         sizeof(info.ingredients[n].item_id) - 1);
+            info.ingredients[n].count = static_cast<uint16_t>(ing.count);
+            ++n;
+        }
+        info.ingredient_count = n;
+        recipes.push_back(info);
+    }
+
+    session->send(build_packet(MessageType::CraftRecipes, recipes));
+}
+
+void Server::on_craft_request(uint32_t player_id, const std::string& recipe_id) {
+    auto& registry = world_.registry();
+    auto player = world_.find_entity_by_network_id(player_id);
+    if (player == entt::null) return;
+
+    auto send_result = [&](bool ok, const std::string& reason) {
+        CraftResultMsg res;
+        std::strncpy(res.recipe_id, recipe_id.c_str(), sizeof(res.recipe_id) - 1);
+        res.success = ok ? 1 : 0;
+        std::strncpy(res.reason, reason.c_str(), sizeof(res.reason) - 1);
+        std::lock_guard<std::mutex> lock(sessions_mutex_);
+        auto sit = sessions_.find(player_id);
+        if (sit != sessions_.end() && sit->second->is_open())
+            sit->second->send(build_packet(MessageType::CraftResult, res));
+    };
+
+    const auto* recipe = config_.find_recipe(recipe_id);
+    if (!recipe) { send_result(false, "unknown recipe"); return; }
+
+    auto* inv = registry.try_get<ecs::Inventory>(player);
+    auto* level = registry.try_get<ecs::PlayerLevel>(player);
+    if (!inv || !level) { send_result(false, "no character"); return; }
+    if (level->level < recipe->required_level) { send_result(false, "level too low"); return; }
+    if (level->gold < recipe->gold_cost) { send_result(false, "not enough gold"); return; }
+
+    // Check ingredients are present.
+    auto have_count = [&](const std::string& id) -> int {
+        int total = 0;
+        for (int i = 0; i < inv->used_slots; ++i) {
+            if (inv->slots[i].item_id == id) total += inv->slots[i].count;
+        }
+        return total;
+    };
+    for (const auto& ing : recipe->ingredients) {
+        if (have_count(ing.item_id) < ing.count) {
+            send_result(false, std::string("missing ") + ing.item_id);
+            return;
+        }
+    }
+
+    // Consume ingredients + gold and grant output.
+    for (const auto& ing : recipe->ingredients) {
+        inv->remove_item(ing.item_id, ing.count);
+    }
+    level->gold -= recipe->gold_cost;
+
+    const ItemConfig* out = config_.find_item(recipe->output_item_id);
+    int stack = out ? out->stack_size : 1;
+    if (!inv->add_item(recipe->output_item_id, recipe->output_count, stack)) {
+        // Refund if inventory is full.
+        for (const auto& ing : recipe->ingredients) inv->add_item(ing.item_id, ing.count, 99);
+        level->gold += recipe->gold_cost;
+        send_result(false, "inventory full");
+        return;
+    }
+
+    send_inventory_update(player_id);
+    send_result(true, "");
+    // Push gold update.
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+    auto sit = sessions_.find(player_id);
+    if (sit != sessions_.end() && sit->second->is_open()) {
+        std::vector<uint8_t> payload(2 * sizeof(int32_t));
+        BufferWriter w(std::span<uint8_t>(payload.data(), payload.size()));
+        w.write<int32_t>(-recipe->gold_cost);
+        w.write<int32_t>(level->gold);
+        sit->second->send(build_packet(MessageType::GoldChange, payload));
+    }
 }
 
 void Server::on_party_kick(uint32_t player_id, uint32_t target_id) {

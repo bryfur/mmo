@@ -2530,6 +2530,24 @@ void Game::update_chat_input() {
             } else if (txt == "/leave" || txt == "/disband") {
                 network_.send_raw(protocol::build_packet(
                     protocol::MessageType::PartyLeave, std::vector<uint8_t>{}));
+            } else if (txt.rfind("/craft ", 0) == 0) {
+                std::string rid = txt.substr(7);
+                while (!rid.empty() && rid.front() == ' ') rid.erase(rid.begin());
+                if (!rid.empty()) {
+                    protocol::CraftRequestMsg m;
+                    std::strncpy(m.recipe_id, rid.c_str(), sizeof(m.recipe_id) - 1);
+                    network_.send_raw(protocol::build_packet(protocol::MessageType::CraftRequest, m));
+                }
+            } else if (txt == "/recipes") {
+                // Local: print recipe list into chat as a system echo.
+                ChatLine header{3, "System", "Available recipes:"};
+                hud_state_.chat.lines.push_back(header);
+                for (const auto& r : hud_state_.crafting.recipes) {
+                    char buf[128];
+                    snprintf(buf, sizeof(buf), "  /craft %s  (%s, lvl %d)",
+                             r.id.c_str(), r.name.c_str(), r.required_level);
+                    hud_state_.chat.add_line(3, "System", buf);
+                }
             } else {
                 protocol::ChatSendMsg msg;
                 msg.channel = chat.selected_channel;

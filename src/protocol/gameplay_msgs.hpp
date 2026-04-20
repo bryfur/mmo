@@ -915,4 +915,88 @@ struct PartyStateMsg : Serializable<PartyStateMsg> {
     }
 };
 
+// ============================================================================
+// Crafting
+// ============================================================================
+
+struct CraftIngredient : Serializable<CraftIngredient> {
+    char item_id[32] = {};
+    uint16_t count = 0;
+
+    static constexpr size_t serialized_size() { return 32 + sizeof(uint16_t); }
+
+    void serialize_impl(BufferWriter& w) const { w.write_bytes(item_id, 32); w.write(count); }
+    void deserialize_impl(BufferReader& r) { r.read_bytes(item_id, 32); count = r.read<uint16_t>(); }
+};
+
+struct CraftRecipeInfo : Serializable<CraftRecipeInfo> {
+    static constexpr int MAX_INGREDIENTS = 4;
+    char id[32] = {};
+    char name[32] = {};
+    char output_item_id[32] = {};
+    uint16_t output_count = 1;
+    int32_t gold_cost = 0;
+    uint8_t required_level = 1;
+    uint8_t ingredient_count = 0;
+    CraftIngredient ingredients[MAX_INGREDIENTS] = {};
+
+    static constexpr size_t serialized_size() {
+        return 32 + 32 + 32 + sizeof(uint16_t) + sizeof(int32_t) + 2 * sizeof(uint8_t)
+             + MAX_INGREDIENTS * CraftIngredient::serialized_size();
+    }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write_bytes(id, 32);
+        w.write_bytes(name, 32);
+        w.write_bytes(output_item_id, 32);
+        w.write(output_count);
+        w.write(gold_cost);
+        w.write(required_level);
+        w.write(ingredient_count);
+        for (int i = 0; i < MAX_INGREDIENTS; ++i) ingredients[i].serialize(w);
+    }
+    void deserialize_impl(BufferReader& r) {
+        r.read_bytes(id, 32);
+        r.read_bytes(name, 32);
+        r.read_bytes(output_item_id, 32);
+        output_count = r.read<uint16_t>();
+        gold_cost = r.read<int32_t>();
+        required_level = r.read<uint8_t>();
+        ingredient_count = r.read<uint8_t>();
+        for (int i = 0; i < MAX_INGREDIENTS; ++i) ingredients[i].deserialize(r);
+    }
+};
+
+// Server -> Client: the recipes the player has access to (level-gated).
+// Sent length-prefixed via build_packet(type, std::vector<CraftRecipeInfo>).
+
+// Client -> Server: "craft one of this recipe."
+struct CraftRequestMsg : Serializable<CraftRequestMsg> {
+    char recipe_id[32] = {};
+
+    static constexpr size_t serialized_size() { return 32; }
+
+    void serialize_impl(BufferWriter& w) const { w.write_bytes(recipe_id, 32); }
+    void deserialize_impl(BufferReader& r) { r.read_bytes(recipe_id, 32); }
+};
+
+struct CraftResultMsg : Serializable<CraftResultMsg> {
+    char recipe_id[32] = {};
+    uint8_t success = 0;    // 1 = ok, 0 = failure
+    char reason[64] = {};   // Human-readable on failure ("missing X", "not enough gold")
+
+    static constexpr size_t serialized_size() { return 32 + 1 + 64; }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write_bytes(recipe_id, 32);
+        w.write(success);
+        w.write_bytes(reason, 64);
+    }
+    void deserialize_impl(BufferReader& r) {
+        r.read_bytes(recipe_id, 32);
+        success = r.read<uint8_t>();
+        r.read_bytes(reason, 64);
+    }
+};
+
 } // namespace mmo::protocol

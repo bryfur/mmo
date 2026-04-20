@@ -41,6 +41,7 @@ bool GameConfig::load(const std::string& data_dir) {
     load_talents(data_dir + "/talents.json");
     load_quests(data_dir + "/quests.json");
     load_vendors(data_dir + "/vendors.json");
+    load_recipes(data_dir + "/crafting.json");
     build_indexes();
     return ok;
 }
@@ -815,6 +816,8 @@ void GameConfig::build_indexes() {
     for (const auto& q : quests_) quest_index_[q.id] = &q;
     vendor_index_.clear();
     for (const auto& v : vendors_) vendor_index_[v.npc_type] = &v;
+    recipe_index_.clear();
+    for (const auto& r : recipes_) recipe_index_[r.id] = &r;
 }
 
 const MonsterTypeConfig* GameConfig::find_monster_type(const std::string& id) const {
@@ -887,6 +890,40 @@ std::vector<const QuestConfig*> GameConfig::quests_for_npc(const std::string& np
 const VendorConfig* GameConfig::find_vendor(const std::string& npc_type) const {
     auto it = vendor_index_.find(npc_type);
     return it != vendor_index_.end() ? it->second : nullptr;
+}
+
+const CraftRecipeConfig* GameConfig::find_recipe(const std::string& id) const {
+    auto it = recipe_index_.find(id);
+    return it != recipe_index_.end() ? it->second : nullptr;
+}
+
+bool GameConfig::load_recipes(const std::string& path) {
+    std::ifstream f(path);
+    if (!f.is_open()) return false;
+    try {
+        json j = json::parse(f);
+        for (const auto& r : j["recipes"]) {
+            CraftRecipeConfig rc;
+            rc.id = r.value("id", std::string{});
+            rc.name = r.value("name", rc.id);
+            rc.output_item_id = r.value("output_item_id", std::string{});
+            rc.output_count = r.value("output_count", 1);
+            rc.gold_cost = r.value("gold_cost", 0);
+            rc.required_level = r.value("required_level", 1);
+            rc.station = r.value("station", std::string{"any"});
+            for (const auto& ing : r["ingredients"]) {
+                CraftIngredientConfig c;
+                c.item_id = ing.value("item_id", std::string{});
+                c.count = ing.value("count", 1);
+                rc.ingredients.push_back(std::move(c));
+            }
+            recipes_.push_back(std::move(rc));
+        }
+        return true;
+    } catch (const json::exception& e) {
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << std::endl;
+        return false;
+    }
 }
 
 bool GameConfig::load_vendors(const std::string& path) {

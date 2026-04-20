@@ -46,6 +46,9 @@ public:
     void on_party_leave(uint32_t player_id);
     void on_party_kick(uint32_t player_id, uint32_t target_id);
 
+    void on_craft_request(uint32_t player_id, const std::string& recipe_id);
+    void send_craft_recipes(uint32_t player_id);
+
     void broadcast(const std::vector<uint8_t>& data);
     void broadcast_except(const std::vector<uint8_t>& data, uint32_t exclude_id);
     void broadcast_system_chat(const std::string& message);

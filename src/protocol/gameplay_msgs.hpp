@@ -453,18 +453,21 @@ struct SkillCooldownMsg : Serializable<SkillCooldownMsg> {
 
 struct SkillSlotInfo : Serializable<SkillSlotInfo> {
     uint16_t skill_id = 0;
-    char name[16] = {};
+    char name[32] = {};         // skill config ID (e.g., "mage_fireball")
+    char display_name[32] = {}; // human-readable name (e.g., "Fireball")
 
-    static constexpr size_t serialized_size() { return sizeof(uint16_t) + 16; }
+    static constexpr size_t serialized_size() { return sizeof(uint16_t) + 32 + 32; }
 
     void serialize_impl(BufferWriter& w) const {
         w.write(skill_id);
-        w.write_bytes(name, 16);
+        w.write_bytes(name, 32);
+        w.write_bytes(display_name, 32);
     }
 
     void deserialize_impl(BufferReader& r) {
         skill_id = r.read<uint16_t>();
-        r.read_bytes(name, 16);
+        r.read_bytes(name, 32);
+        r.read_bytes(display_name, 32);
     }
 };
 
@@ -643,6 +646,163 @@ struct ZoneChangeMsg : Serializable<ZoneChangeMsg> {
 
     void deserialize_impl(BufferReader& r) {
         r.read_bytes(zone_name, 64);
+    }
+};
+
+// ============================================================================
+// Chat
+// ============================================================================
+
+// Chat channels. Stored in one byte on the wire.
+enum class ChatChannel : uint8_t {
+    Say    = 0,   // Local broadcast to nearby players in the same zone
+    Zone   = 1,   // Broadcast to everyone in the same zone
+    Global = 2,   // Broadcast to everyone on the server
+    System = 3,   // Server announcements (kills, level-ups, server messages)
+    Whisper = 4,  // Private message (future)
+};
+
+// Client -> Server: player sent a chat line
+struct ChatSendMsg : Serializable<ChatSendMsg> {
+    uint8_t channel = 0;          // ChatChannel enum
+    char message[192] = {};       // Null-terminated chat text
+
+    static constexpr size_t serialized_size() { return sizeof(uint8_t) + 192; }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write(channel);
+        w.write_bytes(message, 192);
+    }
+
+    void deserialize_impl(BufferReader& r) {
+        channel = r.read<uint8_t>();
+        r.read_bytes(message, 192);
+    }
+};
+
+// Server -> Client: chat message routed from sender
+struct ChatBroadcastMsg : Serializable<ChatBroadcastMsg> {
+    uint8_t channel = 0;            // ChatChannel enum
+    uint32_t sender_id = 0;         // Network id of sender (0 = system)
+    char sender_name[32] = {};      // Name displayed in chat
+    char message[192] = {};         // The chat text
+
+    static constexpr size_t serialized_size() {
+        return sizeof(uint8_t) + sizeof(uint32_t) + 32 + 192;
+    }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write(channel);
+        w.write(sender_id);
+        w.write_bytes(sender_name, 32);
+        w.write_bytes(message, 192);
+    }
+
+    void deserialize_impl(BufferReader& r) {
+        channel = r.read<uint8_t>();
+        sender_id = r.read<uint32_t>();
+        r.read_bytes(sender_name, 32);
+        r.read_bytes(message, 192);
+    }
+};
+
+// ============================================================================
+// Vendor (NPC merchants)
+// ============================================================================
+
+struct VendorStockEntry : Serializable<VendorStockEntry> {
+    char item_id[32] = {};
+    int32_t price = 0;      // In gold
+    int32_t stock = -1;     // -1 = infinite
+
+    static constexpr size_t serialized_size() { return 32 + sizeof(int32_t) * 2; }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write_bytes(item_id, 32);
+        w.write(price);
+        w.write(stock);
+    }
+
+    void deserialize_impl(BufferReader& r) {
+        r.read_bytes(item_id, 32);
+        price = r.read<int32_t>();
+        stock = r.read<int32_t>();
+    }
+};
+
+// Server -> Client: open vendor window with its stock
+struct VendorOpenMsg : Serializable<VendorOpenMsg> {
+    static constexpr int MAX_STOCK = 24;
+    uint32_t npc_id = 0;
+    char vendor_name[32] = {};
+    float buy_price_multiplier = 1.0f;    // Price for items the vendor sells
+    float sell_price_multiplier = 0.25f;  // Price the vendor pays for your items
+    uint8_t stock_count = 0;
+    VendorStockEntry stock[MAX_STOCK] = {};
+
+    static constexpr size_t serialized_size() {
+        return sizeof(uint32_t) + 32 + sizeof(float) * 2 + sizeof(uint8_t)
+             + MAX_STOCK * VendorStockEntry::serialized_size();
+    }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write(npc_id);
+        w.write_bytes(vendor_name, 32);
+        w.write(buy_price_multiplier);
+        w.write(sell_price_multiplier);
+        w.write(stock_count);
+        for (int i = 0; i < MAX_STOCK; ++i) stock[i].serialize(w);
+    }
+
+    void deserialize_impl(BufferReader& r) {
+        npc_id = r.read<uint32_t>();
+        r.read_bytes(vendor_name, 32);
+        buy_price_multiplier = r.read<float>();
+        sell_price_multiplier = r.read<float>();
+        stock_count = r.read<uint8_t>();
+        for (int i = 0; i < MAX_STOCK; ++i) stock[i].deserialize(r);
+    }
+};
+
+// Client -> Server: buy N of a vendor stock slot
+struct VendorBuyMsg : Serializable<VendorBuyMsg> {
+    uint32_t npc_id = 0;
+    uint8_t stock_index = 0;
+    uint8_t quantity = 1;
+
+    static constexpr size_t serialized_size() { return sizeof(uint32_t) + 2 * sizeof(uint8_t); }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write(npc_id);
+        w.write(stock_index);
+        w.write(quantity);
+    }
+
+    void deserialize_impl(BufferReader& r) {
+        npc_id = r.read<uint32_t>();
+        stock_index = r.read<uint8_t>();
+        quantity = r.read<uint8_t>();
+    }
+};
+
+// Client -> Server: sell an inventory slot to the vendor
+struct VendorSellMsg : Serializable<VendorSellMsg> {
+    uint32_t npc_id = 0;
+    uint8_t inventory_slot = 0;
+    uint8_t quantity = 1;
+
+    static constexpr size_t serialized_size() { return sizeof(uint32_t) + 2 * sizeof(uint8_t); }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write(npc_id);
+        w.write(inventory_slot);
+        w.write(quantity);
+    }
+
+    void deserialize_impl(BufferReader& r) {
+        npc_id = r.read<uint32_t>();
+        inventory_slot = r.read<uint8_t>();
+        quantity = r.read<uint8_t>();
     }
 };
 

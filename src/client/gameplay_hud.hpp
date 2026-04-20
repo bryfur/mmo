@@ -156,6 +156,58 @@ struct LootFeedEntry {
     float timer = 3.0f;
 };
 
+// ============================================================================
+// Chat
+// ============================================================================
+
+struct ChatLine {
+    uint8_t channel = 0;
+    std::string sender;
+    std::string text;
+};
+
+struct ChatState {
+    static constexpr int MAX_LINES = 80;
+    static constexpr int VISIBLE_LINES = 8;
+    std::vector<ChatLine> lines;
+    bool input_active = false;
+    std::string input_buffer;
+    uint8_t selected_channel = 1; // Default: Zone
+
+    void add_line(uint8_t channel, const std::string& sender, const std::string& text) {
+        lines.push_back({channel, sender, text});
+        if (static_cast<int>(lines.size()) > MAX_LINES) {
+            lines.erase(lines.begin(), lines.begin() + (lines.size() - MAX_LINES));
+        }
+    }
+};
+
+// ============================================================================
+// Vendor (shop)
+// ============================================================================
+
+struct VendorStockSlot {
+    std::string item_id;
+    std::string item_name;
+    std::string rarity = "common";
+    int price = 0;
+    int stock = -1;
+};
+
+struct VendorState {
+    bool visible = false;
+    uint32_t npc_id = 0;
+    std::string vendor_name;
+    float buy_mult = 4.0f;
+    float sell_mult = 0.25f;
+    std::vector<VendorStockSlot> stock;
+    int cursor = 0;               // Index into stock for buying
+    int sell_cursor = -1;         // Inventory slot index for selling (-1 = none)
+    bool buying = true;           // true = buy mode, false = sell mode
+
+    void close() { visible = false; stock.clear(); cursor = 0; sell_cursor = -1; }
+};
+
 struct HUDState {
     // Player stats
     int level = 1;
@@ -222,6 +274,12 @@ struct HUDState {
     // Loot feed
     std::vector<LootFeedEntry> loot_feed;
 
+    // Chat
+    ChatState chat;
+
+    // Vendor
+    VendorState vendor;
+
     void update(float dt) {
         if (zone_display_timer > 0) zone_display_timer -= dt;
         if (level_up_timer > 0) level_up_timer -= dt;
@@ -262,6 +320,7 @@ struct HUDState {
 
 uint32_t fade_color(uint32_t color, float alpha);
 
+void build_health_bar(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
 void build_xp_bar(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
 void build_mana_bar(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
 void build_gold_display(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
@@ -271,6 +330,8 @@ void build_zone_name(engine::scene::UIScene& ui, const HUDState& hud, float scre
 void build_level_up_notification(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
 void build_loot_feed(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
 void build_minimap(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
+void build_chat_window(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
+void build_vendor_window(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
 void build_gameplay_hud(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
 
 } // namespace mmo::client

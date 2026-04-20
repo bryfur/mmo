@@ -409,15 +409,50 @@ void Game::update_playing(float dt) {
     }
     input().reset_changed();
 
+    // Chat text input: while typing, suppress other bindings.
+    update_chat_input();
+
     // Panel key toggles (check SDL key state directly)
-    {
+    if (!hud_state_.chat.input_active) {
         const bool* keys = SDL_GetKeyboardState(nullptr);
 
         if (key_i_.just_pressed(keys[SDL_SCANCODE_I]) && !menu_system_->is_open()) { panel_state_.toggle_panel(ActivePanel::Inventory); }
         if (key_l_.just_pressed(keys[SDL_SCANCODE_L]) && !menu_system_->is_open()) { panel_state_.toggle_panel(ActivePanel::QuestLog); }
         if (key_t_.just_pressed(keys[SDL_SCANCODE_T]) && !menu_system_->is_open()) { panel_state_.toggle_panel(ActivePanel::Talents); }
         if (key_m_.just_pressed(keys[SDL_SCANCODE_M]) && !menu_system_->is_open()) { panel_state_.toggle_panel(ActivePanel::WorldMap); }
+
+        // Open chat on Enter (only while no other panel is open or dialogue is showing).
+        if (key_chat_open_.just_pressed(keys[SDL_SCANCODE_RETURN])
+            && !menu_system_->is_open()
+            && !panel_state_.is_panel_open()
+            && !hud_state_.dialogue.visible
+            && !hud_state_.vendor.visible) {
+            hud_state_.chat.input_active = true;
+            hud_state_.chat.input_buffer.clear();
+            input().set_text_input_enabled(true);
+        }
+
+        // Vendor input (Esc to close, arrows to select, Enter to buy).
+        update_vendor_input();
     }
+
+    // Helper: turn in completed quests at NPC
+    auto try_turn_in_quests = [&]() {
+        // Check if any tracked quests have all objectives complete and this NPC has turn-ins
+        if (npcs_with_turnins_.count(npc_interaction_.npc_id)) {
+            for (auto& quest : hud_state_.tracked_quests) {
+                bool all_complete = !quest.objectives.empty();
+                for (auto& obj : quest.objectives) {
+                    if (!obj.complete) { all_complete = false; break; }
+                }
+                if (all_complete && !quest.quest_id.empty()) {
+                    QuestTurnInMsg msg;
+                    std::strncpy(msg.quest_id, quest.quest_id.c_str(), sizeof(msg.quest_id) - 1);
+                    network_.send_raw(build_packet(MessageType::QuestTurnIn, msg));
+                }
+            }
+        }
+    };
 
     // Helper: accept currently selected quest from NPC dialog
     auto accept_selected_quest = [&]() {
@@ -430,6 +465,7 @@ void Game::update_playing(float dt) {
         network_.send_raw(build_packet(MessageType::QuestAccept, accept_msg));
 
         QuestTrackerEntry tracker;
+        tracker.quest_id = quest.quest_id;
         tracker.quest_name = quest.quest_name;
         for (auto& obj : quest.objectives) {
             tracker.objectives.push_back({obj.description, 0, obj.count, false});
@@ -499,6 +535,9 @@ void Game::update_playing(float dt) {
                     npc_interaction_.showing_quest_detail = false;
                     npc_interaction_.showing_dialogue = true;
                     hud_state_.dialogue.visible = false;  // suppress legacy dialog
+
+                    // Auto-turn-in completed quests when interacting with NPC
+                    try_turn_in_quests();
 
                     // Send NPCInteract to server
                     NPCInteractMsg msg;
@@ -1922,17 +1961,9 @@ void Game::update_panel_input(float /*dt*/) {
                 hud_state_.dialogue.selected_option++;
             }
 
-            // Accept quest on Enter/Space
-            if ((keys[SDL_SCANCODE_RETURN] || panel_space_.just_pressed(space_down)) &&
-                hud_state_.dialogue.selected_option < hud_state_.dialogue.quest_count) {
-                uint16_t qid = hud_state_.dialogue.quest_ids[hud_state_.dialogue.selected_option];
-                if (qid > 0) {
-                    QuestAcceptMsg msg;
-                    std::strncpy(msg.quest_id,
-                        hud_state_.dialogue.quest_names[hud_state_.dialogue.selected_option].c_str(),
-                        sizeof(msg.quest_id) - 1);
-                    network_.send_raw(build_packet(MessageType::QuestAccept, msg));
-                }
+            // Accept quest on Enter/Space - close legacy dialogue
+            // (Quest accept is handled by the npc_interaction_ system which has proper quest IDs)
+            if (keys[SDL_SCANCODE_RETURN] || panel_space_.just_pressed(space_down)) {
                 hud_state_.dialogue.visible = false;
             }
         }
@@ -2433,6 +2464,93 @@ void Game::build_quest_log_panel_ui(UIScene& ui) {
             qy += 16.0f;
         }
         qy += 8.0f;
+    }
+}
+
+// ============================================================================
+// Chat input
+// ============================================================================
+
+void Game::update_chat_input() {
+    auto& chat = hud_state_.chat;
+    if (!chat.input_active) return;
+
+    auto& ih = input();
+
+    // Consume characters typed since the last frame.
+    std::string typed = ih.take_text_input();
+    for (char c : typed) {
+        if (chat.input_buffer.size() < 180) chat.input_buffer.push_back(c);
+    }
+
+    if (ih.text_backspace_pressed() && !chat.input_buffer.empty()) {
+        chat.input_buffer.pop_back();
+    }
+
+    if (ih.text_escape_pressed()) {
+        chat.input_active = false;
+        chat.input_buffer.clear();
+        ih.set_text_input_enabled(false);
+        ih.clear_text_events();
+        return;
+    }
+
+    if (ih.text_enter_pressed()) {
+        if (!chat.input_buffer.empty()) {
+            protocol::ChatSendMsg msg;
+            msg.channel = chat.selected_channel;
+            std::strncpy(msg.message, chat.input_buffer.c_str(), sizeof(msg.message) - 1);
+            network_.send_raw(protocol::build_packet(protocol::MessageType::ChatSend, msg));
+        }
+        chat.input_active = false;
+        chat.input_buffer.clear();
+        ih.set_text_input_enabled(false);
+    }
+
+    ih.clear_text_events();
+}
+
+// ============================================================================
+// Vendor input
+// ============================================================================
+
+void Game::update_vendor_input() {
+    auto& v = hud_state_.vendor;
+    if (!v.visible) return;
+
+    const bool* keys = SDL_GetKeyboardState(nullptr);
+
+    if (vendor_esc_.just_pressed(keys[SDL_SCANCODE_ESCAPE])) {
+        v.close();
+        return;
+    }
+
+    if (!v.stock.empty()) {
+        int count = static_cast<int>(v.stock.size());
+        if (vendor_up_.just_pressed(keys[SDL_SCANCODE_UP]) && v.cursor > 0) v.cursor--;
+        if (vendor_down_.just_pressed(keys[SDL_SCANCODE_DOWN]) && v.cursor < count - 1) v.cursor++;
+
+        if (vendor_enter_.just_pressed(keys[SDL_SCANCODE_RETURN])) {
+            if (v.buying) {
+                protocol::VendorBuyMsg msg;
+                msg.npc_id = v.npc_id;
+                msg.stock_index = static_cast<uint8_t>(v.cursor);
+                msg.quantity = 1;
+                network_.send_raw(protocol::build_packet(protocol::MessageType::VendorBuy, msg));
+            } else if (v.sell_cursor >= 0) {
+                protocol::VendorSellMsg msg;
+                msg.npc_id = v.npc_id;
+                msg.inventory_slot = static_cast<uint8_t>(v.sell_cursor);
+                msg.quantity = 1;
+                network_.send_raw(protocol::build_packet(protocol::MessageType::VendorSell, msg));
+            }
+        }
+    }
+
+    if (vendor_tab_.just_pressed(keys[SDL_SCANCODE_TAB])) {
+        v.buying = !v.buying;
+        v.cursor = 0;
+        v.sell_cursor = v.buying ? -1 : 0;
     }
 }
 

@@ -37,9 +37,13 @@ public:
     void on_item_equip_by_slot(uint32_t player_id, uint8_t slot_index);
     void on_item_unequip_slot(uint32_t player_id, uint8_t equip_slot);
     void on_item_use(uint32_t player_id, uint8_t slot_index);
+    void on_chat_send(uint32_t player_id, uint8_t channel, const std::string& message);
+    void on_vendor_buy(uint32_t player_id, uint32_t npc_id, uint8_t stock_index, uint8_t quantity);
+    void on_vendor_sell(uint32_t player_id, uint32_t npc_id, uint8_t inventory_slot, uint8_t quantity);
 
     void broadcast(const std::vector<uint8_t>& data);
     void broadcast_except(const std::vector<uint8_t>& data, uint32_t exclude_id);
+    void broadcast_system_chat(const std::string& message);
     
     World& world() { return world_; }
     

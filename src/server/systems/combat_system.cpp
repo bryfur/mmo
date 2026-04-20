@@ -52,9 +52,10 @@ entt::entity find_nearest_target(entt::registry& registry, entt::entity attacker
     return nearest;
 }
 
-// Apply damage and return whether the target died from this hit
+} // anonymous namespace
+
 bool apply_damage(entt::registry& registry, entt::entity target, float damage,
-                   entt::entity attacker = entt::null) {
+                   entt::entity attacker) {
     if (target == entt::null) return false;
     if (!registry.all_of<ecs::Health>(target)) return false;
 
@@ -195,8 +196,6 @@ std::vector<entt::entity> find_targets_in_direction(entt::registry& registry, en
     return targets;
 }
 
-} // anonymous namespace
-
 std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const GameConfig& config) {
     std::vector<CombatHit> hits;
 
@@ -268,12 +267,8 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
             effective_damage *= registry.get<ecs::BuffState>(entity).get_damage_multiplier();
         }
 
-        // Fury damage bonus (when at low HP)
-        if (tp && tp->fury_threshold > 0.0f) {
-            if (health.ratio() <= tp->fury_threshold) {
-                effective_damage *= tp->fury_damage_mult;
-            }
-        }
+        // Fury damage bonus is applied via DamageBoost buff from talent_passive_system
+        // (do NOT apply fury_damage_mult here to avoid double-dipping)
 
         // High-mana damage bonus
         if (tp && tp->high_mana_threshold > 0.0f && registry.all_of<ecs::PlayerLevel>(entity)) {
@@ -448,11 +443,12 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
                 effective_damage = std::max(0.0f, effective_damage - registry.get<ecs::Equipment>(target).defense);
             }
 
+            // effective_damage is pre-mitigation; apply_damage handles shields/defense
             bool died = apply_damage(registry, target, effective_damage, entity);
             CombatHit hit;
             hit.attacker = entity;
             hit.target = target;
-            hit.damage = effective_damage;
+            hit.damage = effective_damage;  // Report pre-mitigation for consistency
             hit.target_died = died;
             hits.push_back(hit);
         }

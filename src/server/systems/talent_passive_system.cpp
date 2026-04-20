@@ -63,11 +63,15 @@ void update_talent_passives(entt::registry& registry, float dt, const GameConfig
             tr.shield_regen_timer = tp.shield_regen_cooldown_max;
         }
 
-        // Fury state: maintain DamageBoost buff when at low HP (Undying Fury)
-        if (tp.fury_threshold > 0.0f && tp.fury_damage_mult > 1.0f) {
-            if (health.ratio() <= tp.fury_threshold) {
+        // Fury state: maintain DamageBoost and SpeedBoost buffs when at low HP (Undying Fury)
+        if (tp.fury_threshold > 0.0f && health.ratio() <= tp.fury_threshold) {
+            if (tp.fury_damage_mult > 1.0f) {
                 apply_effect(registry, entity,
-                    ecs::make_status_effect(ecs::StatusEffect::Type::DamageBoost, dt * 2.0f, tp.fury_damage_mult - 1.0f, 1));
+                    ecs::make_status_effect(ecs::StatusEffect::Type::DamageBoost, 0.5f, tp.fury_damage_mult - 1.0f, 1));
+            }
+            if (tp.fury_attack_speed_mult > 1.0f) {
+                apply_effect(registry, entity,
+                    ecs::make_status_effect(ecs::StatusEffect::Type::SpeedBoost, 0.5f, tp.fury_attack_speed_mult - 1.0f, 1));
             }
         }
 

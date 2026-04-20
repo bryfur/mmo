@@ -1,5 +1,6 @@
 #include "skill_system.hpp"
 #include "buff_system.hpp"
+#include "combat_system.hpp"
 #include "leveling_system.hpp"
 #include "protocol/protocol.hpp"
 #include "server/ecs/game_components.hpp"
@@ -23,15 +24,17 @@ float distance_xz(float x1, float z1, float x2, float z2) {
 
 } // anonymous namespace
 
-bool use_skill(entt::registry& registry, entt::entity player, const std::string& skill_id,
+SkillUseResult use_skill(entt::registry& registry, entt::entity player, const std::string& skill_id,
                float dir_x, float dir_z, const GameConfig& config) {
+    SkillUseResult result;
+
     // Find skill config
     const SkillConfig* skill = config.find_skill(skill_id);
-    if (!skill) return false;
+    if (!skill) return result;
 
     // Verify player has required components
     if (!registry.all_of<ecs::SkillState, ecs::PlayerLevel, ecs::Combat, ecs::Health, ecs::EntityInfo, ecs::Transform>(player))
-        return false;
+        return result;
 
     auto& skill_state = registry.get<ecs::SkillState>(player);
     auto& player_level = registry.get<ecs::PlayerLevel>(player);
@@ -40,24 +43,24 @@ bool use_skill(entt::registry& registry, entt::entity player, const std::string&
     const auto& info = registry.get<ecs::EntityInfo>(player);
     const auto& transform = registry.get<ecs::Transform>(player);
 
-    if (!health.is_alive()) return false;
+    if (!health.is_alive()) return result;
 
     // Check skill class matches player class
     const char* player_class_name = class_name_for_index(info.player_class);
-    if (skill->class_name != player_class_name) return false;
+    if (skill->class_name != player_class_name) return result;
 
     // Check player level
-    if (player_level.level < skill->unlock_level) return false;
+    if (player_level.level < skill->unlock_level) return result;
 
     // Check cooldown
-    if (skill_state.get_cooldown(skill_id) > 0.0f) return false;
+    if (skill_state.get_cooldown(skill_id) > 0.0f) return result;
 
     // Check mana (apply mana_cost_mult from talents)
     float effective_mana_cost = skill->mana_cost;
     if (registry.all_of<ecs::TalentPassiveState>(player)) {
         effective_mana_cost *= registry.get<ecs::TalentPassiveState>(player).mana_cost_mult;
     }
-    if (player_level.mana < effective_mana_cost) return false;
+    if (player_level.mana < effective_mana_cost) return result;
 
     // Deduct mana
     player_level.mana -= effective_mana_cost;
@@ -80,8 +83,10 @@ bool use_skill(entt::registry& registry, entt::entity player, const std::string&
     }
 
     // Apply skill effects - damage and status effects on enemies in range
-    if (skill->damage_multiplier > 0.0f || skill->stun_duration > 0.0f ||
-        skill->slow_duration > 0.0f || skill->freeze_duration > 0.0f) {
+    bool has_offensive_effect = skill->damage_multiplier > 0.0f || skill->stun_duration > 0.0f ||
+        skill->slow_duration > 0.0f || skill->freeze_duration > 0.0f ||
+        skill->bleed_duration > 0.0f || skill->root_duration > 0.0f;
+    if (has_offensive_effect) {
 
         float total_damage = combat.damage * skill->damage_multiplier;
 
@@ -116,8 +121,11 @@ bool use_skill(entt::registry& registry, entt::entity player, const std::string&
 
         auto view = registry.view<ecs::Transform, ecs::Health, ecs::EntityInfo>();
         int num_passes = do_spell_echo ? 2 : 1;
+        int max_targets = skill->projectile_count > 1 ? skill->projectile_count : 9999;
         for (int echo_pass = 0; echo_pass < num_passes; ++echo_pass) {
+        int targets_hit = 0;
         for (auto entity : view) {
+            if (targets_hit >= max_targets) break;
             if (entity == player) continue;
 
             const auto& target_info = view.get<ecs::EntityInfo>(entity);
@@ -141,8 +149,22 @@ bool use_skill(entt::registry& registry, entt::entity player, const std::string&
                 if (dot < std::cos(skill->cone_angle)) continue;
             }
 
-            // Apply damage (respect invulnerability and defense)
+            // Compute pre-mitigation damage
             float actual_damage = total_damage;
+
+            // Execute threshold: bonus damage when target is below HP threshold
+            if (skill->health_threshold > 0.0f && skill->damage_multiplier_below_threshold > 0.0f) {
+                if (target_health.ratio() <= skill->health_threshold) {
+                    actual_damage = combat.damage * skill->damage_multiplier_below_threshold;
+                    // Re-apply buff/talent multipliers
+                    if (registry.all_of<ecs::BuffState>(player)) {
+                        actual_damage *= registry.get<ecs::BuffState>(player).get_damage_multiplier();
+                    }
+                    if (registry.all_of<ecs::TalentPassiveState>(player)) {
+                        actual_damage *= registry.get<ecs::TalentPassiveState>(player).skill_damage_mult;
+                    }
+                }
+            }
 
             // Frozen vulnerability bonus
             if (frozen_vuln > 0.0f && registry.all_of<ecs::BuffState>(entity)) {
@@ -151,41 +173,15 @@ bool use_skill(entt::registry& registry, entt::entity player, const std::string&
                 }
             }
 
-            if (registry.all_of<ecs::BuffState>(entity)) {
-                auto& target_buffs = registry.get<ecs::BuffState>(entity);
-                if (target_buffs.is_invulnerable()) {
-                    actual_damage = 0.0f;
-                } else {
-                    actual_damage *= target_buffs.get_defense_multiplier();
+            bool died = apply_damage(registry, entity, actual_damage, player);
+            targets_hit++;
 
-                    // Absorb damage with shield
-                    float shield = target_buffs.get_shield_value();
-                    if (shield > 0.0f && actual_damage > 0.0f) {
-                        float absorbed = std::min(shield, actual_damage);
-                        actual_damage -= absorbed;
-                        // Reduce shield value in the first shield effect found
-                        for (auto& e : target_buffs.effects) {
-                            if (e.type == ecs::StatusEffect::Type::Shield) {
-                                float to_absorb = std::min(e.value, absorbed);
-                                e.value -= to_absorb;
-                                absorbed -= to_absorb;
-                                if (e.value <= 0.0f) e.duration = 0.0f;
-                                if (absorbed <= 0.0f) break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            target_health.current = std::max(0.0f, target_health.current - actual_damage);
-
-            // Lifesteal: heal attacker
-            if (actual_damage > 0.0f && registry.all_of<ecs::BuffState>(player)) {
-                float lifesteal = registry.get<ecs::BuffState>(player).get_lifesteal();
-                if (lifesteal > 0.0f) {
-                    health.current = std::min(health.max, health.current + actual_damage * lifesteal);
-                }
-            }
+            CombatHit hit;
+            hit.attacker = player;
+            hit.target = entity;
+            hit.damage = actual_damage;
+            hit.target_died = died;
+            result.hits.push_back(hit);
 
             // Apply stun
             if (skill->stun_duration > 0.0f) {
@@ -218,19 +214,91 @@ bool use_skill(entt::registry& registry, entt::entity player, const std::string&
             }
 
             // Apply enemy outgoing damage reduction debuff.
-            // Use DamageBoost with a negative value so their outgoing damage is reduced.
-            // (DefenseBoost would incorrectly reduce their incoming damage instead.)
             if (skill->debuff_duration > 0.0f && skill->enemy_damage_reduction > 0.0f) {
                 apply_effect(registry, entity,
                     ecs::make_status_effect(ecs::StatusEffect::Type::DamageBoost, skill->debuff_duration, -skill->enemy_damage_reduction, player_net_id));
             }
+
+            // Apply bleed (DoT using Poison type)
+            if (skill->bleed_duration > 0.0f && skill->bleed_percent > 0.0f) {
+                float bleed_dps = combat.damage * skill->bleed_percent;
+                apply_effect(registry, entity,
+                    ecs::make_status_effect(ecs::StatusEffect::Type::Poison, skill->bleed_duration, bleed_dps, player_net_id, 1.0f));
+            }
+
+            // AoE splash: damage nearby enemies around the target
+            if (skill->aoe_radius > 0.0f && actual_damage > 0.0f) {
+                const auto& impact_pos = view.get<ecs::Transform>(entity);
+                float aoe_damage = actual_damage * 0.5f; // AoE does half primary damage
+                for (auto aoe_target : view) {
+                    if (aoe_target == entity || aoe_target == player) continue;
+                    const auto& aoe_info = view.get<ecs::EntityInfo>(aoe_target);
+                    if (aoe_info.type != EntityType::NPC) continue;
+                    auto& aoe_hp = view.get<ecs::Health>(aoe_target);
+                    if (!aoe_hp.is_alive()) continue;
+                    const auto& aoe_t = view.get<ecs::Transform>(aoe_target);
+                    float aoe_dist = distance_xz(impact_pos.x, impact_pos.z, aoe_t.x, aoe_t.z);
+                    if (aoe_dist <= skill->aoe_radius) {
+                        bool aoe_died = apply_damage(registry, aoe_target, aoe_damage, player);
+                        CombatHit aoe_hit;
+                        aoe_hit.attacker = player;
+                        aoe_hit.target = aoe_target;
+                        aoe_hit.damage = aoe_damage;
+                        aoe_hit.target_died = aoe_died;
+                        result.hits.push_back(aoe_hit);
+                    }
+                }
+            }
+
+            // Chain lightning: bounce to additional targets near the current one
+            if (skill->chain_targets > 0 && skill->chain_range > 0.0f && actual_damage > 0.0f) {
+                entt::entity chain_source = entity;
+                float chain_damage = actual_damage * 0.7f; // Each bounce does 70% of previous
+                for (int chain = 0; chain < skill->chain_targets; ++chain) {
+                    const auto& src_t = registry.get<ecs::Transform>(chain_source);
+                    entt::entity best_chain = entt::null;
+                    float best_chain_dist = skill->chain_range;
+                    for (auto chain_target : view) {
+                        if (chain_target == player || chain_target == chain_source) continue;
+                        // Skip already-hit targets (check result.hits)
+                        bool already_hit = false;
+                        for (const auto& h : result.hits) {
+                            if (h.target == chain_target) { already_hit = true; break; }
+                        }
+                        if (already_hit) continue;
+                        const auto& ci = view.get<ecs::EntityInfo>(chain_target);
+                        if (ci.type != EntityType::NPC) continue;
+                        auto& ch = view.get<ecs::Health>(chain_target);
+                        if (!ch.is_alive()) continue;
+                        const auto& ct = view.get<ecs::Transform>(chain_target);
+                        float cd = distance_xz(src_t.x, src_t.z, ct.x, ct.z);
+                        if (cd < best_chain_dist) {
+                            best_chain_dist = cd;
+                            best_chain = chain_target;
+                        }
+                    }
+                    if (best_chain == entt::null) break;
+                    bool chain_died = apply_damage(registry, best_chain, chain_damage, player);
+                    CombatHit chain_hit;
+                    chain_hit.attacker = player;
+                    chain_hit.target = best_chain;
+                    chain_hit.damage = chain_damage;
+                    chain_hit.target_died = chain_died;
+                    result.hits.push_back(chain_hit);
+                    chain_source = best_chain;
+                    chain_damage *= 0.7f;
+                }
+            }
         } // end entity loop
         } // end echo_pass loop
-    } // end if damage_multiplier block
+    } // end if offensive effect block
 
     // Heal effect (self)
     if (skill->heal_percent > 0.0f) {
         float heal_amount = health.max * skill->heal_percent;
+        if (registry.all_of<ecs::TalentPassiveState>(player)) {
+            heal_amount *= registry.get<ecs::TalentPassiveState>(player).healing_received_mult;
+        }
         health.current = std::min(health.max, health.current + heal_amount);
     }
 
@@ -260,10 +328,34 @@ bool use_skill(entt::registry& registry, entt::entity player, const std::string&
             ecs::make_status_effect(ecs::StatusEffect::Type::Lifesteal, ls_duration, skill->lifesteal_percent, player_net_id));
     }
 
+    // Self-buff: damage bonus (flat increase via DamageBoost buff)
+    if (skill->buff_duration > 0.0f && skill->damage_bonus > 0.0f) {
+        apply_effect(registry, player,
+            ecs::make_status_effect(ecs::StatusEffect::Type::DamageBoost, skill->buff_duration, skill->damage_bonus, player_net_id));
+    }
+
+    // Self-buff: attack speed bonus (reduce attack cooldown via SpeedBoost)
+    if (skill->buff_duration > 0.0f && skill->attack_speed_bonus > 0.0f) {
+        // Apply as a speed boost - the combat system already factors speed buffs
+        apply_effect(registry, player,
+            ecs::make_status_effect(ecs::StatusEffect::Type::SpeedBoost, skill->buff_duration, skill->attack_speed_bonus, player_net_id));
+    }
+
+    // Self-buff: mana shield (create Shield based on current mana)
+    if (skill->self_shield_percent > 0.0f) {
+        float shield_duration = skill->buff_duration > 0.0f ? skill->buff_duration : 8.0f;
+        float shield_value = player_level.mana * skill->self_shield_percent;
+        if (shield_value > 0.0f) {
+            apply_effect(registry, player,
+                ecs::make_status_effect(ecs::StatusEffect::Type::Shield, shield_duration, shield_value, player_net_id));
+        }
+    }
+
     // Set attacking flag for visual feedback
     combat.is_attacking = true;
 
-    return true;
+    result.success = true;
+    return result;
 }
 
 void update_skill_cooldowns(entt::registry& registry, float dt) {

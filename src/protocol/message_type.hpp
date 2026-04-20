@@ -81,6 +81,16 @@ enum class MessageType : uint8_t {
     // Keepalive
     Ping = 86,                // Server -> client: heartbeat probe
     Pong = 87,                // Client -> server: heartbeat reply
+
+    // Chat
+    ChatSend = 90,            // Client -> server: player sent a chat message
+    ChatBroadcast = 91,       // Server -> client: chat message routed from another player
+
+    // Vendor / shop (NPC merchants)
+    VendorOpen = 95,          // Server -> client: open a vendor window with stock
+    VendorBuy = 96,           // Client -> server: buy N of a slot
+    VendorSell = 97,          // Client -> server: sell an inventory slot
+    VendorClose = 98,         // Client -> server: close vendor window
 };
 
 } // namespace mmo::protocol

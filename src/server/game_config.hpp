@@ -225,6 +225,25 @@ struct SkillConfig {
     float lifesteal_percent = 0.0f;
     float enemy_damage_reduction = 0.0f;
     float debuff_duration = 0.0f;
+
+    // AoE / multi-target fields
+    float aoe_radius = 0.0f;
+    int projectile_count = 1;
+    int chain_targets = 0;
+    float chain_range = 0.0f;
+
+    // Conditional damage fields
+    float health_threshold = 0.0f;
+    float damage_multiplier_below_threshold = 0.0f;
+
+    // Bleed/DoT fields
+    float bleed_percent = 0.0f;
+    float bleed_duration = 0.0f;
+
+    // Self-buff fields
+    float damage_bonus = 0.0f;
+    float attack_speed_bonus = 0.0f;
+    float self_shield_percent = 0.0f;
 };
 
 // ============================================================================
@@ -438,6 +457,24 @@ struct QuestConfig {
 };
 
 // ============================================================================
+// Vendors (NPC merchants) - per-NPC-type stock lists
+// ============================================================================
+
+struct VendorStockConfig {
+    std::string item_id;
+    int price = 0;     // Override price in gold. 0 = use item's sell_value * markup
+    int stock = -1;    // -1 = infinite
+};
+
+struct VendorConfig {
+    std::string npc_type;          // Matches NPCType::{Merchant,Blacksmith,...} lowercase
+    std::string display_name;      // "General Goods", "Blacksmith", etc.
+    float buy_price_multiplier = 4.0f;    // What the vendor charges to sell to you
+    float sell_price_multiplier = 0.25f;  // What vendor pays for your items
+    std::vector<VendorStockConfig> stock;
+};
+
+// ============================================================================
 // Server Config
 // ============================================================================
 
@@ -547,6 +584,10 @@ public:
     const QuestConfig* find_quest(const std::string& id) const;
     std::vector<const QuestConfig*> quests_for_npc(const std::string& npc_type) const;
 
+    // Vendors
+    const std::vector<VendorConfig>& vendors() const { return vendors_; }
+    const VendorConfig* find_vendor(const std::string& npc_type) const;
+
     // Build a ClassInfo for sending to clients
     mmo::protocol::ClassInfo build_class_info(int index) const;
 
@@ -565,6 +606,7 @@ private:
     bool load_skills(const std::string& path);
     bool load_talents(const std::string& path);
     bool load_quests(const std::string& path);
+    bool load_vendors(const std::string& path);
 
     static uint32_t parse_color(const std::string& s);
 
@@ -599,6 +641,7 @@ private:
     std::vector<TalentTreeConfig> talent_trees_;
     TalentGlobalConfig talent_config_;
     std::vector<QuestConfig> quests_;
+    std::vector<VendorConfig> vendors_;
 
     // O(1) lookup indexes (built after loading)
     std::unordered_map<std::string, const MonsterTypeConfig*> monster_type_index_;
@@ -606,6 +649,7 @@ private:
     std::unordered_map<std::string, const LootTableConfig*> loot_table_index_;
     std::unordered_map<std::string, const SkillConfig*> skill_index_;
     std::unordered_map<std::string, const QuestConfig*> quest_index_;
+    std::unordered_map<std::string, const VendorConfig*> vendor_index_;
 
     void build_indexes();
 };

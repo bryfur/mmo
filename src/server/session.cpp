@@ -214,6 +214,34 @@ void Session::handle_packet() {
             break;
         }
 
+        case MessageType::ChatSend: {
+            if (current_header_.payload_size >= ChatSendMsg::serialized_size() && player_id_ != 0) {
+                ChatSendMsg msg;
+                msg.deserialize(payload_buffer_);
+                std::string text(msg.message, strnlen(msg.message, sizeof(msg.message)));
+                server_.on_chat_send(player_id_, msg.channel, text);
+            }
+            break;
+        }
+
+        case MessageType::VendorBuy: {
+            if (current_header_.payload_size >= VendorBuyMsg::serialized_size() && player_id_ != 0) {
+                VendorBuyMsg msg;
+                msg.deserialize(payload_buffer_);
+                server_.on_vendor_buy(player_id_, msg.npc_id, msg.stock_index, msg.quantity);
+            }
+            break;
+        }
+
+        case MessageType::VendorSell: {
+            if (current_header_.payload_size >= VendorSellMsg::serialized_size() && player_id_ != 0) {
+                VendorSellMsg msg;
+                msg.deserialize(payload_buffer_);
+                server_.on_vendor_sell(player_id_, msg.npc_id, msg.inventory_slot, msg.quantity);
+            }
+            break;
+        }
+
         default:
             std::cout << "Unknown message type: " << static_cast<int>(current_header_.type) << std::endl;
             break;

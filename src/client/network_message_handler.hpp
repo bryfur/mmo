@@ -68,6 +68,8 @@ private:
     void on_talent_sync(const std::vector<uint8_t>& payload);
     void on_talent_tree(const std::vector<uint8_t>& payload);
     void on_npc_dialogue(const std::vector<uint8_t>& payload);
+    void on_chat_broadcast(const std::vector<uint8_t>& payload);
+    void on_vendor_open(const std::vector<uint8_t>& payload);
 
     Context ctx_;
 };

@@ -40,6 +40,7 @@ bool GameConfig::load(const std::string& data_dir) {
     load_skills(data_dir + "/skills.json");
     load_talents(data_dir + "/talents.json");
     load_quests(data_dir + "/quests.json");
+    load_vendors(data_dir + "/vendors.json");
     build_indexes();
     return ok;
 }
@@ -477,6 +478,26 @@ bool GameConfig::load_skills(const std::string& path) {
             sk.lifesteal_percent = s.value("lifesteal_percent", 0.0f);
             sk.enemy_damage_reduction = s.value("enemy_damage_reduction", 0.0f);
             sk.debuff_duration = s.value("debuff_duration", 0.0f);
+
+            // AoE / multi-target
+            sk.aoe_radius = s.value("aoe_radius", 0.0f);
+            sk.projectile_count = s.value("projectile_count", 1);
+            sk.chain_targets = s.value("chain_targets", 0);
+            sk.chain_range = s.value("chain_range", 0.0f);
+
+            // Conditional damage
+            sk.health_threshold = s.value("health_threshold", 0.0f);
+            sk.damage_multiplier_below_threshold = s.value("damage_multiplier_below_threshold", 0.0f);
+
+            // Bleed/DoT
+            sk.bleed_percent = s.value("bleed_percent", 0.0f);
+            sk.bleed_duration = s.value("bleed_duration", 0.0f);
+
+            // Self-buff
+            sk.damage_bonus = s.value("damage_bonus", 0.0f);
+            sk.attack_speed_bonus = s.value("attack_speed_bonus", 0.0f);
+            sk.self_shield_percent = s.value("shield_percent_of_mana", 0.0f);
+
             skills_.push_back(std::move(sk));
         }
         // Load mana_system section (per-class mana values)
@@ -792,6 +813,8 @@ void GameConfig::build_indexes() {
     for (const auto& sk : skills_) skill_index_[sk.id] = &sk;
     quest_index_.clear();
     for (const auto& q : quests_) quest_index_[q.id] = &q;
+    vendor_index_.clear();
+    for (const auto& v : vendors_) vendor_index_[v.npc_type] = &v;
 }
 
 const MonsterTypeConfig* GameConfig::find_monster_type(const std::string& id) const {
@@ -859,6 +882,41 @@ std::vector<const QuestConfig*> GameConfig::quests_for_npc(const std::string& np
         if (q.giver_type == npc_type) result.push_back(&q);
     }
     return result;
+}
+
+const VendorConfig* GameConfig::find_vendor(const std::string& npc_type) const {
+    auto it = vendor_index_.find(npc_type);
+    return it != vendor_index_.end() ? it->second : nullptr;
+}
+
+bool GameConfig::load_vendors(const std::string& path) {
+    std::ifstream f(path);
+    if (!f.is_open()) {
+        // Vendor data is optional.
+        return false;
+    }
+    try {
+        json j = json::parse(f);
+        for (const auto& v : j["vendors"]) {
+            VendorConfig vc;
+            vc.npc_type = v.value("npc_type", std::string{});
+            vc.display_name = v.value("display_name", std::string{});
+            vc.buy_price_multiplier = v.value("buy_price_multiplier", 4.0f);
+            vc.sell_price_multiplier = v.value("sell_price_multiplier", 0.25f);
+            for (const auto& s : v["stock"]) {
+                VendorStockConfig sc;
+                sc.item_id = s.value("item_id", std::string{});
+                sc.price = s.value("price", 0);
+                sc.stock = s.value("stock", -1);
+                vc.stock.push_back(std::move(sc));
+            }
+            vendors_.push_back(std::move(vc));
+        }
+        return true;
+    } catch (const json::exception& e) {
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << std::endl;
+        return false;
+    }
 }
 
 } // namespace mmo::server

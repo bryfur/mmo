@@ -139,6 +139,9 @@ void Server::on_class_select(std::shared_ptr<Session> session, uint8_t class_ind
         broadcast_except(build_packet(MessageType::PlayerJoined, player_state), player_id);
     }
 
+    // Announce arrival in chat.
+    broadcast_system_chat(session->player_name() + " has entered the world.");
+
     // Tell client which NPCs have quests available for them
     send_quest_availability(player_id);
 
@@ -216,6 +219,28 @@ void Server::on_npc_interact(std::shared_ptr<Session> session, uint32_t player_i
     dlg.quest_count = static_cast<uint8_t>(available.size());
     session->send(build_packet(MessageType::NPCDialogue, dlg));
 
+    // If this NPC is a vendor, also send a VendorOpen so the client can show shop UI.
+    if (const auto* vendor = config_.find_vendor(npc_type)) {
+        VendorOpenMsg vmsg;
+        vmsg.npc_id = npc_id;
+        std::strncpy(vmsg.vendor_name, vendor->display_name.c_str(), sizeof(vmsg.vendor_name) - 1);
+        vmsg.buy_price_multiplier = vendor->buy_price_multiplier;
+        vmsg.sell_price_multiplier = vendor->sell_price_multiplier;
+        uint8_t n = 0;
+        for (const auto& sc : vendor->stock) {
+            if (n >= VendorOpenMsg::MAX_STOCK) break;
+            const ItemConfig* item = config_.find_item(sc.item_id);
+            int price = sc.price > 0 ? sc.price :
+                (item ? static_cast<int>(std::max(1.0f, item->sell_value * vendor->buy_price_multiplier)) : 1);
+            std::strncpy(vmsg.stock[n].item_id, sc.item_id.c_str(), sizeof(vmsg.stock[n].item_id) - 1);
+            vmsg.stock[n].price = price;
+            vmsg.stock[n].stock = sc.stock;
+            ++n;
+        }
+        vmsg.stock_count = n;
+        session->send(build_packet(MessageType::VendorOpen, vmsg));
+    }
+
     // Send each available quest as a QuestOffer
     for (const auto* quest : available) {
         QuestOfferMsg offer;
@@ -260,14 +285,19 @@ void Server::on_skill_use(uint32_t player_id, const std::string& skill_id, float
     auto player = world_.find_entity_by_network_id(player_id);
     if (player == entt::null) return;
 
-    bool success = systems::use_skill(registry, player, skill_id, dir_x, dir_z, config_);
+    auto skill_result = systems::use_skill(registry, player, skill_id, dir_x, dir_z, config_);
+
+    // Feed skill combat hits into the world's pending events for CombatEvent/EntityDeath
+    if (!skill_result.hits.empty()) {
+        world_.add_combat_hits(skill_result.hits);
+    }
 
     // Send SkillCooldownMsg back to client
     std::lock_guard<std::mutex> lock(sessions_mutex_);
     auto sit = sessions_.find(player_id);
     if (sit == sessions_.end() || !sit->second->is_open()) return;
 
-    if (success) {
+    if (skill_result.success) {
         // Find the skill's slot index for the client
         auto unlocked = systems::get_unlocked_skills(registry, player, config_);
         uint16_t slot_idx = 0;
@@ -276,10 +306,18 @@ void Server::on_skill_use(uint32_t player_id, const std::string& skill_id, float
             if (unlocked[i]->id == skill_id) { slot_idx = i; break; }
         }
 
+        // Send talent-modified cooldown, not raw config value
+        float effective_cooldown = skill_cfg ? skill_cfg->cooldown : 0.0f;
+        if (skill_cfg && registry.all_of<ecs::TalentPassiveState>(player)) {
+            const auto& tp = registry.get<ecs::TalentPassiveState>(player);
+            effective_cooldown = std::max(0.5f,
+                effective_cooldown * tp.cooldown_mult * (1.0f - tp.global_cdr));
+        }
+
         SkillCooldownMsg cd_msg;
         cd_msg.skill_id = slot_idx;
-        cd_msg.cooldown_remaining = skill_cfg ? skill_cfg->cooldown : 0.0f;
-        cd_msg.cooldown_total = skill_cfg ? skill_cfg->cooldown : 0.0f;
+        cd_msg.cooldown_remaining = effective_cooldown;
+        cd_msg.cooldown_total = effective_cooldown;
         sit->second->send(build_packet(MessageType::SkillCooldown, cd_msg));
     }
 }
@@ -360,6 +398,197 @@ void Server::on_item_use(uint32_t player_id, uint8_t slot_index) {
     bool success = systems::use_consumable(registry, player, item_id, config_);
     if (success) {
         send_inventory_update(player_id);
+    }
+}
+
+void Server::on_chat_send(uint32_t player_id, uint8_t channel_raw, const std::string& message) {
+    if (message.empty()) return;
+
+    auto& registry = world_.registry();
+    auto player = world_.find_entity_by_network_id(player_id);
+    if (player == entt::null) return;
+
+    // Slash-command shortcuts (e.g. "/who", "/zone"). Non-chat commands never go on the wire.
+    if (!message.empty() && message[0] == '/') {
+        // For now, handle only a small set. Unknown commands broadcast as-is after the slash.
+        auto space = message.find(' ');
+        std::string cmd = message.substr(1, space == std::string::npos ? std::string::npos : space - 1);
+        if (cmd == "who") {
+            std::lock_guard<std::mutex> lock(sessions_mutex_);
+            std::string reply = "Online: ";
+            for (auto& [id, s] : sessions_) {
+                if (!s || !s->is_open()) continue;
+                if (!reply.empty() && reply.back() != ' ') reply += ", ";
+                reply += s->player_name();
+            }
+            auto sit = sessions_.find(player_id);
+            if (sit != sessions_.end() && sit->second->is_open()) {
+                ChatBroadcastMsg out;
+                out.channel = static_cast<uint8_t>(ChatChannel::System);
+                out.sender_id = 0;
+                std::strncpy(out.sender_name, "Server", sizeof(out.sender_name) - 1);
+                std::strncpy(out.message, reply.c_str(), sizeof(out.message) - 1);
+                sit->second->send(build_packet(MessageType::ChatBroadcast, out));
+            }
+            return;
+        }
+    }
+
+    // Clamp to one of the allowed channels.
+    ChatChannel channel = static_cast<ChatChannel>(channel_raw);
+    if (channel_raw > static_cast<uint8_t>(ChatChannel::Whisper)) channel = ChatChannel::Zone;
+
+    ChatBroadcastMsg out;
+    out.channel = static_cast<uint8_t>(channel);
+    out.sender_id = player_id;
+    std::string name;
+    {
+        std::lock_guard<std::mutex> lock(sessions_mutex_);
+        auto sit = sessions_.find(player_id);
+        if (sit != sessions_.end()) name = sit->second->player_name();
+    }
+    std::strncpy(out.sender_name, name.c_str(), sizeof(out.sender_name) - 1);
+    std::strncpy(out.message, message.c_str(), sizeof(out.message) - 1);
+
+    auto packet = build_packet(MessageType::ChatBroadcast, out);
+
+    if (channel == ChatChannel::Global || channel == ChatChannel::System) {
+        broadcast(packet);
+        return;
+    }
+
+    // Zone/Say: route to players in the same zone as sender (by zone config lookup).
+    auto* sender_tx = registry.try_get<ecs::Transform>(player);
+    if (!sender_tx) { broadcast(packet); return; }
+    const auto* sender_zone = config_.find_zone_at(sender_tx->x, sender_tx->z);
+    std::string sender_zone_id = sender_zone ? sender_zone->id : std::string{};
+
+    const float say_range = 600.0f;  // Local "say" radius in world units
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+    for (auto& [id, session] : sessions_) {
+        if (!session->is_open()) continue;
+        auto other = world_.find_entity_by_network_id(id);
+        if (other == entt::null) continue;
+        auto* otx = registry.try_get<ecs::Transform>(other);
+        if (!otx) continue;
+        if (channel == ChatChannel::Say) {
+            float dx = otx->x - sender_tx->x;
+            float dz = otx->z - sender_tx->z;
+            if (dx * dx + dz * dz > say_range * say_range) continue;
+        } else { // Zone
+            const auto* z = config_.find_zone_at(otx->x, otx->z);
+            std::string other_zone = z ? z->id : std::string{};
+            if (other_zone != sender_zone_id) continue;
+        }
+        session->send(packet);
+    }
+}
+
+void Server::broadcast_system_chat(const std::string& message) {
+    ChatBroadcastMsg out;
+    out.channel = static_cast<uint8_t>(ChatChannel::System);
+    out.sender_id = 0;
+    std::strncpy(out.sender_name, "Server", sizeof(out.sender_name) - 1);
+    std::strncpy(out.message, message.c_str(), sizeof(out.message) - 1);
+    broadcast(build_packet(MessageType::ChatBroadcast, out));
+}
+
+void Server::on_vendor_buy(uint32_t player_id, uint32_t npc_id, uint8_t stock_index, uint8_t quantity) {
+    if (quantity == 0) quantity = 1;
+    auto& registry = world_.registry();
+    auto player = world_.find_entity_by_network_id(player_id);
+    auto npc = world_.find_entity_by_network_id(npc_id);
+    if (player == entt::null || npc == entt::null) return;
+    if (!registry.all_of<ecs::EntityInfo>(npc)) return;
+
+    auto& info = registry.get<ecs::EntityInfo>(npc);
+    if (info.type != protocol::EntityType::TownNPC) return;
+    const auto* vendor = config_.find_vendor(npc_type_to_string(info.npc_type));
+    if (!vendor) return;
+    if (stock_index >= vendor->stock.size()) return;
+
+    // Require player to be near the NPC.
+    auto* ptx = registry.try_get<ecs::Transform>(player);
+    auto* ntx = registry.try_get<ecs::Transform>(npc);
+    if (!ptx || !ntx) return;
+    float dx = ptx->x - ntx->x, dz = ptx->z - ntx->z;
+    if (dx * dx + dz * dz > 200.0f * 200.0f) return;
+
+    const auto& stock = vendor->stock[stock_index];
+    const ItemConfig* item = config_.find_item(stock.item_id);
+    if (!item) return;
+
+    int unit_price = stock.price > 0 ? stock.price :
+        static_cast<int>(std::max(1.0f, item->sell_value * vendor->buy_price_multiplier));
+    int total = unit_price * quantity;
+
+    auto* level = registry.try_get<ecs::PlayerLevel>(player);
+    auto* inv = registry.try_get<ecs::Inventory>(player);
+    if (!level || !inv) return;
+    if (level->gold < total) return;
+
+    if (!inv->add_item(item->id, quantity, item->stack_size)) return;
+    level->gold -= total;
+
+    send_inventory_update(player_id);
+    // Notify the client's gold changed
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+    auto sit = sessions_.find(player_id);
+    if (sit != sessions_.end() && sit->second->is_open()) {
+        std::vector<uint8_t> payload(2 * sizeof(int32_t));
+        BufferWriter w(std::span<uint8_t>(payload.data(), payload.size()));
+        w.write<int32_t>(-total);
+        w.write<int32_t>(level->gold);
+        sit->second->send(build_packet(MessageType::GoldChange, payload));
+    }
+}
+
+void Server::on_vendor_sell(uint32_t player_id, uint32_t npc_id, uint8_t inventory_slot, uint8_t quantity) {
+    if (quantity == 0) quantity = 1;
+    auto& registry = world_.registry();
+    auto player = world_.find_entity_by_network_id(player_id);
+    auto npc = world_.find_entity_by_network_id(npc_id);
+    if (player == entt::null || npc == entt::null) return;
+    if (!registry.all_of<ecs::EntityInfo>(npc)) return;
+
+    auto& info = registry.get<ecs::EntityInfo>(npc);
+    if (info.type != protocol::EntityType::TownNPC) return;
+    const auto* vendor = config_.find_vendor(npc_type_to_string(info.npc_type));
+    if (!vendor) return;
+
+    auto* ptx = registry.try_get<ecs::Transform>(player);
+    auto* ntx = registry.try_get<ecs::Transform>(npc);
+    if (!ptx || !ntx) return;
+    float dx = ptx->x - ntx->x, dz = ptx->z - ntx->z;
+    if (dx * dx + dz * dz > 200.0f * 200.0f) return;
+
+    auto* inv = registry.try_get<ecs::Inventory>(player);
+    auto* level = registry.try_get<ecs::PlayerLevel>(player);
+    if (!inv || !level) return;
+    if (inventory_slot >= inv->used_slots) return;
+
+    std::string item_id = inv->slots[inventory_slot].item_id;
+    if (item_id.empty()) return;
+    int have = inv->slots[inventory_slot].count;
+    int sell_count = std::min<int>(quantity, have);
+
+    const ItemConfig* item = config_.find_item(item_id);
+    if (!item) return;
+    int unit = static_cast<int>(std::max(1.0f, item->sell_value * vendor->sell_price_multiplier));
+    int total = unit * sell_count;
+
+    inv->remove_item(item_id, sell_count);
+    level->gold += total;
+
+    send_inventory_update(player_id);
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+    auto sit = sessions_.find(player_id);
+    if (sit != sessions_.end() && sit->second->is_open()) {
+        std::vector<uint8_t> payload(2 * sizeof(int32_t));
+        BufferWriter w(std::span<uint8_t>(payload.data(), payload.size()));
+        w.write<int32_t>(total);
+        w.write<int32_t>(level->gold);
+        sit->second->send(build_packet(MessageType::GoldChange, payload));
     }
 }
 
@@ -537,10 +766,9 @@ void Server::broadcast_world_state() {
             }
         }
 
-        // Send WorldState with only visible entities to this client
-        if (!visible_entities.empty()) {
-            session->send(build_packet(MessageType::WorldState, visible_entities));
-        }
+        // WorldState is no longer sent - the delta compression system
+        // (EntityEnter/EntityUpdate/EntityExit) handles all entity sync.
+        (void)visible_entities;
     }
 }
 
@@ -773,7 +1001,8 @@ void Server::send_skill_list(uint32_t player_id) {
         std::min(unlocked.size(), static_cast<size_t>(SkillUnlockMsg::MAX_SKILLS)));
     for (int i = 0; i < msg.skill_count; ++i) {
         msg.skills[i].skill_id = static_cast<uint16_t>(i);
-        std::strncpy(msg.skills[i].name, unlocked[i]->name.c_str(), sizeof(msg.skills[i].name) - 1);
+        std::strncpy(msg.skills[i].name, unlocked[i]->id.c_str(), sizeof(msg.skills[i].name) - 1);
+        std::strncpy(msg.skills[i].display_name, unlocked[i]->name.c_str(), sizeof(msg.skills[i].display_name) - 1);
     }
     sit->second->send(build_packet(MessageType::SkillUnlock, msg));
 }
@@ -815,8 +1044,10 @@ void Server::send_progression_updates() {
                             std::min(unlocked.size(), static_cast<size_t>(SkillUnlockMsg::MAX_SKILLS)));
                         for (int si = 0; si < skill_msg.skill_count; ++si) {
                             skill_msg.skills[si].skill_id = static_cast<uint16_t>(si);
-                            std::strncpy(skill_msg.skills[si].name, unlocked[si]->name.c_str(),
+                            std::strncpy(skill_msg.skills[si].name, unlocked[si]->id.c_str(),
                                          sizeof(skill_msg.skills[si].name) - 1);
+                            std::strncpy(skill_msg.skills[si].display_name, unlocked[si]->name.c_str(),
+                                         sizeof(skill_msg.skills[si].display_name) - 1);
                         }
                         sit->second->send(build_packet(MessageType::SkillUnlock, skill_msg));
                     }

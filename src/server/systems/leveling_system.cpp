@@ -1,4 +1,5 @@
 #include "leveling_system.hpp"
+#include "skill_system.hpp"
 #include "server/ecs/game_components.hpp"
 #include "server/game_config.hpp"
 #include <algorithm>
@@ -50,7 +51,14 @@ void award_kill_xp(entt::registry& registry, entt::entity player, entt::entity m
     player_level->xp += xp_gained;
     player_level->gold += monster_type->gold_reward;
 
+    int level_before = player_level->level;
     check_level_up(registry, player, config);
+
+    // Recompute stats with talent multipliers after level-up
+    // (check_level_up applies raw growth; apply_talent_effects normalizes with multipliers)
+    if (player_level->level > level_before) {
+        apply_talent_effects(registry, player, config);
+    }
 }
 
 bool check_level_up(entt::registry& registry, entt::entity player, const GameConfig& config) {

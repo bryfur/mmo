@@ -54,7 +54,42 @@ const char* InputHandler::get_controller_name() const {
     return "No Controller";
 }
 
+void InputHandler::set_text_input_enabled(bool enabled) {
+    if (text_input_enabled_ == enabled) return;
+    text_input_enabled_ = enabled;
+    if (enabled) {
+        SDL_StartTextInput(SDL_GetKeyboardFocus());
+    } else {
+        SDL_Window* win = SDL_GetKeyboardFocus();
+        if (win) SDL_StopTextInput(win);
+        text_input_buffer_.clear();
+    }
+    text_backspace_pressed_ = false;
+    text_enter_pressed_ = false;
+    text_escape_pressed_ = false;
+}
+
 void InputHandler::process_event(const SDL_Event& event) {
+    // Text input mode consumes key + text events first.
+    if (text_input_enabled_) {
+        if (event.type == SDL_EVENT_TEXT_INPUT) {
+            if (event.text.text) text_input_buffer_ += event.text.text;
+            return;
+        }
+        if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat) {
+            switch (event.key.key) {
+                case SDLK_BACKSPACE: text_backspace_pressed_ = true; return;
+                case SDLK_RETURN:    text_enter_pressed_ = true;     return;
+                case SDLK_ESCAPE:    text_escape_pressed_ = true;    return;
+                default: break;
+            }
+        }
+        // Swallow other key events so gameplay doesn't receive them.
+        if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP) {
+            return;
+        }
+    }
+
     // Handle controller connection/disconnection
     if (event.type == SDL_EVENT_GAMEPAD_ADDED) {
         handle_controller_added(event.gdevice.which);

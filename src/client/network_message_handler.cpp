@@ -158,10 +158,7 @@ bool NetworkMessageHandler::try_handle(MessageType type, const std::vector<uint8
         case MessageType::InventoryUpdate:
             on_inventory_update(payload);
             return true;
-        case MessageType::ItemEquip:
-        case MessageType::ItemUnequip:
-            on_inventory_update(payload);
-            return true;
+        // ItemEquip/ItemUnequip are client-to-server only; server sends InventoryUpdate back
         case MessageType::SkillCooldown:
             on_skill_cooldown(payload);
             return true;
@@ -176,6 +173,12 @@ bool NetworkMessageHandler::try_handle(MessageType type, const std::vector<uint8
             return true;
         case MessageType::NPCDialogue:
             on_npc_dialogue(payload);
+            return true;
+        case MessageType::ChatBroadcast:
+            on_chat_broadcast(payload);
+            return true;
+        case MessageType::VendorOpen:
+            on_vendor_open(payload);
             return true;
         default:
             return false;
@@ -278,28 +281,22 @@ void NetworkMessageHandler::on_skill_cooldown(const std::vector<uint8_t>& payloa
 }
 
 void NetworkMessageHandler::on_skill_unlock(const std::vector<uint8_t>& payload) {
-    if (payload.size() < SkillResultMsg::serialized_size()) return;
+    if (payload.size() < SkillUnlockMsg::serialized_size()) return;
 
-    SkillResultMsg msg;
+    SkillUnlockMsg msg;
     msg.deserialize(payload);
 
-    std::string sid(msg.skill_id, strnlen(msg.skill_id, sizeof(msg.skill_id)));
-
+    // Replace the entire skill bar with the server's authoritative list
     for (int i = 0; i < 5; ++i) {
-        if (ctx_.hud_state.skill_slots[i].skill_id == sid) {
-            ctx_.hud_state.skill_slots[i].max_cooldown = msg.cooldown;
-            return;
-        }
+        ctx_.hud_state.skill_slots[i] = {};
     }
-    for (int i = 0; i < 5; ++i) {
-        if (!ctx_.hud_state.skill_slots[i].available) {
-            ctx_.hud_state.skill_slots[i].skill_id = sid;
-            ctx_.hud_state.skill_slots[i].name = sid;
-            ctx_.hud_state.skill_slots[i].max_cooldown = msg.cooldown;
-            ctx_.hud_state.skill_slots[i].available = true;
-            ctx_.hud_state.skill_slots[i].key_number = i + 1;
-            return;
-        }
+    for (int i = 0; i < msg.skill_count && i < 5; ++i) {
+        std::string id(msg.skills[i].name, strnlen(msg.skills[i].name, sizeof(msg.skills[i].name)));
+        std::string display(msg.skills[i].display_name, strnlen(msg.skills[i].display_name, sizeof(msg.skills[i].display_name)));
+        ctx_.hud_state.skill_slots[i].skill_id = id;
+        ctx_.hud_state.skill_slots[i].name = display.empty() ? id : display;
+        ctx_.hud_state.skill_slots[i].available = true;
+        ctx_.hud_state.skill_slots[i].key_number = i + 1;
     }
 }
 
@@ -361,6 +358,39 @@ void NetworkMessageHandler::on_npc_dialogue(const std::vector<uint8_t>& payload)
         dlg.quest_ids[i] = msg.quest_ids[i];
         dlg.quest_names[i] = msg.quest_names[i];
     }
+}
+
+void NetworkMessageHandler::on_chat_broadcast(const std::vector<uint8_t>& payload) {
+    if (payload.size() < ChatBroadcastMsg::serialized_size()) return;
+    ChatBroadcastMsg msg;
+    msg.deserialize(payload);
+    std::string sender(msg.sender_name, strnlen(msg.sender_name, sizeof(msg.sender_name)));
+    std::string text(msg.message, strnlen(msg.message, sizeof(msg.message)));
+    ctx_.hud_state.chat.add_line(msg.channel, sender, text);
+}
+
+void NetworkMessageHandler::on_vendor_open(const std::vector<uint8_t>& payload) {
+    if (payload.size() < VendorOpenMsg::serialized_size()) return;
+    VendorOpenMsg msg;
+    msg.deserialize(payload);
+
+    auto& v = ctx_.hud_state.vendor;
+    v.visible = true;
+    v.npc_id = msg.npc_id;
+    v.vendor_name = std::string(msg.vendor_name, strnlen(msg.vendor_name, sizeof(msg.vendor_name)));
+    v.buy_mult = msg.buy_price_multiplier;
+    v.sell_mult = msg.sell_price_multiplier;
+    v.stock.clear();
+    for (int i = 0; i < msg.stock_count && i < VendorOpenMsg::MAX_STOCK; ++i) {
+        VendorStockSlot slot;
+        slot.item_id = std::string(msg.stock[i].item_id, strnlen(msg.stock[i].item_id, sizeof(msg.stock[i].item_id)));
+        slot.item_name = slot.item_id;
+        slot.price = msg.stock[i].price;
+        slot.stock = msg.stock[i].stock;
+        v.stock.push_back(std::move(slot));
+    }
+    v.cursor = 0;
+    v.buying = true;
 }
 
 } // namespace mmo::client

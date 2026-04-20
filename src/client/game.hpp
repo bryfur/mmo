@@ -77,6 +77,8 @@ private:
     void update_panel_input(float dt);
     void update_damage_numbers(float dt);
     void update_notifications(float dt);
+    void update_chat_input();
+    void update_vendor_input();
 
     // Panel UI rendering
     void build_notifications_ui(engine::scene::UIScene& ui);
@@ -198,6 +200,10 @@ private:
     KeyEdge panel_inv_key1_, panel_inv_key2_, panel_inv_u_;
     KeyEdge panel_talent_up_, panel_talent_down_, panel_talent_enter_;
     KeyEdge panel_quest_up_, panel_quest_down_, panel_quest_del_;
+
+    // Chat / vendor
+    KeyEdge key_chat_open_;
+    KeyEdge vendor_up_, vendor_down_, vendor_enter_, vendor_esc_, vendor_tab_;
 };
 
 } // namespace mmo::client

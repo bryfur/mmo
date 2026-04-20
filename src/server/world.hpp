@@ -5,6 +5,7 @@
 #include "game_types.hpp"
 #include "game_config.hpp"
 #include "heightmap_generator.hpp"
+#include "systems/combat_system.hpp"
 #include "systems/physics_system.hpp"
 #include "systems/zone_system.hpp"
 #include "spatial_grid.hpp"
@@ -84,7 +85,10 @@ public:
     };
 
     std::vector<GameplayEvent> take_events();
-    
+
+    /// Inject combat hits (e.g. from skills) to generate CombatEvent/EntityDeath events
+    void add_combat_hits(const std::vector<systems::CombatHit>& hits);
+
     entt::registry& registry() { return registry_; }
     const entt::registry& registry() const { return registry_; }
     

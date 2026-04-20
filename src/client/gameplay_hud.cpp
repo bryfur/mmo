@@ -21,12 +21,45 @@ uint32_t fade_color(uint32_t color, float alpha) {
 }
 
 // ============================================================================
+// Health bar - bottom-left
+// ============================================================================
+
+void build_health_bar(UIScene& ui, const HUDState& hud, float /*screen_w*/, float screen_h) {
+    float bar_width = 250.0f;
+    float bar_height = 25.0f;
+    float padding = 20.0f;
+    float x = padding;
+    float y = screen_h - padding - bar_height;
+
+    // Frame
+    ui.add_filled_rect(x - 2, y - 2, bar_width + 4, bar_height + 4, 0xFF000000);
+    ui.add_rect_outline(x - 2, y - 2, bar_width + 4, bar_height + 4, BORDER, 1.0f);
+
+    // Background
+    ui.add_filled_rect(x, y, bar_width, bar_height, 0xFF1A0000);
+
+    // Fill
+    float hp_ratio = (hud.max_health > 0) ? hud.health / hud.max_health : 0.0f;
+    hp_ratio = std::min(hp_ratio, 1.0f);
+    if (hp_ratio > 0.0f) {
+        // Color shifts from green to red as health decreases
+        uint32_t fill_color = 0xFF0000FF; // green in ABGR
+        if (hp_ratio < 0.3f) fill_color = 0xFF0000CC; // red
+        else if (hp_ratio < 0.6f) fill_color = 0xFF00AAFF; // yellow/orange
+        ui.add_filled_rect(x, y, bar_width * hp_ratio, bar_height, fill_color);
+    }
+
+    // Text
+    char hp_text[32];
+    snprintf(hp_text, sizeof(hp_text), "HP: %.0f/%.0f", hud.health, hud.max_health);
+    ui.add_text(hp_text, x + 8, y + 5, 1.0f, WHITE);
+}
+
+// ============================================================================
 // XP bar - below the health bar
 // ============================================================================
 
 void build_xp_bar(UIScene& ui, const HUDState& hud, float /*screen_w*/, float screen_h) {
-    // Health bar is at y = screen_h - 45, height 25, so its bottom edge is at screen_h - 20.
-    // Place XP bar just below the health bar.
     float bar_width = 250.0f;
     float bar_height = 12.0f;
     float padding = 20.0f;
@@ -437,10 +470,153 @@ void build_minimap(UIScene& ui, const HUDState& hud, float screen_w, float /*scr
 }
 
 // ============================================================================
+// Chat window - bottom-left, above the skill bar
+// ============================================================================
+
+static uint32_t chat_channel_color(uint8_t channel) {
+    switch (channel) {
+        case 0: return 0xFFCCCCCC;  // Say - light gray
+        case 1: return 0xFF88FFFF;  // Zone - cyan
+        case 2: return 0xFF00CCFF;  // Global - yellow
+        case 3: return 0xFF0088FF;  // System - orange
+        case 4: return 0xFFFF88FF;  // Whisper - magenta
+        default: return 0xFFCCCCCC;
+    }
+}
+
+static const char* chat_channel_prefix(uint8_t channel) {
+    switch (channel) {
+        case 0: return "[Say]";
+        case 1: return "[Zone]";
+        case 2: return "[Global]";
+        case 3: return "[System]";
+        case 4: return "[Whisper]";
+        default: return "";
+    }
+}
+
+void build_chat_window(UIScene& ui, const HUDState& hud, float /*screen_w*/, float screen_h) {
+    const auto& chat = hud.chat;
+    float padding = 20.0f;
+    float width = 460.0f;
+    float line_height = 14.0f;
+    int visible = ChatState::VISIBLE_LINES;
+    // Position: above skill bar (skill bar is ~80px tall at the bottom)
+    float height = visible * line_height + 10.0f + (chat.input_active ? 22.0f : 0.0f);
+    float x = padding;
+    float y = screen_h - 160.0f - height;
+
+    // Background
+    ui.add_filled_rect(x, y, width, height, 0xAA000000);
+    ui.add_rect_outline(x, y, width, height, 0xFF555555, 1.0f);
+
+    // Recent chat lines
+    int start = static_cast<int>(chat.lines.size()) - visible;
+    if (start < 0) start = 0;
+    float ty = y + 6.0f;
+    for (int i = start; i < static_cast<int>(chat.lines.size()); ++i) {
+        const auto& line = chat.lines[i];
+        uint32_t color = chat_channel_color(line.channel);
+        std::string prefix = chat_channel_prefix(line.channel);
+        std::string rendered;
+        if (line.channel == 3) {
+            rendered = prefix + std::string(" ") + line.text;
+        } else {
+            rendered = prefix + std::string(" ") + line.sender + ": " + line.text;
+        }
+        if (rendered.size() > 80) rendered = rendered.substr(0, 80) + "...";
+        ui.add_text(rendered, x + 6, ty, 0.75f, color);
+        ty += line_height;
+    }
+
+    // Input line
+    if (chat.input_active) {
+        float iy = y + height - 20.0f;
+        ui.add_filled_rect(x + 4, iy, width - 8, 18.0f, 0xDD222233);
+        ui.add_rect_outline(x + 4, iy, width - 8, 18.0f, 0xFF666677, 1.0f);
+        std::string prefix = chat_channel_prefix(chat.selected_channel);
+        std::string display = prefix + std::string(" > ") + chat.input_buffer + "_";
+        ui.add_text(display, x + 8, iy + 3, 0.8f, 0xFFFFFFFF);
+    } else {
+        ui.add_text("[Enter] to chat", x + 6, y + height - 14.0f, 0.65f, 0xFF888899);
+    }
+}
+
+// ============================================================================
+// Vendor window - center of screen
+// ============================================================================
+
+void build_vendor_window(UIScene& ui, const HUDState& hud, float screen_w, float screen_h) {
+    const auto& v = hud.vendor;
+    if (!v.visible) return;
+
+    float w = 460.0f;
+    float h = 360.0f;
+    float x = (screen_w - w) * 0.5f;
+    float y = (screen_h - h) * 0.5f;
+
+    // Panel background
+    ui.add_filled_rect(x, y, w, h, 0xEE1A1A22);
+    ui.add_rect_outline(x, y, w, h, 0xFF999999, 2.0f);
+
+    // Title bar
+    ui.add_filled_rect(x, y, w, 26.0f, 0xFF222244);
+    std::string title = v.vendor_name.empty() ? std::string("Vendor") : v.vendor_name;
+    ui.add_text(title, x + 12, y + 6, 1.0f, 0xFFFFEECC);
+    ui.add_text("[Esc] close  [Tab] buy/sell", x + w - 200, y + 6, 0.7f, 0xFFAAAAAA);
+
+    // Mode tab indicator
+    float tab_y = y + 34.0f;
+    ui.add_text(v.buying ? "BUY" : "SELL", x + 12, tab_y, 0.9f,
+                v.buying ? 0xFF00DDFF : 0xFF66FFFF);
+
+    // Gold
+    char gbuf[48];
+    snprintf(gbuf, sizeof(gbuf), "Gold: %d", 0); // Server sends gold separately; UI shows from HUDState.gold
+    (void)gbuf;
+    char gold_buf[48];
+    snprintf(gold_buf, sizeof(gold_buf), "Gold: %d", hud.gold);
+    ui.add_text(gold_buf, x + w - 120, tab_y, 0.85f, 0xFF00DDFF);
+
+    // List of items
+    float list_y = y + 58.0f;
+    float row_h = 22.0f;
+    int max_rows = 12;
+    int count = static_cast<int>(v.stock.size());
+    int cursor = std::max(0, std::min(v.cursor, count - 1));
+
+    for (int i = 0; i < count && i < max_rows; ++i) {
+        float row_y = list_y + i * row_h;
+        bool selected = (i == cursor);
+        uint32_t row_color = selected ? 0xFF334466 : 0xFF222233;
+        ui.add_filled_rect(x + 10, row_y, w - 20, row_h - 2, row_color);
+        const auto& slot = v.stock[i];
+        uint32_t name_color = 0xFFCCCCCC;
+        if (slot.rarity == "uncommon")       name_color = 0xFF00CC00;
+        else if (slot.rarity == "rare")      name_color = 0xFF0088FF;
+        else if (slot.rarity == "epic")      name_color = 0xFFCC00CC;
+        else if (slot.rarity == "legendary") name_color = 0xFF00AAFF;
+        char buf[128];
+        if (slot.stock < 0) {
+            snprintf(buf, sizeof(buf), "%s", slot.item_name.c_str());
+        } else {
+            snprintf(buf, sizeof(buf), "%s (stock: %d)", slot.item_name.c_str(), slot.stock);
+        }
+        ui.add_text(buf, x + 18, row_y + 4, 0.85f, name_color);
+        char price_buf[32];
+        snprintf(price_buf, sizeof(price_buf), "%d g", slot.price);
+        ui.add_text(price_buf, x + w - 70, row_y + 4, 0.85f, 0xFF00DDFF);
+    }
+
+    ui.add_text("[Up/Down] select  [Enter] purchase", x + 12, y + h - 22, 0.7f, 0xFFAAAAAA);
+}
+
+// ============================================================================
 // Master HUD builder - renders all elements
 // ============================================================================
 
 void build_gameplay_hud(UIScene& ui, const HUDState& hud, float screen_w, float screen_h) {
+    // Health bar is rendered in game.cpp's build_gameplay_ui (from entity data)
     build_xp_bar(ui, hud, screen_w, screen_h);
     build_mana_bar(ui, hud, screen_w, screen_h);
     build_minimap(ui, hud, screen_w, screen_h);
@@ -450,6 +626,8 @@ void build_gameplay_hud(UIScene& ui, const HUDState& hud, float screen_w, float 
     build_zone_name(ui, hud, screen_w, screen_h);
     build_level_up_notification(ui, hud, screen_w, screen_h);
     build_loot_feed(ui, hud, screen_w, screen_h);
+    build_chat_window(ui, hud, screen_w, screen_h);
+    build_vendor_window(ui, hud, screen_w, screen_h);
 }
 
 } // namespace mmo::client

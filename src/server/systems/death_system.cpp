@@ -65,7 +65,11 @@ void handle_monster_deaths(
                 // Kill heal (Bloodlust, etc.)
                 if (tp.kill_heal_pct > 0.0f && registry.all_of<ecs::Health>(killer)) {
                     auto& kh = registry.get<ecs::Health>(killer);
-                    kh.current = std::min(kh.max, kh.current + kh.max * tp.kill_heal_pct);
+                    float heal = kh.max * tp.kill_heal_pct;
+                    if (tp.healing_received_mult != 1.0f) {
+                        heal *= tp.healing_received_mult;
+                    }
+                    kh.current = std::min(kh.max, kh.current + heal);
                 }
 
                 // Kill explosion (Inferno)
@@ -255,6 +259,11 @@ void handle_player_deaths(
 
         // Apply death XP penalty
         apply_death_penalty(registry, entity, config);
+
+        // Clear status effects
+        if (auto* buffs = registry.try_get<ecs::BuffState>(entity)) {
+            buffs->effects.clear();
+        }
 
         // Reset health to max
         health.current = health.max;

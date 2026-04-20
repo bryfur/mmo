@@ -141,6 +141,11 @@ void ZoneSystem::respawn_monster(entt::registry& registry, entt::entity monster,
     vel.y = 0.0f;
     vel.z = 0.0f;
 
+    // Clear status effects from previous life
+    if (auto* buffs = registry.try_get<ecs::BuffState>(monster)) {
+        buffs->effects.clear();
+    }
+
     // Reset health
     auto& health = registry.get<ecs::Health>(monster);
     health.current = mt->health;

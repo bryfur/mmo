@@ -36,10 +36,14 @@ void update_buffs(entt::registry& registry, float dt) {
                 effect.tick_timer -= dt;
                 if (effect.tick_timer <= 0.0f) {
                     effect.tick_timer += effect.tick_interval;
-                    // Apply healing
+                    // Apply healing (with healing_received_mult from talents)
                     if (registry.all_of<ecs::Health>(entity)) {
                         auto& health = registry.get<ecs::Health>(entity);
-                        health.current = std::min(health.max, health.current + effect.value);
+                        float heal = effect.value;
+                        if (registry.all_of<ecs::TalentStats>(entity)) {
+                            heal *= registry.get<ecs::TalentStats>(entity).healing_received_mult;
+                        }
+                        health.current = std::min(health.max, health.current + heal);
                     }
                 }
             }

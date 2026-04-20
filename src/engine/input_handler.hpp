@@ -4,6 +4,7 @@
 #include "SDL3/SDL_joystick.h"
 #include "engine/input_state.hpp"
 #include <SDL3/SDL.h>
+#include <string>
 
 namespace mmo::engine {
 
@@ -98,6 +99,16 @@ public:
     // Enable/disable game input (for menu mode)
     void set_game_input_enabled(bool enabled) { game_input_enabled_ = enabled; }
     bool is_game_input_enabled() const { return game_input_enabled_; }
+
+    // Chat text input: when enabled, typed characters accumulate in text_input_buffer_.
+    void set_text_input_enabled(bool enabled);
+    bool is_text_input_enabled() const { return text_input_enabled_; }
+    // Returns pending text since last call, clearing the buffer.
+    std::string take_text_input() { std::string s = std::move(text_input_buffer_); text_input_buffer_.clear(); return s; }
+    bool text_backspace_pressed() const { return text_backspace_pressed_; }
+    bool text_enter_pressed() const { return text_enter_pressed_; }
+    bool text_escape_pressed() const { return text_escape_pressed_; }
+    void clear_text_events() { text_backspace_pressed_ = false; text_enter_pressed_ = false; text_escape_pressed_ = false; }
     
     // Controller support
     bool has_controller() const { return gamepad_ != nullptr; }
@@ -162,6 +173,13 @@ private:
     bool menu_right_pressed_ = false;
     bool menu_select_pressed_ = false;
     bool game_input_enabled_ = true;
+
+    // Text input (chat)
+    bool text_input_enabled_ = false;
+    std::string text_input_buffer_;
+    bool text_backspace_pressed_ = false;
+    bool text_enter_pressed_ = false;
+    bool text_escape_pressed_ = false;
 
     // Key state tracking for was_key_just_pressed()
     const bool* prev_key_state_ = nullptr;

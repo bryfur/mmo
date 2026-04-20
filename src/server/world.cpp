@@ -488,6 +488,44 @@ std::vector<World::GameplayEvent> World::take_events() {
     return std::move(pending_events_);
 }
 
+void World::add_combat_hits(const std::vector<systems::CombatHit>& hits) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (const auto& hit : hits) {
+        uint32_t attacker_net_id = 0;
+        uint32_t target_net_id = 0;
+        if (auto* net = registry_.try_get<ecs::NetworkId>(hit.attacker))
+            attacker_net_id = net->id;
+        if (auto* net = registry_.try_get<ecs::NetworkId>(hit.target))
+            target_net_id = net->id;
+
+        // CombatEvent to all players
+        auto players_view = registry_.view<ecs::PlayerTag, ecs::NetworkId>();
+        for (auto player : players_view) {
+            auto& pnet = players_view.get<ecs::NetworkId>(player);
+            GameplayEvent evt;
+            evt.type = GameplayEvent::Type::CombatEvent;
+            evt.player_id = pnet.id;
+            evt.attacker_id = attacker_net_id;
+            evt.target_id = target_net_id;
+            evt.damage_amount = hit.damage;
+            pending_events_.push_back(evt);
+        }
+
+        if (hit.target_died) {
+            auto players_view2 = registry_.view<ecs::PlayerTag, ecs::NetworkId>();
+            for (auto player : players_view2) {
+                auto& pnet = players_view2.get<ecs::NetworkId>(player);
+                GameplayEvent evt;
+                evt.type = GameplayEvent::Type::EntityDeath;
+                evt.player_id = pnet.id;
+                evt.dead_entity_id = target_net_id;
+                evt.killer_entity_id = attacker_net_id;
+                pending_events_.push_back(evt);
+            }
+        }
+    }
+}
+
 entt::entity World::find_entity_by_network_id(uint32_t id) const {
     auto it = network_id_to_entity_.find(id);
     if (it != network_id_to_entity_.end()) {

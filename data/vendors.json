@@ -1,0 +1,62 @@
+{
+  "vendors": [
+    {
+      "npc_type": "merchant",
+      "display_name": "General Goods",
+      "buy_price_multiplier": 4.0,
+      "sell_price_multiplier": 0.25,
+      "stock": [
+        { "item_id": "small_health_potion" },
+        { "item_id": "medium_health_potion" },
+        { "item_id": "large_health_potion" },
+        { "item_id": "small_mana_potion" },
+        { "item_id": "medium_mana_potion" },
+        { "item_id": "large_mana_potion" },
+        { "item_id": "speed_potion" },
+        { "item_id": "antidote" },
+        { "item_id": "scroll_of_return" },
+        { "item_id": "scroll_of_insight" },
+        { "item_id": "rough_wood" },
+        { "item_id": "wild_herbs" }
+      ]
+    },
+    {
+      "npc_type": "blacksmith",
+      "display_name": "Forge & Arms",
+      "buy_price_multiplier": 5.0,
+      "sell_price_multiplier": 0.3,
+      "stock": [
+        { "item_id": "iron_sword" },
+        { "item_id": "steel_sword" },
+        { "item_id": "iron_mace" },
+        { "item_id": "hand_axe" },
+        { "item_id": "war_axe" },
+        { "item_id": "iron_spear" },
+        { "item_id": "war_hammer" },
+        { "item_id": "shortbow" },
+        { "item_id": "rusty_dagger" },
+        { "item_id": "stiletto" },
+        { "item_id": "leather_tunic" },
+        { "item_id": "chain_mail" },
+        { "item_id": "iron_helmet" },
+        { "item_id": "leather_boots" },
+        { "item_id": "iron_gauntlets" },
+        { "item_id": "wooden_shield" },
+        { "item_id": "iron_kite_shield" },
+        { "item_id": "iron_ore", "price": 12 }
+      ]
+    },
+    {
+      "npc_type": "innkeeper",
+      "display_name": "The Traveler's Rest",
+      "buy_price_multiplier": 3.5,
+      "sell_price_multiplier": 0.2,
+      "stock": [
+        { "item_id": "small_health_potion" },
+        { "item_id": "small_mana_potion" },
+        { "item_id": "medium_health_potion" },
+        { "item_id": "scroll_of_return" }
+      ]
+    }
+  ]
+}

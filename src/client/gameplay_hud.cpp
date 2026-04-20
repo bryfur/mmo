@@ -612,6 +612,70 @@ void build_vendor_window(UIScene& ui, const HUDState& hud, float screen_w, float
 }
 
 // ============================================================================
+// Party frames - upper-left, one compact bar per member
+// ============================================================================
+
+void build_party_frames(UIScene& ui, const HUDState& hud, float /*screen_w*/, float /*screen_h*/) {
+    const auto& party = hud.party;
+    if (!party.has_party()) return;
+
+    float x = 20.0f;
+    float y = 80.0f;
+    float w = 200.0f;
+    float frame_h = 44.0f;
+    float gap = 6.0f;
+
+    for (const auto& m : party.members) {
+        ui.add_filled_rect(x, y, w, frame_h, 0xCC1A1A22);
+        ui.add_rect_outline(x, y, w, frame_h, 0xFF555566, 1.0f);
+
+        bool is_leader = (m.player_id == party.leader_id);
+        uint32_t title_color = is_leader ? 0xFF00DDFF : 0xFFCCCCCC;
+        char nbuf[48];
+        snprintf(nbuf, sizeof(nbuf), "%s%s  Lv %d",
+                 is_leader ? "* " : "  ",
+                 m.name.c_str(), m.level);
+        ui.add_text(nbuf, x + 6, y + 4, 0.75f, title_color);
+
+        // HP bar
+        float hp_ratio = (m.max_health > 0) ? m.health / m.max_health : 0.0f;
+        hp_ratio = std::max(0.0f, std::min(hp_ratio, 1.0f));
+        ui.add_filled_rect(x + 6, y + 22, w - 12, 7, 0xFF1A0000);
+        uint32_t hp_color = 0xFF00CC00;
+        if (hp_ratio < 0.3f) hp_color = 0xFF0000CC;
+        else if (hp_ratio < 0.6f) hp_color = 0xFF00AAFF;
+        ui.add_filled_rect(x + 6, y + 22, (w - 12) * hp_ratio, 7, hp_color);
+
+        // Mana bar
+        float mp_ratio = (m.max_mana > 0) ? m.mana / m.max_mana : 0.0f;
+        mp_ratio = std::max(0.0f, std::min(mp_ratio, 1.0f));
+        ui.add_filled_rect(x + 6, y + 32, w - 12, 5, 0xFF000033);
+        ui.add_filled_rect(x + 6, y + 32, (w - 12) * mp_ratio, 5, 0xFFFF3300);
+
+        y += frame_h + gap;
+    }
+}
+
+void build_party_invite_popup(UIScene& ui, const HUDState& hud, float screen_w, float screen_h) {
+    const auto& party = hud.party;
+    if (party.pending_inviter_id == 0) return;
+
+    float w = 360.0f;
+    float h = 110.0f;
+    float x = (screen_w - w) * 0.5f;
+    float y = (screen_h - h) * 0.5f - 100.0f;
+
+    ui.add_filled_rect(x, y, w, h, 0xEE111122);
+    ui.add_rect_outline(x, y, w, h, 0xFF00DDFF, 2.0f);
+
+    ui.add_text("Party Invite", x + 12, y + 8, 0.95f, 0xFF00DDFF);
+    std::string msg = party.pending_inviter_name + " invited you to join their party.";
+    if (msg.size() > 48) msg = msg.substr(0, 48) + "...";
+    ui.add_text(msg, x + 12, y + 34, 0.78f, 0xFFEEEEEE);
+    ui.add_text("[Y] Accept    [N] Decline", x + 12, y + h - 24, 0.8f, 0xFFCCCCCC);
+}
+
+// ============================================================================
 // Master HUD builder - renders all elements
 // ============================================================================
 
@@ -628,6 +692,8 @@ void build_gameplay_hud(UIScene& ui, const HUDState& hud, float screen_w, float 
     build_loot_feed(ui, hud, screen_w, screen_h);
     build_chat_window(ui, hud, screen_w, screen_h);
     build_vendor_window(ui, hud, screen_w, screen_h);
+    build_party_frames(ui, hud, screen_w, screen_h);
+    build_party_invite_popup(ui, hud, screen_w, screen_h);
 }
 
 } // namespace mmo::client

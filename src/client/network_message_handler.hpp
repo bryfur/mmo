@@ -70,6 +70,8 @@ private:
     void on_npc_dialogue(const std::vector<uint8_t>& payload);
     void on_chat_broadcast(const std::vector<uint8_t>& payload);
     void on_vendor_open(const std::vector<uint8_t>& payload);
+    void on_party_invite_offer(const std::vector<uint8_t>& payload);
+    void on_party_state(const std::vector<uint8_t>& payload);
 
     Context ctx_;
 };

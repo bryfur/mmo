@@ -806,4 +806,113 @@ struct VendorSellMsg : Serializable<VendorSellMsg> {
     }
 };
 
+// ============================================================================
+// Party / group
+// ============================================================================
+
+struct PartyInviteMsg : Serializable<PartyInviteMsg> {
+    char target_name[32] = {};
+
+    static constexpr size_t serialized_size() { return 32; }
+
+    void serialize_impl(BufferWriter& w) const { w.write_bytes(target_name, 32); }
+    void deserialize_impl(BufferReader& r) { r.read_bytes(target_name, 32); }
+};
+
+struct PartyInviteOfferMsg : Serializable<PartyInviteOfferMsg> {
+    uint32_t inviter_id = 0;
+    char inviter_name[32] = {};
+
+    static constexpr size_t serialized_size() { return sizeof(uint32_t) + 32; }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write(inviter_id);
+        w.write_bytes(inviter_name, 32);
+    }
+    void deserialize_impl(BufferReader& r) {
+        inviter_id = r.read<uint32_t>();
+        r.read_bytes(inviter_name, 32);
+    }
+};
+
+struct PartyInviteRespondMsg : Serializable<PartyInviteRespondMsg> {
+    uint32_t inviter_id = 0;
+    uint8_t accept = 0;  // 1 = accept, 0 = decline
+
+    static constexpr size_t serialized_size() { return sizeof(uint32_t) + sizeof(uint8_t); }
+
+    void serialize_impl(BufferWriter& w) const { w.write(inviter_id); w.write(accept); }
+    void deserialize_impl(BufferReader& r) { inviter_id = r.read<uint32_t>(); accept = r.read<uint8_t>(); }
+};
+
+struct PartyKickMsg : Serializable<PartyKickMsg> {
+    uint32_t target_id = 0;
+
+    static constexpr size_t serialized_size() { return sizeof(uint32_t); }
+
+    void serialize_impl(BufferWriter& w) const { w.write(target_id); }
+    void deserialize_impl(BufferReader& r) { target_id = r.read<uint32_t>(); }
+};
+
+// Server -> Client: snapshot of a player's current party state. Empty member
+// list means the player is not in a party.
+struct PartyMemberInfo : Serializable<PartyMemberInfo> {
+    uint32_t player_id = 0;
+    char name[32] = {};
+    uint8_t player_class = 0;
+    uint8_t level = 1;
+    float health = 100.0f;
+    float max_health = 100.0f;
+    float mana = 0.0f;
+    float max_mana = 0.0f;
+
+    static constexpr size_t serialized_size() {
+        return sizeof(uint32_t) + 32 + 2 * sizeof(uint8_t) + 4 * sizeof(float);
+    }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write(player_id);
+        w.write_bytes(name, 32);
+        w.write(player_class);
+        w.write(level);
+        w.write(health);
+        w.write(max_health);
+        w.write(mana);
+        w.write(max_mana);
+    }
+    void deserialize_impl(BufferReader& r) {
+        player_id = r.read<uint32_t>();
+        r.read_bytes(name, 32);
+        player_class = r.read<uint8_t>();
+        level = r.read<uint8_t>();
+        health = r.read<float>();
+        max_health = r.read<float>();
+        mana = r.read<float>();
+        max_mana = r.read<float>();
+    }
+};
+
+struct PartyStateMsg : Serializable<PartyStateMsg> {
+    static constexpr int MAX_MEMBERS = 5;
+    uint32_t leader_id = 0;
+    uint8_t member_count = 0;
+    PartyMemberInfo members[MAX_MEMBERS] = {};
+
+    static constexpr size_t serialized_size() {
+        return sizeof(uint32_t) + sizeof(uint8_t)
+             + MAX_MEMBERS * PartyMemberInfo::serialized_size();
+    }
+
+    void serialize_impl(BufferWriter& w) const {
+        w.write(leader_id);
+        w.write(member_count);
+        for (int i = 0; i < MAX_MEMBERS; ++i) members[i].serialize(w);
+    }
+    void deserialize_impl(BufferReader& r) {
+        leader_id = r.read<uint32_t>();
+        member_count = r.read<uint8_t>();
+        for (int i = 0; i < MAX_MEMBERS; ++i) members[i].deserialize(r);
+    }
+};
+
 } // namespace mmo::protocol

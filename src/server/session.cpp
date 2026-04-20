@@ -242,6 +242,39 @@ void Session::handle_packet() {
             break;
         }
 
+        case MessageType::PartyInvite: {
+            if (current_header_.payload_size >= PartyInviteMsg::serialized_size() && player_id_ != 0) {
+                PartyInviteMsg msg;
+                msg.deserialize(payload_buffer_);
+                std::string target(msg.target_name, strnlen(msg.target_name, sizeof(msg.target_name)));
+                server_.on_party_invite(player_id_, target);
+            }
+            break;
+        }
+
+        case MessageType::PartyInviteRespond: {
+            if (current_header_.payload_size >= PartyInviteRespondMsg::serialized_size() && player_id_ != 0) {
+                PartyInviteRespondMsg msg;
+                msg.deserialize(payload_buffer_);
+                server_.on_party_invite_respond(player_id_, msg.inviter_id, msg.accept != 0);
+            }
+            break;
+        }
+
+        case MessageType::PartyLeave: {
+            if (player_id_ != 0) server_.on_party_leave(player_id_);
+            break;
+        }
+
+        case MessageType::PartyKick: {
+            if (current_header_.payload_size >= PartyKickMsg::serialized_size() && player_id_ != 0) {
+                PartyKickMsg msg;
+                msg.deserialize(payload_buffer_);
+                server_.on_party_kick(player_id_, msg.target_id);
+            }
+            break;
+        }
+
         default:
             std::cout << "Unknown message type: " << static_cast<int>(current_header_.type) << std::endl;
             break;

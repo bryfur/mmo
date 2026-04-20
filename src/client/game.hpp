@@ -204,6 +204,9 @@ private:
     // Chat / vendor
     KeyEdge key_chat_open_;
     KeyEdge vendor_up_, vendor_down_, vendor_enter_, vendor_esc_, vendor_tab_;
+
+    // Party
+    KeyEdge key_party_y_, key_party_n_;
 };
 
 } // namespace mmo::client

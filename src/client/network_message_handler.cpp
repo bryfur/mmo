@@ -180,6 +180,12 @@ bool NetworkMessageHandler::try_handle(MessageType type, const std::vector<uint8
         case MessageType::VendorOpen:
             on_vendor_open(payload);
             return true;
+        case MessageType::PartyInviteOffer:
+            on_party_invite_offer(payload);
+            return true;
+        case MessageType::PartyState:
+            on_party_state(payload);
+            return true;
         default:
             return false;
     }
@@ -367,6 +373,37 @@ void NetworkMessageHandler::on_chat_broadcast(const std::vector<uint8_t>& payloa
     std::string sender(msg.sender_name, strnlen(msg.sender_name, sizeof(msg.sender_name)));
     std::string text(msg.message, strnlen(msg.message, sizeof(msg.message)));
     ctx_.hud_state.chat.add_line(msg.channel, sender, text);
+}
+
+void NetworkMessageHandler::on_party_invite_offer(const std::vector<uint8_t>& payload) {
+    if (payload.size() < PartyInviteOfferMsg::serialized_size()) return;
+    PartyInviteOfferMsg msg;
+    msg.deserialize(payload);
+    auto& p = ctx_.hud_state.party;
+    p.pending_inviter_id = msg.inviter_id;
+    p.pending_inviter_name = std::string(msg.inviter_name, strnlen(msg.inviter_name, sizeof(msg.inviter_name)));
+}
+
+void NetworkMessageHandler::on_party_state(const std::vector<uint8_t>& payload) {
+    if (payload.size() < PartyStateMsg::serialized_size()) return;
+    PartyStateMsg msg;
+    msg.deserialize(payload);
+    auto& p = ctx_.hud_state.party;
+    p.leader_id = msg.leader_id;
+    p.members.clear();
+    for (int i = 0; i < msg.member_count && i < PartyStateMsg::MAX_MEMBERS; ++i) {
+        const auto& m = msg.members[i];
+        PartyMember pm;
+        pm.player_id = m.player_id;
+        pm.name = std::string(m.name, strnlen(m.name, sizeof(m.name)));
+        pm.player_class = m.player_class;
+        pm.level = m.level;
+        pm.health = m.health;
+        pm.max_health = m.max_health;
+        pm.mana = m.mana;
+        pm.max_mana = m.max_mana;
+        p.members.push_back(std::move(pm));
+    }
 }
 
 void NetworkMessageHandler::on_vendor_open(const std::vector<uint8_t>& payload) {

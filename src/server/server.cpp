@@ -154,6 +154,16 @@ void Server::on_class_select(std::shared_ptr<Session> session, uint8_t class_ind
 }
 
 void Server::on_player_disconnect(uint32_t player_id) {
+    // Leave any party before clearing session state.
+    on_party_leave(player_id);
+
+    // Clear any invites they were part of.
+    pending_invites_.erase(player_id);
+    for (auto it = pending_invites_.begin(); it != pending_invites_.end(); ) {
+        if (it->second == player_id) it = pending_invites_.erase(it);
+        else ++it;
+    }
+
     {
         std::lock_guard<std::mutex> lock(sessions_mutex_);
         sessions_.erase(player_id);
@@ -651,6 +661,15 @@ void Server::game_loop() {
 
     // Send progression events (XP, loot, level ups, zone changes) to clients
     send_progression_updates();
+
+    // Broadcast party frames (HP/mana) periodically.
+    party_broadcast_timer_ += dt;
+    if (party_broadcast_timer_ >= PARTY_BROADCAST_INTERVAL) {
+        party_broadcast_timer_ = 0.0f;
+        for (auto& [pid, party] : parties_) {
+            send_party_state_to_all(pid);
+        }
+    }
 
     // Use delta compression instead of full world state broadcasts
     send_entity_deltas();
@@ -1245,6 +1264,238 @@ protocol::EntityDeltaUpdate Server::create_delta(const protocol::NetEntityState&
     }
 
     return delta;
+}
+
+// ============================================================================
+// Party system
+// ============================================================================
+
+uint32_t Server::find_party_id(uint32_t player_id) const {
+    auto it = player_party_.find(player_id);
+    return it != player_party_.end() ? it->second : 0;
+}
+
+void Server::send_party_state(uint32_t player_id) {
+    std::shared_ptr<Session> session;
+    {
+        std::lock_guard<std::mutex> lock(sessions_mutex_);
+        auto sit = sessions_.find(player_id);
+        if (sit == sessions_.end() || !sit->second->is_open()) return;
+        session = sit->second;
+    }
+
+    PartyStateMsg msg;
+    uint32_t party_id = find_party_id(player_id);
+    auto pit = parties_.find(party_id);
+    if (party_id == 0 || pit == parties_.end()) {
+        msg.leader_id = 0;
+        msg.member_count = 0;
+        session->send(build_packet(MessageType::PartyState, msg));
+        return;
+    }
+
+    const auto& party = pit->second;
+    msg.leader_id = party.leader_id;
+    uint8_t count = 0;
+    auto& registry = world_.registry();
+    for (uint32_t mid : party.member_ids) {
+        if (count >= PartyStateMsg::MAX_MEMBERS) break;
+        auto& m = msg.members[count];
+        m.player_id = mid;
+        std::string mname;
+        uint8_t pclass = 0;
+        {
+            std::lock_guard<std::mutex> slock(sessions_mutex_);
+            auto sit = sessions_.find(mid);
+            if (sit != sessions_.end()) mname = sit->second->player_name();
+        }
+        std::strncpy(m.name, mname.c_str(), sizeof(m.name) - 1);
+
+        auto ent = world_.find_entity_by_network_id(mid);
+        if (ent != entt::null) {
+            if (auto* info = registry.try_get<ecs::EntityInfo>(ent)) pclass = info->player_class;
+            if (auto* hp = registry.try_get<ecs::Health>(ent)) {
+                m.health = hp->current;
+                m.max_health = hp->max;
+            }
+            if (auto* lvl = registry.try_get<ecs::PlayerLevel>(ent)) {
+                m.level = static_cast<uint8_t>(std::min(lvl->level, 255));
+                m.mana = lvl->mana;
+                m.max_mana = lvl->max_mana;
+            }
+        }
+        m.player_class = pclass;
+        ++count;
+    }
+    msg.member_count = count;
+    session->send(build_packet(MessageType::PartyState, msg));
+}
+
+void Server::send_party_state_to_all(uint32_t party_id) {
+    auto pit = parties_.find(party_id);
+    if (pit == parties_.end()) return;
+    for (uint32_t mid : pit->second.member_ids) {
+        send_party_state(mid);
+    }
+}
+
+void Server::disband_party_if_small(uint32_t party_id) {
+    auto pit = parties_.find(party_id);
+    if (pit == parties_.end()) return;
+    if (pit->second.member_ids.size() >= 2) return;
+
+    // Solo party - disband.
+    for (uint32_t mid : pit->second.member_ids) {
+        player_party_.erase(mid);
+        // Send empty state to signal left-party.
+        PartyStateMsg empty;
+        std::lock_guard<std::mutex> lock(sessions_mutex_);
+        auto sit = sessions_.find(mid);
+        if (sit != sessions_.end() && sit->second->is_open()) {
+            sit->second->send(build_packet(MessageType::PartyState, empty));
+        }
+    }
+    parties_.erase(pit);
+}
+
+void Server::on_party_invite(uint32_t player_id, const std::string& target_name) {
+    // Find the target player by name.
+    uint32_t target_id = 0;
+    {
+        std::lock_guard<std::mutex> lock(sessions_mutex_);
+        for (auto& [id, s] : sessions_) {
+            if (!s || !s->is_open()) continue;
+            if (s->player_name() == target_name) { target_id = id; break; }
+        }
+    }
+    if (target_id == 0 || target_id == player_id) return;
+    // Can't invite someone who's already in a party, or invite while our
+    // party is full.
+    if (find_party_id(target_id) != 0) return;
+    uint32_t my_party = find_party_id(player_id);
+    if (my_party != 0) {
+        auto pit = parties_.find(my_party);
+        if (pit != parties_.end()
+            && pit->second.member_ids.size() >= PartyStateMsg::MAX_MEMBERS) return;
+        if (pit != parties_.end() && pit->second.leader_id != player_id) return;
+    }
+
+    pending_invites_[player_id] = target_id;
+
+    // Send offer to target.
+    PartyInviteOfferMsg offer;
+    offer.inviter_id = player_id;
+    std::string my_name;
+    {
+        std::lock_guard<std::mutex> lock(sessions_mutex_);
+        auto sit = sessions_.find(player_id);
+        if (sit != sessions_.end()) my_name = sit->second->player_name();
+        auto tit = sessions_.find(target_id);
+        if (tit != sessions_.end() && tit->second->is_open()) {
+            std::strncpy(offer.inviter_name, my_name.c_str(), sizeof(offer.inviter_name) - 1);
+            tit->second->send(build_packet(MessageType::PartyInviteOffer, offer));
+        }
+    }
+}
+
+void Server::on_party_invite_respond(uint32_t player_id, uint32_t inviter_id, bool accept) {
+    auto it = pending_invites_.find(inviter_id);
+    if (it == pending_invites_.end() || it->second != player_id) return;
+    pending_invites_.erase(it);
+    if (!accept) return;
+
+    // Form or join a party.
+    uint32_t party_id = find_party_id(inviter_id);
+    if (party_id == 0) {
+        // Create new party with inviter as leader.
+        party_id = next_party_id_++;
+        Party p;
+        p.id = party_id;
+        p.leader_id = inviter_id;
+        p.member_ids.push_back(inviter_id);
+        parties_[party_id] = std::move(p);
+        player_party_[inviter_id] = party_id;
+    }
+
+    auto pit = parties_.find(party_id);
+    if (pit == parties_.end()) return;
+    if (pit->second.member_ids.size() >= PartyStateMsg::MAX_MEMBERS) return;
+
+    // Add player to the party (if not already in one).
+    if (find_party_id(player_id) != 0) return;
+    pit->second.member_ids.push_back(player_id);
+    player_party_[player_id] = party_id;
+
+    // Chat notice.
+    std::string name;
+    {
+        std::lock_guard<std::mutex> lock(sessions_mutex_);
+        auto sit = sessions_.find(player_id);
+        if (sit != sessions_.end()) name = sit->second->player_name();
+    }
+    for (uint32_t mid : pit->second.member_ids) {
+        ChatBroadcastMsg msg;
+        msg.channel = static_cast<uint8_t>(ChatChannel::System);
+        msg.sender_id = 0;
+        std::strncpy(msg.sender_name, "Party", sizeof(msg.sender_name) - 1);
+        std::string t = name + " joined the party.";
+        std::strncpy(msg.message, t.c_str(), sizeof(msg.message) - 1);
+        std::lock_guard<std::mutex> lock(sessions_mutex_);
+        auto sit = sessions_.find(mid);
+        if (sit != sessions_.end() && sit->second->is_open())
+            sit->second->send(build_packet(MessageType::ChatBroadcast, msg));
+    }
+
+    send_party_state_to_all(party_id);
+}
+
+void Server::on_party_leave(uint32_t player_id) {
+    uint32_t party_id = find_party_id(player_id);
+    if (party_id == 0) return;
+    auto pit = parties_.find(party_id);
+    if (pit == parties_.end()) return;
+
+    auto& members = pit->second.member_ids;
+    members.erase(std::remove(members.begin(), members.end(), player_id), members.end());
+    player_party_.erase(player_id);
+
+    // Tell the leaver they're not in a party anymore.
+    PartyStateMsg empty;
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+    auto sit = sessions_.find(player_id);
+    if (sit != sessions_.end() && sit->second->is_open()) {
+        sit->second->send(build_packet(MessageType::PartyState, empty));
+    }
+
+    // If the leader left, promote the next member.
+    if (pit->second.leader_id == player_id && !members.empty()) {
+        pit->second.leader_id = members.front();
+    }
+
+    disband_party_if_small(party_id);
+    if (parties_.find(party_id) != parties_.end()) send_party_state_to_all(party_id);
+}
+
+void Server::on_party_kick(uint32_t player_id, uint32_t target_id) {
+    uint32_t party_id = find_party_id(player_id);
+    if (party_id == 0) return;
+    auto pit = parties_.find(party_id);
+    if (pit == parties_.end()) return;
+    if (pit->second.leader_id != player_id) return;
+
+    auto& members = pit->second.member_ids;
+    members.erase(std::remove(members.begin(), members.end(), target_id), members.end());
+    player_party_.erase(target_id);
+
+    // Notify kicked player.
+    PartyStateMsg empty;
+    std::lock_guard<std::mutex> lock(sessions_mutex_);
+    auto sit = sessions_.find(target_id);
+    if (sit != sessions_.end() && sit->second->is_open()) {
+        sit->second->send(build_packet(MessageType::PartyState, empty));
+    }
+    disband_party_if_small(party_id);
+    if (parties_.find(party_id) != parties_.end()) send_party_state_to_all(party_id);
 }
 
 } // namespace mmo::server

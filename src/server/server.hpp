@@ -41,6 +41,11 @@ public:
     void on_vendor_buy(uint32_t player_id, uint32_t npc_id, uint8_t stock_index, uint8_t quantity);
     void on_vendor_sell(uint32_t player_id, uint32_t npc_id, uint8_t inventory_slot, uint8_t quantity);
 
+    void on_party_invite(uint32_t player_id, const std::string& target_name);
+    void on_party_invite_respond(uint32_t player_id, uint32_t inviter_id, bool accept);
+    void on_party_leave(uint32_t player_id);
+    void on_party_kick(uint32_t player_id, uint32_t target_id);
+
     void broadcast(const std::vector<uint8_t>& data);
     void broadcast_except(const std::vector<uint8_t>& data, uint32_t exclude_id);
     void broadcast_system_chat(const std::string& message);
@@ -69,6 +74,17 @@ private:
 
     // Send available skills to a player
     void send_skill_list(uint32_t player_id);
+
+    // Party management
+    void send_party_state(uint32_t player_id);
+    void send_party_state_to_all(uint32_t party_id);
+    struct Party {
+        uint32_t id = 0;
+        uint32_t leader_id = 0;
+        std::vector<uint32_t> member_ids;
+    };
+    uint32_t find_party_id(uint32_t player_id) const;
+    void disband_party_if_small(uint32_t party_id);
 
     // Delta compression helpers
     float get_update_interval(mmo::protocol::EntityType type) const;
@@ -99,6 +115,17 @@ private:
     float ping_timer_ = 0.0f;
     static constexpr float PING_INTERVAL = 5.0f;
     static constexpr float PONG_TIMEOUT = 15.0f;
+
+    // Party membership
+    std::unordered_map<uint32_t, Party> parties_;        // party_id -> Party
+    std::unordered_map<uint32_t, uint32_t> player_party_;  // player_id -> party_id
+    uint32_t next_party_id_ = 1;
+    // Pending invites: inviter_id -> invitee_id (one pending per pair)
+    std::unordered_map<uint32_t, uint32_t> pending_invites_;
+
+    // Party state broadcast cadence
+    float party_broadcast_timer_ = 0.0f;
+    static constexpr float PARTY_BROADCAST_INTERVAL = 1.0f;
 };
 
 } // namespace mmo::server

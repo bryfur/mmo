@@ -91,6 +91,14 @@ enum class MessageType : uint8_t {
     VendorBuy = 96,           // Client -> server: buy N of a slot
     VendorSell = 97,          // Client -> server: sell an inventory slot
     VendorClose = 98,         // Client -> server: close vendor window
+
+    // Party / group
+    PartyInvite = 100,        // Client -> server: invite another player by name
+    PartyInviteOffer = 101,   // Server -> client: "X invited you to their party"
+    PartyInviteRespond = 102, // Client -> server: accept or decline an invite
+    PartyLeave = 103,         // Client -> server: leave current party
+    PartyKick = 104,          // Client -> server: kick a member (leader only)
+    PartyState = 105,         // Server -> client: full state of player's party
 };
 
 } // namespace mmo::protocol

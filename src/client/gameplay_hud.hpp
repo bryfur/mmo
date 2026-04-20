@@ -194,6 +194,33 @@ struct VendorStockSlot {
     int stock = -1;
 };
 
+// ============================================================================
+// Party
+// ============================================================================
+
+struct PartyMember {
+    uint32_t player_id = 0;
+    std::string name;
+    uint8_t player_class = 0;
+    uint8_t level = 1;
+    float health = 100.0f;
+    float max_health = 100.0f;
+    float mana = 0.0f;
+    float max_mana = 0.0f;
+};
+
+struct PartyState {
+    uint32_t leader_id = 0;
+    std::vector<PartyMember> members;
+
+    // Pending invite shown as a popup
+    uint32_t pending_inviter_id = 0;
+    std::string pending_inviter_name;
+
+    bool has_party() const { return !members.empty(); }
+    void clear() { leader_id = 0; members.clear(); }
+};
+
 struct VendorState {
     bool visible = false;
     uint32_t npc_id = 0;
@@ -280,6 +307,9 @@ struct HUDState {
     // Vendor
     VendorState vendor;
 
+    // Party
+    PartyState party;
+
     void update(float dt) {
         if (zone_display_timer > 0) zone_display_timer -= dt;
         if (level_up_timer > 0) level_up_timer -= dt;
@@ -332,6 +362,8 @@ void build_loot_feed(engine::scene::UIScene& ui, const HUDState& hud, float scre
 void build_minimap(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
 void build_chat_window(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
 void build_vendor_window(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
+void build_party_frames(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
+void build_party_invite_popup(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
 void build_gameplay_hud(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
 
 } // namespace mmo::client

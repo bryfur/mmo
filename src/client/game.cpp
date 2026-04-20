@@ -434,6 +434,26 @@ void Game::update_playing(float dt) {
 
         // Vendor input (Esc to close, arrows to select, Enter to buy).
         update_vendor_input();
+
+        // Party invite popup Y/N.
+        if (hud_state_.party.pending_inviter_id != 0) {
+            const bool* keys = SDL_GetKeyboardState(nullptr);
+            if (key_party_y_.just_pressed(keys[SDL_SCANCODE_Y])) {
+                protocol::PartyInviteRespondMsg m;
+                m.inviter_id = hud_state_.party.pending_inviter_id;
+                m.accept = 1;
+                network_.send_raw(protocol::build_packet(protocol::MessageType::PartyInviteRespond, m));
+                hud_state_.party.pending_inviter_id = 0;
+                hud_state_.party.pending_inviter_name.clear();
+            } else if (key_party_n_.just_pressed(keys[SDL_SCANCODE_N])) {
+                protocol::PartyInviteRespondMsg m;
+                m.inviter_id = hud_state_.party.pending_inviter_id;
+                m.accept = 0;
+                network_.send_raw(protocol::build_packet(protocol::MessageType::PartyInviteRespond, m));
+                hud_state_.party.pending_inviter_id = 0;
+                hud_state_.party.pending_inviter_name.clear();
+            }
+        }
     }
 
     // Helper: turn in completed quests at NPC
@@ -2497,10 +2517,25 @@ void Game::update_chat_input() {
 
     if (ih.text_enter_pressed()) {
         if (!chat.input_buffer.empty()) {
-            protocol::ChatSendMsg msg;
-            msg.channel = chat.selected_channel;
-            std::strncpy(msg.message, chat.input_buffer.c_str(), sizeof(msg.message) - 1);
-            network_.send_raw(protocol::build_packet(protocol::MessageType::ChatSend, msg));
+            // Local slash-commands for party actions.
+            const std::string& txt = chat.input_buffer;
+            if (txt.rfind("/invite ", 0) == 0) {
+                std::string target = txt.substr(8);
+                while (!target.empty() && target.front() == ' ') target.erase(target.begin());
+                if (!target.empty()) {
+                    protocol::PartyInviteMsg m;
+                    std::strncpy(m.target_name, target.c_str(), sizeof(m.target_name) - 1);
+                    network_.send_raw(protocol::build_packet(protocol::MessageType::PartyInvite, m));
+                }
+            } else if (txt == "/leave" || txt == "/disband") {
+                network_.send_raw(protocol::build_packet(
+                    protocol::MessageType::PartyLeave, std::vector<uint8_t>{}));
+            } else {
+                protocol::ChatSendMsg msg;
+                msg.channel = chat.selected_channel;
+                std::strncpy(msg.message, txt.c_str(), sizeof(msg.message) - 1);
+                network_.send_raw(protocol::build_packet(protocol::MessageType::ChatSend, msg));
+            }
         }
         chat.input_active = false;
         chat.input_buffer.clear();

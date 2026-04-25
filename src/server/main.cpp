@@ -1,7 +1,7 @@
 #include "asio/io_context.hpp"
 #include "asio/signal_set.hpp"
-#include "server/server.hpp"
 #include "server/game_config.hpp"
+#include "server/server.hpp"
 #include <cstdint>
 #include <iostream>
 #include <string>
@@ -16,7 +16,7 @@ int main(int argc, char* argv[]) {
         // Try relative to executable path
         data_dir = "../data";
         if (!config.load(data_dir)) {
-            std::cerr << "Failed to load game config from data/ directory" << std::endl;
+            std::cerr << "Failed to load game config from data/ directory" << '\n';
             return 1;
         }
     }
@@ -37,16 +37,18 @@ int main(int argc, char* argv[]) {
     // approach which was not safe to call game/DB code from.
     asio::signal_set signals(io_context, SIGINT, SIGTERM);
     signals.async_wait([&](const asio::error_code& ec, int sig) {
-        if (ec) return;
-        std::cout << "\nReceived signal " << sig << ", shutting down..." << std::endl;
+        if (ec) {
+            return;
+        }
+        std::cout << "\nReceived signal " << sig << ", shutting down..." << '\n';
         server.stop();
         io_context.stop();
     });
 
     server.start();
 
-    std::cout << "MMO Server running on port " << port << std::endl;
-    std::cout << "Press Ctrl+C to stop" << std::endl;
+    std::cout << "MMO Server running on port " << port << '\n';
+    std::cout << "Press Ctrl+C to stop" << '\n';
 
     io_context.run();
 

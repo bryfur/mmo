@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
-#include "database.hpp"
 #include "player_repository.hpp"
+#include "database.hpp"
+#include <gtest/gtest.h>
 
 #include <algorithm>
 
@@ -15,17 +15,23 @@ PlayerSnapshot make_full_snapshot(std::string name = "alice") {
     s.level = 17;
     s.xp = 12345;
     s.gold = 999;
-    s.pos_x = 4321.0f; s.pos_y = 50.5f; s.pos_z = -250.25f;
+    s.pos_x = 4321.0f;
+    s.pos_y = 50.5f;
+    s.pos_z = -250.25f;
     s.rotation = 1.5707f;
-    s.health = 88.0f;     s.max_health = 120.0f;
-    s.mana = 55.5f;       s.max_mana = 100.0f;   s.mana_regen = 2.5f;
+    s.health = 88.0f;
+    s.max_health = 120.0f;
+    s.mana = 55.5f;
+    s.max_mana = 100.0f;
+    s.mana_regen = 2.5f;
     s.talent_points = 4;
     s.equipped_weapon = "iron_sword";
     s.equipped_armor = "leather_chest";
     s.inventory = {{"health_potion", 5}, {"mana_potion", 3}, {"gold_ore", 12}};
     s.unlocked_talents = {"fortitude", "swiftness"};
     s.completed_quests = {"intro", "first_kill"};
-    s.active_quests = {{"slay_goblins", R"([{"type":"kill","target":"goblin","current":3,"required":10,"complete":false}])"}};
+    s.active_quests = {
+        {"slay_goblins", R"([{"type":"kill","target":"goblin","current":3,"required":10,"complete":false}])"}};
     s.last_seen_unix = 1'700'000'000LL;
     return s;
 }
@@ -62,7 +68,7 @@ void expect_equal(const PlayerSnapshot& a, const PlayerSnapshot& b) {
     ASSERT_EQ(a.inventory.size(), b.inventory.size());
     for (size_t i = 0; i < a.inventory.size(); ++i) {
         EXPECT_EQ(a.inventory[i].item_id, b.inventory[i].item_id);
-        EXPECT_EQ(a.inventory[i].count,   b.inventory[i].count);
+        EXPECT_EQ(a.inventory[i].count, b.inventory[i].count);
     }
 
     ASSERT_EQ(a.active_quests.size(), b.active_quests.size());
@@ -117,8 +123,8 @@ TEST_F(PlayerRepoFixture, SaveReplacesPriorState) {
     updated.xp = 50000;
     updated.health = updated.max_health = 200.0f;
     updated.inventory = {{"diamond_sword", 1}};
-    updated.unlocked_talents = {"fortitude"};  // shrunk
-    updated.completed_quests = {};             // cleared
+    updated.unlocked_talents = {"fortitude"}; // shrunk
+    updated.completed_quests = {};            // cleared
     updated.active_quests = {};
     repo->save(updated);
 
@@ -162,7 +168,7 @@ TEST_F(PlayerRepoFixture, MultiplePlayersIsolated) {
     ASSERT_TRUE(loaded_b.has_value());
     EXPECT_EQ(loaded_a->gold, 100);
     EXPECT_EQ(loaded_b->gold, 200);
-    EXPECT_EQ(loaded_a->inventory.size(), 3u);  // make_full_snapshot default
+    EXPECT_EQ(loaded_a->inventory.size(), 3u); // make_full_snapshot default
     EXPECT_EQ(loaded_b->inventory.size(), 1u);
     EXPECT_EQ(loaded_b->inventory[0].item_id, "bow");
 }
@@ -186,7 +192,7 @@ TEST_F(PlayerRepoFixture, SaveDoesNotLeakAcrossPlayers) {
 TEST_F(PlayerRepoFixture, WasDeadFlagRoundtrips) {
     PlayerSnapshot s;
     s.name = "fallen";
-    s.health = 0.0f;       // logged out at 0 hp
+    s.health = 0.0f; // logged out at 0 hp
     s.max_health = 100.0f;
     s.was_dead = true;
     repo->save(s);
@@ -211,7 +217,7 @@ TEST_F(PlayerRepoFixture, SpecialCharactersInNameAndItem) {
     PlayerSnapshot s;
     s.name = "Bryan O'Neill"; // apostrophe (must not break SQL)
     s.health = s.max_health = 100.0f;
-    s.inventory = {{"item; DROP TABLE players;--", 1}};  // SQL injection attempt
+    s.inventory = {{"item; DROP TABLE players;--", 1}}; // SQL injection attempt
     repo->save(s);
 
     auto loaded = repo->load(s.name);

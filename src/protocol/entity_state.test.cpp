@@ -1,9 +1,9 @@
-#include <gtest/gtest.h>
 #include "protocol/entity_state.hpp"
-#include "protocol/entity_delta.hpp"
 #include "protocol/buffer_reader.hpp"
 #include "protocol/buffer_writer.hpp"
+#include "protocol/entity_delta.hpp"
 #include <cstring>
+#include <gtest/gtest.h>
 
 using namespace mmo::protocol;
 
@@ -31,17 +31,23 @@ TEST(NetEntityStateTest, PopulatedRoundTrip) {
     a.type = EntityType::NPC;
     a.player_class = 2;
     a.npc_type = 5;
-    a.x = 100.5f; a.y = 25.0f; a.z = -200.75f;
-    a.vx = 1.25f; a.vy = -0.5f;
+    a.x = 100.5f;
+    a.y = 25.0f;
+    a.z = -200.75f;
+    a.vx = 1.25f;
+    a.vy = -0.5f;
     a.rotation = 1.5708f;
-    a.health = 42.5f; a.max_health = 100.0f;
+    a.health = 42.5f;
+    a.max_health = 100.0f;
     a.color = 0xAABBCCDD;
     std::strncpy(a.name, "TestMonster", sizeof(a.name) - 1);
     a.is_attacking = true;
     a.attack_cooldown = 0.75f;
-    a.attack_dir_x = 0.707f; a.attack_dir_y = -0.707f;
+    a.attack_dir_x = 0.707f;
+    a.attack_dir_y = -0.707f;
     a.scale = 1.5f;
-    a.mana = 80.0f; a.max_mana = 120.0f;
+    a.mana = 80.0f;
+    a.max_mana = 120.0f;
     std::strncpy(a.model_name, "warrior_rigged", sizeof(a.model_name) - 1);
     a.target_size = 32.0f;
     std::strncpy(a.effect_type, "melee_swing", sizeof(a.effect_type) - 1);
@@ -85,7 +91,7 @@ TEST(NetEntityStateTest, PopulatedRoundTrip) {
 
 TEST(NetEntityStateTest, SerializedSizeMatchesActualWrite) {
     NetEntityState s;
-    std::vector<uint8_t> buf(NetEntityState::serialized_size() + 16);  // padding
+    std::vector<uint8_t> buf(NetEntityState::serialized_size() + 16); // padding
     // Span-mode writer so offset starts at 0 (vector-mode is append-only).
     BufferWriter w(std::span<uint8_t>(buf.data(), buf.size()));
     s.serialize(w);
@@ -115,7 +121,9 @@ TEST(EntityDeltaTest, PositionOnly) {
     EntityDeltaUpdate a;
     a.id = 100;
     a.flags = EntityDeltaUpdate::FLAG_POSITION;
-    a.x = 1.0f; a.y = 2.0f; a.z = 3.0f;
+    a.x = 1.0f;
+    a.y = 2.0f;
+    a.z = 3.0f;
 
     std::vector<uint8_t> buf(EntityDeltaUpdate::serialized_size(a.flags));
     a.serialize(buf);
@@ -132,20 +140,20 @@ TEST(EntityDeltaTest, PositionOnly) {
 TEST(EntityDeltaTest, AllFlagsRoundTrip) {
     EntityDeltaUpdate a;
     a.id = 42;
-    a.flags = EntityDeltaUpdate::FLAG_POSITION
-            | EntityDeltaUpdate::FLAG_VELOCITY
-            | EntityDeltaUpdate::FLAG_HEALTH
-            | EntityDeltaUpdate::FLAG_MAX_HEALTH
-            | EntityDeltaUpdate::FLAG_ATTACKING
-            | EntityDeltaUpdate::FLAG_ATTACK_DIR
-            | EntityDeltaUpdate::FLAG_ROTATION
-            | EntityDeltaUpdate::FLAG_MANA
-            | EntityDeltaUpdate::FLAG_EFFECTS;
-    a.x = 1.0f; a.y = 2.0f; a.z = 3.0f;
-    a.vx = 4.0f; a.vy = 5.0f;
-    a.health = 50.0f; a.max_health = 150.0f;
+    a.flags = EntityDeltaUpdate::FLAG_POSITION | EntityDeltaUpdate::FLAG_VELOCITY | EntityDeltaUpdate::FLAG_HEALTH |
+              EntityDeltaUpdate::FLAG_MAX_HEALTH | EntityDeltaUpdate::FLAG_ATTACKING |
+              EntityDeltaUpdate::FLAG_ATTACK_DIR | EntityDeltaUpdate::FLAG_ROTATION | EntityDeltaUpdate::FLAG_MANA |
+              EntityDeltaUpdate::FLAG_EFFECTS;
+    a.x = 1.0f;
+    a.y = 2.0f;
+    a.z = 3.0f;
+    a.vx = 4.0f;
+    a.vy = 5.0f;
+    a.health = 50.0f;
+    a.max_health = 150.0f;
     a.is_attacking = 1;
-    a.attack_dir_x = 0.5f; a.attack_dir_y = -0.5f;
+    a.attack_dir_x = 0.5f;
+    a.attack_dir_y = -0.5f;
     a.rotation = 1.57f;
     a.mana = 200.0f;
     a.effects_mask = 0xABCD;
@@ -175,25 +183,18 @@ TEST(EntityDeltaTest, AllFlagsRoundTrip) {
 
 TEST(EntityDeltaTest, DifferentFlagCombinationsProduceDifferentSizes) {
     uint16_t flags_pos = EntityDeltaUpdate::FLAG_POSITION;
-    uint16_t flags_all = EntityDeltaUpdate::FLAG_POSITION
-                        | EntityDeltaUpdate::FLAG_HEALTH
-                        | EntityDeltaUpdate::FLAG_EFFECTS;
-    EXPECT_LT(EntityDeltaUpdate::serialized_size(flags_pos),
-              EntityDeltaUpdate::serialized_size(flags_all));
+    uint16_t flags_all =
+        EntityDeltaUpdate::FLAG_POSITION | EntityDeltaUpdate::FLAG_HEALTH | EntityDeltaUpdate::FLAG_EFFECTS;
+    EXPECT_LT(EntityDeltaUpdate::serialized_size(flags_pos), EntityDeltaUpdate::serialized_size(flags_all));
 }
 
 TEST(EntityDeltaTest, EffectsMaskBitsPreserved) {
     EntityDeltaUpdate a;
     a.id = 1;
     a.flags = EntityDeltaUpdate::FLAG_EFFECTS;
-    a.effects_mask = NetEntityState::EffectStun
-                   | NetEntityState::EffectSlow
-                   | NetEntityState::EffectBurn
-                   | NetEntityState::EffectShield
-                   | NetEntityState::EffectDamageBoost
-                   | NetEntityState::EffectSpeedBoost
-                   | NetEntityState::EffectInvuln
-                   | NetEntityState::EffectDefBoost;
+    a.effects_mask = NetEntityState::EffectStun | NetEntityState::EffectSlow | NetEntityState::EffectBurn |
+                     NetEntityState::EffectShield | NetEntityState::EffectDamageBoost |
+                     NetEntityState::EffectSpeedBoost | NetEntityState::EffectInvuln | NetEntityState::EffectDefBoost;
 
     std::vector<uint8_t> buf(EntityDeltaUpdate::serialized_size(a.flags));
     a.serialize(buf);

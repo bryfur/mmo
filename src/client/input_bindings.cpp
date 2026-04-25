@@ -4,23 +4,25 @@
 namespace mmo::client {
 
 InputBindings::InputBindings(engine::InputHandler& input) : input_(input) {
-    key_bindings_[idx(InputAction::Attack)]     = SDL_SCANCODE_SPACE;
-    key_bindings_[idx(InputAction::Sprint)]     = SDL_SCANCODE_LSHIFT;
-    key_bindings_[idx(InputAction::Interact)]   = SDL_SCANCODE_E;
-    key_bindings_[idx(InputAction::Inventory)]  = SDL_SCANCODE_I;
-    key_bindings_[idx(InputAction::QuestLog)]   = SDL_SCANCODE_L;
+    key_bindings_[idx(InputAction::Attack)] = SDL_SCANCODE_SPACE;
+    key_bindings_[idx(InputAction::Sprint)] = SDL_SCANCODE_LSHIFT;
+    key_bindings_[idx(InputAction::Interact)] = SDL_SCANCODE_E;
+    key_bindings_[idx(InputAction::Inventory)] = SDL_SCANCODE_I;
+    key_bindings_[idx(InputAction::QuestLog)] = SDL_SCANCODE_L;
     key_bindings_[idx(InputAction::TalentTree)] = SDL_SCANCODE_T;
-    key_bindings_[idx(InputAction::Map)]        = SDL_SCANCODE_M;
-    key_bindings_[idx(InputAction::Skill1)]     = SDL_SCANCODE_1;
-    key_bindings_[idx(InputAction::Skill2)]     = SDL_SCANCODE_2;
-    key_bindings_[idx(InputAction::Skill3)]     = SDL_SCANCODE_3;
-    key_bindings_[idx(InputAction::Skill4)]     = SDL_SCANCODE_4;
-    key_bindings_[idx(InputAction::Skill5)]     = SDL_SCANCODE_5;
+    key_bindings_[idx(InputAction::Map)] = SDL_SCANCODE_M;
+    key_bindings_[idx(InputAction::Skill1)] = SDL_SCANCODE_1;
+    key_bindings_[idx(InputAction::Skill2)] = SDL_SCANCODE_2;
+    key_bindings_[idx(InputAction::Skill3)] = SDL_SCANCODE_3;
+    key_bindings_[idx(InputAction::Skill4)] = SDL_SCANCODE_4;
+    key_bindings_[idx(InputAction::Skill5)] = SDL_SCANCODE_5;
     action_edges_.fill(false);
 }
 
 void InputBindings::set_action_key(InputAction action, SDL_Scancode scancode) {
-    if (action == InputAction::Count) return;
+    if (action == InputAction::Count) {
+        return;
+    }
     key_bindings_[idx(action)] = scancode;
 }
 
@@ -43,19 +45,16 @@ void InputBindings::update() {
             attack_latched_ = true;
         }
         // Space + Enter latch attack as well, matching prior behavior.
-        if (input_.was_key_just_pressed(SDL_SCANCODE_SPACE) ||
-            input_.was_key_just_pressed(SDL_SCANCODE_RETURN)) {
+        if (input_.was_key_just_pressed(SDL_SCANCODE_SPACE) || input_.was_key_just_pressed(SDL_SCANCODE_RETURN)) {
             attack_latched_ = true;
         }
 
         const bool* keys = SDL_GetKeyboardState(nullptr);
         bool space_attack = keys[SDL_SCANCODE_SPACE];
         bool mouse_attack = input_.mouse_left_held();
-        bool kb_sprint = keys[key_bindings_[idx(InputAction::Sprint)]] ||
-                         keys[SDL_SCANCODE_RSHIFT];
+        bool kb_sprint = keys[key_bindings_[idx(InputAction::Sprint)]] || keys[SDL_SCANCODE_RSHIFT];
 
-        attacking_ = space_attack || mouse_attack || attack_latched_ ||
-                     input_.controller_attack();
+        attacking_ = space_attack || mouse_attack || attack_latched_ || input_.controller_attack();
         sprinting_ = kb_sprint || input_.controller_sprint();
     } else {
         attacking_ = false;
@@ -71,7 +70,9 @@ void InputBindings::clear_edges() {
 int InputBindings::skill_pressed() const {
     for (int slot = 1; slot <= 5; ++slot) {
         InputAction a = static_cast<InputAction>(idx(InputAction::Skill1) + (slot - 1));
-        if (action_edges_[idx(a)]) return slot;
+        if (action_edges_[idx(a)]) {
+            return slot;
+        }
     }
     return 0;
 }

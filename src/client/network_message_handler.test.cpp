@@ -1,12 +1,12 @@
 #include "client/network_message_handler.hpp"
-#include "protocol/gameplay_msgs.hpp"
 #include "protocol/buffer_writer.hpp"
+#include "protocol/gameplay_msgs.hpp"
 
 #include <gtest/gtest.h>
 
+#include <cstring>
 #include <unordered_set>
 #include <vector>
-#include <cstring>
 
 namespace mmo::client {
 namespace {
@@ -25,14 +25,13 @@ struct HandlerFixture {
     bool player_dead = false;
 
     NetworkMessageHandler make_handler() {
-        return NetworkMessageHandler({hud, panel, npc, npcs_with_quests,
-                                      npcs_with_turnins, local_player_id, player_dead});
+        return NetworkMessageHandler(
+            {hud, panel, npc, npcs_with_quests, npcs_with_turnins, local_player_id, player_dead});
     }
 };
 
 // Helper: serialize a Serializable<T> into a byte vector sized to the type.
-template <typename T>
-std::vector<uint8_t> encode(const T& msg) {
+template<typename T> std::vector<uint8_t> encode(const T& msg) {
     std::vector<uint8_t> bytes(msg.size());
     msg.serialize(std::span<uint8_t>(bytes));
     return bytes;
@@ -151,7 +150,7 @@ TEST(NetMsgHandler, GoldChangeNegativeDoesNotPushLoot) {
 
 TEST(NetMsgHandler, QuestListPartitionsByTurninBit) {
     HandlerFixture fx;
-    fx.npcs_with_quests.insert(99);   // ensure prior state is cleared
+    fx.npcs_with_quests.insert(99); // ensure prior state is cleared
     fx.npcs_with_turnins.insert(100);
 
     std::vector<uint8_t> buf;
@@ -162,8 +161,7 @@ TEST(NetMsgHandler, QuestListPartitionsByTurninBit) {
     auto write_entry = [&](size_t idx, uint32_t npc_id, bool turnin) {
         const uint32_t bit = turnin ? 0x80000000u : 0u;
         const uint32_t encoded = (npc_id & 0x7FFFFFFFu) | bit;
-        std::memcpy(buf.data() + sizeof(uint16_t) + idx * sizeof(uint32_t),
-                    &encoded, sizeof(uint32_t));
+        std::memcpy(buf.data() + sizeof(uint16_t) + idx * sizeof(uint32_t), &encoded, sizeof(uint32_t));
     };
     write_entry(0, 1, false);
     write_entry(1, 2, true);
@@ -206,8 +204,7 @@ TEST(NetMsgHandler, QuestOfferAppendsToInteractionState) {
     msg.xp_reward = 250;
     msg.gold_reward = 50;
     msg.objective_count = 1;
-    std::strncpy(msg.objectives[0].description, "Slay 5 wolves",
-                 sizeof(msg.objectives[0].description) - 1);
+    std::strncpy(msg.objectives[0].description, "Slay 5 wolves", sizeof(msg.objectives[0].description) - 1);
     msg.objectives[0].count = 5;
     auto bytes = encode(msg);
 

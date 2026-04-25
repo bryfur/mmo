@@ -103,9 +103,12 @@ TEST(NetworkSmoother, IndependentAxes) {
     // Each axis must interpolate independently.
     ecs::Transform t{};
     ecs::Interpolation i;
-    i.prev_x = 0.0f;   i.target_x = 100.0f;
-    i.prev_y = 50.0f;  i.target_y = 50.0f;     // No change on Y
-    i.prev_z = -20.0f; i.target_z = -10.0f;
+    i.prev_x = 0.0f;
+    i.target_x = 100.0f;
+    i.prev_y = 50.0f;
+    i.target_y = 50.0f; // No change on Y
+    i.prev_z = -20.0f;
+    i.target_z = -10.0f;
     i.alpha = 0.0f;
 
     smooth_step(t, i, kTickTime * 0.5f, kTickTime);

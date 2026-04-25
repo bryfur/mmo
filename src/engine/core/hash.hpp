@@ -8,9 +8,9 @@
 namespace mmo::engine::core {
 
 constexpr uint32_t k_fnv1a_offset_basis_32 = 0x811c9dc5u;
-constexpr uint32_t k_fnv1a_prime_32        = 0x01000193u;
+constexpr uint32_t k_fnv1a_prime_32 = 0x01000193u;
 constexpr uint64_t k_fnv1a_offset_basis_64 = 0xcbf29ce484222325ull;
-constexpr uint64_t k_fnv1a_prime_64        = 0x100000001b3ull;
+constexpr uint64_t k_fnv1a_prime_64 = 0x100000001b3ull;
 
 constexpr uint32_t fnv1a(std::string_view s) noexcept {
     uint32_t h = k_fnv1a_offset_basis_32;
@@ -39,20 +39,17 @@ struct StringId {
 
     constexpr friend bool operator==(StringId a, StringId b) noexcept { return a.value == b.value; }
     constexpr friend bool operator!=(StringId a, StringId b) noexcept { return a.value != b.value; }
-    constexpr friend bool operator<(StringId a, StringId b) noexcept  { return a.value < b.value; }
+    constexpr friend bool operator<(StringId a, StringId b) noexcept { return a.value < b.value; }
 };
 
 constexpr StringId operator""_sid(const char* s, std::size_t n) noexcept {
-    return StringId(std::string_view(s, n));
+    return {std::string_view(s, n)};
 }
 
 } // namespace mmo::engine::core
 
 namespace std {
-template <>
-struct hash<::mmo::engine::core::StringId> {
-    size_t operator()(::mmo::engine::core::StringId id) const noexcept {
-        return static_cast<size_t>(id.value);
-    }
+template<> struct hash<::mmo::engine::core::StringId> {
+    size_t operator()(::mmo::engine::core::StringId id) const noexcept { return static_cast<size_t>(id.value); }
 };
 } // namespace std

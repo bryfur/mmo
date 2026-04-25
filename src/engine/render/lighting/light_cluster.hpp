@@ -1,15 +1,15 @@
 #pragma once
 
+#include "engine/gpu/gpu_buffer.hpp"
+#include "engine/gpu/gpu_device.hpp"
 #include "engine/memory/arena.hpp"
 #include "engine/render/lighting/light.hpp"
 #include "engine/scene/camera_state.hpp"
-#include "engine/gpu/gpu_buffer.hpp"
-#include "engine/gpu/gpu_device.hpp"
-#include <SDL3/SDL_gpu.h>
-#include <glm/glm.hpp>
 #include <array>
 #include <cstdint>
+#include <glm/glm.hpp>
 #include <memory>
+#include <SDL3/SDL_gpu.h>
 #include <vector>
 
 namespace mmo::engine::render::lighting {
@@ -19,10 +19,10 @@ namespace mmo::engine::render::lighting {
 struct alignas(16) ClusterParams {
     glm::mat4 view;
     glm::mat4 invProjection;
-    glm::vec4 screenSize;       // (width, height, 1/width, 1/height)
-    glm::vec4 zPlanes;          // (near, far, log(far/near), 1/log(far/near))
-    glm::uvec4 gridDim;         // (X, Y, Z, totalLightCount)
-    glm::uvec4 maxPerCluster;   // (max_lights_per_cluster, _, _, _)
+    glm::vec4 screenSize;     // (width, height, 1/width, 1/height)
+    glm::vec4 zPlanes;        // (near, far, log(far/near), 1/log(far/near))
+    glm::uvec4 gridDim;       // (X, Y, Z, totalLightCount)
+    glm::uvec4 maxPerCluster; // (max_lights_per_cluster, _, _, _)
 };
 
 class ClusterGrid {
@@ -37,8 +37,8 @@ public:
     void shutdown();
 
     // Reset per-frame light lists and capture camera state.
-    void begin_frame(const scene::CameraState& camera, uint32_t screen_w, uint32_t screen_h,
-                     float near_plane, float far_plane);
+    void begin_frame(const scene::CameraState& camera, uint32_t screen_w, uint32_t screen_h, float near_plane,
+                     float far_plane);
 
     void add_point_light(const PointLight& l);
     void add_spot_light(const SpotLight& l);
@@ -73,20 +73,20 @@ private:
     };
 
     void compute_cluster_bounds();
-    static bool sphere_intersects_aabb(const glm::vec3& center, float radius,
-                                       const glm::vec3& aabb_min, const glm::vec3& aabb_max);
+    static bool sphere_intersects_aabb(const glm::vec3& center, float radius, const glm::vec3& aabb_min,
+                                       const glm::vec3& aabb_max);
 
     gpu::GPUDevice* device_ = nullptr;
     uint32_t max_lights_ = MAX_LIGHTS;
 
     // Per-frame CPU state.
     std::vector<PointLight> points_;
-    std::vector<SpotLight>  spots_;
-    std::vector<LightHeader> headers_;             // size = points + spots
-    std::vector<ClusterBounds> cluster_bounds_;    // size = CLUSTER_COUNT
-    std::vector<uint32_t> cluster_offsets_;        // 2 * CLUSTER_COUNT (offset, count) flat
-    std::vector<uint32_t> light_indices_;          // packed indices into headers_
-    std::vector<std::vector<uint32_t>> bins_;      // scratch, CLUSTER_COUNT entries
+    std::vector<SpotLight> spots_;
+    std::vector<LightHeader> headers_;          // size = points + spots
+    std::vector<ClusterBounds> cluster_bounds_; // size = CLUSTER_COUNT
+    std::vector<uint32_t> cluster_offsets_;     // 2 * CLUSTER_COUNT (offset, count) flat
+    std::vector<uint32_t> light_indices_;       // packed indices into headers_
+    std::vector<std::vector<uint32_t>> bins_;   // scratch, CLUSTER_COUNT entries
 
     ClusterParams params_{};
     glm::mat4 last_inv_projection_{0.0f};

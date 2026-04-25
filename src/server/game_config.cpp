@@ -1,12 +1,12 @@
 #include "game_config.hpp"
 #include "nlohmann/json_fwd.hpp"
 #include "protocol/protocol.hpp"
+#include <cmath>
 #include <cstdint>
-#include <nlohmann/json.hpp>
+#include <cstring>
 #include <fstream>
 #include <iostream>
-#include <cmath>
-#include <cstring>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <utility>
 
@@ -49,7 +49,7 @@ bool GameConfig::load(const std::string& data_dir) {
 bool GameConfig::load_server(const std::string& path) {
     std::ifstream f(path);
     if (!f.is_open()) {
-        std::cerr << "[GameConfig] Failed to open " << path << std::endl;
+        std::cerr << "[GameConfig] Failed to open " << path << '\n';
         return false;
     }
     try {
@@ -58,7 +58,7 @@ bool GameConfig::load_server(const std::string& path) {
         server_.default_port = j.value("default_port", 7777);
         return true;
     } catch (const json::exception& e) {
-        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << std::endl;
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << '\n';
         return false;
     }
 }
@@ -66,7 +66,7 @@ bool GameConfig::load_server(const std::string& path) {
 bool GameConfig::load_world(const std::string& path) {
     std::ifstream f(path);
     if (!f.is_open()) {
-        std::cerr << "[GameConfig] Failed to open " << path << std::endl;
+        std::cerr << "[GameConfig] Failed to open " << path << '\n';
         return false;
     }
     try {
@@ -75,7 +75,7 @@ bool GameConfig::load_world(const std::string& path) {
         world_.height = j.value("height", 32000.0f);
         return true;
     } catch (const json::exception& e) {
-        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << std::endl;
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << '\n';
         return false;
     }
 }
@@ -83,7 +83,7 @@ bool GameConfig::load_world(const std::string& path) {
 bool GameConfig::load_network(const std::string& path) {
     std::ifstream f(path);
     if (!f.is_open()) {
-        std::cerr << "[GameConfig] Failed to open " << path << std::endl;
+        std::cerr << "[GameConfig] Failed to open " << path << '\n';
         return false;
     }
     try {
@@ -97,7 +97,7 @@ bool GameConfig::load_network(const std::string& path) {
         network_.delta_rate_hz = j.value("delta_rate_hz", 20.0f);
         return true;
     } catch (const json::exception& e) {
-        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << std::endl;
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << '\n';
         return false;
     }
 }
@@ -105,7 +105,7 @@ bool GameConfig::load_network(const std::string& path) {
 bool GameConfig::load_classes(const std::string& path) {
     std::ifstream f(path);
     if (!f.is_open()) {
-        std::cerr << "[GameConfig] Failed to open " << path << std::endl;
+        std::cerr << "[GameConfig] Failed to open " << path << '\n';
         return false;
     }
     try {
@@ -133,10 +133,10 @@ bool GameConfig::load_classes(const std::string& path) {
             cls.size = c.value("size", 32.0f);
             classes_.push_back(std::move(cls));
         }
-        std::cout << "[GameConfig] Loaded " << classes_.size() << " classes" << std::endl;
+        std::cout << "[GameConfig] Loaded " << classes_.size() << " classes" << '\n';
         return true;
     } catch (const json::exception& e) {
-        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << std::endl;
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << '\n';
         return false;
     }
 }
@@ -144,7 +144,7 @@ bool GameConfig::load_classes(const std::string& path) {
 bool GameConfig::load_monsters(const std::string& path) {
     std::ifstream f(path);
     if (!f.is_open()) {
-        std::cerr << "[GameConfig] Failed to open " << path << std::endl;
+        std::cerr << "[GameConfig] Failed to open " << path << '\n';
         return false;
     }
     try {
@@ -160,10 +160,10 @@ bool GameConfig::load_monsters(const std::string& path) {
         monster_.model = j.value("model", "npc_enemy");
         monster_.animation = j.value("animation", "");
         monster_.color = parse_color(j.value("color", "0xFF4444FF"));
-        std::cout << "[GameConfig] Loaded monster config: " << monster_.count << " monsters" << std::endl;
+        std::cout << "[GameConfig] Loaded monster config: " << monster_.count << " monsters" << '\n';
         return true;
     } catch (const json::exception& e) {
-        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << std::endl;
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << '\n';
         return false;
     }
 }
@@ -171,7 +171,7 @@ bool GameConfig::load_monsters(const std::string& path) {
 bool GameConfig::load_town(const std::string& path) {
     std::ifstream f(path);
     if (!f.is_open()) {
-        std::cerr << "[GameConfig] Failed to open " << path << std::endl;
+        std::cerr << "[GameConfig] Failed to open " << path << '\n';
         return false;
     }
     try {
@@ -224,11 +224,11 @@ bool GameConfig::load_town(const std::string& path) {
             }
         }
 
-        std::cout << "[GameConfig] Loaded town: " << buildings_.size() << " buildings, "
-                  << town_npcs_.size() << " NPCs" << std::endl;
+        std::cout << "[GameConfig] Loaded town: " << buildings_.size() << " buildings, " << town_npcs_.size() << " NPCs"
+                  << '\n';
         return true;
     } catch (const json::exception& e) {
-        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << std::endl;
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << '\n';
         return false;
     }
 }
@@ -262,7 +262,9 @@ ClassInfo GameConfig::build_class_info(int index) const {
 
 bool GameConfig::load_monster_types(const std::string& path) {
     std::ifstream f(path);
-    if (!f.is_open()) return false;
+    if (!f.is_open()) {
+        return false;
+    }
     try {
         json j = json::parse(f);
         monster_types_.clear();
@@ -296,7 +298,9 @@ bool GameConfig::load_monster_types(const std::string& path) {
 
 bool GameConfig::load_zones(const std::string& path) {
     std::ifstream f(path);
-    if (!f.is_open()) return false;
+    if (!f.is_open()) {
+        return false;
+    }
     try {
         json j = json::parse(f);
         zones_.clear();
@@ -328,7 +332,9 @@ bool GameConfig::load_zones(const std::string& path) {
 
 bool GameConfig::load_items(const std::string& path) {
     std::ifstream f(path);
-    if (!f.is_open()) return false;
+    if (!f.is_open()) {
+        return false;
+    }
     try {
         json j = json::parse(f);
         items_.clear();
@@ -371,7 +377,9 @@ bool GameConfig::load_items(const std::string& path) {
 
 bool GameConfig::load_loot_tables(const std::string& path) {
     std::ifstream f(path);
-    if (!f.is_open()) return false;
+    if (!f.is_open()) {
+        return false;
+    }
     try {
         json j = json::parse(f);
         loot_tables_.clear();
@@ -403,7 +411,9 @@ bool GameConfig::load_loot_tables(const std::string& path) {
 
 bool GameConfig::load_leveling(const std::string& path) {
     std::ifstream f(path);
-    if (!f.is_open()) return false;
+    if (!f.is_open()) {
+        return false;
+    }
     try {
         json j = json::parse(f);
         leveling_.max_level = j.value("max_level", 20);
@@ -444,7 +454,9 @@ bool GameConfig::load_leveling(const std::string& path) {
 
 bool GameConfig::load_skills(const std::string& path) {
     std::ifstream f(path);
-    if (!f.is_open()) return false;
+    if (!f.is_open()) {
+        return false;
+    }
     try {
         json j = json::parse(f);
         skills_.clear();
@@ -535,15 +547,15 @@ bool GameConfig::load_skills(const std::string& path) {
         if (j.contains("mana_system")) {
             const auto& ms = j["mana_system"];
             if (ms.contains("base_mana") && ms.contains("mana_regen_per_second")) {
-                for (auto& [class_name, mana_val] : ms["base_mana"].items()) {
+                for (const auto& [class_name, mana_val] : ms["base_mana"].items()) {
                     auto& entry = mana_system_[class_name];
                     entry.base_mana = mana_val.get<float>();
                 }
-                for (auto& [class_name, regen_val] : ms["mana_regen_per_second"].items()) {
+                for (const auto& [class_name, regen_val] : ms["mana_regen_per_second"].items()) {
                     mana_system_[class_name].mana_regen = regen_val.get<float>();
                 }
                 if (ms.contains("mana_per_level")) {
-                    for (auto& [class_name, mpl_val] : ms["mana_per_level"].items()) {
+                    for (const auto& [class_name, mpl_val] : ms["mana_per_level"].items()) {
                         mana_system_[class_name].mana_per_level = mpl_val.get<float>();
                     }
                 }
@@ -575,7 +587,9 @@ void GameConfig::apply_mana_system() {
 
 bool GameConfig::load_talents(const std::string& path) {
     std::ifstream f(path);
-    if (!f.is_open()) return false;
+    if (!f.is_open()) {
+        return false;
+    }
     try {
         json j = json::parse(f);
         talent_config_.first_talent_point_level = j.value("first_talent_point_level", 3);
@@ -625,8 +639,8 @@ bool GameConfig::load_talents(const std::string& path) {
                                 if (e.contains("cheat_death_cooldown") || e.contains("angel_cooldown")) {
                                     tc.effect.has_cheat_death = true;
                                     tc.effect.cheat_death_cooldown = e.contains("angel_cooldown")
-                                        ? e.value("angel_cooldown", 120.0f)
-                                        : e.value("cheat_death_cooldown", 60.0f);
+                                                                         ? e.value("angel_cooldown", 120.0f)
+                                                                         : e.value("cheat_death_cooldown", 60.0f);
                                     tc.effect.cheat_death_hp = e.value("cheat_death_health", 0.1f);
                                 }
 
@@ -640,10 +654,10 @@ bool GameConfig::load_talents(const std::string& path) {
 
                                 // On-hit procs
                                 tc.effect.slow_on_hit_chance = e.value("slow_chance", 0.0f);
-                                tc.effect.slow_on_hit_value = e.value("slow_percent",
-                                    e.value("attack_slow_percent", 0.0f));
-                                tc.effect.slow_on_hit_dur = e.value("slow_duration",
-                                    e.value("attack_slow_duration", 0.0f));
+                                tc.effect.slow_on_hit_value =
+                                    e.value("slow_percent", e.value("attack_slow_percent", 0.0f));
+                                tc.effect.slow_on_hit_dur =
+                                    e.value("slow_duration", e.value("attack_slow_duration", 0.0f));
                                 tc.effect.burn_on_hit_pct = e.value("burn_damage_percent", 0.0f);
                                 tc.effect.burn_on_hit_dur = e.value("burn_duration", 0.0f);
                                 tc.effect.poison_on_hit_pct = e.value("poison_damage_percent", 0.0f);
@@ -668,15 +682,16 @@ bool GameConfig::load_talents(const std::string& path) {
                                 tc.effect.burn_spread_radius = e.value("burn_spread_radius", 0.0f);
 
                                 // Damage reflect
-                                tc.effect.reflect_percent = e.value("reflect_percent",
-                                    e.value("reflect_damage_percent", 0.0f));
+                                tc.effect.reflect_percent =
+                                    e.value("reflect_percent", e.value("reflect_damage_percent", 0.0f));
 
                                 // Stationary
                                 tc.effect.stationary_damage_mult = e.value("stationary_damage_mult", 1.0f);
                                 tc.effect.stationary_damage_reduction = e.value("stationary_damage_reduction", 0.0f);
                                 tc.effect.stationary_heal_pct = e.value("stationary_heal_percent", 0.0f);
                                 if (e.contains("stationary_delay") || e.contains("stationary_damage_mult") ||
-                                    e.contains("stationary_damage_reduction") || e.contains("stationary_heal_percent")) {
+                                    e.contains("stationary_damage_reduction") ||
+                                    e.contains("stationary_heal_percent")) {
                                     tc.effect.stationary_delay = e.value("stationary_delay", 1.0f);
                                 }
 
@@ -772,7 +787,9 @@ bool GameConfig::load_talents(const std::string& path) {
 
 bool GameConfig::load_quests(const std::string& path) {
     std::ifstream f(path);
-    if (!f.is_open()) return false;
+    if (!f.is_open()) {
+        return false;
+    }
     try {
         json j = json::parse(f);
         quests_.clear();
@@ -883,7 +900,9 @@ const LootTableConfig* GameConfig::find_loot_table(const std::string& monster_ty
 std::vector<const SkillConfig*> GameConfig::skills_for_class(const std::string& class_name) const {
     std::vector<const SkillConfig*> result;
     for (const auto& sk : skills_) {
-        if (sk.class_name == class_name) result.push_back(&sk);
+        if (sk.class_name == class_name) {
+            result.push_back(&sk);
+        }
     }
     return result;
 }
@@ -897,7 +916,9 @@ const TalentConfig* GameConfig::find_talent(const std::string& id) const {
     for (const auto& tree : talent_trees_) {
         for (const auto& branch : tree.branches) {
             for (const auto& talent : branch.talents) {
-                if (talent.id == id) return &talent;
+                if (talent.id == id) {
+                    return &talent;
+                }
             }
         }
     }
@@ -912,7 +933,9 @@ const QuestConfig* GameConfig::find_quest(const std::string& id) const {
 std::vector<const QuestConfig*> GameConfig::quests_for_npc(const std::string& npc_type) const {
     std::vector<const QuestConfig*> result;
     for (const auto& q : quests_) {
-        if (q.giver_type == npc_type) result.push_back(&q);
+        if (q.giver_type == npc_type) {
+            result.push_back(&q);
+        }
     }
     return result;
 }
@@ -929,7 +952,9 @@ const CraftRecipeConfig* GameConfig::find_recipe(const std::string& id) const {
 
 bool GameConfig::load_recipes(const std::string& path) {
     std::ifstream f(path);
-    if (!f.is_open()) return false;
+    if (!f.is_open()) {
+        return false;
+    }
     try {
         json j = json::parse(f);
         for (const auto& r : j["recipes"]) {
@@ -951,7 +976,7 @@ bool GameConfig::load_recipes(const std::string& path) {
         }
         return true;
     } catch (const json::exception& e) {
-        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << std::endl;
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << '\n';
         return false;
     }
 }
@@ -981,7 +1006,7 @@ bool GameConfig::load_vendors(const std::string& path) {
         }
         return true;
     } catch (const json::exception& e) {
-        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << std::endl;
+        std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << '\n';
         return false;
     }
 }

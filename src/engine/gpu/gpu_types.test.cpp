@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
 #include "engine/gpu/gpu_types.hpp"
 #include <cstddef>
+#include <gtest/gtest.h>
 
 using namespace mmo::engine::gpu;
 
@@ -16,9 +16,9 @@ TEST(Vertex3DLayout, SizeIs64Bytes) {
 TEST(Vertex3DLayout, FieldOffsets) {
     EXPECT_EQ(offsetof(Vertex3D, position), 0u);
     EXPECT_EQ(offsetof(Vertex3D, normal), 12u);   // after vec3 (12 bytes)
-    EXPECT_EQ(offsetof(Vertex3D, texcoord), 24u);  // after 2x vec3 (24 bytes)
-    EXPECT_EQ(offsetof(Vertex3D, color), 32u);     // after vec3+vec3+vec2 (32 bytes)
-    EXPECT_EQ(offsetof(Vertex3D, tangent), 48u);   // after vec3+vec3+vec2+vec4 (48 bytes)
+    EXPECT_EQ(offsetof(Vertex3D, texcoord), 24u); // after 2x vec3 (24 bytes)
+    EXPECT_EQ(offsetof(Vertex3D, color), 32u);    // after vec3+vec3+vec2 (32 bytes)
+    EXPECT_EQ(offsetof(Vertex3D, tangent), 48u);  // after vec3+vec3+vec2+vec4 (48 bytes)
 }
 
 // =============================================================================

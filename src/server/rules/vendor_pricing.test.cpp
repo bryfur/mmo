@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include "server/rules/vendor_pricing.hpp"
+#include <gtest/gtest.h>
 
 using namespace mmo::server::rules;
 

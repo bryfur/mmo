@@ -17,8 +17,8 @@ struct QuestChange {
     int current = 0;
     int required = 0;
     bool objective_complete = false;
-    bool quest_complete = false;  // all objectives done
-    std::string quest_name;       // filled when quest_complete
+    bool quest_complete = false; // all objectives done
+    std::string quest_name;      // filled when quest_complete
 };
 
 /// Check if a player can accept a specific quest
@@ -31,22 +31,25 @@ bool accept_quest(entt::registry& registry, entt::entity player, const std::stri
 /// monster's world position (kill_x, kill_z) is used to match kill_in_area
 /// objectives. Returns list of changes for network notification.
 std::vector<QuestChange> on_monster_killed(entt::registry& registry, entt::entity player,
-                                            const std::string& monster_type_id, const GameConfig& config,
-                                            float kill_x = 0.0f, float kill_z = 0.0f);
+                                           const std::string& monster_type_id, const GameConfig& config,
+                                           float kill_x = 0.0f, float kill_z = 0.0f);
 
 /// Update visit objectives for a player based on their position.
 /// Returns list of changes for network notification.
-std::vector<QuestChange> update_visit_objectives(entt::registry& registry, entt::entity player, const GameConfig& config);
+std::vector<QuestChange> update_visit_objectives(entt::registry& registry, entt::entity player,
+                                                 const GameConfig& config);
 
 /// Turn in a completed quest and give rewards
-bool turn_in_quest(entt::registry& registry, entt::entity player, const std::string& quest_id, const GameConfig& config);
+bool turn_in_quest(entt::registry& registry, entt::entity player, const std::string& quest_id,
+                   const GameConfig& config);
 
 /// Get available quests from an NPC type for a specific player
 std::vector<const QuestConfig*> get_available_quests(entt::registry& registry, entt::entity player,
-                                                      const std::string& npc_type, const GameConfig& config);
+                                                     const std::string& npc_type, const GameConfig& config);
 
 /// Update all quest-related checks for all players (called each tick).
 /// Returns list of changes for network notification.
-std::vector<std::pair<entt::entity, QuestChange>> update_quests(entt::registry& registry, float dt, const GameConfig& config);
+std::vector<std::pair<entt::entity, QuestChange>> update_quests(entt::registry& registry, float dt,
+                                                                const GameConfig& config);
 
 } // namespace mmo::server::systems

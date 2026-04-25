@@ -1,13 +1,13 @@
 #include "gpu_shader.hpp"
-#include "SDL3/SDL_error.h"
 #include "engine/gpu/gpu_device.hpp"
-#include <SDL3/SDL_log.h>
-#include <SDL3_shadercross/SDL_shadercross.h>
+#include "SDL3/SDL_error.h"
 #include <cstddef>
 #include <cstdint>
 #include <fstream>
 #include <ios>
 #include <memory>
+#include <SDL3/SDL_log.h>
+#include <SDL3_shadercross/SDL_shadercross.h>
 #include <sstream>
 #include <string>
 #include <utility>
@@ -29,9 +29,9 @@ GPUShader::~GPUShader() {
 }
 
 GPUShader::GPUShader(GPUShader&& other) noexcept
-    : device_(other.device_)
-    , shader_(other.shader_)
-    , stage_(other.stage_) {
+    : device_(other.device_),
+      shader_(other.shader_),
+      stage_(other.stage_) {
     other.device_ = nullptr;
     other.shader_ = nullptr;
 }
@@ -58,8 +58,7 @@ bool GPUShader::init_compiler() {
     }
 
     if (!SDL_ShaderCross_Init()) {
-        SDL_Log("GPUShader::init_compiler: Failed to initialize SDL_shadercross: %s",
-                SDL_GetError());
+        SDL_Log("GPUShader::init_compiler: Failed to initialize SDL_shadercross: %s", SDL_GetError());
         return false;
     }
 
@@ -104,12 +103,8 @@ std::vector<uint8_t> GPUShader::read_file(const std::string& path) {
     return buffer;
 }
 
-std::unique_ptr<GPUShader> GPUShader::load_spirv(
-    GPUDevice& device,
-    const std::string& path,
-    ShaderStage stage,
-    const std::string& entry_point,
-    const ShaderResources& resources) {
+std::unique_ptr<GPUShader> GPUShader::load_spirv(GPUDevice& device, const std::string& path, ShaderStage stage,
+                                                 const std::string& entry_point, const ShaderResources& resources) {
 
     std::vector<uint8_t> bytecode = read_file(path);
     if (bytecode.empty()) {
@@ -123,12 +118,9 @@ std::unique_ptr<GPUShader> GPUShader::load_spirv(
     return shader;
 }
 
-std::unique_ptr<GPUShader> GPUShader::create_from_spirv(
-    GPUDevice& device,
-    const std::vector<uint8_t>& spirv_bytecode,
-    ShaderStage stage,
-    const std::string& entry_point,
-    const ShaderResources& resources) {
+std::unique_ptr<GPUShader> GPUShader::create_from_spirv(GPUDevice& device, const std::vector<uint8_t>& spirv_bytecode,
+                                                        ShaderStage stage, const std::string& entry_point,
+                                                        const ShaderResources& resources) {
 
     if (!s_compiler_initialized) {
         if (!init_compiler()) {
@@ -157,19 +149,13 @@ std::unique_ptr<GPUShader> GPUShader::create_from_spirv(
     spirv_info.bytecode = spirv_bytecode.data();
     spirv_info.bytecode_size = spirv_bytecode.size();
     spirv_info.entrypoint = entry_point.c_str();
-    spirv_info.shader_stage = (stage == ShaderStage::Vertex)
-        ? SDL_SHADERCROSS_SHADERSTAGE_VERTEX
-        : SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT;
+    spirv_info.shader_stage =
+        (stage == ShaderStage::Vertex) ? SDL_SHADERCROSS_SHADERSTAGE_VERTEX : SDL_SHADERCROSS_SHADERSTAGE_FRAGMENT;
     spirv_info.props = 0;
 
     // Compile SPIRV to backend shader (Vulkan uses SPIRV directly,
     // Metal/D3D12 get transpiled via SPIRV-Cross)
-    shader->shader_ = SDL_ShaderCross_CompileGraphicsShaderFromSPIRV(
-        device.handle(),
-        &spirv_info,
-        &resource_info,
-        0
-    );
+    shader->shader_ = SDL_ShaderCross_CompileGraphicsShaderFromSPIRV(device.handle(), &spirv_info, &resource_info, 0);
 
     if (!shader->shader_) {
         SDL_Log("GPUShader::create_from_spirv: SPIRV->GPU failed: %s", SDL_GetError());
@@ -183,8 +169,7 @@ std::unique_ptr<GPUShader> GPUShader::create_from_spirv(
 // ShaderManager Implementation
 // =============================================================================
 
-ShaderManager::ShaderManager(GPUDevice& device)
-    : device_(device) {
+ShaderManager::ShaderManager(GPUDevice& device) : device_(device) {
     // Initialize the cross-compilation system
     GPUShader::init_compiler();
 }
@@ -193,33 +178,26 @@ ShaderManager::~ShaderManager() {
     clear_cache();
 }
 
-std::string ShaderManager::make_cache_key(const std::string& path,
-                                           ShaderStage stage,
-                                           const std::string& entry_point) const {
+std::string ShaderManager::make_cache_key(const std::string& path, ShaderStage stage, const std::string& entry_point) {
     // Use length-prefixed fields to avoid collisions
     std::ostringstream oss;
-    oss << path.size() << ':' << path
-        << '|' << static_cast<int>(stage) << '|'
-        << entry_point.size() << ':' << entry_point;
+    oss << path.size() << ':' << path << '|' << static_cast<int>(stage) << '|' << entry_point.size() << ':'
+        << entry_point;
     return oss.str();
 }
 
-GPUShader* ShaderManager::get_vertex(const std::string& path,
-                                      const std::string& entry_point,
-                                      const ShaderResources& resources) {
+GPUShader* ShaderManager::get_vertex(const std::string& path, const std::string& entry_point,
+                                     const ShaderResources& resources) {
     return get(path, ShaderStage::Vertex, entry_point, resources);
 }
 
-GPUShader* ShaderManager::get_fragment(const std::string& path,
-                                        const std::string& entry_point,
-                                        const ShaderResources& resources) {
+GPUShader* ShaderManager::get_fragment(const std::string& path, const std::string& entry_point,
+                                       const ShaderResources& resources) {
     return get(path, ShaderStage::Fragment, entry_point, resources);
 }
 
-GPUShader* ShaderManager::get(const std::string& path,
-                               ShaderStage stage,
-                               const std::string& entry_point,
-                               const ShaderResources& resources) {
+GPUShader* ShaderManager::get(const std::string& path, ShaderStage stage, const std::string& entry_point,
+                              const ShaderResources& resources) {
     std::string key = make_cache_key(path, stage, entry_point);
 
     // Check cache
@@ -249,7 +227,9 @@ bool ShaderManager::reload(const std::string& path) {
     // Find and remove all cache entries for this path
     auto matches_path = [&path](const std::string& key) {
         size_t colon_pos = key.find(':');
-        if (colon_pos == std::string::npos) return false;
+        if (colon_pos == std::string::npos) {
+            return false;
+        }
         size_t path_len = std::stoull(key.substr(0, colon_pos));
         std::string key_path = key.substr(colon_pos + 1, path_len);
         return key_path == path;
@@ -266,8 +246,7 @@ bool ShaderManager::reload(const std::string& path) {
         cache_.erase(key);
     }
 
-    SDL_Log("ShaderManager: Marked '%s' for reload (%zu variants)",
-            path.c_str(), keys_to_remove.size());
+    SDL_Log("ShaderManager: Marked '%s' for reload (%zu variants)", path.c_str(), keys_to_remove.size());
     return !keys_to_remove.empty();
 }
 
@@ -282,28 +261,21 @@ int ShaderManager::reload_all() {
 // ShaderProgram Implementation
 // =============================================================================
 
-std::unique_ptr<ShaderProgram> ShaderProgram::load(
-    GPUDevice& device,
-    const std::string& vertex_path,
-    const std::string& fragment_path,
-    const std::string& vertex_entry,
-    const std::string& fragment_entry) {
+std::unique_ptr<ShaderProgram> ShaderProgram::load(GPUDevice& device, const std::string& vertex_path,
+                                                   const std::string& fragment_path, const std::string& vertex_entry,
+                                                   const std::string& fragment_entry) {
 
     auto program = std::unique_ptr<ShaderProgram>(new ShaderProgram());
 
-    program->vertex_ = GPUShader::load_spirv(device, vertex_path,
-                                              ShaderStage::Vertex, vertex_entry);
+    program->vertex_ = GPUShader::load_spirv(device, vertex_path, ShaderStage::Vertex, vertex_entry);
     if (!program->vertex_) {
-        SDL_Log("ShaderProgram::load: Failed to load vertex shader '%s'",
-                vertex_path.c_str());
+        SDL_Log("ShaderProgram::load: Failed to load vertex shader '%s'", vertex_path.c_str());
         return nullptr;
     }
 
-    program->fragment_ = GPUShader::load_spirv(device, fragment_path,
-                                                ShaderStage::Fragment, fragment_entry);
+    program->fragment_ = GPUShader::load_spirv(device, fragment_path, ShaderStage::Fragment, fragment_entry);
     if (!program->fragment_) {
-        SDL_Log("ShaderProgram::load: Failed to load fragment shader '%s'",
-                fragment_path.c_str());
+        SDL_Log("ShaderProgram::load: Failed to load fragment shader '%s'", fragment_path.c_str());
         return nullptr;
     }
 

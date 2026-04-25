@@ -11,30 +11,53 @@ struct PlayerInput : Serializable<PlayerInput> {
     bool move_right = false;
     bool attacking = false;
     bool sprinting = false;
-    float attack_dir_x = 0.0f;  // Normalized attack direction from mouse
+    float attack_dir_x = 0.0f; // Normalized attack direction from mouse
     float attack_dir_y = 1.0f;
-    float move_dir_x = 0.0f;    // Continuous movement direction (normalized)
-    float move_dir_y = 0.0f;    // For smooth camera-relative movement
+    float move_dir_x = 0.0f; // Continuous movement direction (normalized)
+    float move_dir_y = 0.0f; // For smooth camera-relative movement
+
+    // Field-by-field equality. Don't memcmp this struct: the layout has
+    // padding bytes between the bool block and the float block, and those
+    // bytes are unspecified — memcmp would report spurious differences.
+    bool operator==(const PlayerInput& o) const {
+        return move_up == o.move_up && move_down == o.move_down && move_left == o.move_left &&
+               move_right == o.move_right && attacking == o.attacking && sprinting == o.sprinting &&
+               attack_dir_x == o.attack_dir_x && attack_dir_y == o.attack_dir_y &&
+               move_dir_x == o.move_dir_x && move_dir_y == o.move_dir_y;
+    }
+    bool operator!=(const PlayerInput& o) const { return !(*this == o); }
 
     // Serialize movement + attack flag only (1 byte)
     uint8_t serialize_flags() const {
         uint8_t flags = 0;
-        if (move_up) flags |= 0x01;
-        if (move_down) flags |= 0x02;
-        if (move_left) flags |= 0x04;
-        if (move_right) flags |= 0x08;
-        if (attacking) flags |= 0x10;
-        if (sprinting) flags |= 0x20;
+        if (move_up) {
+            flags |= 0x01;
+        }
+        if (move_down) {
+            flags |= 0x02;
+        }
+        if (move_left) {
+            flags |= 0x04;
+        }
+        if (move_right) {
+            flags |= 0x08;
+        }
+        if (attacking) {
+            flags |= 0x10;
+        }
+        if (sprinting) {
+            flags |= 0x20;
+        }
         return flags;
     }
 
     void deserialize_flags(uint8_t flags) {
-        move_up = flags & 0x01;
-        move_down = flags & 0x02;
-        move_left = flags & 0x04;
-        move_right = flags & 0x08;
-        attacking = flags & 0x10;
-        sprinting = flags & 0x20;
+        move_up = ((flags & 0x01) != 0);
+        move_down = ((flags & 0x02) != 0);
+        move_left = ((flags & 0x04) != 0);
+        move_right = ((flags & 0x08) != 0);
+        attacking = ((flags & 0x10) != 0);
+        sprinting = ((flags & 0x20) != 0);
     }
 
     static constexpr size_t serialized_size() { return 17; }
@@ -65,7 +88,7 @@ struct PlayerInput : Serializable<PlayerInput> {
             BufferReader r(data.subspan(1));
             attack_dir_x = r.read<float>();
             attack_dir_y = r.read<float>();
-        } else if (data.size() >= 1) {
+        } else if (!data.empty()) {
             deserialize_flags(data[0]);
         }
     }

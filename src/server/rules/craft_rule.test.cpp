@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include "server/rules/craft_rule.hpp"
+#include <gtest/gtest.h>
 
 using namespace mmo::server::rules;
 
@@ -35,31 +35,36 @@ TEST(CraftRule, BaselineAccepted) {
 // ============================================================================
 
 TEST(CraftRule, UnknownRecipeRejected) {
-    auto i = baseline(); i.recipe_exists = false;
+    auto i = baseline();
+    i.recipe_exists = false;
     EXPECT_EQ(CraftRule::check(i), CraftRule::Result::UnknownRecipe);
 }
 
 TEST(CraftRule, LowLevelRejected) {
     auto i = baseline();
-    i.caster_level = 2; i.recipe_required_level = 10;
+    i.caster_level = 2;
+    i.recipe_required_level = 10;
     EXPECT_EQ(CraftRule::check(i), CraftRule::Result::LevelTooLow);
 }
 
 TEST(CraftRule, ExactLevelAccepted) {
     auto i = baseline();
-    i.caster_level = 5; i.recipe_required_level = 5;
+    i.caster_level = 5;
+    i.recipe_required_level = 5;
     EXPECT_EQ(CraftRule::check(i), CraftRule::Result::Ok);
 }
 
 TEST(CraftRule, NotEnoughGoldRejected) {
     auto i = baseline();
-    i.gold_cost = 200; i.player_gold = 100;
+    i.gold_cost = 200;
+    i.player_gold = 100;
     EXPECT_EQ(CraftRule::check(i), CraftRule::Result::NotEnoughGold);
 }
 
 TEST(CraftRule, ExactGoldAccepted) {
     auto i = baseline();
-    i.gold_cost = 50; i.player_gold = 50;
+    i.gold_cost = 50;
+    i.player_gold = 50;
     EXPECT_EQ(CraftRule::check(i), CraftRule::Result::Ok);
 }
 
@@ -120,7 +125,7 @@ TEST(CraftRule, AnyStationSkipsCheck) {
 
 TEST(CraftRule, NearStationInRange) {
     EXPECT_TRUE(CraftRule::near_station(100, 100, 100, 100));
-    EXPECT_TRUE(CraftRule::near_station(100, 100, 500, 100));  // exactly MAX_STATION_DIST
+    EXPECT_TRUE(CraftRule::near_station(100, 100, 500, 100)); // exactly MAX_STATION_DIST
 }
 
 TEST(CraftRule, NearStationOutOfRange) {

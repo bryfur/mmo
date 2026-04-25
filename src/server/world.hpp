@@ -1,20 +1,20 @@
 #pragma once
 
+#include "game_config.hpp"
+#include "game_types.hpp"
+#include "gameplay_events.hpp"
+#include "heightmap_generator.hpp"
 #include "protocol/protocol.hpp"
 #include "server/ecs/game_components.hpp"
-#include "game_types.hpp"
-#include "game_config.hpp"
-#include "heightmap_generator.hpp"
+#include "spatial_grid.hpp"
 #include "systems/combat_system.hpp"
 #include "systems/physics_system.hpp"
 #include "systems/zone_system.hpp"
-#include "spatial_grid.hpp"
-#include "gameplay_events.hpp"
 #include <entt/entt.hpp>
 #include <glm/vec2.hpp>
+#include <random>
 #include <unordered_map>
 #include <vector>
-#include <random>
 
 namespace mmo::server {
 
@@ -65,27 +65,28 @@ public:
 
     entt::registry& registry() { return registry_; }
     const entt::registry& registry() const { return registry_; }
-    
+
     // Physics system access
     systems::PhysicsSystem& physics() { return physics_; }
     const systems::PhysicsSystem& physics() const { return physics_; }
-    
+
     // Heightmap access
     const mmo::protocol::HeightmapChunk& heightmap() const { return heightmap_; }
     float get_terrain_height(float x, float z) const { return physics_.terrain_height(x, z); }
 
     // Cached town center position (from "town_safe_zone" config)
     const glm::vec2& town_center() const { return town_center_; }
-    
+
 private:
     void load_heightmap();
     bool spawn_from_world_data();
     void setup_collision_callbacks();
-    void populate_render_data(mmo::protocol::NetEntityState& state, const ecs::EntityInfo& info, const ecs::Combat& combat) const;
+    void populate_render_data(mmo::protocol::NetEntityState& state, const ecs::EntityInfo& info,
+                              const ecs::Combat& combat) const;
     mmo::protocol::NetEntityState build_entity_state(entt::entity entity, bool include_render_static) const;
     uint32_t generate_color(PlayerClass player_class);
     uint32_t next_network_id();
-    
+
     const GameConfig* config_ = nullptr;
     entt::registry registry_;
     systems::PhysicsSystem physics_;
@@ -96,8 +97,8 @@ private:
     uint32_t next_id_ = 1;
     std::mt19937 rng_;
     std::vector<GameplayEvent> pending_events_;
-    std::unordered_map<uint32_t, std::string> player_zones_;  // track last zone per player
-    glm::vec2 town_center_{4000.0f, 4000.0f};  // cached from "town_safe_zone" config
+    std::unordered_map<uint32_t, std::string> player_zones_; // track last zone per player
+    glm::vec2 town_center_{4000.0f, 4000.0f};                // cached from "town_safe_zone" config
 };
 
 } // namespace mmo::server

@@ -1,28 +1,28 @@
 #pragma once
 
+#include <memory>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
 #include <string>
-#include <memory>
 
 namespace mmo::engine::gpu {
 
 /**
  * @brief GPU Device wrapper for SDL3 GPU API
- * 
+ *
  * This class manages the GPU device lifecycle and provides a clean interface
  * for frame management and resource creation. It encapsulates the SDL3 GPU
  * device and handles the command buffer acquire/submit cycle.
- * 
+ *
  * Usage:
  *   GPUDevice device;
  *   device.init(window);
- *   
+ *
  *   // Each frame:
  *   auto* cmd = device.begin_frame();
  *   // ... render commands ...
  *   device.end_frame(cmd);
- *   
+ *
  *   device.shutdown();
  */
 class GPUDevice {
@@ -72,7 +72,7 @@ public:
      * @brief End the frame and submit the command buffer
      * @param cmd The command buffer to submit
      */
-    void end_frame(SDL_GPUCommandBuffer* cmd);
+    static void end_frame(SDL_GPUCommandBuffer* cmd);
 
     /**
      * @brief Acquire the swapchain texture for the current frame
@@ -84,9 +84,8 @@ public:
      * @warning Must be called from the thread that created the window.
      *          See: https://wiki.libsdl.org/SDL3/SDL_WaitAndAcquireGPUSwapchainTexture
      */
-    SDL_GPUTexture* acquire_swapchain_texture(SDL_GPUCommandBuffer* cmd,
-                                                uint32_t* out_width = nullptr,
-                                                uint32_t* out_height = nullptr);
+    SDL_GPUTexture* acquire_swapchain_texture(SDL_GPUCommandBuffer* cmd, uint32_t* out_width = nullptr,
+                                              uint32_t* out_height = nullptr);
 
     // =========================================================================
     // Resource Creation (Factory Methods)
@@ -182,8 +181,7 @@ public:
     /**
      * @brief Check if a texture format is supported
      */
-    bool supports_format(SDL_GPUTextureFormat format, SDL_GPUTextureType type, 
-                         SDL_GPUTextureUsageFlags usage) const;
+    bool supports_format(SDL_GPUTextureFormat format, SDL_GPUTextureType type, SDL_GPUTextureUsageFlags usage) const;
 
 private:
     SDL_GPUDevice* device_ = nullptr;

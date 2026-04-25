@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include "engine/gpu/gpu_pipeline.hpp"
+#include <gtest/gtest.h>
 
 using namespace mmo::engine::gpu;
 
@@ -168,10 +168,7 @@ TEST(PipelineConfigDepthBias, WithDepthBiasDefaultClampIsZero) {
 
 TEST(PipelineConfigChaining, MethodsCombineCorrectly) {
     PipelineConfig config;
-    config.with_vertex3d()
-          .alpha_blended()
-          .no_cull()
-          .with_depth_bias(2.0f, 1.0f);
+    config.with_vertex3d().alpha_blended().no_cull().with_depth_bias(2.0f, 1.0f);
 
     // All settings should be applied
     EXPECT_EQ(config.vertex_attributes.size(), 5u);

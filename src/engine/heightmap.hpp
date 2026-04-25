@@ -5,10 +5,10 @@
  * Game code converts from its own heightmap format to this.
  */
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <vector>
-#include <cmath>
-#include <algorithm>
 
 namespace mmo::engine {
 
@@ -28,7 +28,9 @@ struct Heightmap {
     std::vector<uint16_t> height_data;
 
     float get_height_local(uint32_t local_x, uint32_t local_z) const {
-        if (local_x >= resolution || local_z >= resolution) return 0.0f;
+        if (local_x >= resolution || local_z >= resolution) {
+            return 0.0f;
+        }
         uint16_t raw = height_data[local_z * resolution + local_x];
         float normalized = raw / 65535.0f;
         return normalized * (max_height - min_height) + min_height;
@@ -69,8 +71,15 @@ struct Heightmap {
         ny = 2.0f * eps;
         nz = hD - hU;
         float len = std::sqrt(nx * nx + ny * ny + nz * nz);
-        if (len > 0.0001f) { nx /= len; ny /= len; nz /= len; }
-        else { nx = 0.0f; ny = 1.0f; nz = 0.0f; }
+        if (len > 0.0001f) {
+            nx /= len;
+            ny /= len;
+            nz /= len;
+        } else {
+            nx = 0.0f;
+            ny = 1.0f;
+            nz = 0.0f;
+        }
     }
 };
 

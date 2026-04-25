@@ -50,8 +50,8 @@ private:
     glm::vec3 right_{1.0f, 0.0f, 0.0f};
     glm::vec3 up_{0.0f, 1.0f, 0.0f};
 
-    float yaw_ = 0.0f;         // Horizontal rotation (radians)
-    float pitch_ = -0.5f;      // Vertical rotation (radians), looking slightly down
+    float yaw_ = 0.0f;    // Horizontal rotation (radians)
+    float pitch_ = -0.5f; // Vertical rotation (radians), looking slightly down
     float move_speed_ = 500.0f;
     float fov_ = 60.0f;
 };

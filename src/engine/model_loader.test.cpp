@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
 #include "engine/model_loader.hpp"
 #include "engine/gpu/gpu_types.hpp"
+#include <gtest/gtest.h>
 
 using namespace mmo::engine;
 

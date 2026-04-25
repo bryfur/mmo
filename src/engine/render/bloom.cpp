@@ -1,8 +1,8 @@
 #include "bloom.hpp"
 #include "engine/gpu/gpu_pipeline.hpp"
+#include <algorithm>
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_log.h>
-#include <algorithm>
 
 namespace mmo::engine::render {
 
@@ -43,8 +43,12 @@ void Bloom::shutdown() {
 }
 
 void Bloom::resize(int width, int height) {
-    if (width == width_ && height == height_) return;
-    if (!device_) return;
+    if (width == width_ && height == height_) {
+        return;
+    }
+    if (!device_) {
+        return;
+    }
 
     width_ = width;
     height_ = height;
@@ -59,10 +63,8 @@ void Bloom::create_textures(int width, int height) {
     int h = std::max(1, height / 2);
 
     for (int i = 0; i < MIP_COUNT; ++i) {
-        mip_textures_[i] = gpu::GPUTexture::create_2d(
-            *device_, w, h,
-            SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
-            SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER);
+        mip_textures_[i] = gpu::GPUTexture::create_2d(*device_, w, h, SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
+                                                      SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER);
 
         w = std::max(1, w / 2);
         h = std::max(1, h / 2);
@@ -81,9 +83,13 @@ void Bloom::create_sampler() {
 }
 
 bool Bloom::is_ready() const {
-    if (!linear_sampler_) return false;
+    if (!linear_sampler_) {
+        return false;
+    }
     for (int i = 0; i < MIP_COUNT; ++i) {
-        if (!mip_textures_[i]) return false;
+        if (!mip_textures_[i]) {
+            return false;
+        }
     }
     return true;
 }
@@ -95,13 +101,17 @@ SDL_GPUTexture* Bloom::bloom_texture() const {
     return nullptr;
 }
 
-void Bloom::render(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& registry,
-                   SDL_GPUTexture* scene_color, float threshold) {
-    if (!is_ready() || !cmd || !scene_color) return;
+void Bloom::render(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& registry, SDL_GPUTexture* scene_color,
+                   float threshold) {
+    if (!is_ready() || !cmd || !scene_color) {
+        return;
+    }
 
     auto* downsample_pipeline = registry.get_bloom_downsample_pipeline();
     auto* upsample_pipeline = registry.get_bloom_upsample_pipeline();
-    if (!downsample_pipeline || !upsample_pipeline) return;
+    if (!downsample_pipeline || !upsample_pipeline) {
+        return;
+    }
 
     // =========================================================================
     // Downsample chain: scene_color -> mip[0] -> mip[1] -> ... -> mip[N-1]
@@ -123,7 +133,9 @@ void Bloom::render(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& registry,
         color_target.store_op = SDL_GPU_STOREOP_STORE;
 
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &color_target, 1, nullptr);
-        if (!pass) continue;
+        if (!pass) {
+            continue;
+        }
 
         downsample_pipeline->bind(pass);
         SDL_PushGPUFragmentUniformData(cmd, 0, &uniforms, sizeof(uniforms));
@@ -158,7 +170,9 @@ void Bloom::render(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& registry,
         color_target.store_op = SDL_GPU_STOREOP_STORE;
 
         SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &color_target, 1, nullptr);
-        if (!pass) continue;
+        if (!pass) {
+            continue;
+        }
 
         upsample_pipeline->bind(pass);
         SDL_PushGPUFragmentUniformData(cmd, 0, &uniforms, sizeof(uniforms));

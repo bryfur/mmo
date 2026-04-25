@@ -3,8 +3,8 @@
 #include "server/ecs/game_components.hpp"
 #include "server/game_config.hpp"
 #include <entt/entt.hpp>
-#include <string>
 #include <random>
+#include <string>
 
 namespace mmo::server::systems {
 
@@ -15,13 +15,11 @@ public:
     explicit ZoneSystem(const GameConfig& config);
 
     /// Spawn initial monsters across all zones based on density
-    void spawn_initial_monsters(entt::registry& registry,
-                                 std::function<uint32_t()> next_id_fn,
-                                 std::function<float(float, float)> height_fn);
+    void spawn_initial_monsters(entt::registry& registry, std::function<uint32_t()> next_id_fn,
+                                std::function<float(float, float)> height_fn);
 
     /// Respawn a monster when it dies (pick a zone-appropriate location and type)
-    void respawn_monster(entt::registry& registry, entt::entity monster,
-                         std::function<float(float, float)> height_fn);
+    void respawn_monster(entt::registry& registry, entt::entity monster, std::function<float(float, float)> height_fn);
 
     /// Get the zone name at a world position
     std::string get_zone_name(float x, float z) const;

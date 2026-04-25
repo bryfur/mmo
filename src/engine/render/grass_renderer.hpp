@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../gpu/gpu_device.hpp"
 #include "../gpu/gpu_buffer.hpp"
+#include "../gpu/gpu_device.hpp"
 #include "../gpu/gpu_texture.hpp"
 #include "../gpu/pipeline_registry.hpp"
 #include <glm/glm.hpp>
@@ -9,7 +9,7 @@
 #include <vector>
 
 namespace mmo::engine::scene {
-    class Frustum;
+class Frustum;
 }
 
 namespace mmo::engine::render {
@@ -32,24 +32,24 @@ struct HeightmapParams {
  * Layout is std140-compatible; padding makes vec3 members 16-byte aligned.
  */
 struct alignas(16) GrassVertexUniforms {
-    glm::mat4 view_projection;     // 64 bytes
-    glm::vec3 camera_pos;          // 12 bytes
-    float time;                    // 4  (finishes vec4 slot)
-    glm::vec3 _pad0;               // 12
-    float grass_view_distance;     // 4
-    glm::vec2 wind_direction;      // 8
-    float wind_strength;           // 4
-    float chunk_size;              // 4  (vec4 boundary)
-    float blade_spacing;           // 4
-    uint32_t blades_per_chunk_side;  // 4
-    uint32_t blades_per_chunk_sq;    // 4
-    float _pad1;                   // 4  (vec4 boundary)
-    float heightmap_origin_x;      // 4
-    float heightmap_origin_z;      // 4
-    float heightmap_world_size;    // 4
-    float heightmap_min_height;    // 4  (vec4 boundary)
-    float heightmap_max_height;    // 4
-    glm::vec3 _pad2;               // 12 (vec4 boundary)
+    glm::mat4 view_projection;      // 64 bytes
+    glm::vec3 camera_pos;           // 12 bytes
+    float time;                     // 4  (finishes vec4 slot)
+    glm::vec3 _pad0;                // 12
+    float grass_view_distance;      // 4
+    glm::vec2 wind_direction;       // 8
+    float wind_strength;            // 4
+    float chunk_size;               // 4  (vec4 boundary)
+    float blade_spacing;            // 4
+    uint32_t blades_per_chunk_side; // 4
+    uint32_t blades_per_chunk_sq;   // 4
+    float _pad1;                    // 4  (vec4 boundary)
+    float heightmap_origin_x;       // 4
+    float heightmap_origin_z;       // 4
+    float heightmap_world_size;     // 4
+    float heightmap_min_height;     // 4  (vec4 boundary)
+    float heightmap_max_height;     // 4
+    glm::vec3 _pad2;                // 12 (vec4 boundary)
 };
 
 /**
@@ -91,24 +91,20 @@ public:
     GrassRenderer(const GrassRenderer&) = delete;
     GrassRenderer& operator=(const GrassRenderer&) = delete;
 
-    bool init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry,
-              float world_width, float world_height);
+    bool init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry, float world_width, float world_height);
 
     void update(float delta_time, float current_time);
 
     /// Cull chunks and upload the visible chunk storage buffer.
     /// MUST be called outside any render pass (performs a copy pass internally).
     /// Call this in the pre-pass upload phase, same stage as instance buffers.
-    void upload_chunks(SDL_GPUCommandBuffer* cmd, const glm::vec3& camera_pos,
-                       const scene::Frustum* frustum);
+    void upload_chunks(SDL_GPUCommandBuffer* cmd, const glm::vec3& camera_pos, const scene::Frustum* frustum);
 
     /// Draw the grass. Requires upload_chunks() to have been called this frame.
     /// Must be called inside an active render pass.
-    void render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                const glm::mat4& view, const glm::mat4& projection,
+    void render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const glm::mat4& view, const glm::mat4& projection,
                 const glm::vec3& camera_pos, const glm::vec3& light_dir,
-                const SDL_GPUTextureSamplerBinding* shadow_bindings = nullptr,
-                int shadow_binding_count = 0);
+                const SDL_GPUTextureSamplerBinding* shadow_bindings = nullptr, int shadow_binding_count = 0);
 
     void shutdown();
 
@@ -117,9 +113,7 @@ public:
         heightmap_params_ = params;
     }
 
-    void set_cluster_lighting(SDL_GPUBuffer* light_data,
-                              SDL_GPUBuffer* cluster_offsets,
-                              SDL_GPUBuffer* light_indices,
+    void set_cluster_lighting(SDL_GPUBuffer* light_data, SDL_GPUBuffer* cluster_offsets, SDL_GPUBuffer* light_indices,
                               const void* params, size_t params_size) {
         cluster_light_data_ = light_data;
         cluster_offsets_ = cluster_offsets;
@@ -142,10 +136,9 @@ private:
     void generate_blade_mesh();
 
     // Chunk geometry constants
-    static constexpr float CHUNK_SIZE = 32.0f;            // world units per chunk side
-    static constexpr uint32_t BLADES_PER_CHUNK_SIDE = 8;  // blades per chunk side
-    static constexpr uint32_t BLADES_PER_CHUNK_SQ =
-        BLADES_PER_CHUNK_SIDE * BLADES_PER_CHUNK_SIDE;
+    static constexpr float CHUNK_SIZE = 32.0f;           // world units per chunk side
+    static constexpr uint32_t BLADES_PER_CHUNK_SIDE = 8; // blades per chunk side
+    static constexpr uint32_t BLADES_PER_CHUNK_SQ = BLADES_PER_CHUNK_SIDE * BLADES_PER_CHUNK_SIDE;
 
     gpu::GPUDevice* device_ = nullptr;
     gpu::PipelineRegistry* pipeline_registry_ = nullptr;
@@ -158,7 +151,7 @@ private:
     // Per-frame chunk storage buffer. Reused + grown via capacity-doubling.
     std::unique_ptr<gpu::GPUBuffer> chunk_storage_buffer_;
     size_t chunk_storage_capacity_bytes_ = 0;
-    std::vector<glm::vec4> visible_chunks_scratch_;  // reused per frame
+    std::vector<glm::vec4> visible_chunks_scratch_; // reused per frame
 
     // Heightmap for GPU height sampling
     gpu::GPUTexture* heightmap_texture_ = nullptr;

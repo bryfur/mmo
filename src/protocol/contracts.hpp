@@ -9,19 +9,19 @@
 // includes it at runtime. The protocol library CMake pulls it in so the
 // asserts fire on any build.
 
-#include "protocol/net_message_concept.hpp"
-#include "protocol/packet.hpp"
-#include "protocol/connect_msg.hpp"
+#include "protocol/class_info.hpp"
 #include "protocol/class_select_msg.hpp"
+#include "protocol/connect_msg.hpp"
 #include "protocol/connection_accepted_msg.hpp"
-#include "protocol/player_left_msg.hpp"
+#include "protocol/entity_delta.hpp"
 #include "protocol/entity_exit_msg.hpp"
 #include "protocol/entity_state.hpp"
-#include "protocol/entity_delta.hpp"
-#include "protocol/player_input.hpp"
-#include "protocol/class_info.hpp"
-#include "protocol/world_config.hpp"
 #include "protocol/gameplay_msgs.hpp"
+#include "protocol/net_message_concept.hpp"
+#include "protocol/packet.hpp"
+#include "protocol/player_input.hpp"
+#include "protocol/player_left_msg.hpp"
+#include "protocol/world_config.hpp"
 
 namespace mmo::protocol {
 

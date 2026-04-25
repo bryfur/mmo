@@ -44,9 +44,7 @@ TEST_F(ParallelForTest, FillsTenThousandIndices) {
 TEST_F(ParallelForTest, SerialFallbackForLargeGrain) {
     constexpr std::size_t N = 1000;
     std::atomic<int> chunks{0};
-    parallel_for(0, N, [&](std::size_t, std::size_t) {
-        chunks.fetch_add(1);
-    }, /*grain=*/N * 2);
+    parallel_for(0, N, [&](std::size_t, std::size_t) { chunks.fetch_add(1); }, /*grain=*/N * 2);
     EXPECT_EQ(chunks.load(), 1);
 }
 
@@ -57,9 +55,7 @@ TEST_F(ParallelForTest, AutomaticGrainSplitsRange) {
     }
     constexpr std::size_t N = 4096;
     std::atomic<int> chunks{0};
-    parallel_for(0, N, [&](std::size_t, std::size_t) {
-        chunks.fetch_add(1);
-    });
+    parallel_for(0, N, [&](std::size_t, std::size_t) { chunks.fetch_add(1); });
     EXPECT_GT(chunks.load(), 1);
 }
 
@@ -78,9 +74,12 @@ TEST_F(ParallelForTest, AccumulatesAtomicCounter) {
 TEST_F(ParallelForTest, StressOneThousandTrivialTasksAllRun) {
     constexpr std::size_t N = 1000;
     std::atomic<int> seen{0};
-    parallel_for(0, N, [&](std::size_t b, std::size_t e) {
-        for (std::size_t i = b; i < e; ++i) seen.fetch_add(1, std::memory_order_relaxed);
-    }, /*grain=*/1);
+    parallel_for(
+        0, N,
+        [&](std::size_t b, std::size_t e) {
+            for (std::size_t i = b; i < e; ++i) seen.fetch_add(1, std::memory_order_relaxed);
+        },
+        /*grain=*/1);
     EXPECT_EQ(seen.load(), static_cast<int>(N));
 }
 

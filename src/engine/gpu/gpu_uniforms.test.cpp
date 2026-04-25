@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
 #include "engine/gpu/gpu_uniforms.hpp"
 #include <cstddef>
+#include <gtest/gtest.h>
 
 using namespace mmo::engine::gpu;
 

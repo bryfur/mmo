@@ -3,10 +3,10 @@
 #include "game_types.hpp"
 #include "protocol/protocol.hpp"
 #include <algorithm>
+#include <cstdint>
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <cstdint>
 
 namespace mmo::server {
 
@@ -14,7 +14,7 @@ namespace mmo::server {
 struct ClassConfig {
     std::string name;
     std::string model;
-    std::string animation;  // Animation config name (e.g. "humanoid")
+    std::string animation; // Animation config name (e.g. "humanoid")
     float health = 100.0f;
     float damage = 10.0f;
     float attack_range = 50.0f;
@@ -45,7 +45,7 @@ struct MonsterConfig {
     float aggro_range = 300.0f;
     int count = 10;
     std::string model;
-    std::string animation;  // Animation config name (e.g. "humanoid")
+    std::string animation; // Animation config name (e.g. "humanoid")
     uint32_t color = 0xFF4444FF;
 };
 
@@ -141,9 +141,9 @@ struct ItemStats {
 struct ItemConfig {
     std::string id;
     std::string name;
-    std::string type;      // weapon, armor, consumable, material
+    std::string type; // weapon, armor, consumable, material
     std::string subtype;
-    std::string rarity;    // common, uncommon, rare, epic, legendary
+    std::string rarity; // common, uncommon, rare, epic, legendary
     int level_req = 1;
     std::vector<std::string> classes;
     ItemStats stats;
@@ -185,8 +185,8 @@ struct ClassGrowth {
 
 struct LevelingConfig {
     int max_level = 20;
-    std::vector<int> xp_curve;  // XP needed to reach each level
-    std::vector<ClassGrowth> class_growth;  // indexed by PlayerClass
+    std::vector<int> xp_curve;             // XP needed to reach each level
+    std::vector<ClassGrowth> class_growth; // indexed by PlayerClass
     float death_xp_loss_percent = 5.0f;
 };
 
@@ -246,23 +246,23 @@ struct SkillConfig {
     float self_shield_percent = 0.0f;
 
     // Projectile/spread fields (multi-shot, arrow_storm)
-    float spread_angle = 0.0f;       // total cone angle in radians for N projectiles
-    bool  piercing = false;          // single straight line, hits multiple enemies
+    float spread_angle = 0.0f;         // total cone angle in radians for N projectiles
+    bool piercing = false;             // single straight line, hits multiple enemies
     float armor_ignore_percent = 0.0f; // % of target defense to ignore
-    bool  teleport_behind = false;   // move caster behind target (shadow_step)
-    float crit_bonus = 0.0f;         // flat bonus crit chance for next attack
+    bool teleport_behind = false;      // move caster behind target (shadow_step)
+    float crit_bonus = 0.0f;           // flat bonus crit chance for next attack
     float crit_bonus_duration = 0.0f;
 
     // Channeled / ticking AoE (whirlwind, arcane_rain, rain_of_arrows, consecrate, healing_aura)
-    bool  channeled = false;
-    float tick_rate = 0.0f;          // seconds between ticks
+    bool channeled = false;
+    float tick_rate = 0.0f; // seconds between ticks
     float heal_percent_per_tick = 0.0f;
-    bool  affects_allies = false;
-    float cast_delay = 0.0f;         // delay before damage resolves (meteor)
-    bool  disables_attack = false;
-    bool  invulnerable_during = false;
-    bool  interrupts = false;
-    bool  slow_immunity = false;
+    bool affects_allies = false;
+    float cast_delay = 0.0f; // delay before damage resolves (meteor)
+    bool disables_attack = false;
+    bool invulnerable_during = false;
+    bool interrupts = false;
+    bool slow_immunity = false;
     float taunt_duration = 0.0f;
     float cooldown_reduction = 0.0f;
     float cast_speed_bonus = 0.0f;
@@ -425,7 +425,7 @@ struct TalentConfig {
     int tier = 1;
     std::string description;
     TalentEffect effect;
-    std::string prerequisite;  // prerequisite talent id
+    std::string prerequisite; // prerequisite talent id
 };
 
 struct TalentBranch {
@@ -449,7 +449,7 @@ struct TalentGlobalConfig {
 // ============================================================================
 
 struct QuestObjectiveConfig {
-    std::string type;       // kill, visit, gather
+    std::string type; // kill, visit, gather
     std::string target;
     int count = 1;
     std::string description;
@@ -501,7 +501,7 @@ struct CraftRecipeConfig {
     int output_count = 1;
     int gold_cost = 0;
     int required_level = 1;
-    std::string station;    // "blacksmith", "any" - which NPC type (or area) is required
+    std::string station; // "blacksmith", "any" - which NPC type (or area) is required
     std::vector<CraftIngredientConfig> ingredients;
 };
 
@@ -511,15 +511,15 @@ struct CraftRecipeConfig {
 
 struct VendorStockConfig {
     std::string item_id;
-    int price = 0;     // Override price in gold. 0 = use item's sell_value * markup
-    int stock = -1;    // -1 = infinite
+    int price = 0;  // Override price in gold. 0 = use item's sell_value * markup
+    int stock = -1; // -1 = infinite
 };
 
 struct VendorConfig {
-    std::string npc_type;          // Matches NPCType::{Merchant,Blacksmith,...} lowercase
-    std::string display_name;      // "General Goods", "Blacksmith", etc.
-    float buy_price_multiplier = 4.0f;    // What the vendor charges to sell to you
-    float sell_price_multiplier = 0.25f;  // What vendor pays for your items
+    std::string npc_type;                // Matches NPCType::{Merchant,Blacksmith,...} lowercase
+    std::string display_name;            // "General Goods", "Blacksmith", etc.
+    float buy_price_multiplier = 4.0f;   // What the vendor charges to sell to you
+    float sell_price_multiplier = 0.25f; // What vendor pays for your items
     std::vector<VendorStockConfig> stock;
 };
 
@@ -547,13 +547,13 @@ struct NetworkConfig {
     float delta_rate_hz = 20.0f;
 
     float max_view_distance() const {
-        return std::max({player_view_distance, npc_view_distance, town_npc_view_distance,
-                         building_view_distance, environment_view_distance});
+        return std::max({player_view_distance, npc_view_distance, town_npc_view_distance, building_view_distance,
+                         environment_view_distance});
     }
 
     // Helper to get view distance for an entity type
     float get_view_distance_for_type(mmo::protocol::EntityType type) const {
-        switch(type) {
+        switch (type) {
             case mmo::protocol::EntityType::Building:
                 return building_view_distance;
             case mmo::protocol::EntityType::Environment:
@@ -676,7 +676,7 @@ private:
     TowerConfig corner_towers_;
     float safe_zone_radius_ = 400.0f;
 
-    void apply_mana_system();  // Post-load: apply mana_system data to class configs
+    void apply_mana_system(); // Post-load: apply mana_system data to class configs
 
     // Mana system per-class data (from skills.json)
     struct ManaSystemEntry {

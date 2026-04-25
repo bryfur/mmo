@@ -3,8 +3,8 @@
 #include "gpu_device.hpp"
 #include <memory>
 #include <string>
-#include <vector>
 #include <unordered_map>
+#include <vector>
 
 namespace mmo::engine::gpu {
 
@@ -64,22 +64,16 @@ public:
      * @param resources Shader resource requirements
      * @return Unique pointer to the shader, or nullptr on failure
      */
-    static std::unique_ptr<GPUShader> load_spirv(
-        GPUDevice& device,
-        const std::string& path,
-        ShaderStage stage,
-        const std::string& entry_point = "main",
-        const ShaderResources& resources = {});
+    static std::unique_ptr<GPUShader> load_spirv(GPUDevice& device, const std::string& path, ShaderStage stage,
+                                                 const std::string& entry_point = "main",
+                                                 const ShaderResources& resources = {});
 
     /**
      * @brief Create a shader from SPIRV bytecode in memory
      */
-    static std::unique_ptr<GPUShader> create_from_spirv(
-        GPUDevice& device,
-        const std::vector<uint8_t>& spirv_bytecode,
-        ShaderStage stage,
-        const std::string& entry_point = "main",
-        const ShaderResources& resources = {});
+    static std::unique_ptr<GPUShader> create_from_spirv(GPUDevice& device, const std::vector<uint8_t>& spirv_bytecode,
+                                                        ShaderStage stage, const std::string& entry_point = "main",
+                                                        const ShaderResources& resources = {});
 
     // =========================================================================
     // Accessors
@@ -149,23 +143,19 @@ public:
     /**
      * @brief Load or get a cached vertex shader
      */
-    GPUShader* get_vertex(const std::string& path,
-                          const std::string& entry_point = "main",
+    GPUShader* get_vertex(const std::string& path, const std::string& entry_point = "main",
                           const ShaderResources& resources = {});
 
     /**
      * @brief Load or get a cached fragment shader
      */
-    GPUShader* get_fragment(const std::string& path,
-                            const std::string& entry_point = "main",
+    GPUShader* get_fragment(const std::string& path, const std::string& entry_point = "main",
                             const ShaderResources& resources = {});
 
     /**
      * @brief Load or get a shader (generic)
      */
-    GPUShader* get(const std::string& path,
-                   ShaderStage stage,
-                   const std::string& entry_point,
+    GPUShader* get(const std::string& path, ShaderStage stage, const std::string& entry_point,
                    const ShaderResources& resources = {});
 
     /**
@@ -193,8 +183,7 @@ private:
     // shader loading happens on a single thread (e.g., the main/render thread).
     std::unordered_map<std::string, std::unique_ptr<GPUShader>> cache_;
 
-    std::string make_cache_key(const std::string& path, ShaderStage stage,
-                               const std::string& entry_point) const;
+    static std::string make_cache_key(const std::string& path, ShaderStage stage, const std::string& entry_point);
 };
 
 /**
@@ -212,12 +201,10 @@ public:
     /**
      * @brief Load shader program from pre-compiled SPIRV files
      */
-    static std::unique_ptr<ShaderProgram> load(
-        GPUDevice& device,
-        const std::string& vertex_path,
-        const std::string& fragment_path,
-        const std::string& vertex_entry = "VSMain",
-        const std::string& fragment_entry = "PSMain");
+    static std::unique_ptr<ShaderProgram> load(GPUDevice& device, const std::string& vertex_path,
+                                               const std::string& fragment_path,
+                                               const std::string& vertex_entry = "VSMain",
+                                               const std::string& fragment_entry = "PSMain");
 
     SDL_GPUShader* vertex_shader() const { return vertex_ ? vertex_->handle() : nullptr; }
     SDL_GPUShader* fragment_shader() const { return fragment_ ? fragment_->handle() : nullptr; }

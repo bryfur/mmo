@@ -19,8 +19,7 @@ struct CombatHit {
 
 /// Apply damage to a target through the full combat pipeline (defense, shields, cheat death, reflect, lifesteal).
 /// Returns true if the target died.
-bool apply_damage(entt::registry& registry, entt::entity target, float damage,
-                  entt::entity attacker = entt::null);
+bool apply_damage(entt::registry& registry, entt::entity target, float damage, entt::entity attacker = entt::null);
 
 /// Update combat and return all hits that occurred this tick
 std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const GameConfig& config);

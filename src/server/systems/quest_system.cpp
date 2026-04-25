@@ -24,32 +24,49 @@ void check_all_complete(ecs::ActiveQuest& quest) {
 bool can_accept_quest(entt::registry& registry, entt::entity player, const QuestConfig& quest) {
     // Must have QuestState
     auto* quest_state = registry.try_get<ecs::QuestState>(player);
-    if (!quest_state) return false;
+    if (!quest_state) {
+        return false;
+    }
 
     // Check level requirement
     auto* player_level = registry.try_get<ecs::PlayerLevel>(player);
-    if (!player_level) return false;
-    if (player_level->level < quest.min_level) return false;
+    if (!player_level) {
+        return false;
+    }
+    if (player_level->level < quest.min_level) {
+        return false;
+    }
 
     // Check prerequisite
     if (!quest.prerequisite_quest.empty()) {
-        if (!quest_state->has_completed(quest.prerequisite_quest)) return false;
+        if (!quest_state->has_completed(quest.prerequisite_quest)) {
+            return false;
+        }
     }
 
     // Check not already active
-    if (quest_state->has_active(quest.id)) return false;
+    if (quest_state->has_active(quest.id)) {
+        return false;
+    }
 
     // If not repeatable, check not already completed
-    if (!quest.repeatable && quest_state->has_completed(quest.id)) return false;
+    if (!quest.repeatable && quest_state->has_completed(quest.id)) {
+        return false;
+    }
 
     return true;
 }
 
-bool accept_quest(entt::registry& registry, entt::entity player, const std::string& quest_id, const GameConfig& config) {
+bool accept_quest(entt::registry& registry, entt::entity player, const std::string& quest_id,
+                  const GameConfig& config) {
     const QuestConfig* quest = config.find_quest(quest_id);
-    if (!quest) return false;
+    if (!quest) {
+        return false;
+    }
 
-    if (!can_accept_quest(registry, player, *quest)) return false;
+    if (!can_accept_quest(registry, player, *quest)) {
+        return false;
+    }
 
     auto& quest_state = registry.get<ecs::QuestState>(player);
 
@@ -73,14 +90,18 @@ bool accept_quest(entt::registry& registry, entt::entity player, const std::stri
 }
 
 std::vector<QuestChange> on_monster_killed(entt::registry& registry, entt::entity player,
-                                            const std::string& monster_type_id, const GameConfig& config,
-                                            float kill_x, float kill_z) {
+                                           const std::string& monster_type_id, const GameConfig& config, float kill_x,
+                                           float kill_z) {
     std::vector<QuestChange> changes;
     auto* quest_state = registry.try_get<ecs::QuestState>(player);
-    if (!quest_state) return changes;
+    if (!quest_state) {
+        return changes;
+    }
 
     for (auto& active : quest_state->active_quests) {
-        if (active.all_complete) continue;
+        if (active.all_complete) {
+            continue;
+        }
 
         const QuestConfig* quest = config.find_quest(active.quest_id);
 
@@ -105,7 +126,9 @@ std::vector<QuestChange> on_monster_killed(entt::registry& registry, entt::entit
             in.kill_x = kill_x;
             in.kill_z = kill_z;
 
-            if (KillObjective::check(in) != KillObjective::Result::Ok) continue;
+            if (KillObjective::check(in) != KillObjective::Result::Ok) {
+                continue;
+            }
 
             obj_state.current += KillObjective::progress_delta_on_ok();
             if (obj_state.current >= obj_state.required) {
@@ -136,19 +159,28 @@ std::vector<QuestChange> on_monster_killed(entt::registry& registry, entt::entit
     return changes;
 }
 
-std::vector<QuestChange> update_visit_objectives(entt::registry& registry, entt::entity player, const GameConfig& config) {
+std::vector<QuestChange> update_visit_objectives(entt::registry& registry, entt::entity player,
+                                                 const GameConfig& config) {
     std::vector<QuestChange> changes;
     auto* quest_state = registry.try_get<ecs::QuestState>(player);
-    if (!quest_state) return changes;
+    if (!quest_state) {
+        return changes;
+    }
 
     auto* transform = registry.try_get<ecs::Transform>(player);
-    if (!transform) return changes;
+    if (!transform) {
+        return changes;
+    }
 
     for (auto& active : quest_state->active_quests) {
-        if (active.all_complete) continue;
+        if (active.all_complete) {
+            continue;
+        }
 
         const QuestConfig* quest = config.find_quest(active.quest_id);
-        if (!quest) continue;
+        if (!quest) {
+            continue;
+        }
 
         bool was_complete_before = active.all_complete;
         for (size_t i = 0; i < active.objectives.size() && i < quest->objectives.size(); ++i) {
@@ -167,7 +199,9 @@ std::vector<QuestChange> update_visit_objectives(entt::registry& registry, entt:
             in.player_x = transform->x;
             in.player_z = transform->z;
 
-            if (LocationObjective::check(in) != LocationObjective::Result::Ok) continue;
+            if (LocationObjective::check(in) != LocationObjective::Result::Ok) {
+                continue;
+            }
 
             obj_state.current = obj_state.required;
             obj_state.complete = true;
@@ -195,16 +229,25 @@ std::vector<QuestChange> update_visit_objectives(entt::registry& registry, entt:
     return changes;
 }
 
-bool turn_in_quest(entt::registry& registry, entt::entity player, const std::string& quest_id, const GameConfig& config) {
+bool turn_in_quest(entt::registry& registry, entt::entity player, const std::string& quest_id,
+                   const GameConfig& config) {
     auto* quest_state = registry.try_get<ecs::QuestState>(player);
-    if (!quest_state) return false;
+    if (!quest_state) {
+        return false;
+    }
 
     ecs::ActiveQuest* active = quest_state->get_active(quest_id);
-    if (!active) return false;
-    if (!active->all_complete) return false;
+    if (!active) {
+        return false;
+    }
+    if (!active->all_complete) {
+        return false;
+    }
 
     const QuestConfig* quest = config.find_quest(quest_id);
-    if (!quest) return false;
+    if (!quest) {
+        return false;
+    }
 
     // Award rewards
     auto* player_level = registry.try_get<ecs::PlayerLevel>(player);
@@ -237,7 +280,7 @@ bool turn_in_quest(entt::registry& registry, entt::entity player, const std::str
 }
 
 std::vector<const QuestConfig*> get_available_quests(entt::registry& registry, entt::entity player,
-                                                      const std::string& npc_type, const GameConfig& config) {
+                                                     const std::string& npc_type, const GameConfig& config) {
     auto npc_quests = config.quests_for_npc(npc_type);
 
     std::vector<const QuestConfig*> available;
@@ -249,7 +292,8 @@ std::vector<const QuestConfig*> get_available_quests(entt::registry& registry, e
     return available;
 }
 
-std::vector<std::pair<entt::entity, QuestChange>> update_quests(entt::registry& registry, float /*dt*/, const GameConfig& config) {
+std::vector<std::pair<entt::entity, QuestChange>> update_quests(entt::registry& registry, float /*dt*/,
+                                                                const GameConfig& config) {
     std::vector<std::pair<entt::entity, QuestChange>> all_changes;
     auto view = registry.view<ecs::PlayerTag, ecs::QuestState, ecs::Transform>();
     for (auto entity : view) {

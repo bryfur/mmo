@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include "engine/render_constants.hpp"
+#include <gtest/gtest.h>
 
 using namespace mmo::engine;
 

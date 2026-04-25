@@ -18,7 +18,7 @@ class BufferWriter {
     uint8_t* data_ = nullptr;
     size_t capacity_ = 0;
     size_t offset_ = 0;
-    std::vector<uint8_t>* vec_ = nullptr;  // null for span mode
+    std::vector<uint8_t>* vec_ = nullptr; // null for span mode
 
     void ensure(size_t n) {
         if (vec_) {
@@ -28,7 +28,9 @@ class BufferWriter {
                 // but only resize to the exact amount needed (size() == actual data)
                 if (vec_->capacity() < required) {
                     size_t new_cap = vec_->capacity() * 2;
-                    if (new_cap < required) new_cap = required;
+                    if (new_cap < required) {
+                        new_cap = required;
+                    }
                     vec_->reserve(new_cap);
                 }
                 vec_->resize(required);
@@ -43,18 +45,26 @@ class BufferWriter {
 public:
     // Span mode: fixed buffer, bounds-checked
     explicit BufferWriter(std::span<uint8_t> buf)
-        : data_(buf.data()), capacity_(buf.size()), offset_(0), vec_(nullptr) {}
+        : data_(buf.data()),
+          capacity_(buf.size()),
+          offset_(0),
+          vec_(nullptr) {}
 
     // Offset mode: write into pre-sized vector at offset
     BufferWriter(std::vector<uint8_t>& buf, size_t offset)
-        : data_(buf.data()), capacity_(buf.size()), offset_(offset), vec_(&buf) {}
+        : data_(buf.data()),
+          capacity_(buf.size()),
+          offset_(offset),
+          vec_(&buf) {}
 
     // Append mode: grows the vector on each write
     explicit BufferWriter(std::vector<uint8_t>& buf)
-        : data_(buf.data()), capacity_(buf.size()), offset_(buf.size()), vec_(&buf) {}
+        : data_(buf.data()),
+          capacity_(buf.size()),
+          offset_(buf.size()),
+          vec_(&buf) {}
 
-    template<typename T>
-    void write(const T& val) {
+    template<typename T> void write(const T& val) {
         ensure(sizeof(T));
         std::memcpy(data_ + offset_, &val, sizeof(T));
         offset_ += sizeof(T);
@@ -86,8 +96,7 @@ public:
     }
 
     // Write a length-prefixed array of Serializable items
-    template<typename T>
-    void write_array(const std::vector<T>& items) {
+    template<typename T> void write_array(const std::vector<T>& items) {
         write<uint16_t>(static_cast<uint16_t>(items.size()));
         for (const auto& item : items) {
             item.serialize(*this);

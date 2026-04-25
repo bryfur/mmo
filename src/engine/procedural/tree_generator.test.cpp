@@ -1,8 +1,8 @@
-#include <gtest/gtest.h>
 #include "engine/procedural/tree_generator.hpp"
 #include "engine/model_loader.hpp"
-#include <glm/glm.hpp>
 #include <cmath>
+#include <glm/glm.hpp>
+#include <gtest/gtest.h>
 
 using namespace mmo::engine::procedural;
 using namespace mmo::engine;
@@ -62,8 +62,7 @@ TEST(TreeGenerator, SeededRNGIsDeterministic) {
     ASSERT_EQ(model1->meshes[0].vertices.size(), model2->meshes[0].vertices.size());
     // Verify same geometry
     for (size_t i = 0; i < model1->meshes[0].vertices.size(); i++) {
-        EXPECT_FLOAT_EQ(model1->meshes[0].vertices[i].position.x,
-                        model2->meshes[0].vertices[i].position.x);
+        EXPECT_FLOAT_EQ(model1->meshes[0].vertices[i].position.x, model2->meshes[0].vertices[i].position.x);
     }
 }
 

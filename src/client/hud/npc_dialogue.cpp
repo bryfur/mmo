@@ -12,9 +12,8 @@ using namespace engine::ui_colors;
 
 namespace {
 
-void build_quest_list(UIScene& ui, const NPCInteractionState& state,
-                      MouseUI& mui,
-                      float px, float py, float pw, float ph) {
+void build_quest_list(UIScene& ui, const NPCInteractionState& state, MouseUI& mui, float px, float py, float pw,
+                      float ph) {
     if (state.available_quests.empty()) {
         ui.add_text("No quests available.", px + 20.0f, py + 60.0f, 1.0f, 0xFF888888);
         return;
@@ -31,25 +30,20 @@ void build_quest_list(UIScene& ui, const NPCInteractionState& state,
             ui.add_filled_rect(px + 10.0f, qy - 2.0f, pw - 20.0f, 28.0f, 0x40FFFFFF);
         }
 
-        ui.add_text(quest.quest_name, px + 25.0f, qy + 2.0f, 1.0f,
-                    selected ? 0xFFFFFFFF : 0xFFCCCCCC);
+        ui.add_text(quest.quest_name, px + 25.0f, qy + 2.0f, 1.0f, selected ? 0xFFFFFFFF : 0xFFCCCCCC);
 
         char reward_text[64];
-        std::snprintf(reward_text, sizeof(reward_text),
-                      "XP: %d  Gold: %d", quest.xp_reward, quest.gold_reward);
+        std::snprintf(reward_text, sizeof(reward_text), "XP: %d  Gold: %d", quest.xp_reward, quest.gold_reward);
         ui.add_text(reward_text, px + pw - 180.0f, qy + 4.0f, 0.7f, 0xFF00DDFF);
 
-        mui.push_region(quest_row_id(i), WidgetId::TitleDialogue,
-                        px + 10.0f, qy - 2.0f, pw - 20.0f, 28.0f);
+        mui.push_region(quest_row_id(i), WidgetId::TitleDialogue, px + 10.0f, qy - 2.0f, pw - 20.0f, 28.0f);
         qy += 32.0f;
     }
 
-    ui.add_text("Click to view - [W/S] Navigate  [ENTER] View Quest",
-                px + 20.0f, py + ph - 35.0f, 0.8f, 0xFF888888);
+    ui.add_text("Click to view - [W/S] Navigate  [ENTER] View Quest", px + 20.0f, py + ph - 35.0f, 0.8f, 0xFF888888);
 }
 
-void build_quest_detail(UIScene& ui, const NPCInteractionState& state,
-                        float px, float py, float pw, float ph) {
+void build_quest_detail(UIScene& ui, const NPCInteractionState& state, float px, float py, float pw, float ph) {
     const auto& quest = state.available_quests[state.selected_quest];
     const float text_w = pw - 40.0f;
     const float btn_y = py + ph - 50.0f;
@@ -65,20 +59,19 @@ void build_quest_detail(UIScene& ui, const NPCInteractionState& state,
     ui.add_text("Objectives:", px + 20.0f, oy, 1.0f, 0xFFFFFFFF);
     oy += 22.0f;
     for (const auto& obj : quest.objectives) {
-        if (oy + 16.0f > btn_y - 60.0f) break;  // Reserve space for rewards + buttons.
+        if (oy + 16.0f > btn_y - 60.0f) {
+            break; // Reserve space for rewards + buttons.
+        }
         char obj_text[128];
-        std::snprintf(obj_text, sizeof(obj_text), "- %s (%d)",
-                      obj.description.c_str(), obj.count);
-        oy += ui.add_text_wrapped(std::string(obj_text), px + 30.0f, oy,
-                                  text_w - 10.0f, 0.85f, 0xFFCCCCCC);
+        std::snprintf(obj_text, sizeof(obj_text), "- %s (%d)", obj.description.c_str(), obj.count);
+        oy += ui.add_text_wrapped(std::string(obj_text), px + 30.0f, oy, text_w - 10.0f, 0.85f, 0xFFCCCCCC);
     }
 
     oy = std::max(oy + 8.0f, btn_y - 50.0f);
     ui.add_text("Rewards:", px + 20.0f, oy, 1.0f, 0xFFFFFFFF);
     oy += 22.0f;
     char reward_buf[64];
-    std::snprintf(reward_buf, sizeof(reward_buf),
-                  "XP: %d   Gold: %d", quest.xp_reward, quest.gold_reward);
+    std::snprintf(reward_buf, sizeof(reward_buf), "XP: %d   Gold: %d", quest.xp_reward, quest.gold_reward);
     ui.add_text(reward_buf, px + 30.0f, oy, 0.9f, 0xFF00DDFF);
 
     // Accept / decline buttons.
@@ -93,17 +86,14 @@ void build_quest_detail(UIScene& ui, const NPCInteractionState& state,
 
 } // namespace
 
-void build_npc_dialogue(UIScene& ui,
-                        const NPCInteractionState& state,
-                        MouseUI& mui,
-                        float screen_w, float screen_h) {
-    if (!state.showing_dialogue) return;
+void build_npc_dialogue(UIScene& ui, const NPCInteractionState& state, MouseUI& mui, float screen_w, float screen_h) {
+    if (!state.showing_dialogue) {
+        return;
+    }
 
     constexpr float pw = 500.0f;
     constexpr float ph = 400.0f;
-    auto pos = mui.default_pos(WidgetId::TitleDialogue,
-                               (screen_w - pw) * 0.5f,
-                               (screen_h - ph) * 0.5f);
+    auto pos = mui.default_pos(WidgetId::TitleDialogue, (screen_w - pw) * 0.5f, (screen_h - ph) * 0.5f);
     const float px = pos.x;
     const float py = pos.y;
 
@@ -121,10 +111,8 @@ void build_npc_dialogue(UIScene& ui,
     ui.add_filled_rect(cx_btn, cy_btn, cs, cs, 0xFF553344);
     ui.add_text("X", cx_btn + 8.0f, cy_btn + 5.0f, 0.95f, 0xFFFFFFFF);
 
-    mui.push_region(WidgetId::TitleDialogue, WidgetId::TitleDialogue,
-                    px, py, pw - cs - 10.0f, 35.0f);
-    mui.push_region(WidgetId::CloseDialogue, WidgetId::TitleDialogue,
-                    cx_btn, cy_btn, cs, cs);
+    mui.push_region(WidgetId::TitleDialogue, WidgetId::TitleDialogue, px, py, pw - cs - 10.0f, 35.0f);
+    mui.push_region(WidgetId::CloseDialogue, WidgetId::TitleDialogue, cx_btn, cy_btn, cs, cs);
 
     if (state.showing_quest_detail) {
         build_quest_detail(ui, state, px, py, pw, ph);
@@ -133,10 +121,11 @@ void build_npc_dialogue(UIScene& ui,
     }
 }
 
-void build_legacy_dialogue(UIScene& ui, const HUDState& hud,
-                           float screen_w, float screen_h) {
+void build_legacy_dialogue(UIScene& ui, const HUDState& hud, float screen_w, float screen_h) {
     const auto& d = hud.dialogue;
-    if (!d.visible) return;
+    if (!d.visible) {
+        return;
+    }
 
     constexpr float w = 500.0f;
     constexpr float h = 250.0f;
@@ -164,8 +153,7 @@ void build_legacy_dialogue(UIScene& ui, const HUDState& hud,
         option_y += 26.0f;
     }
 
-    ui.add_text("[E/ESC] Close    [Enter] Accept",
-                x + 10.0f, y + h - 25.0f, 0.7f, TEXT_HINT);
+    ui.add_text("[E/ESC] Close    [Enter] Accept", x + 10.0f, y + h - 25.0f, 0.7f, TEXT_HINT);
 }
 
 } // namespace mmo::client::hud

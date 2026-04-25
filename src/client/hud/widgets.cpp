@@ -8,8 +8,8 @@ namespace mmo::client {
 
 using engine::scene::UIScene;
 using namespace engine::ui_colors;
-using hud_layout::fade_color;
 using hud_layout::bar_ratio;
+using hud_layout::fade_color;
 using hud_layout::linear_fade;
 
 // ============================================================================
@@ -33,8 +33,7 @@ void build_health_bar(UIScene& ui, const HUDState& hud, float /*screen_w*/, floa
     // Fill (color shifts green -> orange -> red as health drops)
     const float hp_ratio = bar_ratio(hud.health, hud.max_health);
     if (hp_ratio > 0.0f) {
-        ui.add_filled_rect(x, y, bar_width * hp_ratio, bar_height,
-                           hud_layout::health_bar_color(hp_ratio));
+        ui.add_filled_rect(x, y, bar_width * hp_ratio, bar_height, hud_layout::health_bar_color(hp_ratio));
     }
 
     // Text
@@ -62,8 +61,7 @@ void build_xp_bar(UIScene& ui, const HUDState& hud, float /*screen_w*/, float sc
     ui.add_filled_rect(x, y, bar_width, bar_height, hud_colors::XP_BG);
 
     // XP fill
-    const float xp_ratio = bar_ratio(static_cast<float>(hud.xp),
-                                     static_cast<float>(hud.xp_to_next_level));
+    const float xp_ratio = bar_ratio(static_cast<float>(hud.xp), static_cast<float>(hud.xp_to_next_level));
     if (xp_ratio > 0.0f) {
         ui.add_filled_rect(x, y, bar_width * xp_ratio, bar_height, hud_colors::XP_FILL);
     }
@@ -128,7 +126,7 @@ void build_gold_display(UIScene& ui, const HUDState& hud, float screen_w, float 
     float panel_w = 130.0f;
     float panel_h = 30.0f;
     float x = screen_w - padding - panel_w;
-    float y = 210.0f;  // Below the minimap (180px + padding)
+    float y = 210.0f; // Below the minimap (180px + padding)
 
     // Panel background
     ui.add_filled_rect(x, y, panel_w, panel_h, PANEL_BG);
@@ -163,12 +161,10 @@ void build_skill_bar(UIScene& ui, const HUDState& hud, MouseUI& mui, float scree
 
     // Panel background behind all slots
     float panel_pad = 8.0f;
-    ui.add_filled_rect(start_x - panel_pad, y - panel_pad,
-                       total_width + panel_pad * 2, slot_size + panel_pad * 2 + 16.0f,
-                       PANEL_BG);
-    ui.add_rect_outline(start_x - panel_pad, y - panel_pad,
-                        total_width + panel_pad * 2, slot_size + panel_pad * 2 + 16.0f,
-                        BORDER, 1.0f);
+    ui.add_filled_rect(start_x - panel_pad, y - panel_pad, total_width + panel_pad * 2,
+                       slot_size + panel_pad * 2 + 16.0f, PANEL_BG);
+    ui.add_rect_outline(start_x - panel_pad, y - panel_pad, total_width + panel_pad * 2,
+                        slot_size + panel_pad * 2 + 16.0f, BORDER, 1.0f);
 
     for (int i = 0; i < slot_count; i++) {
         float sx = start_x + i * (slot_size + slot_gap);
@@ -218,12 +214,14 @@ void build_skill_bar(UIScene& ui, const HUDState& hud, MouseUI& mui, float scree
 // ============================================================================
 
 void build_quest_tracker(UIScene& ui, const HUDState& hud, float screen_w, float /*screen_h*/) {
-    if (hud.tracked_quests.empty()) return;
+    if (hud.tracked_quests.empty()) {
+        return;
+    }
 
     float panel_w = 220.0f;
     float padding = 15.0f;
     float x = screen_w - padding - panel_w;
-    float y = 250.0f;  // Below minimap and gold display
+    float y = 250.0f; // Below minimap and gold display
     float line_h = 16.0f;
 
     // Compute panel height based on content
@@ -232,7 +230,9 @@ void build_quest_tracker(UIScene& ui, const HUDState& hud, float screen_w, float
     for (int q = 0; q < max_quests; q++) {
         content_h += 20.0f; // quest name
         content_h += static_cast<float>(hud.tracked_quests[q].objectives.size()) * line_h;
-        if (q < max_quests - 1) content_h += 6.0f; // gap between quests
+        if (q < max_quests - 1) {
+            content_h += 6.0f; // gap between quests
+        }
     }
     content_h += 8.0f; // bottom padding
 
@@ -262,15 +262,16 @@ void build_quest_tracker(UIScene& ui, const HUDState& hud, float screen_w, float
             // Truncate description to fit panel width at scale 0.6 (~4.8px/char, 196px available)
             const std::string desc = hud_layout::truncate_with_ellipsis(obj.description, 28);
             char obj_text[128];
-            snprintf(obj_text, sizeof(obj_text), "  %s: %d/%d",
-                     desc.c_str(), obj.current, obj.required);
+            snprintf(obj_text, sizeof(obj_text), "  %s: %d/%d", desc.c_str(), obj.current, obj.required);
 
             uint32_t obj_color = obj.complete ? hud_colors::QUEST_DONE : hud_colors::QUEST_OBJ;
             ui.add_text(obj_text, x + 12, cy, 0.6f, obj_color);
             cy += line_h;
         }
 
-        if (q < max_quests - 1) cy += 6.0f;
+        if (q < max_quests - 1) {
+            cy += 6.0f;
+        }
     }
 }
 
@@ -279,7 +280,9 @@ void build_quest_tracker(UIScene& ui, const HUDState& hud, float screen_w, float
 // ============================================================================
 
 void build_zone_name(UIScene& ui, const HUDState& hud, float screen_w, float /*screen_h*/) {
-    if (hud.zone_display_timer <= 0.0f || hud.current_zone.empty()) return;
+    if (hud.zone_display_timer <= 0.0f || hud.current_zone.empty()) {
+        return;
+    }
 
     // Full opacity for first 2.5s, then fade out over the last 1.5s.
     const float alpha = linear_fade(hud.zone_display_timer, 1.5f);
@@ -301,8 +304,7 @@ void build_zone_name(UIScene& ui, const HUDState& hud, float screen_w, float /*s
     float line_y = y + 32.0f;
     float line_w = text_w * 0.6f;
     float line_x = (screen_w - line_w) / 2.0f;
-    ui.add_line(line_x, line_y, line_x + line_w, line_y,
-                fade_color(hud_colors::ZONE_TEXT, alpha * 0.4f), 1.0f);
+    ui.add_line(line_x, line_y, line_x + line_w, line_y, fade_color(hud_colors::ZONE_TEXT, alpha * 0.4f), 1.0f);
 }
 
 // ============================================================================
@@ -310,7 +312,9 @@ void build_zone_name(UIScene& ui, const HUDState& hud, float screen_w, float /*s
 // ============================================================================
 
 void build_level_up_notification(UIScene& ui, const HUDState& hud, float screen_w, float screen_h) {
-    if (hud.level_up_timer <= 0.0f) return;
+    if (hud.level_up_timer <= 0.0f) {
+        return;
+    }
 
     // Fade out over the last 1.5 seconds.
     const float alpha = linear_fade(hud.level_up_timer, 1.5f);
@@ -324,21 +328,17 @@ void build_level_up_notification(UIScene& ui, const HUDState& hud, float screen_
     // Background glow
     float glow_w = 260.0f;
     float glow_h = 80.0f;
-    ui.add_filled_rect(cx - glow_w / 2, cy - 10,
-                       glow_w, glow_h,
-                       fade_color(0x60000000, alpha));
+    ui.add_filled_rect(cx - glow_w / 2, cy - 10, glow_w, glow_h, fade_color(0x60000000, alpha));
 
     // "LEVEL UP!" text
     float text_w = 9.0f * 16.0f;
-    ui.add_text("LEVEL UP!", cx - text_w / 2, cy, 2.0f,
-                fade_color(hud_colors::LEVEL_UP_TEXT, alpha));
+    ui.add_text("LEVEL UP!", cx - text_w / 2, cy, 2.0f, fade_color(hud_colors::LEVEL_UP_TEXT, alpha));
 
     // Level number below
     char level_text[32];
     snprintf(level_text, sizeof(level_text), "Level %d", hud.level_up_level);
     float sub_w = static_cast<float>(std::strlen(level_text)) * 10.0f;
-    ui.add_text(level_text, cx - sub_w / 2, cy + 36.0f, 1.2f,
-                fade_color(hud_colors::LEVEL_UP_SUB, alpha));
+    ui.add_text(level_text, cx - sub_w / 2, cy + 36.0f, 1.2f, fade_color(hud_colors::LEVEL_UP_SUB, alpha));
 }
 
 // ============================================================================
@@ -346,7 +346,9 @@ void build_level_up_notification(UIScene& ui, const HUDState& hud, float screen_
 // ============================================================================
 
 void build_loot_feed(UIScene& ui, const HUDState& hud, float screen_w, float screen_h) {
-    if (hud.loot_feed.empty()) return;
+    if (hud.loot_feed.empty()) {
+        return;
+    }
 
     float padding = 15.0f;
     float line_h = 20.0f;
@@ -383,7 +385,7 @@ void build_minimap(UIScene& ui, const HUDState& hud, float screen_w, float /*scr
     view.center_x = cx;
     view.center_y = cy;
     view.map_radius = map_radius;
-    view.world_radius = 2000.0f;  // world units visible on minimap
+    view.world_radius = 2000.0f; // world units visible on minimap
     view.player_world_x = hud.minimap.player_x;
     view.player_world_z = hud.minimap.player_z;
 
@@ -404,8 +406,7 @@ void build_minimap(UIScene& ui, const HUDState& hud, float screen_w, float /*scr
     for (const auto& area : hud.minimap.objective_areas) {
         const auto p = hud_layout::world_to_minimap(view, area.world_x, area.world_z);
         if (p.in_bounds) {
-            const float area_r = hud_layout::minimap_area_pixel_radius(
-                area.radius, view.world_radius, map_radius);
+            const float area_r = hud_layout::minimap_area_pixel_radius(area.radius, view.world_radius, map_radius);
             ui.add_filled_rect(p.x - area_r, p.y - area_r, area_r * 2, area_r * 2, 0x3300DDFF);
             ui.add_rect_outline(p.x - area_r, p.y - area_r, area_r * 2, area_r * 2, 0x8800DDFF, 1.0f);
         }
@@ -414,7 +415,9 @@ void build_minimap(UIScene& ui, const HUDState& hud, float screen_w, float /*scr
     // Draw map icons (NPCs, monsters, etc.)
     for (const auto& icon : hud.minimap.icons) {
         const auto p = hud_layout::world_to_minimap(view, icon.world_x, icon.world_z);
-        if (!p.in_bounds) continue;
+        if (!p.in_bounds) {
+            continue;
+        }
         if (icon.is_objective) {
             // Diamond shape for objectives (rotated square)
             const float s = 5.0f;
@@ -445,35 +448,98 @@ void build_minimap(UIScene& ui, const HUDState& hud, float screen_w, float /*scr
 
 void build_status_effect_row(UIScene& ui, const HUDState& hud, float /*screen_w*/, float screen_h) {
     uint16_t m = hud.effects_mask;
-    if (m == 0) return;
+    if (m == 0) {
+        return;
+    }
 
     // Icon tiles next to each other, just above the XP bar (which sits above
     // the HP bar at the bottom-left).
     float icon_size = 22.0f;
     float icon_gap = 4.0f;
-    float x = 20.0f + 250.0f + 10.0f;  // right of the HP/XP stack
+    float x = 20.0f + 250.0f + 10.0f; // right of the HP/XP stack
     float y = screen_h - 70.0f - icon_size - 10.0f;
 
-    struct IconSpec { uint16_t bit; uint32_t color; const char* label; };
+    struct IconSpec {
+        uint16_t bit;
+        uint32_t color;
+        const char* label;
+    };
     static const IconSpec specs[] = {
-        { status_bits::INVULN,       0xFF44FFFF, "INV" },  // cyan
-        { status_bits::SHIELD,       0xFF00DDFF, "SHD" },  // gold
-        { status_bits::DAMAGE_BOOST, 0xFF3388FF, "DMG" },  // orange
-        { status_bits::SPEED_BOOST,  0xFF00FF88, "SPD" },  // green
-        { status_bits::DEF_BOOST,    0xFFDDDD00, "DEF" },  // teal
-        { status_bits::STUN,         0xFF4444FF, "STN" },  // red
-        { status_bits::ROOT,         0xFF2266AA, "RT" },
-        { status_bits::SLOW,         0xFFCC66FF, "SLO" },  // purple
-        { status_bits::BURN,         0xFF0000FF, "BRN" },  // red
+        {status_bits::INVULN, 0xFF44FFFF, "INV"},                                               // cyan
+        {status_bits::SHIELD, 0xFF00DDFF, "SHD"},                                               // gold
+        {status_bits::DAMAGE_BOOST, 0xFF3388FF, "DMG"},                                         // orange
+        {status_bits::SPEED_BOOST, 0xFF00FF88, "SPD"},                                          // green
+        {status_bits::DEF_BOOST, 0xFFDDDD00, "DEF"},                                            // teal
+        {status_bits::STUN, 0xFF4444FF, "STN"},                                                 // red
+        {status_bits::ROOT, 0xFF2266AA, "RT"},          {status_bits::SLOW, 0xFFCC66FF, "SLO"}, // purple
+        {status_bits::BURN, 0xFF0000FF, "BRN"},                                                 // red
     };
 
     for (const auto& s : specs) {
-        if ((m & s.bit) == 0) continue;
+        if ((m & s.bit) == 0) {
+            continue;
+        }
         ui.add_filled_rect(x, y, icon_size, icon_size, 0xAA000000);
         ui.add_rect_outline(x, y, icon_size, icon_size, s.color, 2.0f);
         ui.add_filled_rect(x + 3, y + 3, icon_size - 6, icon_size - 6, s.color & 0x80FFFFFF);
         ui.add_text(s.label, x + 3, y + 5, 0.55f, 0xFFFFFFFF);
         x += icon_size + icon_gap;
+    }
+}
+
+// ============================================================================
+// Bottom-right menu bar - clickable shortcuts to each panel/menu
+// ============================================================================
+
+void build_menu_bar(UIScene& ui, const PanelState& panel, MouseUI& mui, float screen_w, float screen_h) {
+    struct Button {
+        const char* label;
+        const char* hotkey;
+        WidgetId id;
+        ActivePanel panel; // ActivePanel::None for the menu button
+    };
+    const Button buttons[] = {
+        {"Bag", "I", WidgetId::MenuBarInventory, ActivePanel::Inventory},
+        {"Quests", "L", WidgetId::MenuBarQuestLog, ActivePanel::QuestLog},
+        {"Talents", "T", WidgetId::MenuBarTalents, ActivePanel::Talents},
+        {"Map", "M", WidgetId::MenuBarWorldMap, ActivePanel::WorldMap},
+        {"Menu", "Esc", WidgetId::MenuBarMenu, ActivePanel::None},
+    };
+    constexpr int N = sizeof(buttons) / sizeof(buttons[0]);
+
+    const float bw = 52.0f;
+    const float bh = 44.0f;
+    const float gap = 4.0f;
+    const float pad = 6.0f;
+    const float margin = 12.0f;
+
+    const float total_w = N * bw + (N - 1) * gap;
+    const float panel_w = total_w + pad * 2;
+    const float panel_h = bh + pad * 2;
+    const float panel_x = screen_w - panel_w - margin;
+    const float panel_y = screen_h - panel_h - margin;
+
+    ui.add_filled_rect(panel_x, panel_y, panel_w, panel_h, hud_colors::SKILL_BG);
+    ui.add_rect_outline(panel_x, panel_y, panel_w, panel_h, hud_colors::SKILL_BORDER, 1.0f);
+
+    for (int i = 0; i < N; ++i) {
+        const auto& b = buttons[i];
+        const float bx = panel_x + pad + i * (bw + gap);
+        const float by = panel_y + pad;
+
+        const bool is_active = (b.panel != ActivePanel::None && panel.active_panel == b.panel);
+        const uint32_t fill = is_active ? hud_colors::QUEST_DONE : hud_colors::SKILL_READY;
+        const uint32_t border = is_active ? WHITE : hud_colors::SKILL_BORDER;
+
+        ui.add_filled_rect(bx, by, bw, bh, fill);
+        ui.add_rect_outline(bx, by, bw, bh, border, 1.0f);
+
+        ui.add_text(b.hotkey, bx + 4, by + 3, 0.55f, hud_colors::KEY_NUMBER);
+
+        const float label_x = bx + (bw - static_cast<float>(std::strlen(b.label)) * 6.0f) * 0.5f;
+        ui.add_text(b.label, label_x, by + bh - 16.0f, 0.7f, WHITE);
+
+        mui.push_region(b.id, WidgetId::None, bx, by, bw, bh);
     }
 }
 

@@ -25,10 +25,11 @@ public:
 
     void* allocate(std::size_t size, std::size_t align);
 
-    template <typename T, typename... Args>
-    T* create(Args&&... args) {
+    template<typename T, typename... Args> T* create(Args&&... args) {
         void* mem = allocate(sizeof(T), alignof(T));
-        if (!mem) return nullptr;
+        if (!mem) {
+            return nullptr;
+        }
         T* obj = new (mem) T(std::forward<Args>(args)...);
         if constexpr (!std::is_trivially_destructible_v<T>) {
             register_destructor(obj, [](void* p) { static_cast<T*>(p)->~T(); });

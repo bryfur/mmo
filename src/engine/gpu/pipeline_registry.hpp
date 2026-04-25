@@ -8,7 +8,9 @@
 #include <unordered_map>
 #include <vector>
 
-namespace mmo::engine::core::asset { class FileWatcher; }
+namespace mmo::engine::core::asset {
+class FileWatcher;
+}
 
 
 namespace mmo::engine::gpu {
@@ -20,23 +22,23 @@ class ShaderManager;
  */
 enum class PipelineType {
     // 3D rendering pipelines
-    Model,              ///< Static 3D models
-    SkinnedModel,       ///< Animated/skeletal models
-    Terrain,            ///< Terrain rendering with splatmap
-    Skybox,             ///< Skybox cubemap rendering
-    Grid,               ///< Debug grid overlay
-    
+    Model,        ///< Static 3D models
+    SkinnedModel, ///< Animated/skeletal models
+    Terrain,      ///< Terrain rendering with splatmap
+    Skybox,       ///< Skybox cubemap rendering
+    Grid,         ///< Debug grid overlay
+
     // 2D/UI pipelines
-    UI,                 ///< 2D UI elements
-    Text,               ///< Text rendering with font atlas
-    Billboard,          ///< Camera-facing billboards
-    
+    UI,        ///< 2D UI elements
+    Text,      ///< Text rendering with font atlas
+    Billboard, ///< Camera-facing billboards
+
     // Effect pipelines
-    Effect,             ///< Particle effects (additive blending)
-    Grass,              ///< Instanced grass rendering
+    Effect, ///< Particle effects (additive blending)
+    Grass,  ///< Instanced grass rendering
 
     // Instanced rendering pipelines
-    InstancedModel,     ///< Instanced static models (rocks, trees)
+    InstancedModel,       ///< Instanced static models (rocks, trees)
     InstancedShadowModel, ///< Instanced shadow depth pass
 
     // Shadow pipelines (depth-only)
@@ -45,13 +47,13 @@ enum class PipelineType {
     ShadowTerrain,      ///< Shadow depth pass for terrain
 
     // Post-processing pipelines (fullscreen triangle, no vertex input)
-    SSAO,               ///< SSAO ambient occlusion calculation
-    GTAO,               ///< GTAO ambient occlusion calculation
-    BlurAO,             ///< Bilateral blur for AO
-    Composite,          ///< Final composite (color * AO + bloom) to swapchain
-    BloomDownsample,    ///< Bloom brightness extract + downsample
-    BloomUpsample,      ///< Bloom tent-filter upsample
-    VolumetricFog,      ///< Volumetric fog with god rays
+    SSAO,            ///< SSAO ambient occlusion calculation
+    GTAO,            ///< GTAO ambient occlusion calculation
+    BlurAO,          ///< Bilateral blur for AO
+    Composite,       ///< Final composite (color * AO + bloom) to swapchain
+    BloomDownsample, ///< Bloom brightness extract + downsample
+    BloomUpsample,   ///< Bloom tent-filter upsample
+    VolumetricFog,   ///< Volumetric fog with god rays
 
     // Count for iteration
     Count
@@ -62,53 +64,76 @@ enum class PipelineType {
  */
 inline const char* pipeline_type_to_string(PipelineType type) {
     switch (type) {
-        case PipelineType::Model:         return "Model";
-        case PipelineType::SkinnedModel:  return "SkinnedModel";
-        case PipelineType::Terrain:       return "Terrain";
-        case PipelineType::Skybox:        return "Skybox";
-        case PipelineType::Grid:          return "Grid";
-        case PipelineType::UI:            return "UI";
-        case PipelineType::Text:          return "Text";
-        case PipelineType::Billboard:     return "Billboard";
-        case PipelineType::Effect:        return "Effect";
-        case PipelineType::Grass:              return "Grass";
-        case PipelineType::InstancedModel:     return "InstancedModel";
-        case PipelineType::InstancedShadowModel: return "InstancedShadowModel";
-        case PipelineType::ShadowModel:        return "ShadowModel";
-        case PipelineType::ShadowSkinnedModel: return "ShadowSkinnedModel";
-        case PipelineType::ShadowTerrain:      return "ShadowTerrain";
-        case PipelineType::SSAO:               return "SSAO";
-        case PipelineType::GTAO:               return "GTAO";
-        case PipelineType::BlurAO:             return "BlurAO";
-        case PipelineType::Composite:          return "Composite";
-        case PipelineType::BloomDownsample:    return "BloomDownsample";
-        case PipelineType::BloomUpsample:      return "BloomUpsample";
-        case PipelineType::VolumetricFog:      return "VolumetricFog";
-        default:                               return "Unknown";
+        case PipelineType::Model:
+            return "Model";
+        case PipelineType::SkinnedModel:
+            return "SkinnedModel";
+        case PipelineType::Terrain:
+            return "Terrain";
+        case PipelineType::Skybox:
+            return "Skybox";
+        case PipelineType::Grid:
+            return "Grid";
+        case PipelineType::UI:
+            return "UI";
+        case PipelineType::Text:
+            return "Text";
+        case PipelineType::Billboard:
+            return "Billboard";
+        case PipelineType::Effect:
+            return "Effect";
+        case PipelineType::Grass:
+            return "Grass";
+        case PipelineType::InstancedModel:
+            return "InstancedModel";
+        case PipelineType::InstancedShadowModel:
+            return "InstancedShadowModel";
+        case PipelineType::ShadowModel:
+            return "ShadowModel";
+        case PipelineType::ShadowSkinnedModel:
+            return "ShadowSkinnedModel";
+        case PipelineType::ShadowTerrain:
+            return "ShadowTerrain";
+        case PipelineType::SSAO:
+            return "SSAO";
+        case PipelineType::GTAO:
+            return "GTAO";
+        case PipelineType::BlurAO:
+            return "BlurAO";
+        case PipelineType::Composite:
+            return "Composite";
+        case PipelineType::BloomDownsample:
+            return "BloomDownsample";
+        case PipelineType::BloomUpsample:
+            return "BloomUpsample";
+        case PipelineType::VolumetricFog:
+            return "VolumetricFog";
+        default:
+            return "Unknown";
     }
 }
 
 /**
  * @brief Registry for managing and caching GPU pipelines
- * 
+ *
  * The PipelineRegistry provides a central location for creating and caching
  * all graphics pipelines used by the renderer. It handles:
  * - Lazy pipeline creation on first access
  * - Pipeline caching to avoid recreation
  * - Shader compilation and management
  * - Proper resource cleanup on shutdown
- * 
+ *
  * Usage:
  *   PipelineRegistry registry;
  *   registry.init(device);
- *   
+ *
  *   // Get pipelines (created on demand)
  *   auto* model_pipeline = registry.get_pipeline(PipelineType::Model);
  *   auto* ui_pipeline = registry.get_pipeline(PipelineType::UI);
- *   
+ *
  *   // In render loop:
  *   model_pipeline->bind(render_pass);
- *   
+ *
  *   registry.shutdown();
  */
 class PipelineRegistry {
@@ -124,9 +149,9 @@ public:
 
     /**
      * @brief Initialize the pipeline registry
-     * 
+     *
      * Must be called before any pipelines can be retrieved.
-     * 
+     *
      * @param device The GPU device to create pipelines on
      * @return true on success, false on failure
      */
@@ -144,10 +169,10 @@ public:
 
     /**
      * @brief Get a pipeline by type
-     * 
+     *
      * Pipelines are created lazily on first access. Returns nullptr if
      * the pipeline could not be created.
-     * 
+     *
      * @param type The pipeline type to retrieve
      * @return Pointer to the pipeline, or nullptr on failure
      */
@@ -179,10 +204,10 @@ public:
 
     /**
      * @brief Pre-create all pipelines
-     * 
+     *
      * Call this during loading to create all pipelines upfront and avoid
      * hitching during gameplay. Returns false if any pipeline fails to create.
-     * 
+     *
      * @return true if all pipelines created successfully
      */
     bool preload_all_pipelines();
@@ -194,7 +219,7 @@ public:
 
     /**
      * @brief Invalidate all cached pipelines
-     * 
+     *
      * Call this if the swapchain format changes (e.g., window resize that
      * changes color format). Pipelines will be recreated on next access.
      */

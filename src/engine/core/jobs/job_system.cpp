@@ -24,7 +24,9 @@ JobSystem::~JobSystem() {
 }
 
 void JobSystem::init(unsigned thread_count) {
-    if (initialized_.load(std::memory_order_acquire)) return;
+    if (initialized_.load(std::memory_order_acquire)) {
+        return;
+    }
 
     unsigned n = thread_count;
     if (n == 0) {
@@ -52,16 +54,18 @@ void JobSystem::init(unsigned thread_count) {
 }
 
 void JobSystem::shutdown() {
-    if (!initialized_.load(std::memory_order_acquire)) return;
+    if (!initialized_.load(std::memory_order_acquire)) {
+        return;
+    }
 
     stopping_.store(true, std::memory_order_release);
-    {
-        std::lock_guard<std::mutex> lock(global_mutex_);
-    }
+    { std::lock_guard<std::mutex> lock(global_mutex_); }
     global_cv_.notify_all();
 
     for (auto& t : workers_) {
-        if (t.joinable()) t.join();
+        if (t.joinable()) {
+            t.join();
+        }
     }
     workers_.clear();
 
@@ -99,10 +103,14 @@ TaskHandle JobSystem::submit(std::function<void()> fn) {
 }
 
 bool JobSystem::try_pop_local_(unsigned index, Job& out) {
-    if (index >= worker_queues_.size()) return false;
+    if (index >= worker_queues_.size()) {
+        return false;
+    }
     auto& w = *worker_queues_[index];
     std::lock_guard<std::mutex> lock(w.mutex);
-    if (w.queue.empty()) return false;
+    if (w.queue.empty()) {
+        return false;
+    }
     out = std::move(w.queue.back());
     w.queue.pop_back();
     return true;
@@ -110,16 +118,24 @@ bool JobSystem::try_pop_local_(unsigned index, Job& out) {
 
 bool JobSystem::try_steal_(unsigned thief, Job& out) {
     const size_t n = worker_queues_.size();
-    if (n <= 1) return false;
+    if (n <= 1) {
+        return false;
+    }
     thread_local std::mt19937 rng{std::random_device{}()};
     std::uniform_int_distribution<size_t> dist(0, n - 1);
     for (size_t attempts = 0; attempts < n * 2; ++attempts) {
         size_t victim = dist(rng);
-        if (victim == thief) continue;
+        if (victim == thief) {
+            continue;
+        }
         auto& w = *worker_queues_[victim];
         std::unique_lock<std::mutex> lock(w.mutex, std::try_to_lock);
-        if (!lock.owns_lock()) continue;
-        if (w.queue.empty()) continue;
+        if (!lock.owns_lock()) {
+            continue;
+        }
+        if (w.queue.empty()) {
+            continue;
+        }
         out = std::move(w.queue.front());
         w.queue.pop_front();
         return true;
@@ -129,7 +145,9 @@ bool JobSystem::try_steal_(unsigned thief, Job& out) {
 
 bool JobSystem::try_pop_global_(Job& out) {
     std::lock_guard<std::mutex> lock(global_mutex_);
-    if (global_queue_.empty()) return false;
+    if (global_queue_.empty()) {
+        return false;
+    }
     out = std::move(global_queue_.front());
     global_queue_.pop_front();
     return true;
@@ -139,7 +157,9 @@ void JobSystem::execute_(Job& job) {
     try {
         job.fn();
     } catch (...) {
-        if (job.task) job.task->error = std::current_exception();
+        if (job.task) {
+            job.task->error = std::current_exception();
+        }
     }
     if (job.task) {
         job.task->done.store(true, std::memory_order_release);
@@ -158,29 +178,26 @@ void JobSystem::worker_main_(unsigned index) {
     auto last_plot = std::chrono::steady_clock::now();
     while (!stopping_.load(std::memory_order_acquire)) {
         Job job;
-        if (try_pop_local_(index, job) ||
-            try_pop_global_(job) ||
-            try_steal_(index, job)) {
+        if (try_pop_local_(index, job) || try_pop_global_(job) || try_steal_(index, job)) {
             execute_(job);
             const auto now = std::chrono::steady_clock::now();
-            if (index == 0 &&
-                std::chrono::duration_cast<std::chrono::seconds>(now - last_plot).count() >= 1) {
-                ENGINE_PROFILE_PLOT("jobs.pending",
-                    static_cast<int64_t>(pending_.load(std::memory_order_acquire)));
+            if (index == 0 && std::chrono::duration_cast<std::chrono::seconds>(now - last_plot).count() >= 1) {
+                ENGINE_PROFILE_PLOT("jobs.pending", static_cast<int64_t>(pending_.load(std::memory_order_acquire)));
                 last_plot = now;
             }
             continue;
         }
 
         std::unique_lock<std::mutex> lock(global_mutex_);
-        global_cv_.wait_for(lock, std::chrono::milliseconds(50), [this]() {
-            return stopping_.load(std::memory_order_acquire) || !global_queue_.empty();
-        });
+        global_cv_.wait_for(lock, std::chrono::milliseconds(50),
+                            [this]() { return stopping_.load(std::memory_order_acquire) || !global_queue_.empty(); });
     }
 }
 
 void JobSystem::wait(TaskHandle h) {
-    if (!h.valid()) return;
+    if (!h.valid()) {
+        return;
+    }
     auto& task = *h.raw();
     while (!task.done.load(std::memory_order_acquire)) {
         Job job;
@@ -215,9 +232,8 @@ void JobSystem::wait_all() {
             }
         }
         std::unique_lock<std::mutex> lock(wait_all_mutex_);
-        wait_all_cv_.wait_for(lock, std::chrono::milliseconds(50), [this]() {
-            return pending_.load(std::memory_order_acquire) == 0;
-        });
+        wait_all_cv_.wait_for(lock, std::chrono::milliseconds(50),
+                              [this]() { return pending_.load(std::memory_order_acquire) == 0; });
     }
 }
 

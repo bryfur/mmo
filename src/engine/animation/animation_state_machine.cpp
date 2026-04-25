@@ -6,7 +6,9 @@
 namespace mmo::engine::animation {
 
 bool TransitionCondition::evaluate(const std::vector<ParamValue>& params) const {
-    if (param_index < 0 || param_index >= static_cast<int>(params.size())) return false;
+    if (param_index < 0 || param_index >= static_cast<int>(params.size())) {
+        return false;
+    }
 
     const auto& val = params[param_index];
 
@@ -30,9 +32,7 @@ bool TransitionCondition::evaluate(const std::vector<ParamValue>& params) const 
 void AnimationStateMachine::add_state(AnimState state) {
     std::string name = state.name;
     std::sort(state.transitions.begin(), state.transitions.end(),
-              [](const StateTransition& a, const StateTransition& b) {
-                  return a.priority > b.priority;
-              });
+              [](const StateTransition& a, const StateTransition& b) { return a.priority > b.priority; });
 
     auto it = state_name_to_index_.find(name);
     if (it != state_name_to_index_.end()) {
@@ -50,7 +50,9 @@ void AnimationStateMachine::set_default_state(const std::string& name) {
 
 int AnimationStateMachine::ensure_param(const std::string& name) {
     auto it = param_name_to_index_.find(name);
-    if (it != param_name_to_index_.end()) return it->second;
+    if (it != param_name_to_index_.end()) {
+        return it->second;
+    }
     int index = static_cast<int>(params_.size());
     param_name_to_index_[name] = index;
     params_.emplace_back(0.0f);
@@ -59,7 +61,9 @@ int AnimationStateMachine::ensure_param(const std::string& name) {
 
 int AnimationStateMachine::find_param(const std::string& name) const {
     auto it = param_name_to_index_.find(name);
-    if (it != param_name_to_index_.end()) return it->second;
+    if (it != param_name_to_index_.end()) {
+        return it->second;
+    }
     return -1;
 }
 
@@ -73,7 +77,9 @@ bool AnimationStateMachine::bind_clips(const std::vector<AnimationClip>& clips) 
                 break;
             }
         }
-        if (state.clip_index < 0) all_found = false;
+        if (state.clip_index < 0) {
+            all_found = false;
+        }
     }
 
     for (auto& state : states_) {
@@ -114,32 +120,37 @@ void AnimationStateMachine::set_bool(const std::string& name, bool v) {
 
 float AnimationStateMachine::get_float(const std::string& name) const {
     int idx = find_param(name);
-    if (idx >= 0 && params_[idx].type == ParamType::Float)
+    if (idx >= 0 && params_[idx].type == ParamType::Float) {
         return params_[idx].f;
+    }
     return 0.0f;
 }
 
 bool AnimationStateMachine::get_bool(const std::string& name) const {
     int idx = find_param(name);
-    if (idx >= 0 && params_[idx].type == ParamType::Bool)
+    if (idx >= 0 && params_[idx].type == ParamType::Bool) {
         return params_[idx].b;
+    }
     return false;
 }
 
 const std::string& AnimationStateMachine::current_state() const {
     static const std::string empty;
-    if (current_state_ >= 0 && current_state_ < static_cast<int>(states_.size()))
+    if (current_state_ >= 0 && current_state_ < static_cast<int>(states_.size())) {
         return states_[current_state_].name;
+    }
     return empty;
 }
 
-void AnimationStateMachine::enter_state(int state_index,
-                                        AnimationPlayer& player,
-                                        float crossfade) {
-    if (state_index < 0 || state_index >= static_cast<int>(states_.size())) return;
+void AnimationStateMachine::enter_state(int state_index, AnimationPlayer& player, float crossfade) {
+    if (state_index < 0 || state_index >= static_cast<int>(states_.size())) {
+        return;
+    }
 
     const auto& state = states_[state_index];
-    if (state.clip_index < 0) return;
+    if (state.clip_index < 0) {
+        return;
+    }
 
     current_state_ = state_index;
     player.crossfade_to(state.clip_index, crossfade);
@@ -149,8 +160,12 @@ void AnimationStateMachine::enter_state(int state_index,
 }
 
 void AnimationStateMachine::update(AnimationPlayer& player) {
-    if (!bound_ || current_state_ < 0) return;
-    if (current_state_ >= static_cast<int>(states_.size())) return;
+    if (!bound_ || current_state_ < 0) {
+        return;
+    }
+    if (current_state_ >= static_cast<int>(states_.size())) {
+        return;
+    }
 
     const auto& state = states_[current_state_];
 
@@ -169,7 +184,10 @@ void AnimationStateMachine::update(AnimationPlayer& player) {
             if (passes && !transition.any_of.empty()) {
                 bool any = false;
                 for (const auto& cond : transition.any_of) {
-                    if (cond.evaluate(params_)) { any = true; break; }
+                    if (cond.evaluate(params_)) {
+                        any = true;
+                        break;
+                    }
                 }
                 passes = any;
             }

@@ -12,25 +12,35 @@ namespace mmo::engine::render_graph {
 // ---------- RenderPassContext ----------
 
 SDL_GPUTexture* RenderPassContext::get_texture(ResourceHandle h) const noexcept {
-    if (!graph_) return nullptr;
-    if (!h.valid()) return nullptr;
+    if (!graph_) {
+        return nullptr;
+    }
+    if (!h.valid()) {
+        return nullptr;
+    }
     const auto& r = graph_->resource(h);
     return r.transient ? r.resolved_texture : r.imported_texture;
 }
 
 SDL_GPUBuffer* RenderPassContext::get_buffer(ResourceHandle h) const noexcept {
-    if (!graph_) return nullptr;
-    if (!h.valid()) return nullptr;
+    if (!graph_) {
+        return nullptr;
+    }
+    if (!h.valid()) {
+        return nullptr;
+    }
     const auto& r = graph_->resource(h);
     return r.transient ? r.resolved_buffer : r.imported_buffer;
 }
 
 // ---------- PassBuilder ----------
 
-ResourceHandle PassBuilder::create_color_target(const std::string& name, const TextureDesc& desc,
-                                                SDL_GPULoadOp loadop, glm::vec4 clear_color) {
+ResourceHandle PassBuilder::create_color_target(const std::string& name, const TextureDesc& desc, SDL_GPULoadOp loadop,
+                                                glm::vec4 clear_color) {
     TextureDesc d = desc;
-    if ((d.usage & SDL_GPU_TEXTUREUSAGE_COLOR_TARGET) == 0) d.usage |= SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+    if ((d.usage & SDL_GPU_TEXTUREUSAGE_COLOR_TARGET) == 0) {
+        d.usage |= SDL_GPU_TEXTUREUSAGE_COLOR_TARGET;
+    }
     ResourceHandle h = graph_->declare_transient_texture(name, d);
     write(h);
     SDL_GPUColorTargetInfo info{};
@@ -45,10 +55,12 @@ ResourceHandle PassBuilder::create_color_target(const std::string& name, const T
     return h;
 }
 
-ResourceHandle PassBuilder::create_depth_target(const std::string& name, const TextureDesc& desc,
-                                                SDL_GPULoadOp loadop, float clear_depth) {
+ResourceHandle PassBuilder::create_depth_target(const std::string& name, const TextureDesc& desc, SDL_GPULoadOp loadop,
+                                                float clear_depth) {
     TextureDesc d = desc;
-    if ((d.usage & SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET) == 0) d.usage |= SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
+    if ((d.usage & SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET) == 0) {
+        d.usage |= SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
+    }
     ResourceHandle h = graph_->declare_transient_texture(name, d);
     write(h);
     SDL_GPUDepthStencilTargetInfo info{};
@@ -65,9 +77,8 @@ ResourceHandle PassBuilder::create_depth_target(const std::string& name, const T
     return h;
 }
 
-ResourceHandle PassBuilder::import_texture(const std::string& name, SDL_GPUTexture* tex,
-                                           uint32_t width, uint32_t height,
-                                           SDL_GPUTextureFormat format) {
+ResourceHandle PassBuilder::import_texture(const std::string& name, SDL_GPUTexture* tex, uint32_t width,
+                                           uint32_t height, SDL_GPUTextureFormat format) {
     return graph_->declare_imported_texture(name, tex, width, height, format);
 }
 
@@ -77,25 +88,33 @@ ResourceHandle PassBuilder::lookup(const std::string& name) const {
 
 ResourceHandle PassBuilder::read(const std::string& name) {
     ResourceHandle h = graph_->find_resource(name);
-    if (h.valid()) read(h);
+    if (h.valid()) {
+        read(h);
+    }
     return h;
 }
 
 ResourceHandle PassBuilder::write(const std::string& name) {
     ResourceHandle h = graph_->find_resource(name);
-    if (h.valid()) write(h);
+    if (h.valid()) {
+        write(h);
+    }
     return h;
 }
 
 void PassBuilder::read(ResourceHandle h) {
-    if (!h.valid()) return;
+    if (!h.valid()) {
+        return;
+    }
     if (std::find(node_->reads.begin(), node_->reads.end(), h) == node_->reads.end()) {
         node_->reads.push_back(h);
     }
 }
 
 void PassBuilder::write(ResourceHandle h) {
-    if (!h.valid()) return;
+    if (!h.valid()) {
+        return;
+    }
     if (std::find(node_->writes.begin(), node_->writes.end(), h) == node_->writes.end()) {
         node_->writes.push_back(h);
         graph_->resource(h).version += 1;
@@ -129,12 +148,18 @@ void PassBuilder::attach_depth(ResourceHandle h, SDL_GPULoadOp loadop, float cle
     node_->managed_render_pass = true;
 }
 
-void PassBuilder::set_managed_render_pass(bool managed) noexcept { node_->managed_render_pass = managed; }
-void PassBuilder::set_pass_type(PassType t) noexcept { node_->type = t; }
+void PassBuilder::set_managed_render_pass(bool managed) noexcept {
+    node_->managed_render_pass = managed;
+}
+void PassBuilder::set_pass_type(PassType t) noexcept {
+    node_->type = t;
+}
 
 // ---------- RenderGraph ----------
 
-RenderGraph::~RenderGraph() { shutdown(); }
+RenderGraph::~RenderGraph() {
+    shutdown();
+}
 
 bool RenderGraph::init(gpu::GPUDevice& device) {
     device_ = &device;
@@ -171,14 +196,15 @@ PassNode& RenderGraph::create_pass_node(const std::string& name) {
     return n;
 }
 
-void RenderGraph::add_pass(const std::string& name, PassType type,
-                           std::function<void(PassBuilder&)> setup,
+void RenderGraph::add_pass(const std::string& name, PassType type, std::function<void(PassBuilder&)> setup,
                            PassExecuteFn execute) {
     PassNode& node = create_pass_node(name);
     node.type = type;
     {
         PassBuilder b(*this, node);
-        if (setup) setup(b);
+        if (setup) {
+            setup(b);
+        }
     }
     node.execute = std::move(execute);
 }
@@ -194,13 +220,17 @@ const ResourceNode& RenderGraph::resource(ResourceHandle h) const {
 
 ResourceHandle RenderGraph::find_resource(const std::string& name) const {
     auto it = name_to_resource_.find(name);
-    if (it == name_to_resource_.end()) return ResourceHandle::invalid();
+    if (it == name_to_resource_.end()) {
+        return ResourceHandle::invalid();
+    }
     return ResourceHandle{it->second};
 }
 
 ResourceHandle RenderGraph::declare_transient_texture(const std::string& name, const TextureDesc& desc) {
     auto it = name_to_resource_.find(name);
-    if (it != name_to_resource_.end()) return ResourceHandle{it->second};
+    if (it != name_to_resource_.end()) {
+        return ResourceHandle{it->second};
+    }
     uint32_t idx = static_cast<uint32_t>(resources_.size());
     ResourceNode r;
     r.type = ResourceType::Texture;
@@ -212,8 +242,8 @@ ResourceHandle RenderGraph::declare_transient_texture(const std::string& name, c
     return ResourceHandle{idx};
 }
 
-ResourceHandle RenderGraph::declare_imported_texture(const std::string& name, SDL_GPUTexture* tex,
-                                                     uint32_t w, uint32_t h, SDL_GPUTextureFormat fmt) {
+ResourceHandle RenderGraph::declare_imported_texture(const std::string& name, SDL_GPUTexture* tex, uint32_t w,
+                                                     uint32_t h, SDL_GPUTextureFormat fmt) {
     auto it = name_to_resource_.find(name);
     if (it != name_to_resource_.end()) {
         auto& existing = resources_[it->second];
@@ -242,14 +272,18 @@ bool RenderGraph::topo_sort(std::vector<size_t>& out_order, bool& out_cycle) con
     out_cycle = false;
     out_order.clear();
     const size_t n = passes_.size();
-    if (n == 0) return true;
+    if (n == 0) {
+        return true;
+    }
 
     // For each resource, find the producing pass(es).
     // A pass that reads R has an edge from every pass that wrote R.
     std::vector<std::vector<size_t>> producers(resources_.size());
     for (size_t i = 0; i < n; ++i) {
         for (auto h : passes_[i].writes) {
-            if (h.valid()) producers[h.index()].push_back(i);
+            if (h.valid()) {
+                producers[h.index()].push_back(i);
+            }
         }
     }
 
@@ -258,9 +292,13 @@ bool RenderGraph::topo_sort(std::vector<size_t>& out_order, bool& out_cycle) con
     std::vector<std::unordered_set<size_t>> seen_edges(n);
     for (size_t i = 0; i < n; ++i) {
         for (auto h : passes_[i].reads) {
-            if (!h.valid()) continue;
+            if (!h.valid()) {
+                continue;
+            }
             for (size_t p : producers[h.index()]) {
-                if (p == i) continue;
+                if (p == i) {
+                    continue;
+                }
                 if (seen_edges[p].insert(i).second) {
                     adj[p].push_back(i);
                     ++indegree[i];
@@ -271,12 +309,19 @@ bool RenderGraph::topo_sort(std::vector<size_t>& out_order, bool& out_cycle) con
 
     // Kahn topo with FIFO so passes added earlier come first when independent.
     std::queue<size_t> q;
-    for (size_t i = 0; i < n; ++i) if (indegree[i] == 0) q.push(i);
+    for (size_t i = 0; i < n; ++i) {
+        if (indegree[i] == 0) {
+            q.push(i);
+        }
+    }
     while (!q.empty()) {
-        size_t i = q.front(); q.pop();
+        size_t i = q.front();
+        q.pop();
         out_order.push_back(i);
         for (size_t j : adj[i]) {
-            if (--indegree[j] == 0) q.push(j);
+            if (--indegree[j] == 0) {
+                q.push(j);
+            }
         }
     }
     if (out_order.size() != n) {
@@ -289,17 +334,18 @@ bool RenderGraph::topo_sort(std::vector<size_t>& out_order, bool& out_cycle) con
 void RenderGraph::compute_lifetimes() {
     for (auto& r : resources_) {
         r.first_write_pass = std::numeric_limits<uint32_t>::max();
-        r.last_read_pass   = std::numeric_limits<uint32_t>::max();
+        r.last_read_pass = std::numeric_limits<uint32_t>::max();
     }
     for (size_t step = 0; step < compiled_order_.size(); ++step) {
         size_t pi = compiled_order_[step];
         for (auto h : passes_[pi].writes) {
             auto& r = resources_[h.index()];
-            if (r.first_write_pass == std::numeric_limits<uint32_t>::max())
+            if (r.first_write_pass == std::numeric_limits<uint32_t>::max()) {
                 r.first_write_pass = static_cast<uint32_t>(step);
-            r.last_read_pass = std::max<uint32_t>(
-                r.last_read_pass == std::numeric_limits<uint32_t>::max() ? 0u : r.last_read_pass,
-                static_cast<uint32_t>(step));
+            }
+            r.last_read_pass =
+                std::max<uint32_t>(r.last_read_pass == std::numeric_limits<uint32_t>::max() ? 0u : r.last_read_pass,
+                                   static_cast<uint32_t>(step));
         }
         for (auto h : passes_[pi].reads) {
             auto& r = resources_[h.index()];
@@ -318,7 +364,9 @@ void RenderGraph::allocate_transients() {
     for (size_t step = 0; step < compiled_order_.size(); ++step) {
         // Acquire new transients.
         for (auto& r : resources_) {
-            if (!r.transient) continue;
+            if (!r.transient) {
+                continue;
+            }
             if (r.first_write_pass == static_cast<uint32_t>(step) && r.resolved_texture == nullptr) {
                 r.resolved_texture = allocator_.acquire_texture(r.texture_desc, r.name.c_str());
                 ++last_transient_count_;
@@ -326,7 +374,9 @@ void RenderGraph::allocate_transients() {
         }
         // Release transients no longer needed.
         for (auto& r : resources_) {
-            if (!r.transient) continue;
+            if (!r.transient) {
+                continue;
+            }
             if (r.last_read_pass == static_cast<uint32_t>(step) && r.resolved_texture != nullptr) {
                 allocator_.release_texture(r.texture_desc, r.resolved_texture);
                 // Don't null out resolved_texture: pass might run after lifetime in same frame
@@ -343,8 +393,7 @@ bool RenderGraph::compile() {
     bool cycle = false;
     bool ok = topo_sort(compiled_order_, cycle);
     if (!ok) {
-        ENGINE_LOG_ERROR("rg", "compile: cycle detected in render graph (passes={}); skipping execute",
-                         passes_.size());
+        ENGINE_LOG_ERROR("rg", "compile: cycle detected in render graph (passes={}); skipping execute", passes_.size());
         compiled_order_.clear();
         compiled_ = false;
         return false;
@@ -357,13 +406,14 @@ bool RenderGraph::compile() {
 }
 
 void RenderGraph::execute() {
-    if (!compiled_) return;
+    if (!compiled_) {
+        return;
+    }
     for (size_t step = 0; step < compiled_order_.size(); ++step) {
         PassNode& pass = passes_[compiled_order_[step]];
 
         SDL_GPURenderPass* sdl_pass = nullptr;
-        if (cb_ && pass.managed_render_pass &&
-            (!pass.color_attachments.empty() || pass.has_depth)) {
+        if (cb_ && pass.managed_render_pass && (!pass.color_attachments.empty() || pass.has_depth)) {
 
             std::vector<SDL_GPUColorTargetInfo> color_infos;
             color_infos.reserve(pass.color_attachments.size());
@@ -384,16 +434,18 @@ void RenderGraph::execute() {
                 depth_info.texture = r.transient ? r.resolved_texture : r.imported_texture;
                 depth_ptr = &depth_info;
             }
-            sdl_pass = SDL_BeginGPURenderPass(cb_,
-                                              color_infos.empty() ? nullptr : color_infos.data(),
-                                              static_cast<Uint32>(color_infos.size()),
-                                              depth_ptr);
+            sdl_pass = SDL_BeginGPURenderPass(cb_, color_infos.empty() ? nullptr : color_infos.data(),
+                                              static_cast<Uint32>(color_infos.size()), depth_ptr);
         }
 
         RenderPassContext ctx(*this, cb_, sdl_pass);
-        if (pass.execute) pass.execute(ctx);
+        if (pass.execute) {
+            pass.execute(ctx);
+        }
 
-        if (sdl_pass) SDL_EndGPURenderPass(sdl_pass);
+        if (sdl_pass) {
+            SDL_EndGPURenderPass(sdl_pass);
+        }
     }
 }
 
@@ -401,12 +453,17 @@ void RenderGraph::end_frame() {
     // Return all transients to the pool.
     allocator_.release_all();
     for (auto& r : resources_) {
-        if (r.transient) { r.resolved_texture = nullptr; r.resolved_buffer = nullptr; }
+        if (r.transient) {
+            r.resolved_texture = nullptr;
+            r.resolved_buffer = nullptr;
+        }
     }
     cb_ = nullptr;
 }
 
-void RenderGraph::evict_pool() { allocator_.evict_all(); }
+void RenderGraph::evict_pool() {
+    allocator_.evict_all();
+}
 
 void RenderGraph::dump_dot(std::ostream& os) const {
     os << "digraph RenderGraph {\n";
@@ -415,14 +472,20 @@ void RenderGraph::dump_dot(std::ostream& os) const {
         os << "  pass" << i << " [label=\"" << passes_[i].name << "\", shape=box];\n";
     }
     for (size_t i = 0; i < resources_.size(); ++i) {
-        os << "  res" << i << " [label=\"" << resources_[i].name
-           << (resources_[i].transient ? " (T)" : " (I)") << "\", shape=ellipse];\n";
+        os << "  res" << i << " [label=\"" << resources_[i].name << (resources_[i].transient ? " (T)" : " (I)")
+           << "\", shape=ellipse];\n";
     }
     for (size_t i = 0; i < passes_.size(); ++i) {
-        for (auto h : passes_[i].writes) if (h.valid())
-            os << "  pass" << i << " -> res" << h.index() << ";\n";
-        for (auto h : passes_[i].reads) if (h.valid())
-            os << "  res" << h.index() << " -> pass" << i << ";\n";
+        for (auto h : passes_[i].writes) {
+            if (h.valid()) {
+                os << "  pass" << i << " -> res" << h.index() << ";\n";
+            }
+        }
+        for (auto h : passes_[i].reads) {
+            if (h.valid()) {
+                os << "  res" << h.index() << " -> pass" << i << ";\n";
+            }
+        }
     }
     os << "}\n";
 }

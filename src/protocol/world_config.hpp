@@ -10,9 +10,7 @@ struct NetWorldConfig : Serializable<NetWorldConfig> {
     float world_height = 32000.0f;
     float tick_rate = 60.0f;
 
-    static constexpr size_t serialized_size() {
-        return sizeof(float) * 3;
-    }
+    static constexpr size_t serialized_size() { return sizeof(float) * 3; }
 
     void serialize_impl(BufferWriter& w) const {
         w.write(world_width);

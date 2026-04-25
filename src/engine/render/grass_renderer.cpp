@@ -1,15 +1,15 @@
 #include "grass_renderer.hpp"
-#include "SDL3/SDL_gpu.h"
 #include "engine/gpu/gpu_buffer.hpp"
 #include "engine/gpu/gpu_device.hpp"
 #include "engine/gpu/gpu_texture.hpp"
 #include "engine/gpu/gpu_types.hpp"
 #include "engine/gpu/pipeline_registry.hpp"
 #include "engine/scene/frustum.hpp"
-#include <SDL3/SDL_log.h>
+#include "SDL3/SDL_gpu.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <SDL3/SDL_log.h>
 #include <vector>
 
 namespace mmo::engine::render {
@@ -22,9 +22,11 @@ GrassRenderer::~GrassRenderer() {
     shutdown();
 }
 
-bool GrassRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry,
-                         float world_width, float world_height) {
-    if (initialized_) return true;
+bool GrassRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry, float world_width,
+                         float world_height) {
+    if (initialized_) {
+        return true;
+    }
 
     SDL_Log("Initializing grass renderer (chunked instanced, AAA-quality)...");
 
@@ -51,8 +53,8 @@ bool GrassRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline
     // usually 200-400 visible after frustum cull.
     constexpr size_t initial_capacity_chunks = 2048;
     chunk_storage_capacity_bytes_ = initial_capacity_chunks * sizeof(glm::vec4);
-    chunk_storage_buffer_ = gpu::GPUBuffer::create_dynamic(
-        device, gpu::GPUBuffer::Type::Storage, chunk_storage_capacity_bytes_);
+    chunk_storage_buffer_ =
+        gpu::GPUBuffer::create_dynamic(device, gpu::GPUBuffer::Type::Storage, chunk_storage_capacity_bytes_);
     if (!chunk_storage_buffer_) {
         SDL_Log("GrassRenderer::init: Failed to create chunk storage buffer");
         return false;
@@ -60,8 +62,8 @@ bool GrassRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline
     visible_chunks_scratch_.reserve(initial_capacity_chunks);
 
     initialized_ = true;
-    SDL_Log("Grass renderer initialized (blade mesh: %u indices, chunks: %ux%u, blades/chunk: %u)",
-            blade_index_count_, BLADES_PER_CHUNK_SIDE, BLADES_PER_CHUNK_SIDE, BLADES_PER_CHUNK_SQ);
+    SDL_Log("Grass renderer initialized (blade mesh: %u indices, chunks: %ux%u, blades/chunk: %u)", blade_index_count_,
+            BLADES_PER_CHUNK_SIDE, BLADES_PER_CHUNK_SIDE, BLADES_PER_CHUNK_SQ);
     return true;
 }
 
@@ -116,20 +118,20 @@ void GrassRenderer::generate_blade_mesh() {
         indices.push_back(base + 3);
     }
 
-    blade_vertex_buffer_ = gpu::GPUBuffer::create_static(
-        *device_, gpu::GPUBuffer::Type::Vertex,
-        vertices.data(), vertices.size() * sizeof(gpu::Vertex3D));
+    blade_vertex_buffer_ = gpu::GPUBuffer::create_static(*device_, gpu::GPUBuffer::Type::Vertex, vertices.data(),
+                                                         vertices.size() * sizeof(gpu::Vertex3D));
 
-    blade_index_buffer_ = gpu::GPUBuffer::create_static(
-        *device_, gpu::GPUBuffer::Type::Index,
-        indices.data(), indices.size() * sizeof(uint32_t));
+    blade_index_buffer_ = gpu::GPUBuffer::create_static(*device_, gpu::GPUBuffer::Type::Index, indices.data(),
+                                                        indices.size() * sizeof(uint32_t));
 
     blade_index_count_ = static_cast<uint32_t>(indices.size());
 }
 
 void GrassRenderer::upload_chunks(SDL_GPUCommandBuffer* cmd, const glm::vec3& camera_pos,
                                   const scene::Frustum* frustum) {
-    if (!initialized_ || !cmd) return;
+    if (!initialized_ || !cmd) {
+        return;
+    }
 
     // === CPU chunk culling ===
     const float chunk_size = CHUNK_SIZE;
@@ -141,7 +143,7 @@ void GrassRenderer::upload_chunks(SDL_GPUCommandBuffer* cmd, const glm::vec3& ca
     const int half_extent = static_cast<int>(std::ceil(view_dist / chunk_size)) + 1;
 
     const float y_min = heightmap_params_.min_height;
-    const float y_max = heightmap_params_.max_height + 20.0f;  // + blade height upper bound
+    const float y_max = heightmap_params_.max_height + 20.0f; // + blade height upper bound
 
     visible_chunks_scratch_.clear();
 
@@ -155,33 +157,43 @@ void GrassRenderer::upload_chunks(SDL_GPUCommandBuffer* cmd, const glm::vec3& ca
             float dx = cx - camera_pos.x;
             float dz = cz - camera_pos.z;
             float dist_sq = dx * dx + dz * dz;
-            if (dist_sq > view_dist_sq) continue;
+            if (dist_sq > view_dist_sq) {
+                continue;
+            }
 
-            if (ox + chunk_size < 50.0f || ox > world_width_ - 50.0f ||
-                oz + chunk_size < 50.0f || oz > world_height_ - 50.0f) continue;
+            if (ox + chunk_size < 50.0f || ox > world_width_ - 50.0f || oz + chunk_size < 50.0f ||
+                oz > world_height_ - 50.0f) {
+                continue;
+            }
 
             float town_cx = world_width_ * 0.5f;
             float town_cz = world_height_ * 0.5f;
-            if (std::abs(cx - town_cx) < 200.0f && std::abs(cz - town_cz) < 200.0f) continue;
+            if (std::abs(cx - town_cx) < 200.0f && std::abs(cz - town_cz) < 200.0f) {
+                continue;
+            }
 
             if (frustum) {
                 glm::vec3 aabb_min(ox, y_min, oz);
                 glm::vec3 aabb_max(ox + chunk_size, y_max, oz + chunk_size);
-                if (!frustum->intersects_aabb(aabb_min, aabb_max)) continue;
+                if (!frustum->intersects_aabb(aabb_min, aabb_max)) {
+                    continue;
+                }
             }
 
             visible_chunks_scratch_.emplace_back(ox, 0.0f, oz, 0.0f);
         }
     }
 
-    if (visible_chunks_scratch_.empty()) return;
+    if (visible_chunks_scratch_.empty()) {
+        return;
+    }
 
     // Grow storage buffer if needed (copy pass internally — must be outside render pass).
     size_t needed_bytes = visible_chunks_scratch_.size() * sizeof(glm::vec4);
     if (needed_bytes > chunk_storage_capacity_bytes_) {
         chunk_storage_capacity_bytes_ = needed_bytes * 2;
-        chunk_storage_buffer_ = gpu::GPUBuffer::create_dynamic(
-            *device_, gpu::GPUBuffer::Type::Storage, chunk_storage_capacity_bytes_);
+        chunk_storage_buffer_ =
+            gpu::GPUBuffer::create_dynamic(*device_, gpu::GPUBuffer::Type::Storage, chunk_storage_capacity_bytes_);
         if (!chunk_storage_buffer_) {
             SDL_Log("GrassRenderer::upload_chunks: Failed to grow chunk storage buffer");
             return;
@@ -191,15 +203,21 @@ void GrassRenderer::upload_chunks(SDL_GPUCommandBuffer* cmd, const glm::vec3& ca
     chunk_storage_buffer_->update(cmd, visible_chunks_scratch_.data(), needed_bytes);
 }
 
-void GrassRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                           const glm::mat4& view, const glm::mat4& projection,
-                           const glm::vec3& camera_pos, const glm::vec3& light_dir,
-                           const SDL_GPUTextureSamplerBinding* shadow_bindings,
-                           int shadow_binding_count) {
-    if (!initialized_ || !pipeline_registry_ || !pass || !cmd) return;
-    if (!blade_vertex_buffer_ || !blade_index_buffer_ || blade_index_count_ == 0) return;
-    if (!heightmap_texture_ || !heightmap_sampler_) return;
-    if (visible_chunks_scratch_.empty() || !chunk_storage_buffer_) return;
+void GrassRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const glm::mat4& view,
+                           const glm::mat4& projection, const glm::vec3& camera_pos, const glm::vec3& light_dir,
+                           const SDL_GPUTextureSamplerBinding* shadow_bindings, int shadow_binding_count) {
+    if (!initialized_ || !pipeline_registry_ || !pass || !cmd) {
+        return;
+    }
+    if (!blade_vertex_buffer_ || !blade_index_buffer_ || blade_index_count_ == 0) {
+        return;
+    }
+    if (!heightmap_texture_ || !heightmap_sampler_) {
+        return;
+    }
+    if (visible_chunks_scratch_.empty() || !chunk_storage_buffer_) {
+        return;
+    }
 
     auto* pipeline = pipeline_registry_->get_grass_pipeline();
     if (!pipeline) {
@@ -247,10 +265,7 @@ void GrassRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
     SDL_PushGPUFragmentUniformData(cmd, 0, &fu, sizeof(fu));
 
     // Vertex sampler slot 0: heightmap.
-    SDL_GPUTextureSamplerBinding heightmap_binding = {
-        heightmap_texture_->handle(),
-        heightmap_sampler_->handle()
-    };
+    SDL_GPUTextureSamplerBinding heightmap_binding = {heightmap_texture_->handle(), heightmap_sampler_->handle()};
     SDL_BindGPUVertexSamplers(pass, 0, &heightmap_binding, 1);
 
     // Vertex storage buffer slot 0: visible-chunk origins.
@@ -263,20 +278,19 @@ void GrassRenderer::render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
     }
 
     if (cluster_light_data_ && cluster_offsets_ && cluster_indices_ && cluster_params_) {
-        SDL_GPUBuffer* bufs[3] = { cluster_light_data_, cluster_offsets_, cluster_indices_ };
+        SDL_GPUBuffer* bufs[3] = {cluster_light_data_, cluster_offsets_, cluster_indices_};
         SDL_BindGPUFragmentStorageBuffers(pass, 0, bufs, 3);
         SDL_PushGPUFragmentUniformData(cmd, 2, cluster_params_, static_cast<Uint32>(cluster_params_size_));
     }
 
     // Blade mesh.
-    SDL_GPUBufferBinding vb_binding = { blade_vertex_buffer_->handle(), 0 };
+    SDL_GPUBufferBinding vb_binding = {blade_vertex_buffer_->handle(), 0};
     SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
 
-    SDL_GPUBufferBinding ib_binding = { blade_index_buffer_->handle(), 0 };
+    SDL_GPUBufferBinding ib_binding = {blade_index_buffer_->handle(), 0};
     SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
 
-    uint32_t instance_count =
-        static_cast<uint32_t>(visible_chunks_scratch_.size()) * BLADES_PER_CHUNK_SQ;
+    uint32_t instance_count = static_cast<uint32_t>(visible_chunks_scratch_.size()) * BLADES_PER_CHUNK_SQ;
     SDL_DrawGPUIndexedPrimitives(pass, blade_index_count_, instance_count, 0, 0, 0);
 }
 

@@ -10,8 +10,7 @@ namespace mmo::client {
 // shake, focus-bias and fov-bias primitives. Engine cameras stay game-agnostic.
 class CombatCamera {
 public:
-    explicit CombatCamera(engine::systems::CameraController& camera) noexcept
-        : camera_(camera) {}
+    explicit CombatCamera(engine::systems::CameraController& camera) noexcept : camera_(camera) {}
 
     void set_in_combat(bool in_combat) noexcept {
         in_combat_ = in_combat;
@@ -23,9 +22,7 @@ public:
         push_state();
     }
 
-    void notify_attack() {
-        camera_.add_shake(engine::systems::ShakeType::Impact, 0.3f, 0.08f);
-    }
+    void notify_attack() { camera_.add_shake(engine::systems::ShakeType::Impact, 0.3f, 0.08f); }
 
     void notify_hit(const glm::vec3& hit_direction, float damage) {
         const float intensity = std::min(damage / 100.0f, 1.5f);

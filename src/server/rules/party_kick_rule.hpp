@@ -26,9 +26,15 @@ public:
     };
 
     [[nodiscard]] static constexpr Result check(const Inputs& in) noexcept {
-        if (in.kicker_id == in.target_id)    return Result::SelfKick;
-        if (!in.kicker_is_leader)            return Result::NotLeader;
-        if (!in.target_in_same_party)        return Result::TargetNotInParty;
+        if (in.kicker_id == in.target_id) {
+            return Result::SelfKick;
+        }
+        if (!in.kicker_is_leader) {
+            return Result::NotLeader;
+        }
+        if (!in.target_in_same_party) {
+            return Result::TargetNotInParty;
+        }
         return Result::Ok;
     }
 };

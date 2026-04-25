@@ -1,20 +1,20 @@
 #pragma once
 
 #include "engine/effect_definition.hpp"
-#include <glm/glm.hpp>
 #include <algorithm>
-#include <vector>
+#include <glm/glm.hpp>
 #include <string>
 #include <type_traits>
+#include <vector>
 
 namespace mmo::engine::systems {
 
 // Types from mmo::engine (parent namespace) are directly accessible
+using mmo::engine::AppearanceDefinition;
 using mmo::engine::EffectDefinition;
 using mmo::engine::EmitterDefinition;
-using mmo::engine::VelocityDefinition;
 using mmo::engine::RotationDefinition;
-using mmo::engine::AppearanceDefinition;
+using mmo::engine::VelocityDefinition;
 
 // Runtime particle instance
 struct Particle {
@@ -30,20 +30,20 @@ struct Particle {
     glm::vec4 color = {1, 1, 1, 1};
 
     // Timing
-    float age = 0.0f;           // How long this particle has been alive
-    float lifetime = 1.0f;      // Total lifetime before death
+    float age = 0.0f;      // How long this particle has been alive
+    float lifetime = 1.0f; // Total lifetime before death
 
     // Model reference (points to the stable string in EmitterDefinition)
     const std::string* model = nullptr;
 
     // For orbital particles
     float orbit_angle = 0.0f;
-    int orbit_index = 0;        // Which object in the orbit (0, 1, 2, etc.)
-    glm::vec3 orbit_origin = {0, 0, 0};  // Center point of orbit
+    int orbit_index = 0;                // Which object in the orbit (0, 1, 2, etc.)
+    glm::vec3 orbit_origin = {0, 0, 0}; // Center point of orbit
 
     // For arc particles (melee slash)
-    glm::vec3 arc_origin = {0, 0, 0};     // Center point of the arc
-    glm::vec3 arc_direction = {1, 0, 0};  // Base direction for the arc
+    glm::vec3 arc_origin = {0, 0, 0};    // Center point of the arc
+    glm::vec3 arc_direction = {1, 0, 0}; // Base direction for the arc
 };
 
 // Runtime emitter instance (spawns and manages particles)
@@ -55,25 +55,25 @@ struct EmitterInstance {
 
     // Emitter state
     float age = 0.0f;
-    float next_spawn_time = 0.0f;  // For continuous spawning
+    float next_spawn_time = 0.0f;   // For continuous spawning
     bool has_spawned_burst = false; // For burst mode
 
     // Spawn location and direction
     glm::vec3 origin = {0, 0, 0};
     glm::vec3 direction = {1, 0, 0};
-    float range = 100.0f;  // Effect range/scale
+    float range = 100.0f; // Effect range/scale
 
     // Check if emitter is still active
     bool is_active() const {
-        if (!definition) return false;
+        if (!definition) {
+            return false;
+        }
         float duration = definition->duration < 0 ? definition->particle_lifetime : definition->duration;
         return age < duration;
     }
 
     // Check if emitter has finished and all particles are dead
-    bool is_complete() const {
-        return !is_active() && particles.empty();
-    }
+    bool is_complete() const { return !is_active() && particles.empty(); }
 };
 
 // Runtime effect instance (collection of emitters)
@@ -102,18 +102,15 @@ class EffectSystem {
 public:
     // Spawn a new effect at a location
     // Returns index of the spawned effect, or -1 if failed
-    int spawn_effect(
-        const EffectDefinition* definition,
-        const glm::vec3& position,
-        const glm::vec3& direction = {1, 0, 0},
-        float range = -1.0f  // -1 = use definition's default_range
+    int spawn_effect(const EffectDefinition* definition, const glm::vec3& position,
+                     const glm::vec3& direction = {1, 0, 0},
+                     float range = -1.0f // -1 = use definition's default_range
     );
 
     // Update all active effects and particles.
     // TerrainHeightFn is invoked per particle; templating avoids std::function
     // indirection in the inner particle loop.
-    template <typename TerrainHeightFn>
-    void update(float dt, TerrainHeightFn&& get_terrain_height);
+    template<typename TerrainHeightFn> void update(float dt, TerrainHeightFn&& get_terrain_height);
 
     // Update with no terrain sampling (skips the per-particle terrain clamp).
     void update(float dt);
@@ -142,12 +139,13 @@ private:
     // Emitter update is templated on terrain sampler so the particle-level
     // check folds away when sampling is disabled. HasTerrain=false path
     // compiles out the per-particle callable invocation entirely.
-    template <typename TerrainHeightFn, bool HasTerrain>
+    template<typename TerrainHeightFn, bool HasTerrain>
     void update_emitter_t(EmitterInstance& emitter, float dt, TerrainHeightFn& get_terrain_height);
 
     void spawn_particles(EmitterInstance& emitter, int count);
     void update_particle(Particle& particle, const EmitterDefinition& emitter_def, float dt);
-    glm::vec3 calculate_initial_velocity(const VelocityDefinition& vel_def, const glm::vec3& direction, int particle_index);
+    glm::vec3 calculate_initial_velocity(const VelocityDefinition& vel_def, const glm::vec3& direction,
+                                         int particle_index);
 
     // Compacts dead effects after updating - shared between overloads.
     void compact_effects();
@@ -157,11 +155,11 @@ private:
 // Template definitions (header-only so any caller can instantiate them)
 // ============================================================================
 
-template <typename TerrainHeightFn, bool HasTerrain>
-void EffectSystem::update_emitter_t(
-    EmitterInstance& emitter, float dt, TerrainHeightFn& get_terrain_height
-) {
-    if (!emitter.definition) return;
+template<typename TerrainHeightFn, bool HasTerrain>
+void EffectSystem::update_emitter_t(EmitterInstance& emitter, float dt, TerrainHeightFn& get_terrain_height) {
+    if (!emitter.definition) {
+        return;
+    }
 
     const auto& def = *emitter.definition;
     emitter.age += dt;
@@ -191,15 +189,12 @@ void EffectSystem::update_emitter_t(
         }
     }
 
-    emitter.particles.erase(
-        std::remove_if(emitter.particles.begin(), emitter.particles.end(),
-            [](const Particle& p) { return p.age >= p.lifetime; }),
-        emitter.particles.end()
-    );
+    emitter.particles.erase(std::remove_if(emitter.particles.begin(), emitter.particles.end(),
+                                           [](const Particle& p) { return p.age >= p.lifetime; }),
+                            emitter.particles.end());
 }
 
-template <typename TerrainHeightFn>
-void EffectSystem::update(float dt, TerrainHeightFn&& get_terrain_height) {
+template<typename TerrainHeightFn> void EffectSystem::update(float dt, TerrainHeightFn&& get_terrain_height) {
     auto sampler = std::forward<TerrainHeightFn>(get_terrain_height);
     for (auto& effect : effects_) {
         effect.age += dt;

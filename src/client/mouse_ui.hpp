@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <unordered_map>
@@ -15,7 +16,11 @@ struct WindowPos {
     float y = 0.0f;
     bool has_position = false;
 
-    void set(float nx, float ny) { x = nx; y = ny; has_position = true; }
+    void set(float nx, float ny) {
+        x = nx;
+        y = ny;
+        has_position = true;
+    }
 };
 
 // Identifier for every interactive region registered this frame.
@@ -43,7 +48,7 @@ enum class WidgetId : uint16_t {
 
     // Vendor rows (32 slots max)
     VendorRowFirst = 100,
-    VendorRowLast  = 131,
+    VendorRowLast = 131,
 
     // Vendor tab switch (buy / sell)
     VendorTab = 140,
@@ -52,37 +57,44 @@ enum class WidgetId : uint16_t {
 
     // Inventory slots (MAX_INVENTORY_SLOTS)
     InventorySlotFirst = 200,
-    InventorySlotLast  = 219,
+    InventorySlotLast = 219,
 
     // Inventory action buttons
     InventoryEquipBtn = 230,
-    InventoryUseBtn   = 231,
+    InventoryUseBtn = 231,
 
     // Craft rows
     CraftRowFirst = 300,
-    CraftRowLast  = 331,
-    CraftButton   = 340,
+    CraftRowLast = 331,
+    CraftButton = 340,
 
     // Quest log rows
     QuestRowFirst = 400,
-    QuestRowLast  = 431,
+    QuestRowLast = 431,
     QuestAbandonBtn = 440,
 
     // Talent tree rows
     TalentRowFirst = 500,
-    TalentRowLast  = 599,
+    TalentRowLast = 599,
 
     // Party frame right-click kick targets (5 slots)
     PartyKickFirst = 600,
-    PartyKickLast  = 604,
+    PartyKickLast = 604,
 
     // Skill bar buttons (5 slots)
     SkillSlotFirst = 700,
-    SkillSlotLast  = 707,
+    SkillSlotLast = 707,
 
     // Chat channel buttons (5 channels)
     ChatChannelFirst = 800,
-    ChatChannelLast  = 804,
+    ChatChannelLast = 804,
+
+    // Bottom-right menu bar (panel/menu shortcut buttons)
+    MenuBarInventory = 900,
+    MenuBarQuestLog,
+    MenuBarTalents,
+    MenuBarWorldMap,
+    MenuBarMenu,
 };
 
 inline WidgetId vendor_row_id(int i) {
@@ -114,12 +126,10 @@ inline WidgetId chat_channel_id(int i) {
 // a region to a draggable window (for z-order / front-to-back lookups).
 struct HitRegion {
     WidgetId id = WidgetId::None;
-    WidgetId window = WidgetId::None;   // The title bar / window this region belongs to
+    WidgetId window = WidgetId::None; // The title bar / window this region belongs to
     float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
 
-    bool contains(float px, float py) const {
-        return px >= x && px <= x + w && py >= y && py <= y + h;
-    }
+    bool contains(float px, float py) const { return px >= x && px <= x + w && py >= y && py <= y + h; }
 };
 
 // Stores ordered list of hit regions (later entries drawn on top).
@@ -127,10 +137,10 @@ struct HitRegion {
 struct MouseUI {
     float mouse_x = 0.0f;
     float mouse_y = 0.0f;
-    bool  left_pressed = false;
-    bool  left_held = false;
-    bool  left_released = false;
-    bool  right_pressed = false;
+    bool left_pressed = false;
+    bool left_held = false;
+    bool left_released = false;
+    bool right_pressed = false;
 
     std::vector<HitRegion> regions;
 
@@ -146,18 +156,19 @@ struct MouseUI {
     // Per-window positions keyed by the title WidgetId.
     std::unordered_map<uint16_t, WindowPos> window_positions;
 
-    void begin_frame(float mx, float my, bool pressed, bool held, bool released,
-                     bool right_pressed_edge = false) {
-        mouse_x = mx; mouse_y = my;
-        left_pressed = pressed; left_held = held; left_released = released;
+    void begin_frame(float mx, float my, bool pressed, bool held, bool released, bool right_pressed_edge = false) {
+        mouse_x = mx;
+        mouse_y = my;
+        left_pressed = pressed;
+        left_held = held;
+        left_released = released;
         right_pressed = right_pressed_edge;
         regions.clear();
         clicked = WidgetId::None;
         right_clicked = WidgetId::None;
     }
 
-    void push_region(WidgetId id, WidgetId window,
-                     float x, float y, float w, float h) {
+    void push_region(WidgetId id, WidgetId window, float x, float y, float w, float h) {
         regions.push_back({id, window, x, y, w, h});
     }
 
@@ -165,7 +176,9 @@ struct MouseUI {
     // region drawn last wins (matches visual z-order).
     const HitRegion* hit_test(float mx, float my) const {
         for (auto it = regions.rbegin(); it != regions.rend(); ++it) {
-            if (it->contains(mx, my)) return &*it;
+            if (it->contains(mx, my)) {
+                return &*it;
+            }
         }
         return nullptr;
     }
@@ -173,16 +186,22 @@ struct MouseUI {
     // Returns true if the mouse is currently over any registered region
     // (used to suppress click-to-attack in the world).
     bool over_any_ui() const {
-        for (const auto& r : regions) if (r.contains(mouse_x, mouse_y)) return true;
+        for (const auto& r : regions) {
+            if (r.contains(mouse_x, mouse_y)) {
+                return true;
+            }
+        }
         return false;
     }
 
-    WindowPos& pos_for(WidgetId title_id) {
-        return window_positions[static_cast<uint16_t>(title_id)];
-    }
+    WindowPos& pos_for(WidgetId title_id) { return window_positions[static_cast<uint16_t>(title_id)]; }
     WindowPos default_pos(WidgetId title_id, float def_x, float def_y) {
         auto& p = window_positions[static_cast<uint16_t>(title_id)];
-        if (!p.has_position) { p.x = def_x; p.y = def_y; p.has_position = true; }
+        if (!p.has_position) {
+            p.x = def_x;
+            p.y = def_y;
+            p.has_position = true;
+        }
         return p;
     }
 
@@ -207,10 +226,16 @@ struct MouseUI {
                 // always grab the window back even if they drag to a corner.
                 const float min_visible_w = 40.0f;
                 const float min_visible_h = 24.0f;
-                if (p.x + min_visible_w > viewport_w) p.x = viewport_w - min_visible_w;
-                if (p.x < -0.0f) p.x = 0.0f;
-                if (p.y + min_visible_h > viewport_h) p.y = viewport_h - min_visible_h;
-                if (p.y < 0.0f) p.y = 0.0f;
+                if (p.x + min_visible_w > viewport_w) {
+                    p.x = viewport_w - min_visible_w;
+                }
+                if (p.x < -0.0f) {
+                    p.x = 0.0f;
+                }
+                if (p.y + min_visible_h > viewport_h) {
+                    p.y = viewport_h - min_visible_h;
+                }
+                p.y = std::max(p.y, 0.0f);
                 p.has_position = true;
             }
             return;
@@ -221,8 +246,8 @@ struct MouseUI {
             const HitRegion* hit = hit_test(mouse_x, mouse_y);
             if (hit) {
                 int raw = static_cast<int>(hit->id);
-                bool is_title = (raw >= static_cast<int>(WidgetId::TitleInventory)
-                              && raw <  static_cast<int>(WidgetId::CloseInventory));
+                bool is_title = (raw >= static_cast<int>(WidgetId::TitleInventory) &&
+                                 raw < static_cast<int>(WidgetId::CloseInventory));
                 if (is_title) {
                     dragging_window = hit->id;
                     auto& p = pos_for(hit->id);
@@ -237,7 +262,9 @@ struct MouseUI {
         // Right-click events (context menus: party kick, inventory drop, etc.)
         if (right_pressed) {
             const HitRegion* hit = hit_test(mouse_x, mouse_y);
-            if (hit) right_clicked = hit->id;
+            if (hit) {
+                right_clicked = hit->id;
+            }
         }
     }
 };

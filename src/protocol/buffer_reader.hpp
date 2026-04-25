@@ -23,8 +23,7 @@ class BufferReader {
 public:
     BufferReader(std::span<const uint8_t> data) : data_(data) {}
 
-    template<typename T>
-    T read() {
+    template<typename T> T read() {
         check_bounds(sizeof(T));
         T val;
         std::memcpy(&val, data_.data() + offset_, sizeof(T));
@@ -57,14 +56,11 @@ public:
     }
 
     // Get array size (reads and consumes the count prefix)
-    uint16_t get_array_size() {
-        return read<uint16_t>();
-    }
+    uint16_t get_array_size() { return read<uint16_t>(); }
 
     // Read array elements into a span (caller must ensure span is large enough)
     // Call get_array_size() first to know how many elements to expect
-    template<typename T>
-    void read_array_into(std::span<T> output, size_t count) {
+    template<typename T> void read_array_into(std::span<T> output, size_t count) {
         for (size_t i = 0; i < count; ++i) {
             output[i].deserialize(remaining());
             offset_ += output[i].serialized_size();
@@ -72,8 +68,7 @@ public:
     }
 
     // Legacy: Read a length-prefixed array of Serializable items (allocates)
-    template<typename T>
-    std::vector<T> read_array() {
+    template<typename T> std::vector<T> read_array() {
         uint16_t count = read<uint16_t>();
         std::vector<T> items(count);
         for (auto& item : items) {

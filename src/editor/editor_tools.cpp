@@ -1,20 +1,20 @@
 #include "editor_tools.hpp"
+#include "client/ecs/components.hpp"
 #include "editor_application.hpp"
 #include "editor_raycaster.hpp"
+#include "engine/heightmap.hpp"
+#include "engine/model_loader.hpp"
 #include "engine/scene/render_scene.hpp"
 #include "engine/scene/ui_scene.hpp"
-#include "engine/model_loader.hpp"
-#include "engine/heightmap.hpp"
-#include "client/ecs/components.hpp"
-#include <imgui.h>
-#include <SDL3/SDL_scancode.h>
-#include <SDL3/SDL_mouse.h>
-#include <glm/gtc/matrix_transform.hpp>
-#include <nlohmann/json.hpp>
-#include <fstream>
 #include <algorithm>
 #include <cmath>
+#include <fstream>
+#include <glm/gtc/matrix_transform.hpp>
+#include <imgui.h>
 #include <iostream>
+#include <nlohmann/json.hpp>
+#include <SDL3/SDL_mouse.h>
+#include <SDL3/SDL_scancode.h>
 
 namespace mmo::editor {
 
@@ -57,18 +57,36 @@ bool TerrainBrushTool::on_scroll(float delta, bool shift_held, EditorApplication
 bool TerrainBrushTool::on_key_down(int scancode, EditorApplication& app) {
     if (paint_mode_ == PaintMode::Height) {
         switch (scancode) {
-            case SDL_SCANCODE_Q: mode_ = BrushMode::Raise; return true;
-            case SDL_SCANCODE_W: mode_ = BrushMode::Lower; return true;
-            case SDL_SCANCODE_E: mode_ = BrushMode::Smooth; return true;
-            case SDL_SCANCODE_R: mode_ = BrushMode::Flatten; return true;
-            case SDL_SCANCODE_T: mode_ = BrushMode::SetMax; return true;
+            case SDL_SCANCODE_Q:
+                mode_ = BrushMode::Raise;
+                return true;
+            case SDL_SCANCODE_W:
+                mode_ = BrushMode::Lower;
+                return true;
+            case SDL_SCANCODE_E:
+                mode_ = BrushMode::Smooth;
+                return true;
+            case SDL_SCANCODE_R:
+                mode_ = BrushMode::Flatten;
+                return true;
+            case SDL_SCANCODE_T:
+                mode_ = BrushMode::SetMax;
+                return true;
         }
     } else {
         switch (scancode) {
-            case SDL_SCANCODE_Q: splat_channel_ = SplatChannel::Grass; return true;
-            case SDL_SCANCODE_W: splat_channel_ = SplatChannel::Dirt; return true;
-            case SDL_SCANCODE_E: splat_channel_ = SplatChannel::Rock; return true;
-            case SDL_SCANCODE_R: splat_channel_ = SplatChannel::Sand; return true;
+            case SDL_SCANCODE_Q:
+                splat_channel_ = SplatChannel::Grass;
+                return true;
+            case SDL_SCANCODE_W:
+                splat_channel_ = SplatChannel::Dirt;
+                return true;
+            case SDL_SCANCODE_E:
+                splat_channel_ = SplatChannel::Rock;
+                return true;
+            case SDL_SCANCODE_R:
+                splat_channel_ = SplatChannel::Sand;
+                return true;
         }
     }
     return false;
@@ -86,7 +104,9 @@ void TerrainBrushTool::update(float dt, EditorApplication& app) {
 
 void TerrainBrushTool::apply_brush(const glm::vec3& center, float dt, EditorApplication& app) {
     auto& hm = app.heightmap();
-    if (hm.resolution == 0) return;
+    if (hm.resolution == 0) {
+        return;
+    }
 
     float texel_size = hm.world_size / static_cast<float>(hm.resolution - 1);
     int radius_texels = static_cast<int>(radius_ / texel_size) + 1;
@@ -100,7 +120,9 @@ void TerrainBrushTool::apply_brush(const glm::vec3& center, float dt, EditorAppl
     if (mode_ == BrushMode::Smooth) {
         for (int tz = center_tz - radius_texels; tz <= center_tz + radius_texels; ++tz) {
             for (int tx = center_tx - radius_texels; tx <= center_tx + radius_texels; ++tx) {
-                if (tx < 0 || tx >= (int)hm.resolution || tz < 0 || tz >= (int)hm.resolution) continue;
+                if (tx < 0 || tx >= (int)hm.resolution || tz < 0 || tz >= (int)hm.resolution) {
+                    continue;
+                }
                 float wx = hm.world_origin_x + (float(tx) / (hm.resolution - 1)) * hm.world_size;
                 float wz = hm.world_origin_z + (float(tz) / (hm.resolution - 1)) * hm.world_size;
                 float dist = std::sqrt((wx - center.x) * (wx - center.x) + (wz - center.z) * (wz - center.z));
@@ -110,18 +132,24 @@ void TerrainBrushTool::apply_brush(const glm::vec3& center, float dt, EditorAppl
                 }
             }
         }
-        if (smooth_count > 0) smooth_avg /= smooth_count;
+        if (smooth_count > 0) {
+            smooth_avg /= smooth_count;
+        }
     }
 
     bool modified = false;
     for (int tz = center_tz - radius_texels; tz <= center_tz + radius_texels; ++tz) {
         for (int tx = center_tx - radius_texels; tx <= center_tx + radius_texels; ++tx) {
-            if (tx < 0 || tx >= (int)hm.resolution || tz < 0 || tz >= (int)hm.resolution) continue;
+            if (tx < 0 || tx >= (int)hm.resolution || tz < 0 || tz >= (int)hm.resolution) {
+                continue;
+            }
 
             float wx = hm.world_origin_x + (float(tx) / (hm.resolution - 1)) * hm.world_size;
             float wz = hm.world_origin_z + (float(tz) / (hm.resolution - 1)) * hm.world_size;
             float dist = std::sqrt((wx - center.x) * (wx - center.x) + (wz - center.z) * (wz - center.z));
-            if (dist > radius_) continue;
+            if (dist > radius_) {
+                continue;
+            }
 
             float falloff = 0.5f * (1.0f + std::cos(3.14159f * dist / radius_));
             float current = hm.get_height_local(tx, tz);
@@ -191,12 +219,16 @@ void TerrainBrushTool::apply_splatmap_brush(const glm::vec3& center, float dt, E
     bool modified = false;
     for (int tz = center_tz - radius_texels; tz <= center_tz + radius_texels; ++tz) {
         for (int tx = center_tx - radius_texels; tx <= center_tx + radius_texels; ++tx) {
-            if (tx < 0 || tx >= (int)resolution || tz < 0 || tz >= (int)resolution) continue;
+            if (tx < 0 || tx >= (int)resolution || tz < 0 || tz >= (int)resolution) {
+                continue;
+            }
 
             float wx = world_origin_x + (float(tx) / (resolution - 1)) * world_size;
             float wz = world_origin_z + (float(tz) / (resolution - 1)) * world_size;
             float dist = std::sqrt((wx - center.x) * (wx - center.x) + (wz - center.z) * (wz - center.z));
-            if (dist > radius_) continue;
+            if (dist > radius_) {
+                continue;
+            }
 
             float falloff = 0.5f * (1.0f + std::cos(3.14159f * dist / radius_));
             float paint_strength = strength_ * 0.01f * falloff * dt; // Scale strength for painting
@@ -243,7 +275,8 @@ void TerrainBrushTool::build_imgui(EditorApplication& app) {
 
     // Paint mode selection
     int paint_mode_i = static_cast<int>(paint_mode_);
-    ImGui::RadioButton("Height", &paint_mode_i, 0); ImGui::SameLine();
+    ImGui::RadioButton("Height", &paint_mode_i, 0);
+    ImGui::SameLine();
     ImGui::RadioButton("Splatmap", &paint_mode_i, 1);
     paint_mode_ = static_cast<PaintMode>(paint_mode_i);
 
@@ -252,10 +285,13 @@ void TerrainBrushTool::build_imgui(EditorApplication& app) {
     if (paint_mode_ == PaintMode::Height) {
         // Height brush modes
         int mode_i = static_cast<int>(mode_);
-        ImGui::RadioButton("Raise (Q)", &mode_i, 0); ImGui::SameLine();
+        ImGui::RadioButton("Raise (Q)", &mode_i, 0);
+        ImGui::SameLine();
         ImGui::RadioButton("Lower (W)", &mode_i, 1);
-        ImGui::RadioButton("Smooth (E)", &mode_i, 2); ImGui::SameLine();
-        ImGui::RadioButton("Flatten (R)", &mode_i, 3); ImGui::SameLine();
+        ImGui::RadioButton("Smooth (E)", &mode_i, 2);
+        ImGui::SameLine();
+        ImGui::RadioButton("Flatten (R)", &mode_i, 3);
+        ImGui::SameLine();
         ImGui::RadioButton("SetMax (T)", &mode_i, 4);
         mode_ = static_cast<BrushMode>(mode_i);
 
@@ -265,9 +301,11 @@ void TerrainBrushTool::build_imgui(EditorApplication& app) {
     } else {
         // Splatmap channel selection
         int channel_i = static_cast<int>(splat_channel_);
-        ImGui::RadioButton("Grass (Q)", &channel_i, 0); ImGui::SameLine();
+        ImGui::RadioButton("Grass (Q)", &channel_i, 0);
+        ImGui::SameLine();
         ImGui::RadioButton("Dirt (W)", &channel_i, 1);
-        ImGui::RadioButton("Rock (E)", &channel_i, 2); ImGui::SameLine();
+        ImGui::RadioButton("Rock (E)", &channel_i, 2);
+        ImGui::SameLine();
         ImGui::RadioButton("Sand (R)", &channel_i, 3);
         splat_channel_ = static_cast<SplatChannel>(channel_i);
 
@@ -279,10 +317,11 @@ void TerrainBrushTool::build_imgui(EditorApplication& app) {
     ImGui::SliderFloat("Strength", &strength_, 10.0f, 300.0f, "%.0f");
 }
 
-void TerrainBrushTool::render_overlay(engine::scene::RenderScene& scene,
-                                       engine::scene::UIScene& ui,
-                                       EditorApplication& app) {
-    if (!app.cursor_on_terrain()) return;
+void TerrainBrushTool::render_overlay(engine::scene::RenderScene& scene, engine::scene::UIScene& ui,
+                                      EditorApplication& app) {
+    if (!app.cursor_on_terrain()) {
+        return;
+    }
 
     auto cam = app.get_camera_state();
     auto center = app.cursor_world_pos();
@@ -291,23 +330,41 @@ void TerrainBrushTool::render_overlay(engine::scene::RenderScene& scene,
 
     // Draw brush circle by projecting terrain points to screen
     const int segments = 48;
-    uint32_t color;
+    uint32_t color = 0;
 
     if (paint_mode_ == PaintMode::Height) {
         switch (mode_) {
-            case BrushMode::Raise:   color = 0xFF00FF00; break; // green
-            case BrushMode::Lower:   color = 0xFFFF4444; break; // red
-            case BrushMode::Smooth:  color = 0xFF44AAFF; break; // blue
-            case BrushMode::Flatten: color = 0xFFFFFF44; break; // yellow
-            case BrushMode::SetMax:  color = 0xFFFFFFFF; break; // white
+            case BrushMode::Raise:
+                color = 0xFF00FF00;
+                break; // green
+            case BrushMode::Lower:
+                color = 0xFFFF4444;
+                break; // red
+            case BrushMode::Smooth:
+                color = 0xFF44AAFF;
+                break; // blue
+            case BrushMode::Flatten:
+                color = 0xFFFFFF44;
+                break; // yellow
+            case BrushMode::SetMax:
+                color = 0xFFFFFFFF;
+                break; // white
         }
     } else {
         // Splatmap painting colors
         switch (splat_channel_) {
-            case SplatChannel::Grass: color = 0xFF00FF00; break; // green
-            case SplatChannel::Dirt:  color = 0xFFAA5522; break; // brown
-            case SplatChannel::Rock:  color = 0xFF888888; break; // gray
-            case SplatChannel::Sand:  color = 0xFFFFDD88; break; // tan/yellow
+            case SplatChannel::Grass:
+                color = 0xFF00FF00;
+                break; // green
+            case SplatChannel::Dirt:
+                color = 0xFFAA5522;
+                break; // brown
+            case SplatChannel::Rock:
+                color = 0xFF888888;
+                break; // gray
+            case SplatChannel::Sand:
+                color = 0xFFFFDD88;
+                break; // tan/yellow
         }
     }
 
@@ -353,25 +410,22 @@ entt::entity SelectTool::pick_entity(float mx, float my, EditorApplication& app)
         auto& info = view.get<EntityInfo>(entity);
 
         auto* model = app.models().get_model(info.model_name);
-        if (!model) continue;
+        if (!model) {
+            continue;
+        }
 
         float model_dim = model->max_dimension();
-        if (model_dim < 0.001f) continue;
+        if (model_dim < 0.001f) {
+            continue;
+        }
         float scale = (info.target_size * 1.5f) / model_dim;
 
         float cx = (model->min_x + model->max_x) / 2.0f;
         float cz = (model->min_z + model->max_z) / 2.0f;
 
-        glm::vec3 aabb_min(
-            t.x + (model->min_x - cx) * scale,
-            t.y,
-            t.z + (model->min_z - cz) * scale
-        );
-        glm::vec3 aabb_max(
-            t.x + (model->max_x - cx) * scale,
-            t.y + (model->max_y - model->min_y) * scale,
-            t.z + (model->max_z - cz) * scale
-        );
+        glm::vec3 aabb_min(t.x + (model->min_x - cx) * scale, t.y, t.z + (model->min_z - cz) * scale);
+        glm::vec3 aabb_max(t.x + (model->max_x - cx) * scale, t.y + (model->max_y - model->min_y) * scale,
+                           t.z + (model->max_z - cz) * scale);
 
         float hit_t = EditorRaycaster::intersect_aabb(ray, aabb_min, aabb_max);
         if (hit_t >= 0.0f && hit_t < best_t) {
@@ -478,9 +532,7 @@ void SelectTool::build_imgui(EditorApplication& app) {
     }
 }
 
-void SelectTool::render_overlay(engine::scene::RenderScene& scene,
-                                 engine::scene::UIScene& ui,
-                                 EditorApplication& app) {
+void SelectTool::render_overlay(engine::scene::RenderScene& scene, engine::scene::UIScene& ui, EditorApplication& app) {
     // Selection highlight is handled in add_entity_to_scene via selected_entity()
 }
 
@@ -510,10 +562,14 @@ void PlacementTool::build_palette(EditorApplication& app) {
     }
 
     for (auto& entry : manifest["models"]) {
-        if (!entry.value("placeable", false)) continue;
+        if (!entry.value("placeable", false)) {
+            continue;
+        }
 
         std::string id = entry["id"];
-        if (!app.models().get_model(id)) continue;
+        if (!app.models().get_model(id)) {
+            continue;
+        }
 
         PlaceableObject obj;
         obj.model_name = id;
@@ -534,9 +590,14 @@ void PlacementTool::build_palette(EditorApplication& app) {
     for (auto& obj : palette_) {
         bool found = false;
         for (auto& cat : categories_) {
-            if (cat == obj.category) { found = true; break; }
+            if (cat == obj.category) {
+                found = true;
+                break;
+            }
         }
-        if (!found) categories_.push_back(obj.category);
+        if (!found) {
+            categories_.push_back(obj.category);
+        }
     }
 
     palette_built_ = true;
@@ -573,21 +634,29 @@ bool PlacementTool::on_scroll(float delta, bool shift_held, EditorApplication& a
 }
 
 void PlacementTool::build_imgui(EditorApplication& app) {
-    if (!palette_built_) build_palette(app);
+    if (!palette_built_) {
+        build_palette(app);
+    }
 
     ImGui::Text("Place Object");
     ImGui::Separator();
 
     // Category tabs
     for (int i = 0; i < (int)categories_.size(); ++i) {
-        if (i > 0) ImGui::SameLine();
+        if (i > 0) {
+            ImGui::SameLine();
+        }
         bool selected = (i == active_category_);
-        if (selected) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.3f, 1.0f));
+        if (selected) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.3f, 0.5f, 0.3f, 1.0f));
+        }
         if (ImGui::Button(categories_[i].c_str())) {
             active_category_ = i;
             selected_object_ = -1;
         }
-        if (selected) ImGui::PopStyleColor();
+        if (selected) {
+            ImGui::PopStyleColor();
+        }
     }
 
     ImGui::Separator();
@@ -596,7 +665,9 @@ void PlacementTool::build_imgui(EditorApplication& app) {
     if (active_category_ < (int)categories_.size()) {
         const auto& cat = categories_[active_category_];
         for (int i = 0; i < (int)palette_.size(); ++i) {
-            if (palette_[i].category != cat) continue;
+            if (palette_[i].category != cat) {
+                continue;
+            }
             bool is_selected = (i == selected_object_);
             if (ImGui::Selectable(palette_[i].display_name.c_str(), is_selected)) {
                 selected_object_ = i;
@@ -610,14 +681,17 @@ void PlacementTool::build_imgui(EditorApplication& app) {
     ImGui::SliderFloat("Scale", &placement_scale_, 0.1f, 10.0f, "%.1fx");
 }
 
-void PlacementTool::render_overlay(engine::scene::RenderScene& scene,
-                                    engine::scene::UIScene& ui,
-                                    EditorApplication& app) {
-    if (selected_object_ < 0 || !app.cursor_on_terrain()) return;
+void PlacementTool::render_overlay(engine::scene::RenderScene& scene, engine::scene::UIScene& ui,
+                                   EditorApplication& app) {
+    if (selected_object_ < 0 || !app.cursor_on_terrain()) {
+        return;
+    }
 
     auto& obj = palette_[selected_object_];
     auto* model = app.models().get_model(obj.model_name);
-    if (!model) return;
+    if (!model) {
+        return;
+    }
 
     auto pos = app.cursor_world_pos();
 

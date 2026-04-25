@@ -8,8 +8,8 @@ namespace {
 
 using protocol::EntityType;
 
-entt::entity make_npc(entt::registry& registry, uint32_t id, const char* name,
-                      float x, float z, EntityType type = EntityType::TownNPC) {
+entt::entity make_npc(entt::registry& registry, uint32_t id, const char* name, float x, float z,
+                      EntityType type = EntityType::TownNPC) {
     auto e = registry.create();
     registry.emplace<ecs::NetworkId>(e, ecs::NetworkId{id});
     ecs::Transform tf{};
@@ -32,18 +32,18 @@ TEST(FindClosestNPC, ReturnsEmptyWhenRegistryEmpty) {
 
 TEST(FindClosestNPC, IgnoresNonTownNPCs) {
     entt::registry registry;
-    make_npc(registry, 1, "Wolf",   1.0f, 1.0f, EntityType::NPC);          // hostile
-    make_npc(registry, 2, "Tree",   2.0f, 2.0f, EntityType::Environment);
+    make_npc(registry, 1, "Wolf", 1.0f, 1.0f, EntityType::NPC); // hostile
+    make_npc(registry, 2, "Tree", 2.0f, 2.0f, EntityType::Environment);
     make_npc(registry, 3, "Player", 3.0f, 3.0f, EntityType::Player);
-    make_npc(registry, 4, "House",  4.0f, 4.0f, EntityType::Building);
+    make_npc(registry, 4, "House", 4.0f, 4.0f, EntityType::Building);
     EXPECT_FALSE(find_closest_npc(registry, 0.0f, 0.0f, 200.0f).has_value());
 }
 
 TEST(FindClosestNPC, PicksNearestWithinRange) {
     entt::registry registry;
-    make_npc(registry, 10, "Far",   100.0f, 0.0f);
-    make_npc(registry, 11, "Mid",    50.0f, 0.0f);
-    make_npc(registry, 12, "Near",   10.0f, 0.0f);
+    make_npc(registry, 10, "Far", 100.0f, 0.0f);
+    make_npc(registry, 11, "Mid", 50.0f, 0.0f);
+    make_npc(registry, 12, "Near", 10.0f, 0.0f);
 
     auto best = find_closest_npc(registry, 0.0f, 0.0f, 200.0f);
     ASSERT_TRUE(best.has_value());
@@ -68,13 +68,13 @@ TEST(FindClosestNPC, MeasuresPlanarDistanceOnly) {
 
     auto best = find_closest_npc(registry, 0.0f, 0.0f, 100.0f);
     ASSERT_TRUE(best.has_value());
-    EXPECT_FLOAT_EQ(best->distance, 5.0f);  // 3-4-5 triangle
+    EXPECT_FLOAT_EQ(best->distance, 5.0f); // 3-4-5 triangle
 }
 
 TEST(FindClosestNPC, FromOffsetPlayer) {
     entt::registry registry;
     make_npc(registry, 1, "A", 100.0f, 100.0f);
-    make_npc(registry, 2, "B",  90.0f, 100.0f);
+    make_npc(registry, 2, "B", 90.0f, 100.0f);
 
     // Player at (95, _, 100) — B is closer.
     auto best = find_closest_npc(registry, 95.0f, 100.0f, 50.0f);
@@ -88,7 +88,7 @@ TEST(FindClosestNPC, TiesPickOneOfTheTied) {
     // entt's view iteration order isn't part of the API contract, so we
     // just assert one of the two equidistant candidates won.
     entt::registry registry;
-    make_npc(registry, 1, "First",  10.0f, 0.0f);
+    make_npc(registry, 1, "First", 10.0f, 0.0f);
     make_npc(registry, 2, "Second", 10.0f, 0.0f);
 
     auto best = find_closest_npc(registry, 0.0f, 0.0f, 100.0f);

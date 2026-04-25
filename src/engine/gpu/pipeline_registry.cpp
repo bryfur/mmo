@@ -1,13 +1,13 @@
 #include "pipeline_registry.hpp"
-#include "SDL3/SDL_gpu.h"
 #include "engine/core/asset/file_watcher.hpp"
 #include "engine/core/logger.hpp"
 #include "engine/gpu/gpu_device.hpp"
 #include "engine/gpu/gpu_pipeline.hpp"
 #include "engine/gpu/gpu_shader.hpp"
-#include <SDL3/SDL_log.h>
-#include <SDL3/SDL_filesystem.h>
+#include "SDL3/SDL_gpu.h"
 #include <memory>
+#include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_log.h>
 #include <string>
 #include <utility>
 
@@ -19,7 +19,6 @@ namespace mmo::engine::gpu {
 
 PipelineRegistry::~PipelineRegistry() {
     shutdown();
-
 }
 
 bool PipelineRegistry::init(GPUDevice& device) {
@@ -52,7 +51,7 @@ bool PipelineRegistry::init(GPUDevice& device) {
 
 void PipelineRegistry::shutdown() {
     if (!device_ && pipelines_.empty() && !shader_manager_) {
-        return;  // Already shut down
+        return; // Already shut down
     }
     pipelines_.clear();
     shader_manager_.reset();
@@ -148,8 +147,7 @@ GPUPipeline* PipelineRegistry::get_pipeline(PipelineType type) {
     }
 
     if (!pipeline) {
-        SDL_Log("PipelineRegistry: Failed to create %s pipeline",
-                pipeline_type_to_string(type));
+        SDL_Log("PipelineRegistry: Failed to create %s pipeline", pipeline_type_to_string(type));
         return nullptr;
     }
 
@@ -167,8 +165,7 @@ bool PipelineRegistry::preload_all_pipelines() {
     for (int i = 0; i < static_cast<int>(PipelineType::Count); ++i) {
         auto type = static_cast<PipelineType>(i);
         if (!get_pipeline(type)) {
-            SDL_Log("PipelineRegistry: Failed to preload %s pipeline",
-                    pipeline_type_to_string(type));
+            SDL_Log("PipelineRegistry: Failed to preload %s pipeline", pipeline_type_to_string(type));
             success = false;
         }
     }
@@ -194,29 +191,27 @@ void PipelineRegistry::set_swapchain_format(SDL_GPUTextureFormat format) {
 
 void PipelineRegistry::enable_hot_reload(core::asset::FileWatcher& watcher) {
     if (!device_) {
-        ENGINE_LOG_WARN("hot_reload",
-                        "PipelineRegistry::enable_hot_reload called before init");
+        ENGINE_LOG_WARN("hot_reload", "PipelineRegistry::enable_hot_reload called before init");
         return;
     }
-    if (watcher_ != nullptr) return;
+    if (watcher_ != nullptr) {
+        return;
+    }
     watcher_ = &watcher;
-    shader_watch_handle_ = watcher_->watch_directory(
-        shader_path_, ".spv",
-        [this](const std::filesystem::path& p) {
-            ENGINE_LOG_INFO("hot_reload", "Shader changed: {} -- rebuilding pipelines",
-                            p.filename().string());
-            reload_all_pipelines();
-        });
-    ENGINE_LOG_INFO("hot_reload", "PipelineRegistry hot-reload enabled at {}",
-                    shader_path_);
+    shader_watch_handle_ = watcher_->watch_directory(shader_path_, ".spv", [this](const std::filesystem::path& p) {
+        ENGINE_LOG_INFO("hot_reload", "Shader changed: {} -- rebuilding pipelines", p.filename().string());
+        reload_all_pipelines();
+    });
+    ENGINE_LOG_INFO("hot_reload", "PipelineRegistry hot-reload enabled at {}", shader_path_);
 }
 
 void PipelineRegistry::reload_all_pipelines() {
-    if (!device_) return;
+    if (!device_) {
+        return;
+    }
     invalidate_all();
     if (!preload_all_pipelines()) {
-        ENGINE_LOG_WARN("hot_reload",
-                        "PipelineRegistry: one or more pipelines failed to rebuild");
+        ENGINE_LOG_WARN("hot_reload", "PipelineRegistry: one or more pipelines failed to rebuild");
     }
 }
 
@@ -229,16 +224,16 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_model_pipeline() {
     vs_resources.num_uniform_buffers = 1;
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 3;       // lighting + shadow data + cluster params
-    fs_resources.num_samplers = 6;              // baseColor + 4 shadow cascade maps + normal map
-    fs_resources.num_storage_buffers = 3;       // light data + cluster offsets + light indices
+    fs_resources.num_uniform_buffers = 3; // lighting + shadow data + cluster params
+    fs_resources.num_samplers = 6;        // baseColor + 4 shadow cascade maps + normal map
+    fs_resources.num_storage_buffers = 3; // light data + cluster offsets + light indices
 
-    auto* vs = shader_manager_->get(shader_path_ + "model.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "model.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs = shader_manager_->get(shader_path_ + "model.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "model.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();
@@ -252,20 +247,22 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_model_pipeline() {
 
 std::unique_ptr<GPUPipeline> PipelineRegistry::create_instanced_model_pipeline() {
     ShaderResources vs_resources;
-    vs_resources.num_uniform_buffers = 1;  // camera uniforms
-    vs_resources.num_storage_buffers = 1;  // instance data
+    vs_resources.num_uniform_buffers = 1; // camera uniforms
+    vs_resources.num_storage_buffers = 1; // instance data
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 3;       // lighting + shadow data + cluster params
-    fs_resources.num_samplers = 6;              // baseColor + 4 shadow cascade maps + normal map
-    fs_resources.num_storage_buffers = 3;       // light data + cluster offsets + light indices
+    fs_resources.num_uniform_buffers = 3; // lighting + shadow data + cluster params
+    fs_resources.num_samplers = 6;        // baseColor + 4 shadow cascade maps + normal map
+    fs_resources.num_storage_buffers = 3; // light data + cluster offsets + light indices
 
-    auto* vs = shader_manager_->get(shader_path_ + "model_instanced.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "model_instanced.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs =
+        shader_manager_->get(shader_path_ + "model_instanced.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs =
+        shader_manager_->get(shader_path_ + "model_instanced.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();
@@ -279,25 +276,27 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_instanced_model_pipeline()
 
 std::unique_ptr<GPUPipeline> PipelineRegistry::create_instanced_shadow_model_pipeline() {
     ShaderResources vs_resources;
-    vs_resources.num_uniform_buffers = 1;  // lightViewProjection
-    vs_resources.num_storage_buffers = 1;  // instance model matrices
+    vs_resources.num_uniform_buffers = 1; // lightViewProjection
+    vs_resources.num_storage_buffers = 1; // instance model matrices
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 1;  // hasTexture flag
-    fs_resources.num_samplers = 1;         // alpha texture for transparency
+    fs_resources.num_uniform_buffers = 1; // hasTexture flag
+    fs_resources.num_samplers = 1;        // alpha texture for transparency
 
-    auto* vs = shader_manager_->get(shader_path_ + "shadow_depth_instanced.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "shadow_depth.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs = shader_manager_->get(shader_path_ + "shadow_depth_instanced.vert.spv", ShaderStage::Vertex, "VSMain",
+                                    vs_resources);
+    auto* fs =
+        shader_manager_->get(shader_path_ + "shadow_depth.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();
     config.fragment_shader = fs->handle();
     config.with_vertex3d().opaque().cull_front().with_depth_bias(4.0f, 2.0f);
-    config.color_format = SDL_GPU_TEXTUREFORMAT_INVALID;  // depth-only
+    config.color_format = SDL_GPU_TEXTUREFORMAT_INVALID; // depth-only
     config.depth_format = depth_format_;
 
     return GPUPipeline::create(*device_, config);
@@ -308,16 +307,17 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_skinned_model_pipeline() {
     vs_resources.num_uniform_buffers = 2; // Camera + Bones
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 3;       // lighting + shadow data + cluster params
-    fs_resources.num_samplers = 6;              // baseColor + 4 shadow cascade maps + normal map
-    fs_resources.num_storage_buffers = 3;       // light data + cluster offsets + light indices
+    fs_resources.num_uniform_buffers = 3; // lighting + shadow data + cluster params
+    fs_resources.num_samplers = 6;        // baseColor + 4 shadow cascade maps + normal map
+    fs_resources.num_storage_buffers = 3; // light data + cluster offsets + light indices
 
-    auto* vs = shader_manager_->get(shader_path_ + "skinned_model.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "model.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs =
+        shader_manager_->get(shader_path_ + "skinned_model.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "model.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();
@@ -334,34 +334,32 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_terrain_pipeline() {
     vs_resources.num_uniform_buffers = 1;
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 3;       // lighting + shadow data + cluster params
-    fs_resources.num_samplers = 6;              // material array + splatmap + 4 shadow cascade maps
-    fs_resources.num_storage_buffers = 3;       // light data + cluster offsets + light indices
+    fs_resources.num_uniform_buffers = 3; // lighting + shadow data + cluster params
+    fs_resources.num_samplers = 6;        // material array + splatmap + 4 shadow cascade maps
+    fs_resources.num_storage_buffers = 3; // light data + cluster offsets + light indices
 
-    auto* vs = shader_manager_->get(shader_path_ + "terrain.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "terrain.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs = shader_manager_->get(shader_path_ + "terrain.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "terrain.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     // Custom terrain vertex format: position(3), texcoord(2), color(4), normal(3)
     PipelineConfig config;
     config.vertex_shader = vs->handle();
     config.fragment_shader = fs->handle();
 
-    config.vertex_buffers = {{
-        .slot = 0,
-        .pitch = sizeof(float) * 12,  // 3 + 2 + 4 + 3 floats
-        .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
-        .instance_step_rate = 0
-    }};
+    config.vertex_buffers = {{.slot = 0,
+                              .pitch = sizeof(float) * 12, // 3 + 2 + 4 + 3 floats
+                              .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+                              .instance_step_rate = 0}};
 
     config.vertex_attributes = {
-        { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, 0 },                    // position
-        { 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, sizeof(float) * 3 },    // texcoord
-        { 2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, sizeof(float) * 5 },    // color
-        { 3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, sizeof(float) * 9 },    // normal
+        {0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, 0},                 // position
+        {1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, sizeof(float) * 3}, // texcoord
+        {2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, sizeof(float) * 5}, // color
+        {3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, sizeof(float) * 9}, // normal
     };
 
     config.opaque();
@@ -378,26 +376,22 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_skybox_pipeline() {
     ShaderResources fs_resources;
     fs_resources.num_uniform_buffers = 1;
 
-    auto* vs = shader_manager_->get(shader_path_ + "skybox.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "skybox.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs = shader_manager_->get(shader_path_ + "skybox.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "skybox.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();
     config.fragment_shader = fs->handle();
 
     // Skybox uses position-only vertices (float3), not full Vertex3D
-    config.vertex_buffers = {{
-        .slot = 0,
-        .pitch = sizeof(float) * 3,
-        .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
-        .instance_step_rate = 0
-    }};
+    config.vertex_buffers = {
+        {.slot = 0, .pitch = sizeof(float) * 3, .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX, .instance_step_rate = 0}};
     config.vertex_attributes = {
-        { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, 0 },  // position only
+        {0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, 0}, // position only
     };
 
     config.opaque().no_cull();
@@ -416,27 +410,23 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_grid_pipeline() {
     ShaderResources fs_resources;
     // No resources needed
 
-    auto* vs = shader_manager_->get(shader_path_ + "grid.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "grid.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs = shader_manager_->get(shader_path_ + "grid.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "grid.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();
     config.fragment_shader = fs->handle();
 
     // Custom grid vertex format: position(3) + color(4) = 28 bytes
-    config.vertex_buffers = {{
-        .slot = 0,
-        .pitch = sizeof(float) * 7,
-        .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
-        .instance_step_rate = 0
-    }};
+    config.vertex_buffers = {
+        {.slot = 0, .pitch = sizeof(float) * 7, .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX, .instance_step_rate = 0}};
     config.vertex_attributes = {
-        { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, 0 },                    // position
-        { 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, sizeof(float) * 3 },    // color
+        {0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, 0},                 // position
+        {1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, sizeof(float) * 3}, // color
     };
 
     config.alpha_blended().no_cull();
@@ -449,21 +439,21 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_grid_pipeline() {
 
 std::unique_ptr<GPUPipeline> PipelineRegistry::create_ui_pipeline() {
     ShaderResources vs_resources;
-    vs_resources.num_uniform_buffers = 1;  // screen size uniform
+    vs_resources.num_uniform_buffers = 1; // screen size uniform
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 1;  // has_texture flag
-    fs_resources.num_samplers = 1;  // texture sampler (even if not always used)
+    fs_resources.num_uniform_buffers = 1; // has_texture flag
+    fs_resources.num_samplers = 1;        // texture sampler (even if not always used)
 
     SDL_Log("PipelineRegistry: Creating UI shaders with vs_uniforms=%d, fs_uniforms=%d, fs_samplers=%d",
             vs_resources.num_uniform_buffers, fs_resources.num_uniform_buffers, fs_resources.num_samplers);
 
-    auto* vs = shader_manager_->get(shader_path_ + "ui.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "ui.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs = shader_manager_->get(shader_path_ + "ui.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "ui.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();
@@ -476,18 +466,18 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_ui_pipeline() {
 
 std::unique_ptr<GPUPipeline> PipelineRegistry::create_text_pipeline() {
     ShaderResources vs_resources;
-    vs_resources.num_uniform_buffers = 1;  // projection
+    vs_resources.num_uniform_buffers = 1; // projection
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 1;  // text color
-    fs_resources.num_samplers = 1;         // font texture
+    fs_resources.num_uniform_buffers = 1; // text color
+    fs_resources.num_samplers = 1;        // font texture
 
-    auto* vs = shader_manager_->get(shader_path_ + "text.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "text.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs = shader_manager_->get(shader_path_ + "text.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "text.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     // Text uses 4-float vertex format: position(2), texcoord(2)
     // Color is passed as a uniform, not per-vertex
@@ -495,16 +485,14 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_text_pipeline() {
     config.vertex_shader = vs->handle();
     config.fragment_shader = fs->handle();
 
-    config.vertex_buffers = {{
-        .slot = 0,
-        .pitch = sizeof(float) * 4,  // 2 + 2 floats
-        .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
-        .instance_step_rate = 0
-    }};
+    config.vertex_buffers = {{.slot = 0,
+                              .pitch = sizeof(float) * 4, // 2 + 2 floats
+                              .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+                              .instance_step_rate = 0}};
 
     config.vertex_attributes = {
-        { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, 0 },                    // position
-        { 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, sizeof(float) * 2 },    // texcoord
+        {0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, 0},                 // position
+        {1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, sizeof(float) * 2}, // texcoord
     };
 
     config.alpha_blended().no_depth().no_cull();
@@ -520,12 +508,12 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_billboard_pipeline() {
     ShaderResources fs_resources;
     fs_resources.num_samplers = 1;
 
-    auto* vs = shader_manager_->get(shader_path_ + "billboard.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "billboard.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs = shader_manager_->get(shader_path_ + "billboard.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "billboard.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();
@@ -544,12 +532,12 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_effect_pipeline() {
     ShaderResources fs_resources;
     fs_resources.num_samplers = 1;
 
-    auto* vs = shader_manager_->get(shader_path_ + "effect.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "effect.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs = shader_manager_->get(shader_path_ + "effect.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "effect.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();
@@ -565,20 +553,20 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_effect_pipeline() {
 std::unique_ptr<GPUPipeline> PipelineRegistry::create_grass_pipeline() {
     ShaderResources vs_resources;
     vs_resources.num_uniform_buffers = 1;
-    vs_resources.num_samplers = 1;          // heightmap texture
-    vs_resources.num_storage_buffers = 1;   // visible-chunk origins (chunked LOD)
+    vs_resources.num_samplers = 1;        // heightmap texture
+    vs_resources.num_storage_buffers = 1; // visible-chunk origins (chunked LOD)
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 3;       // lighting + shadow data + cluster params
-    fs_resources.num_samplers = 4;              // 4 shadow cascade maps
-    fs_resources.num_storage_buffers = 3;       // light data + cluster offsets + light indices
+    fs_resources.num_uniform_buffers = 3; // lighting + shadow data + cluster params
+    fs_resources.num_samplers = 4;        // 4 shadow cascade maps
+    fs_resources.num_storage_buffers = 3; // light data + cluster offsets + light indices
 
-    auto* vs = shader_manager_->get(shader_path_ + "grass.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "grass.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs = shader_manager_->get(shader_path_ + "grass.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "grass.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();
@@ -592,24 +580,26 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_grass_pipeline() {
 
 std::unique_ptr<GPUPipeline> PipelineRegistry::create_shadow_model_pipeline() {
     ShaderResources vs_resources;
-    vs_resources.num_uniform_buffers = 1;  // lightVP + model
+    vs_resources.num_uniform_buffers = 1; // lightVP + model
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 1;  // hasTexture flag
-    fs_resources.num_samplers = 1;         // alpha texture for transparency
+    fs_resources.num_uniform_buffers = 1; // hasTexture flag
+    fs_resources.num_samplers = 1;        // alpha texture for transparency
 
-    auto* vs = shader_manager_->get(shader_path_ + "shadow_depth.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "shadow_depth.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs =
+        shader_manager_->get(shader_path_ + "shadow_depth.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs =
+        shader_manager_->get(shader_path_ + "shadow_depth.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();
     config.fragment_shader = fs->handle();
     config.with_vertex3d().opaque().cull_front().with_depth_bias(4.0f, 2.0f);
-    config.color_format = SDL_GPU_TEXTUREFORMAT_INVALID;  // depth-only
+    config.color_format = SDL_GPU_TEXTUREFORMAT_INVALID; // depth-only
     config.depth_format = depth_format_;
 
     return GPUPipeline::create(*device_, config);
@@ -617,18 +607,20 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_shadow_model_pipeline() {
 
 std::unique_ptr<GPUPipeline> PipelineRegistry::create_shadow_skinned_model_pipeline() {
     ShaderResources vs_resources;
-    vs_resources.num_uniform_buffers = 2;  // lightVP+model, bones
+    vs_resources.num_uniform_buffers = 2; // lightVP+model, bones
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 1;  // hasTexture flag
-    fs_resources.num_samplers = 1;         // alpha texture for transparency
+    fs_resources.num_uniform_buffers = 1; // hasTexture flag
+    fs_resources.num_samplers = 1;        // alpha texture for transparency
 
-    auto* vs = shader_manager_->get(shader_path_ + "shadow_skinned.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "shadow_depth.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs =
+        shader_manager_->get(shader_path_ + "shadow_skinned.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs =
+        shader_manager_->get(shader_path_ + "shadow_depth.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();
@@ -642,36 +634,36 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_shadow_skinned_model_pipel
 
 std::unique_ptr<GPUPipeline> PipelineRegistry::create_shadow_terrain_pipeline() {
     ShaderResources vs_resources;
-    vs_resources.num_uniform_buffers = 1;  // lightVP
+    vs_resources.num_uniform_buffers = 1; // lightVP
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 1;  // hasTexture flag
-    fs_resources.num_samplers = 1;         // alpha texture for transparency
+    fs_resources.num_uniform_buffers = 1; // hasTexture flag
+    fs_resources.num_samplers = 1;        // alpha texture for transparency
 
-    auto* vs = shader_manager_->get(shader_path_ + "shadow_terrain.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "shadow_depth.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs =
+        shader_manager_->get(shader_path_ + "shadow_terrain.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs =
+        shader_manager_->get(shader_path_ + "shadow_depth.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     // Terrain vertex format: position(3), texcoord(2), color(4), normal(3)
     PipelineConfig config;
     config.vertex_shader = vs->handle();
     config.fragment_shader = fs->handle();
 
-    config.vertex_buffers = {{
-        .slot = 0,
-        .pitch = sizeof(float) * 12,
-        .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
-        .instance_step_rate = 0
-    }};
+    config.vertex_buffers = {{.slot = 0,
+                              .pitch = sizeof(float) * 12,
+                              .input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX,
+                              .instance_step_rate = 0}};
 
     config.vertex_attributes = {
-        { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, 0 },
-        { 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, sizeof(float) * 3 },
-        { 2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, sizeof(float) * 5 },
-        { 3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, sizeof(float) * 9 },
+        {0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, 0},
+        {1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, sizeof(float) * 3},
+        {2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, sizeof(float) * 5},
+        {3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, sizeof(float) * 9},
     };
 
     // Terrain is single-sided (upward-facing only), so no_cull is needed
@@ -690,12 +682,12 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_ssao_pipeline() {
     fs_resources.num_uniform_buffers = 1;
     fs_resources.num_samplers = 1;
 
-    auto* vs = shader_manager_->get(shader_path_ + "fullscreen.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "ssao.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs = shader_manager_->get(shader_path_ + "fullscreen.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "ssao.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();
@@ -711,15 +703,15 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_gtao_pipeline() {
     // Fullscreen vertex shader: no uniforms, no samplers
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 1;  // GTAOUniforms
-    fs_resources.num_samplers = 1;         // depth texture
+    fs_resources.num_uniform_buffers = 1; // GTAOUniforms
+    fs_resources.num_samplers = 1;        // depth texture
 
-    auto* vs = shader_manager_->get(shader_path_ + "fullscreen.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "gtao.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs = shader_manager_->get(shader_path_ + "fullscreen.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "gtao.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();
@@ -735,15 +727,15 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_blur_ao_pipeline() {
     ShaderResources vs_resources;
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 1;  // BlurUniforms
-    fs_resources.num_samplers = 2;         // AO texture + depth texture
+    fs_resources.num_uniform_buffers = 1; // BlurUniforms
+    fs_resources.num_samplers = 2;        // AO texture + depth texture
 
-    auto* vs = shader_manager_->get(shader_path_ + "fullscreen.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "blur_ao.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs = shader_manager_->get(shader_path_ + "fullscreen.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "blur_ao.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();
@@ -758,15 +750,15 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_composite_pipeline() {
     ShaderResources vs_resources;
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 1;  // CompositeUniforms
-    fs_resources.num_samplers = 4;         // color + AO + bloom + volumetric fog
+    fs_resources.num_uniform_buffers = 1; // CompositeUniforms
+    fs_resources.num_samplers = 4;        // color + AO + bloom + volumetric fog
 
-    auto* vs = shader_manager_->get(shader_path_ + "fullscreen.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "composite.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs = shader_manager_->get(shader_path_ + "fullscreen.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs = shader_manager_->get(shader_path_ + "composite.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();
@@ -781,15 +773,16 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_bloom_downsample_pipeline(
     ShaderResources vs_resources;
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 1;  // BloomDownsampleUniforms
-    fs_resources.num_samplers = 1;         // source texture
+    fs_resources.num_uniform_buffers = 1; // BloomDownsampleUniforms
+    fs_resources.num_samplers = 1;        // source texture
 
-    auto* vs = shader_manager_->get(shader_path_ + "fullscreen.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "bloom_downsample.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs = shader_manager_->get(shader_path_ + "fullscreen.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs =
+        shader_manager_->get(shader_path_ + "bloom_downsample.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();
@@ -804,15 +797,16 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_bloom_upsample_pipeline() 
     ShaderResources vs_resources;
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 1;  // BloomUpsampleUniforms
-    fs_resources.num_samplers = 1;         // source texture
+    fs_resources.num_uniform_buffers = 1; // BloomUpsampleUniforms
+    fs_resources.num_samplers = 1;        // source texture
 
-    auto* vs = shader_manager_->get(shader_path_ + "fullscreen.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "bloom_upsample.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs = shader_manager_->get(shader_path_ + "fullscreen.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs =
+        shader_manager_->get(shader_path_ + "bloom_upsample.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();
@@ -827,15 +821,16 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_volumetric_fog_pipeline() 
     ShaderResources vs_resources;
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 1;  // VolumetricFogUniforms
-    fs_resources.num_samplers = 2;         // depth texture + shadow map
+    fs_resources.num_uniform_buffers = 1; // VolumetricFogUniforms
+    fs_resources.num_samplers = 2;        // depth texture + shadow map
 
-    auto* vs = shader_manager_->get(shader_path_ + "fullscreen.vert.spv",
-                                     ShaderStage::Vertex, "VSMain", vs_resources);
-    auto* fs = shader_manager_->get(shader_path_ + "volumetric_fog.frag.spv",
-                                     ShaderStage::Fragment, "PSMain", fs_resources);
+    auto* vs = shader_manager_->get(shader_path_ + "fullscreen.vert.spv", ShaderStage::Vertex, "VSMain", vs_resources);
+    auto* fs =
+        shader_manager_->get(shader_path_ + "volumetric_fog.frag.spv", ShaderStage::Fragment, "PSMain", fs_resources);
 
-    if (!vs || !fs) return nullptr;
+    if (!vs || !fs) {
+        return nullptr;
+    }
 
     PipelineConfig config;
     config.vertex_shader = vs->handle();

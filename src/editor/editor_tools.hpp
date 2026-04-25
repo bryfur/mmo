@@ -1,10 +1,10 @@
 #pragma once
 
-#include <glm/glm.hpp>
+#include <cstdint>
 #include <entt/entt.hpp>
+#include <glm/glm.hpp>
 #include <string>
 #include <vector>
-#include <cstdint>
 
 namespace mmo::engine::scene {
 class RenderScene;
@@ -45,9 +45,8 @@ public:
     virtual void build_imgui(EditorApplication& app) {}
 
     // Add 3D overlay to the render scene (brush circle, ghost preview, etc.)
-    virtual void render_overlay(engine::scene::RenderScene& scene,
-                                engine::scene::UIScene& ui,
-                                EditorApplication& app) {}
+    virtual void render_overlay(engine::scene::RenderScene& scene, engine::scene::UIScene& ui, EditorApplication& app) {
+    }
 };
 
 // ============================================================================
@@ -66,9 +65,7 @@ public:
 
     void update(float dt, EditorApplication& app) override;
     void build_imgui(EditorApplication& app) override;
-    void render_overlay(engine::scene::RenderScene& scene,
-                        engine::scene::UIScene& ui,
-                        EditorApplication& app) override;
+    void render_overlay(engine::scene::RenderScene& scene, engine::scene::UIScene& ui, EditorApplication& app) override;
 
 private:
     void apply_brush(const glm::vec3& center, float dt, EditorApplication& app);
@@ -99,14 +96,12 @@ public:
     bool on_key_down(int scancode, EditorApplication& app) override;
 
     void build_imgui(EditorApplication& app) override;
-    void render_overlay(engine::scene::RenderScene& scene,
-                        engine::scene::UIScene& ui,
-                        EditorApplication& app) override;
+    void render_overlay(engine::scene::RenderScene& scene, engine::scene::UIScene& ui, EditorApplication& app) override;
 
     entt::entity selected() const { return selected_; }
 
 private:
-    entt::entity pick_entity(float mx, float my, EditorApplication& app);
+    static entt::entity pick_entity(float mx, float my, EditorApplication& app);
 
     entt::entity selected_ = entt::null;
     bool dragging_ = false;
@@ -133,9 +128,7 @@ public:
     bool on_scroll(float delta, bool shift_held, EditorApplication& app) override;
 
     void build_imgui(EditorApplication& app) override;
-    void render_overlay(engine::scene::RenderScene& scene,
-                        engine::scene::UIScene& ui,
-                        EditorApplication& app) override;
+    void render_overlay(engine::scene::RenderScene& scene, engine::scene::UIScene& ui, EditorApplication& app) override;
 
 private:
     void build_palette(EditorApplication& app);

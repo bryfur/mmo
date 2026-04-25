@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include "server/rules/party_kick_rule.hpp"
+#include <gtest/gtest.h>
 
 using namespace mmo::server::rules;
 
@@ -7,7 +7,8 @@ static_assert(Rule<PartyKickRule>);
 
 TEST(PartyKickRule, KickByLeaderAllowed) {
     PartyKickRule::Inputs i{
-        .kicker_id = 1, .target_id = 2,
+        .kicker_id = 1,
+        .target_id = 2,
         .kicker_is_leader = true,
         .target_in_same_party = true,
     };
@@ -16,7 +17,8 @@ TEST(PartyKickRule, KickByLeaderAllowed) {
 
 TEST(PartyKickRule, KickByNonLeaderRejected) {
     PartyKickRule::Inputs i{
-        .kicker_id = 1, .target_id = 2,
+        .kicker_id = 1,
+        .target_id = 2,
         .kicker_is_leader = false,
         .target_in_same_party = true,
     };
@@ -25,7 +27,8 @@ TEST(PartyKickRule, KickByNonLeaderRejected) {
 
 TEST(PartyKickRule, KickOfPlayerInOtherPartyRejected) {
     PartyKickRule::Inputs i{
-        .kicker_id = 1, .target_id = 2,
+        .kicker_id = 1,
+        .target_id = 2,
         .kicker_is_leader = true,
         .target_in_same_party = false,
     };
@@ -34,7 +37,8 @@ TEST(PartyKickRule, KickOfPlayerInOtherPartyRejected) {
 
 TEST(PartyKickRule, SelfKickRejectedEvenForLeader) {
     PartyKickRule::Inputs i{
-        .kicker_id = 1, .target_id = 1,
+        .kicker_id = 1,
+        .target_id = 1,
         .kicker_is_leader = true,
         .target_in_same_party = true,
     };

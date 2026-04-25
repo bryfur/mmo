@@ -1,22 +1,22 @@
 #pragma once
 
+#include <glm/glm.hpp>
+#include <memory>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
 #include <SDL3_ttf/SDL_ttf.h>
-#include <glm/glm.hpp>
 #include <string>
-#include <memory>
-#include <vector>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 // Forward declarations
 namespace mmo::engine::gpu {
-    class GPUDevice;
-    class GPUBuffer;
-    class GPUTexture;
-    class PipelineRegistry;
-}
+class GPUDevice;
+class GPUBuffer;
+class GPUTexture;
+class PipelineRegistry;
+} // namespace mmo::engine::gpu
 
 namespace mmo::engine::render {
 
@@ -24,7 +24,7 @@ namespace gpu = mmo::engine::gpu;
 
 /**
  * TextRenderer handles text rendering using SDL_ttf and SDL3 GPU API.
- * 
+ *
  * SDL3 GPU Migration: This renderer now uses GPUBuffer for vertex data,
  * GPUTexture for font rendering, and the text pipeline from PipelineRegistry.
  * Text is rendered by creating temporary textures from TTF surfaces.
@@ -33,7 +33,7 @@ class TextRenderer {
 public:
     TextRenderer();
     ~TextRenderer();
-    
+
     /**
      * Initialize text rendering resources.
      * @param device GPU device for creating resources
@@ -41,10 +41,10 @@ public:
      */
     bool init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry);
     void shutdown();
-    
+
     // Set projection matrix before drawing
     void set_projection(const glm::mat4& projection);
-    
+
     /**
      * Draw text at the specified position.
      * @param cmd Command buffer for the frame
@@ -55,20 +55,17 @@ public:
      * @param color Text color in ABGR format
      * @param scale Text scale factor
      */
-    void draw_text(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* render_pass,
-                   const std::string& text, float x, float y, 
+    void draw_text(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* render_pass, const std::string& text, float x, float y,
                    uint32_t color = 0xFFFFFFFF, float scale = 1.0f);
-    
-    void draw_text_centered(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* render_pass,
-                            const std::string& text, float x, float y,
-                            uint32_t color = 0xFFFFFFFF, float scale = 1.0f);
+
+    void draw_text_centered(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* render_pass, const std::string& text, float x,
+                            float y, uint32_t color = 0xFFFFFFFF, float scale = 1.0f);
 
     /**
      * Queue a text draw for batched rendering.
      * Call this instead of draw_text during recording phase.
      */
-    void queue_text_draw(const std::string& text, float x, float y,
-                         uint32_t color = 0xFFFFFFFF, float scale = 1.0f);
+    void queue_text_draw(const std::string& text, float x, float y, uint32_t color = 0xFFFFFFFF, float scale = 1.0f);
 
     /**
      * Upload all queued text vertex data. Call BEFORE starting render pass.
@@ -86,15 +83,14 @@ public:
      * Used during execute phase when vertex buffer is already uploaded.
      * Uses push uniforms for quad transform instead of vertex buffer updates.
      */
-    void draw_text_immediate(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* render_pass,
-                             const std::string& text, float x, float y,
-                             uint32_t color = 0xFFFFFFFF, float scale = 1.0f);
-    
+    void draw_text_immediate(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* render_pass, const std::string& text,
+                             float x, float y, uint32_t color = 0xFFFFFFFF, float scale = 1.0f);
+
     int get_text_width(const std::string& text, float scale = 1.0f);
     int get_text_height(float scale = 1.0f);
-    
+
     bool is_ready() const { return initialized_ && font_ != nullptr; }
-    
+
     /**
      * Release GPU resources from previous frames.
      * Call this at the beginning of each frame to clean up resources
@@ -137,11 +133,11 @@ private:
     TTF_Font* font_ = nullptr;
     int font_size_ = 18;
     bool initialized_ = false;
-    
+
     gpu::GPUDevice* device_ = nullptr;
     gpu::PipelineRegistry* pipeline_registry_ = nullptr;
     glm::mat4 projection_;
-    
+
     // Dynamic vertex buffer for text quads (legacy, used by draw_text)
     std::unique_ptr<gpu::GPUBuffer> vertex_buffer_;
 
@@ -151,7 +147,7 @@ private:
 
     // Sampler for text textures
     SDL_GPUSampler* sampler_ = nullptr;
-    
+
     // Pending GPU resources to be released after GPU has finished using them
     // We use double-buffering: resources go to pending_*, then released next frame
     std::vector<SDL_GPUTexture*> pending_textures_;
@@ -160,23 +156,23 @@ private:
     // Text texture cache - maps text string to cached texture info
     std::unordered_map<std::string, CachedText> text_cache_;
     uint64_t current_frame_ = 0;
-    static constexpr uint64_t CACHE_EXPIRY_FRAMES = 300;  // Remove unused textures after ~5 seconds at 60fps
+    static constexpr uint64_t CACHE_EXPIRY_FRAMES = 300; // Remove unused textures after ~5 seconds at 60fps
 
     // Texts that were requested but not in cache - created at end of frame
     std::unordered_set<std::string> pending_text_creates_;
 
     // Batched text rendering data
     struct QueuedText {
-        CachedText* cached;    // cached pointer into text_cache_ (pointer stable per frame)
+        CachedText* cached; // cached pointer into text_cache_ (pointer stable per frame)
         float x, y;
         uint32_t color;
         float scale;
-        size_t vertex_offset;  // Offset into batch vertex buffer
+        size_t vertex_offset; // Offset into batch vertex buffer
     };
     std::vector<QueuedText> queued_texts_;
-    std::vector<float> batch_vertices_;  // All vertex data for queued texts
+    std::vector<float> batch_vertices_; // All vertex data for queued texts
     static constexpr size_t VERTICES_PER_QUAD = 6;
-    static constexpr size_t FLOATS_PER_VERTEX = 4;  // x, y, u, v
+    static constexpr size_t FLOATS_PER_VERTEX = 4; // x, y, u, v
     static constexpr size_t MAX_QUEUED_TEXTS = 4096;
 };
 

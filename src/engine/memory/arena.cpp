@@ -62,8 +62,12 @@ Arena& Arena::operator=(Arena&& other) noexcept {
 }
 
 void* Arena::allocate(std::size_t size, std::size_t align) {
-    if (size == 0) return nullptr;
-    if (align == 0) align = alignof(std::max_align_t);
+    if (size == 0) {
+        return nullptr;
+    }
+    if (align == 0) {
+        align = alignof(std::max_align_t);
+    }
 
     if (!chunks_.empty()) {
         Chunk& cur = chunks_.back();
@@ -76,13 +80,19 @@ void* Arena::allocate(std::size_t size, std::size_t align) {
         }
     }
 
-    if (fixed_buffer_) return nullptr;
-    if (!grow(size + align)) return nullptr;
+    if (fixed_buffer_) {
+        return nullptr;
+    }
+    if (!grow(size + align)) {
+        return nullptr;
+    }
 
     Chunk& cur = chunks_.back();
     std::size_t base_addr = reinterpret_cast<std::size_t>(cur.base);
     std::size_t aligned = align_up(base_addr + cur.used, align) - base_addr;
-    if (aligned + size > cur.size) return nullptr;
+    if (aligned + size > cur.size) {
+        return nullptr;
+    }
     void* p = cur.base + aligned;
     cur.used = aligned + size;
     return p;
@@ -91,7 +101,9 @@ void* Arena::allocate(std::size_t size, std::size_t align) {
 bool Arena::grow(std::size_t min_bytes) {
     std::size_t chunk_size = std::max(default_chunk_size_, min_bytes);
     void* mem = std::malloc(chunk_size);
-    if (!mem) return false;
+    if (!mem) {
+        return false;
+    }
     Chunk c;
     c.base = static_cast<std::byte*>(mem);
     c.size = chunk_size;
@@ -103,7 +115,9 @@ bool Arena::grow(std::size_t min_bytes) {
 void Arena::reset() {
     destroy_all();
     if (fixed_buffer_) {
-        if (!chunks_.empty()) chunks_[0].used = 0;
+        if (!chunks_.empty()) {
+            chunks_[0].used = 0;
+        }
         return;
     }
     // Keep the first chunk to amortize allocations across resets; free the rest.
@@ -113,23 +127,25 @@ void Arena::reset() {
         }
         chunks_.resize(1);
     }
-    if (!chunks_.empty()) chunks_[0].used = 0;
+    if (!chunks_.empty()) {
+        chunks_[0].used = 0;
+    }
 }
 
 std::size_t Arena::bytes_used() const noexcept {
     std::size_t total = 0;
-    for (auto& c : chunks_) total += c.used;
+    for (const auto& c : chunks_) total += c.used;
     return total;
 }
 
 std::size_t Arena::bytes_capacity() const noexcept {
     std::size_t total = 0;
-    for (auto& c : chunks_) total += c.size;
+    for (const auto& c : chunks_) total += c.size;
     return total;
 }
 
 void Arena::register_destructor(void* obj, void (*fn)(void*)) {
-    destructors_.push_back(Destructor{ obj, fn });
+    destructors_.push_back(Destructor{obj, fn});
 }
 
 void Arena::destroy_all() noexcept {

@@ -10,7 +10,7 @@
 
 namespace mmo::server::rules {
 
-template <typename ResultEnum>
+template<typename ResultEnum>
     requires std::is_enum_v<ResultEnum>
 struct RuleOutcome {
     ResultEnum value;

@@ -1,8 +1,8 @@
-#include <gtest/gtest.h>
 #include "server/rules/skill_gate.hpp"
+#include <gtest/gtest.h>
 
-using mmo::server::rules::SkillGate;
 using mmo::server::rules::Rule;
+using mmo::server::rules::SkillGate;
 
 // Contract: compile-time enforcement that SkillGate implements Rule.
 static_assert(Rule<SkillGate>);

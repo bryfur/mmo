@@ -4,8 +4,8 @@
 #include "client/hud/panel_state.hpp"
 #include "protocol/protocol.hpp"
 
-#include <entt/entt.hpp>
 #include <cstdint>
+#include <entt/entt.hpp>
 #include <optional>
 
 namespace mmo::client::systems {
@@ -23,11 +23,7 @@ std::optional<uint32_t> minimap_color_for(protocol::EntityType type);
 // `local_player_entity` is the entt::entity for the local player, or
 // entt::null when the player isn't yet known — in which case nothing is
 // updated except clearing the icon list.
-void update_minimap(entt::registry& registry,
-                    HUDState& hud,
-                    PanelState& panel,
-                    entt::entity local_player_entity,
-                    uint32_t local_player_network_id,
-                    float view_radius_world);
+void update_minimap(entt::registry& registry, HUDState& hud, PanelState& panel, entt::entity local_player_entity,
+                    uint32_t local_player_network_id, float view_radius_world);
 
 } // namespace mmo::client::systems

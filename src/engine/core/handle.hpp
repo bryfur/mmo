@@ -7,14 +7,13 @@
 
 namespace mmo::engine::core {
 
-template <typename Tag>
-struct Handle {
+template<typename Tag> struct Handle {
     uint32_t index = 0;
     uint32_t generation = 0;
 
     static constexpr uint32_t k_invalid_index = static_cast<uint32_t>(-1);
 
-    static constexpr Handle invalid() { return Handle{ k_invalid_index, 0 }; }
+    static constexpr Handle invalid() { return Handle{k_invalid_index, 0}; }
 
     bool is_valid() const noexcept { return index != k_invalid_index; }
 
@@ -24,8 +23,7 @@ struct Handle {
     friend bool operator!=(const Handle& a, const Handle& b) noexcept { return !(a == b); }
 };
 
-template <typename Tag, typename T>
-class HandlePool {
+template<typename Tag, typename T> class HandlePool {
 public:
     using HandleT = Handle<Tag>;
 
@@ -36,7 +34,7 @@ public:
             free_head_ = slot.next_free;
             slot.next_free = k_occupied;
             slot.value = std::move(value);
-            return HandleT{ idx, slot.generation };
+            return HandleT{idx, slot.generation};
         }
         uint32_t idx = static_cast<uint32_t>(slots_.size());
         Slot s;
@@ -44,14 +42,20 @@ public:
         s.next_free = k_occupied;
         s.value = std::move(value);
         slots_.push_back(std::move(s));
-        return HandleT{ idx, slots_[idx].generation };
+        return HandleT{idx, slots_[idx].generation};
     }
 
     bool release(HandleT h) {
-        if (!h.is_valid() || h.index >= slots_.size()) return false;
+        if (!h.is_valid() || h.index >= slots_.size()) {
+            return false;
+        }
         Slot& slot = slots_[h.index];
-        if (slot.next_free != k_occupied) return false;
-        if (slot.generation != h.generation) return false;
+        if (slot.next_free != k_occupied) {
+            return false;
+        }
+        if (slot.generation != h.generation) {
+            return false;
+        }
         slot.value = T{};
         slot.generation += 1;
         slot.next_free = free_head_;
@@ -60,18 +64,30 @@ public:
     }
 
     T* get(HandleT h) {
-        if (!h.is_valid() || h.index >= slots_.size()) return nullptr;
+        if (!h.is_valid() || h.index >= slots_.size()) {
+            return nullptr;
+        }
         Slot& slot = slots_[h.index];
-        if (slot.next_free != k_occupied) return nullptr;
-        if (slot.generation != h.generation) return nullptr;
+        if (slot.next_free != k_occupied) {
+            return nullptr;
+        }
+        if (slot.generation != h.generation) {
+            return nullptr;
+        }
         return &slot.value;
     }
 
     const T* get(HandleT h) const {
-        if (!h.is_valid() || h.index >= slots_.size()) return nullptr;
+        if (!h.is_valid() || h.index >= slots_.size()) {
+            return nullptr;
+        }
         const Slot& slot = slots_[h.index];
-        if (slot.next_free != k_occupied) return nullptr;
-        if (slot.generation != h.generation) return nullptr;
+        if (slot.next_free != k_occupied) {
+            return nullptr;
+        }
+        if (slot.generation != h.generation) {
+            return nullptr;
+        }
         return &slot.value;
     }
 
@@ -79,7 +95,7 @@ public:
 
     size_t size() const noexcept {
         size_t free_count = 0;
-        for (uint32_t cur = free_head_; cur != HandleT::k_invalid_index; ) {
+        for (uint32_t cur = free_head_; cur != HandleT::k_invalid_index;) {
             ++free_count;
             cur = slots_[cur].next_free;
         }
@@ -110,8 +126,7 @@ private:
 } // namespace mmo::engine::core
 
 namespace std {
-template <typename Tag>
-struct hash<::mmo::engine::core::Handle<Tag>> {
+template<typename Tag> struct hash<::mmo::engine::core::Handle<Tag>> {
     size_t operator()(const ::mmo::engine::core::Handle<Tag>& h) const noexcept {
         return (static_cast<size_t>(h.generation) << 32) ^ static_cast<size_t>(h.index);
     }

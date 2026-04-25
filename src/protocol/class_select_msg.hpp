@@ -10,13 +10,9 @@ struct ClassSelectMsg : Serializable<ClassSelectMsg> {
 
     static constexpr size_t serialized_size() { return 1; }
 
-    void serialize_impl(BufferWriter& w) const {
-        w.write(class_index);
-    }
+    void serialize_impl(BufferWriter& w) const { w.write(class_index); }
 
-    void deserialize_impl(BufferReader& r) {
-        class_index = r.read<uint8_t>();
-    }
+    void deserialize_impl(BufferReader& r) { class_index = r.read<uint8_t>(); }
 };
 
 } // namespace mmo::protocol

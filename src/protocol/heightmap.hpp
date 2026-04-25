@@ -1,7 +1,7 @@
 #pragma once
 /**
  * Heightmap Data Structures - Shared Between Client and Server
- * 
+ *
  * Designed for streaming chunks in the future.
  * Server generates/loads heightmaps and sends to clients.
  * Clients upload to GPU as texture for shader sampling.
@@ -19,20 +19,20 @@ namespace mmo::protocol {
  * Heightmap configuration constants
  */
 namespace heightmap_config {
-    // Resolution of each chunk (vertices per edge)
-    // 1025 = 1024 cells + 1 for edge vertices (power of 2 + 1 for seamless tiling)
-    constexpr uint32_t CHUNK_RESOLUTION = 1025;
+// Resolution of each chunk (vertices per edge)
+// 1025 = 1024 cells + 1 for edge vertices (power of 2 + 1 for seamless tiling)
+constexpr uint32_t CHUNK_RESOLUTION = 1025;
 
-    // World size each chunk covers (in world units/meters)
-    constexpr float CHUNK_WORLD_SIZE = 32000.0f;
-    
-    // Height range for normalization (for 16-bit storage)
-    constexpr float MIN_HEIGHT = -500.0f;
-    constexpr float MAX_HEIGHT = 1000.0f;
-    
-    // Meters per texel
-    constexpr float TEXEL_SIZE = CHUNK_WORLD_SIZE / (CHUNK_RESOLUTION - 1);
-}
+// World size each chunk covers (in world units/meters)
+constexpr float CHUNK_WORLD_SIZE = 32000.0f;
+
+// Height range for normalization (for 16-bit storage)
+constexpr float MIN_HEIGHT = -500.0f;
+constexpr float MAX_HEIGHT = 1000.0f;
+
+// Meters per texel
+constexpr float TEXEL_SIZE = CHUNK_WORLD_SIZE / (CHUNK_RESOLUTION - 1);
+} // namespace heightmap_config
 
 /**
  * A single heightmap chunk that can be streamed
@@ -41,28 +41,26 @@ struct HeightmapChunk {
     // Chunk grid position (for multi-chunk worlds)
     int32_t chunk_x = 0;
     int32_t chunk_z = 0;
-    
+
     // Resolution (width and height in samples)
     uint32_t resolution = heightmap_config::CHUNK_RESOLUTION;
-    
+
     // World-space bounds this chunk covers
     float world_origin_x = 0.0f;
     float world_origin_z = 0.0f;
     float world_size = heightmap_config::CHUNK_WORLD_SIZE;
-    
+
     // Height data stored as 16-bit normalized values for compact transfer
     // Real height = (uint16_value / 65535.0) * (MAX_HEIGHT - MIN_HEIGHT) + MIN_HEIGHT
     std::vector<uint16_t> height_data;
-    
+
     /**
      * Serialized size for network transfer
      * Header: chunk_x(4) + chunk_z(4) + resolution(4) + origin_x(4) + origin_z(4) + world_size(4) = 24 bytes
      * Data: resolution * resolution * 2 bytes
      */
-    size_t serialized_size() const {
-        return 24 + height_data.size() * sizeof(uint16_t);
-    }
-    
+    size_t serialized_size() const { return 24 + height_data.size() * sizeof(uint16_t); }
+
     /**
      * Serialize to byte buffer for network transfer
      */
@@ -70,21 +68,29 @@ struct HeightmapChunk {
         size_t start = buffer.size();
         buffer.resize(start + serialized_size());
         uint8_t* ptr = buffer.data() + start;
-        
-        std::memcpy(ptr, &chunk_x, 4); ptr += 4;
-        std::memcpy(ptr, &chunk_z, 4); ptr += 4;
-        std::memcpy(ptr, &resolution, 4); ptr += 4;
-        std::memcpy(ptr, &world_origin_x, 4); ptr += 4;
-        std::memcpy(ptr, &world_origin_z, 4); ptr += 4;
-        std::memcpy(ptr, &world_size, 4); ptr += 4;
+
+        std::memcpy(ptr, &chunk_x, 4);
+        ptr += 4;
+        std::memcpy(ptr, &chunk_z, 4);
+        ptr += 4;
+        std::memcpy(ptr, &resolution, 4);
+        ptr += 4;
+        std::memcpy(ptr, &world_origin_x, 4);
+        ptr += 4;
+        std::memcpy(ptr, &world_origin_z, 4);
+        ptr += 4;
+        std::memcpy(ptr, &world_size, 4);
+        ptr += 4;
         std::memcpy(ptr, height_data.data(), height_data.size() * sizeof(uint16_t));
     }
-    
+
     /**
      * Deserialize from byte buffer
      */
     bool deserialize(std::span<const uint8_t> data) {
-        if (data.size() < 24) return false;
+        if (data.size() < 24) {
+            return false;
+        }
 
         BufferReader r(data);
         chunk_x = r.read<int32_t>();
@@ -95,10 +101,14 @@ struct HeightmapChunk {
         world_size = r.read<float>();
 
         // Reject unreasonable resolutions to prevent excessive memory allocation
-        if (resolution == 0 || resolution > 4096) return false;
+        if (resolution == 0 || resolution > 4096) {
+            return false;
+        }
 
         size_t data_size = resolution * resolution;
-        if (data.size() < 24 + data_size * sizeof(uint16_t)) return false;
+        if (data.size() < 24 + data_size * sizeof(uint16_t)) {
+            return false;
+        }
 
         height_data.resize(data_size);
         r.read_bytes(height_data.data(), data_size * sizeof(uint16_t));

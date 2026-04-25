@@ -1,18 +1,13 @@
 #include "spatial_grid.hpp"
-#include <cmath>
 #include <algorithm>
+#include <cmath>
 
 namespace mmo::server {
 
-SpatialGrid::SpatialGrid(float cell_size)
-    : cell_size_(cell_size) {
-}
+SpatialGrid::SpatialGrid(float cell_size) : cell_size_(cell_size) {}
 
 GridCell SpatialGrid::get_cell(float x, float y) const {
-    return GridCell{
-        static_cast<int>(std::floor(x / cell_size_)),
-        static_cast<int>(std::floor(y / cell_size_))
-    };
+    return GridCell{static_cast<int>(std::floor(x / cell_size_)), static_cast<int>(std::floor(y / cell_size_))};
 }
 
 std::vector<GridCell> SpatialGrid::get_cells_in_radius(float center_x, float center_y, float radius) const {
@@ -75,7 +70,7 @@ void SpatialGrid::update_entity(uint32_t entity_id, float x, float y, protocol::
 void SpatialGrid::remove_entity(uint32_t entity_id) {
     auto it = entity_info_.find(entity_id);
     if (it == entity_info_.end()) {
-        return;  // Entity not in grid
+        return; // Entity not in grid
     }
 
     GridCell cell = it->second.cell;
@@ -117,14 +112,9 @@ std::vector<uint32_t> SpatialGrid::query_radius(float center_x, float center_y, 
     return result;
 }
 
-std::vector<uint32_t> SpatialGrid::query_with_type_radii(
-    float center_x, float center_y,
-    float building_radius,
-    float environment_radius,
-    float player_radius,
-    float npc_radius,
-    float town_npc_radius
-) const {
+std::vector<uint32_t> SpatialGrid::query_with_type_radii(float center_x, float center_y, float building_radius,
+                                                         float environment_radius, float player_radius,
+                                                         float npc_radius, float town_npc_radius) const {
     std::vector<uint32_t> result;
 
     // Use max radius to get all cells that might contain any visible entities
@@ -138,7 +128,9 @@ std::vector<uint32_t> SpatialGrid::query_with_type_radii(
             for (uint32_t entity_id : it->second) {
                 // Look up entity info to get type
                 auto info_it = entity_info_.find(entity_id);
-                if (info_it == entity_info_.end()) continue;
+                if (info_it == entity_info_.end()) {
+                    continue;
+                }
 
                 // We need to get position to check distance, but we don't store it
                 // For now, we'll add all entities in the cells and let the caller filter by distance

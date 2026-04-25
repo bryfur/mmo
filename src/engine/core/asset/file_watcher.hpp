@@ -53,9 +53,7 @@ public:
     bool is_initialized() const noexcept { return initialized_; }
 
     WatchHandle watch_file(std::filesystem::path path, WatchCallback on_change);
-    WatchHandle watch_directory(std::filesystem::path dir,
-                                std::string extension_filter,
-                                WatchCallback on_change);
+    WatchHandle watch_directory(std::filesystem::path dir, std::string extension_filter, WatchCallback on_change);
     void unwatch(WatchHandle h);
 
     // Drain pending changes, fire callbacks on the calling (main) thread.
@@ -68,7 +66,7 @@ private:
         WatchHandle handle = k_invalid_handle;
         WatchKind kind = WatchKind::File;
         std::filesystem::path target;
-        std::string ext_filter;            // ".spv", "" = any
+        std::string ext_filter; // ".spv", "" = any
         WatchCallback callback;
         // Per-path mtime cache (file_time_type stored as nanoseconds since epoch).
         std::unordered_map<std::string, int64_t> mtimes;

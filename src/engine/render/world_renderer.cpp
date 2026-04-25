@@ -1,13 +1,10 @@
 #include "world_renderer.hpp"
-#include <algorithm>
 #include "../gpu/gpu_texture.hpp"
 #include "../gpu/gpu_uniforms.hpp"
 #include "../render_constants.hpp"
-#include "SDL3/SDL_error.h"
-#include "SDL3/SDL_gpu.h"
+#include "engine/core/logger.hpp"
 #include "engine/gpu/gpu_buffer.hpp"
 #include "engine/gpu/gpu_device.hpp"
-#include "engine/core/logger.hpp"
 #include "engine/gpu/pipeline_registry.hpp"
 #include "engine/model_loader.hpp"
 #include "glm/ext/matrix_float3x3.hpp"
@@ -17,6 +14,9 @@
 #include "glm/ext/vector_float4.hpp"
 #include "glm/matrix.hpp"
 #include "glm/trigonometric.hpp"
+#include "SDL3/SDL_error.h"
+#include "SDL3/SDL_gpu.h"
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <vector>
@@ -31,14 +31,14 @@ WorldRenderer::~WorldRenderer() {
     shutdown();
 }
 
-bool WorldRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry,
-                         float world_width, float world_height, ModelManager* model_manager) {
+bool WorldRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry, float world_width,
+                         float world_height, ModelManager* model_manager) {
     device_ = &device;
     pipeline_registry_ = &pipeline_registry;
     world_width_ = world_width;
     world_height_ = world_height;
     model_manager_ = model_manager;
-    
+
     // Create sampler for textures
     SDL_GPUSamplerCreateInfo sampler_info = {};
     sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
@@ -54,7 +54,7 @@ bool WorldRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline
         ENGINE_LOG_ERROR("render", "Failed to create sampler: {}", SDL_GetError());
         return false;
     }
-    
+
     create_skybox_mesh();
     create_grid_mesh();
 
@@ -64,12 +64,12 @@ bool WorldRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline
 void WorldRenderer::shutdown() {
     skybox_vertex_buffer_.reset();
     grid_vertex_buffer_.reset();
-    
+
     if (sampler_ && device_) {
         SDL_ReleaseGPUSampler(device_->handle(), sampler_);
         sampler_ = nullptr;
     }
-    
+
     device_ = nullptr;
     pipeline_registry_ = nullptr;
 }
@@ -86,27 +86,29 @@ float WorldRenderer::get_terrain_height(float x, float z) const {
 }
 
 void WorldRenderer::create_skybox_mesh() {
-    if (!device_) return;
-    
+    if (!device_) {
+        return;
+    }
+
     // Fullscreen triangle in clip space (3 vertices that cover the entire screen)
     // z component is unused by shader but included for float3 vertex format
     float vertices[] = {
-        -1.0f, -1.0f, 0.0f,
-         3.0f, -1.0f, 0.0f,
-        -1.0f,  3.0f, 0.0f,
+        -1.0f, -1.0f, 0.0f, 3.0f, -1.0f, 0.0f, -1.0f, 3.0f, 0.0f,
     };
-    
-    skybox_vertex_buffer_ = gpu::GPUBuffer::create_static(
-        *device_, gpu::GPUBuffer::Type::Vertex, vertices, sizeof(vertices));
-    
+
+    skybox_vertex_buffer_ =
+        gpu::GPUBuffer::create_static(*device_, gpu::GPUBuffer::Type::Vertex, vertices, sizeof(vertices));
+
     if (!skybox_vertex_buffer_) {
         ENGINE_LOG_ERROR("render", "Failed to create skybox vertex buffer");
     }
 }
 
 void WorldRenderer::create_grid_mesh() {
-    if (!device_) return;
-    
+    if (!device_) {
+        return;
+    }
+
     std::vector<float> grid_data;
     float grid_step = 100.0f;
 
@@ -117,16 +119,26 @@ void WorldRenderer::create_grid_mesh() {
     grid_data.reserve(total_verts * 7);
 
     auto push_vertex = [&](float x, float y, float z, float r, float g, float b, float a) {
-        grid_data.push_back(x); grid_data.push_back(y); grid_data.push_back(z);
-        grid_data.push_back(r); grid_data.push_back(g); grid_data.push_back(b); grid_data.push_back(a);
+        grid_data.push_back(x);
+        grid_data.push_back(y);
+        grid_data.push_back(z);
+        grid_data.push_back(r);
+        grid_data.push_back(g);
+        grid_data.push_back(b);
+        grid_data.push_back(a);
     };
 
-    // Grid lines
-    for (float x = 0; x <= world_width_; x += grid_step) {
+    // Grid lines. Iterate with integer counters to avoid float-accumulation
+    // drift dropping the last grid line.
+    const int x_steps = static_cast<int>(world_width_ / grid_step);
+    for (int i = 0; i <= x_steps; ++i) {
+        float x = static_cast<float>(i) * grid_step;
         push_vertex(x, 0.0f, 0.0f, 0.15f, 0.15f, 0.2f, 0.8f);
         push_vertex(x, 0.0f, world_height_, 0.15f, 0.15f, 0.2f, 0.8f);
     }
-    for (float z = 0; z <= world_height_; z += grid_step) {
+    const int z_steps = static_cast<int>(world_height_ / grid_step);
+    for (int i = 0; i <= z_steps; ++i) {
+        float z = static_cast<float>(i) * grid_step;
         push_vertex(0.0f, 0.0f, z, 0.15f, 0.15f, 0.2f, 0.8f);
         push_vertex(world_width_, 0.0f, z, 0.15f, 0.15f, 0.2f, 0.8f);
     }
@@ -140,27 +152,30 @@ void WorldRenderer::create_grid_mesh() {
     push_vertex(0.0f, 0.0f, world_height_, 0.4f, 0.4f, 0.5f, 1.0f);
     push_vertex(0.0f, 0.0f, world_height_, 0.4f, 0.4f, 0.5f, 1.0f);
     push_vertex(0.0f, 0.0f, 0.0f, 0.4f, 0.4f, 0.5f, 1.0f);
-    
+
     grid_vertex_count_ = static_cast<uint32_t>(grid_data.size() / 7);
-    
-    grid_vertex_buffer_ = gpu::GPUBuffer::create_static(
-        *device_, gpu::GPUBuffer::Type::Vertex, 
-        grid_data.data(), grid_data.size() * sizeof(float));
-    
+
+    grid_vertex_buffer_ = gpu::GPUBuffer::create_static(*device_, gpu::GPUBuffer::Type::Vertex, grid_data.data(),
+                                                        grid_data.size() * sizeof(float));
+
     if (!grid_vertex_buffer_) {
         ENGINE_LOG_ERROR("render", "Failed to create grid vertex buffer");
     }
 }
 
-void WorldRenderer::render_skybox(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                   const glm::mat4& view, const glm::mat4& projection) {
-    if (!skybox_vertex_buffer_ || !pipeline_registry_ || !pass || !cmd) return;
-    
+void WorldRenderer::render_skybox(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const glm::mat4& view,
+                                  const glm::mat4& projection) {
+    if (!skybox_vertex_buffer_ || !pipeline_registry_ || !pass || !cmd) {
+        return;
+    }
+
     auto* pipeline = pipeline_registry_->get_skybox_pipeline();
-    if (!pipeline) return;
-    
+    if (!pipeline) {
+        return;
+    }
+
     pipeline->bind(pass);
-    
+
     // Push fragment uniforms - invVP for per-pixel ray, plus time and sun direction
     gpu::SkyboxFragmentUniforms fs_uniforms = {};
     glm::mat4 view_no_translation = glm::mat4(glm::mat3(view));
@@ -168,37 +183,41 @@ void WorldRenderer::render_skybox(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer*
     fs_uniforms.time = skybox_time_;
     fs_uniforms.sunDirection = sun_direction_;
     SDL_PushGPUFragmentUniformData(cmd, 0, &fs_uniforms, sizeof(fs_uniforms));
-    
+
     // Bind vertex buffer
     SDL_GPUBufferBinding vb_binding = {};
     vb_binding.buffer = skybox_vertex_buffer_->handle();
     vb_binding.offset = 0;
     SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
-    
+
     // Draw fullscreen triangle (3 vertices)
     SDL_DrawGPUPrimitives(pass, 3, 1, 0, 0);
 }
 
-void WorldRenderer::render_grid(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                 const glm::mat4& view, const glm::mat4& projection) {
-    if (!grid_vertex_buffer_ || !pipeline_registry_ || !pass || !cmd) return;
-    
+void WorldRenderer::render_grid(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const glm::mat4& view,
+                                const glm::mat4& projection) {
+    if (!grid_vertex_buffer_ || !pipeline_registry_ || !pass || !cmd) {
+        return;
+    }
+
     auto* pipeline = pipeline_registry_->get_grid_pipeline();
-    if (!pipeline) return;
-    
+    if (!pipeline) {
+        return;
+    }
+
     pipeline->bind(pass);
-    
+
     // Push uniforms
     gpu::GridVertexUniforms uniforms = {};
     uniforms.viewProjection = projection * view;
     SDL_PushGPUVertexUniformData(cmd, 0, &uniforms, sizeof(uniforms));
-    
+
     // Bind vertex buffer
     SDL_GPUBufferBinding vb_binding = {};
     vb_binding.buffer = grid_vertex_buffer_->handle();
     vb_binding.offset = 0;
     SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
-    
+
     // Draw grid lines
     SDL_DrawGPUPrimitives(pass, grid_vertex_count_, 1, 0, 0);
 }

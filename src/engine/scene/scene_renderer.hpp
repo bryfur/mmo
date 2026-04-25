@@ -1,20 +1,20 @@
 #pragma once
 
-#include "engine/scene/render_scene.hpp"
-#include "engine/scene/ui_scene.hpp"
-#include "engine/scene/camera_state.hpp"
-#include "engine/scene/frustum.hpp"
-#include "engine/graphics_settings.hpp"
-#include "engine/render_stats.hpp"
 #include "engine/gpu/gpu_buffer.hpp"
 #include "engine/gpu/gpu_debug.hpp"
 #include "engine/gpu/gpu_texture.hpp"
 #include "engine/gpu/gpu_uniforms.hpp"
+#include "engine/graphics_settings.hpp"
 #include "engine/render/lighting/light_cluster.hpp"
-#include <glm/glm.hpp>
+#include "engine/render_stats.hpp"
+#include "engine/scene/camera_state.hpp"
+#include "engine/scene/frustum.hpp"
+#include "engine/scene/render_scene.hpp"
+#include "engine/scene/ui_scene.hpp"
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <glm/glm.hpp>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -22,31 +22,32 @@
 
 // Forward declarations for types only used in private implementation
 namespace mmo::engine::render {
-    class RenderContext;
-    class TerrainRenderer;
-    class WorldRenderer;
-    class UIRenderer;
-    class EffectRenderer;
-    class GrassRenderer;
-    class ShadowMap;
-    class AmbientOcclusion;
-    class Bloom;
-    class VolumetricFog;
-}
+class RenderContext;
+class TerrainRenderer;
+class WorldRenderer;
+class UIRenderer;
+class EffectRenderer;
+class GrassRenderer;
+class ShadowMap;
+class AmbientOcclusion;
+class Bloom;
+class VolumetricFog;
+} // namespace mmo::engine::render
 
 namespace mmo::engine::gpu {
-    class PipelineRegistry;
+class PipelineRegistry;
 }
 
 namespace mmo::engine::systems {
-    class EffectSystem;
+class EffectSystem;
 }
 
 namespace mmo::engine {
-    class ModelManager;
-    struct Heightmap;
-    struct EffectDefinition;
-}
+class ModelManager;
+struct Heightmap;
+struct EffectDefinition;
+struct Model;
+} // namespace mmo::engine
 
 namespace mmo::engine::scene {
 
@@ -83,8 +84,9 @@ public:
      * @param camera Camera state for the frame
      * @param dt Delta time for animations/effects
      */
-    void render_frame(const RenderScene& scene, const UIScene& ui_scene,
-                      const CameraState& camera, float dt);
+    // RenderScene is taken by non-const reference because the renderer
+    // drains particle-effect spawn commands from it as part of consumption.
+    void render_frame(RenderScene& scene, const UIScene& ui_scene, const CameraState& camera, float dt);
 
     // ========== Configuration ==========
 
@@ -124,7 +126,7 @@ private:
     void end_ui();
 
     // Rendering
-    void render_3d_scene(const RenderScene& scene, const CameraState& camera, float dt);
+    void render_3d_scene(RenderScene& scene, const CameraState& camera, float dt);
     void render_model_command(const ModelCommand& cmd, const CameraState& camera);
     void render_model_command_inner(const ModelCommand& cmd, const CameraState& camera);
     void render_skinned_model_command(const SkinnedModelCommand& cmd, const CameraState& camera);
@@ -134,7 +136,7 @@ private:
     void upload_instance_buffers();
     void render_instanced_models(const CameraState& camera);
     void render_instanced_shadow_models(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                         const glm::mat4& light_view_projection, int cascade);
+                                        const glm::mat4& light_view_projection, int cascade);
     void render_ui_commands(const UIScene& ui_scene, const CameraState& camera);
     void draw_billboard_3d(const Billboard3DCommand& cmd, const CameraState& camera);
     void render_debug_lines(const RenderScene& scene, const CameraState& camera);
@@ -156,10 +158,8 @@ private:
 
 
     // Effect spawning (internal - consumes scene commands)
-    int spawn_effect(const mmo::engine::EffectDefinition* definition,
-                     const glm::vec3& position,
-                     const glm::vec3& direction = {1, 0, 0},
-                     float range = -1.0f);
+    int spawn_effect(const mmo::engine::EffectDefinition* definition, const glm::vec3& position,
+                     const glm::vec3& direction = {1, 0, 0}, float range = -1.0f);
 
     // ========== Sub-renderers ==========
     render::RenderContext* context_ = nullptr;
@@ -181,12 +181,12 @@ private:
     // ========== GPU Resources ==========
     std::unique_ptr<gpu::GPUBuffer> billboard_vertex_buffer_;
     std::unique_ptr<gpu::GPUBuffer> debug_line_vertex_buffer_;
-    size_t debug_line_buffer_capacity_ = 0;  // max line count the buffer can hold
-    std::vector<float> debug_line_scratch_;  // reused per frame to avoid alloc
+    size_t debug_line_buffer_capacity_ = 0; // max line count the buffer can hold
+    std::vector<float> debug_line_scratch_; // reused per frame to avoid alloc
     std::unique_ptr<gpu::GPUTexture> depth_texture_;
     SDL_GPUSampler* default_sampler_ = nullptr;
-    std::unique_ptr<gpu::GPUTexture> dummy_white_texture_;  // 1x1 white for binding slots that need a texture
-    std::unique_ptr<gpu::GPUTexture> default_normal_texture_;  // 1x1 (128,128,255) flat tangent-space normal
+    std::unique_ptr<gpu::GPUTexture> dummy_white_texture_;    // 1x1 white for binding slots that need a texture
+    std::unique_ptr<gpu::GPUTexture> default_normal_texture_; // 1x1 (128,128,255) flat tangent-space normal
 
     // ========== Instanced Rendering ==========
     // Per-model batched instance data, rebuilt each frame (keyed by ModelHandle for O(1) lookup)
@@ -195,8 +195,8 @@ private:
     // Only casters inside that cascade's light frustum are added, which dramatically
     // reduces shadow draw work for tight near cascades.
     std::array<std::unordered_map<ModelHandle, std::vector<gpu::ShadowInstanceData>>, 4> shadow_instance_batches_;
-    std::vector<const ModelCommand*> non_instanced_commands_;  // individual draw fallback
-    std::vector<const SkinnedModelCommand*> shadow_skinned_commands_;  // pre-collected for shadow passes
+    std::vector<const ModelCommand*> non_instanced_commands_;         // individual draw fallback
+    std::vector<const SkinnedModelCommand*> shadow_skinned_commands_; // pre-collected for shadow passes
     std::unique_ptr<gpu::GPUBuffer> instance_storage_buffer_;
     size_t instance_storage_capacity_ = 0;
     std::unique_ptr<gpu::GPUBuffer> shadow_instance_storage_buffer_;
@@ -213,8 +213,25 @@ private:
     std::vector<gpu::InstanceData> packed_instances_;
     std::vector<gpu::ShadowInstanceData> packed_shadow_instances_;
 
+    // Per-frame scratch for shadow-pass entity resolution. Cleared per
+    // render_shadow_passes call but capacity is preserved across frames.
+    // Held as members rather than thread_local locals so they participate
+    // in normal object lifetime / can be reset by tests.
+    struct ResolvedSkinnedEntry {
+        const SkinnedModelCommand* cmd;
+        Model* model;
+        glm::vec3 world_center;
+        float world_radius;
+    };
+    struct ResolvedStaticEntry {
+        const ModelCommand* cmd;
+        Model* model;
+    };
+    std::vector<ResolvedSkinnedEntry> shadow_skinned_scratch_;
+    std::vector<ResolvedStaticEntry> shadow_static_scratch_;
+
     // ========== Render State ==========
-    Frustum frame_frustum_;  // Extracted once per frame, reused across passes
+    Frustum frame_frustum_{}; // Extracted once per frame, reused across passes
     SDL_GPURenderPass* main_render_pass_ = nullptr;
     SDL_GPUTexture* current_swapchain_ = nullptr;
     bool had_main_pass_this_frame_ = false;

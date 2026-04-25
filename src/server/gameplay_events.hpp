@@ -75,16 +75,7 @@ struct EntityDeathEvent {
     uint32_t killer_id = 0;
 };
 
-using GameplayEvent = std::variant<
-    XPGain,
-    LevelUp,
-    LootDrop,
-    ZoneChange,
-    QuestProgress,
-    QuestComplete,
-    InventoryUpdate,
-    CombatHitEvent,
-    EntityDeathEvent
->;
+using GameplayEvent = std::variant<XPGain, LevelUp, LootDrop, ZoneChange, QuestProgress, QuestComplete, InventoryUpdate,
+                                   CombatHitEvent, EntityDeathEvent>;
 
 } // namespace mmo::server::events

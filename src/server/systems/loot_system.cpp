@@ -20,12 +20,13 @@ std::mt19937& rng() {
 } // anonymous namespace
 
 // Seeded overload - tests inject a std::mt19937 to get deterministic rolls.
-LootResult roll_loot(const std::string& monster_type_id, const GameConfig& config,
-                     std::mt19937& rng_) {
+LootResult roll_loot(const std::string& monster_type_id, const GameConfig& config, std::mt19937& rng_) {
     LootResult result;
 
     const LootTableConfig* table = config.find_loot_table(monster_type_id);
-    if (!table) return result;
+    if (!table) {
+        return result;
+    }
 
     // Roll gold
     if (table->gold_max > table->gold_min) {
@@ -55,8 +56,8 @@ LootResult roll_loot(const std::string& monster_type_id, const GameConfig& confi
     return roll_loot(monster_type_id, config, rng());
 }
 
-std::vector<std::pair<std::string, int>>
-give_loot(entt::registry& registry, entt::entity player, const LootResult& loot) {
+std::vector<std::pair<std::string, int>> give_loot(entt::registry& registry, entt::entity player,
+                                                   const LootResult& loot) {
     std::vector<std::pair<std::string, int>> overflow;
 
     // Add gold (no inventory cap on gold in this design).
@@ -73,7 +74,9 @@ give_loot(entt::registry& registry, entt::entity player, const LootResult& loot)
                 int after = inv->count_item(item_id);
                 int added = after - before;
                 int lost = count - added;
-                if (lost > 0) overflow.emplace_back(item_id, lost);
+                if (lost > 0) {
+                    overflow.emplace_back(item_id, lost);
+                }
             }
         }
     }
@@ -84,22 +87,32 @@ bool equip_item(entt::registry& registry, entt::entity player, const std::string
     auto* inv = registry.try_get<ecs::Inventory>(player);
     auto* equip = registry.try_get<ecs::Equipment>(player);
     auto* level = registry.try_get<ecs::PlayerLevel>(player);
-    if (!inv || !equip || !level) return false;
+    if (!inv || !equip || !level) {
+        return false;
+    }
 
     // Check item exists in inventory
-    if (inv->count_item(item_id) <= 0) return false;
+    if (inv->count_item(item_id) <= 0) {
+        return false;
+    }
 
     // Find item config
     const ItemConfig* item = config.find_item(item_id);
-    if (!item) return false;
+    if (!item) {
+        return false;
+    }
 
     // Check level requirement
-    if (level->level < item->level_req) return false;
+    if (level->level < item->level_req) {
+        return false;
+    }
 
     // Fix #5: Check class restriction
     if (!item->classes.empty()) {
         const auto* info = registry.try_get<ecs::EntityInfo>(player);
-        if (!info) return false;
+        if (!info) {
+            return false;
+        }
         const char* player_class_name = class_name_for_index(info->player_class);
         bool class_allowed = false;
         for (const auto& cls : item->classes) {
@@ -108,7 +121,9 @@ bool equip_item(entt::registry& registry, entt::entity player, const std::string
                 break;
             }
         }
-        if (!class_allowed) return false;
+        if (!class_allowed) {
+            return false;
+        }
     }
 
     // Remove the new item from inventory FIRST so the slot it occupied is
@@ -150,15 +165,25 @@ bool equip_item(entt::registry& registry, entt::entity player, const std::string
 bool unequip_item(entt::registry& registry, entt::entity player, const std::string& slot, const GameConfig& config) {
     auto* inv = registry.try_get<ecs::Inventory>(player);
     auto* equip = registry.try_get<ecs::Equipment>(player);
-    if (!inv || !equip) return false;
+    if (!inv || !equip) {
+        return false;
+    }
 
     if (slot == "weapon") {
-        if (equip->weapon_id.empty()) return false;
-        if (!inv->add_item(equip->weapon_id)) return false; // Inventory full
+        if (equip->weapon_id.empty()) {
+            return false;
+        }
+        if (!inv->add_item(equip->weapon_id)) {
+            return false; // Inventory full
+        }
         equip->weapon_id.clear();
     } else if (slot == "armor") {
-        if (equip->armor_id.empty()) return false;
-        if (!inv->add_item(equip->armor_id)) return false; // Inventory full
+        if (equip->armor_id.empty()) {
+            return false;
+        }
+        if (!inv->add_item(equip->armor_id)) {
+            return false; // Inventory full
+        }
         equip->armor_id.clear();
     } else {
         return false; // Unknown slot
@@ -168,27 +193,41 @@ bool unequip_item(entt::registry& registry, entt::entity player, const std::stri
     return true;
 }
 
-bool use_consumable(entt::registry& registry, entt::entity player, const std::string& item_id, const GameConfig& config) {
+bool use_consumable(entt::registry& registry, entt::entity player, const std::string& item_id,
+                    const GameConfig& config) {
     auto* inv = registry.try_get<ecs::Inventory>(player);
-    if (!inv) return false;
+    if (!inv) {
+        return false;
+    }
 
     // Check item exists in inventory
-    if (inv->count_item(item_id) <= 0) return false;
+    if (inv->count_item(item_id) <= 0) {
+        return false;
+    }
 
     // Find item config
     const ItemConfig* item = config.find_item(item_id);
-    if (!item) return false;
+    if (!item) {
+        return false;
+    }
 
     // Must be consumable
-    if (item->type != "consumable") return false;
+    if (item->type != "consumable") {
+        return false;
+    }
 
     // Per-item cooldown (potion spam guard). Heal potions share a 6s
     // cooldown, mana potions 6s, stat elixirs 60s, scrolls 15s.
     auto& cd = registry.get_or_emplace<ecs::ConsumableCooldowns>(player);
-    if (cd.remaining(item_id) > 0.0f) return false;
+    if (cd.remaining(item_id) > 0.0f) {
+        return false;
+    }
     float cooldown_seconds = 6.0f;
-    if (item->subtype == "elixir" || item->stats.buff_duration > 20.0f) cooldown_seconds = 60.0f;
-    else if (item->subtype == "scroll") cooldown_seconds = 15.0f;
+    if (item->subtype == "elixir" || item->stats.buff_duration > 20.0f) {
+        cooldown_seconds = 60.0f;
+    } else if (item->subtype == "scroll") {
+        cooldown_seconds = 15.0f;
+    }
     cd.set(item_id, cooldown_seconds);
 
     // Apply heal
@@ -209,7 +248,7 @@ bool use_consumable(entt::registry& registry, entt::entity player, const std::st
         }
 
         apply_effect(registry, player,
-            ecs::make_status_effect(buff_type, item->stats.buff_duration, item->stats.buff_multiplier));
+                     ecs::make_status_effect(buff_type, item->stats.buff_duration, item->stats.buff_multiplier));
     }
 
     // Remove 1 from inventory
@@ -219,7 +258,9 @@ bool use_consumable(entt::registry& registry, entt::entity player, const std::st
 
 void recalc_equipment(entt::registry& registry, entt::entity player, const GameConfig& config) {
     auto* equip = registry.try_get<ecs::Equipment>(player);
-    if (!equip) return;
+    if (!equip) {
+        return;
+    }
 
     // Reset bonuses
     equip->damage_bonus = 0.0f;
@@ -257,8 +298,11 @@ void recalc_equipment(entt::registry& registry, entt::entity player, const GameC
         if (delta != 0.0f) {
             hp->max = std::max(1.0f, hp->max + delta);
             // Don't over-heal: clamp current, but extend if we grew.
-            if (hp->current > hp->max) hp->current = hp->max;
-            else if (delta > 0.0f) hp->current = std::min(hp->max, hp->current + delta);
+            if (hp->current > hp->max) {
+                hp->current = hp->max;
+            } else if (delta > 0.0f) {
+                hp->current = std::min(hp->max, hp->current + delta);
+            }
         }
         equip->applied_health_bonus = equip->health_bonus;
     }

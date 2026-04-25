@@ -2,8 +2,8 @@
 #include "SDL3/SDL_error.h"
 #include "SDL3/SDL_gpu.h"
 #include "SDL3/SDL_video.h"
-#include <SDL3/SDL_log.h>
 #include <cstdint>
+#include <SDL3/SDL_log.h>
 #include <string>
 
 namespace mmo::engine::gpu {
@@ -22,11 +22,11 @@ bool GPUDevice::init(SDL_Window* window, bool prefer_low_power) {
 
     // Create the GPU device with automatic backend selection
     // SDL3 will choose the best available backend (Metal on macOS, Vulkan/D3D12 on others)
-    device_ = SDL_CreateGPUDevice(
-        SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_METALLIB | SDL_GPU_SHADERFORMAT_DXIL,
-        true,  // debug mode
-        nullptr // prefer no specific driver
-    );
+    device_ =
+        SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV | SDL_GPU_SHADERFORMAT_METALLIB | SDL_GPU_SHADERFORMAT_DXIL,
+                            true,   // debug mode
+                            nullptr // prefer no specific driver
+        );
 
     if (!device_) {
         SDL_Log("GPUDevice::init: Failed to create GPU device: %s", SDL_GetError());
@@ -49,15 +49,15 @@ void GPUDevice::shutdown() {
     if (device_) {
         // Wait for all GPU operations to complete
         SDL_WaitForGPUIdle(device_);
-        
+
         if (window_) {
             SDL_ReleaseWindowFromGPUDevice(device_, window_);
         }
-        
+
         SDL_DestroyGPUDevice(device_);
         device_ = nullptr;
         window_ = nullptr;
-        
+
         SDL_Log("GPUDevice::shutdown: Device destroyed");
     }
 }
@@ -84,16 +84,17 @@ void GPUDevice::end_frame(SDL_GPUCommandBuffer* cmd) {
     SDL_SubmitGPUCommandBuffer(cmd);
 }
 
-SDL_GPUTexture* GPUDevice::acquire_swapchain_texture(SDL_GPUCommandBuffer* cmd,
-                                                       uint32_t* out_width,
-                                                       uint32_t* out_height) {
+SDL_GPUTexture* GPUDevice::acquire_swapchain_texture(SDL_GPUCommandBuffer* cmd, uint32_t* out_width,
+                                                     uint32_t* out_height) {
     if (!cmd || !window_) {
-        SDL_Log("GPUDevice::acquire_swapchain_texture: cmd=%p window=%p", (void*)cmd, (void*)window_);
+        SDL_Log("GPUDevice::acquire_swapchain_texture: cmd=%p window=%p", reinterpret_cast<void*>(cmd),
+                reinterpret_cast<void*>(window_));
         return nullptr;
     }
 
     SDL_GPUTexture* swapchain_texture = nullptr;
-    uint32_t w = 0, h = 0;
+    uint32_t w = 0;
+    uint32_t h = 0;
 
     // Use waiting version to avoid memory bloat from accumulated command buffers
     // See: https://wiki.libsdl.org/SDL3/SDL_WaitAndAcquireGPUSwapchainTexture
@@ -107,8 +108,12 @@ SDL_GPUTexture* GPUDevice::acquire_swapchain_texture(SDL_GPUCommandBuffer* cmd,
         return nullptr;
     }
 
-    if (out_width) *out_width = w;
-    if (out_height) *out_height = h;
+    if (out_width) {
+        *out_width = w;
+    }
+    if (out_height) {
+        *out_height = h;
+    }
 
     return swapchain_texture;
 }
@@ -118,32 +123,44 @@ SDL_GPUTexture* GPUDevice::acquire_swapchain_texture(SDL_GPUCommandBuffer* cmd,
 // =============================================================================
 
 SDL_GPUBuffer* GPUDevice::create_buffer(const SDL_GPUBufferCreateInfo& info) {
-    if (!device_) return nullptr;
+    if (!device_) {
+        return nullptr;
+    }
     return SDL_CreateGPUBuffer(device_, &info);
 }
 
 SDL_GPUTransferBuffer* GPUDevice::create_transfer_buffer(const SDL_GPUTransferBufferCreateInfo& info) {
-    if (!device_) return nullptr;
+    if (!device_) {
+        return nullptr;
+    }
     return SDL_CreateGPUTransferBuffer(device_, &info);
 }
 
 SDL_GPUTexture* GPUDevice::create_texture(const SDL_GPUTextureCreateInfo& info) {
-    if (!device_) return nullptr;
+    if (!device_) {
+        return nullptr;
+    }
     return SDL_CreateGPUTexture(device_, &info);
 }
 
 SDL_GPUSampler* GPUDevice::create_sampler(const SDL_GPUSamplerCreateInfo& info) {
-    if (!device_) return nullptr;
+    if (!device_) {
+        return nullptr;
+    }
     return SDL_CreateGPUSampler(device_, &info);
 }
 
 SDL_GPUGraphicsPipeline* GPUDevice::create_graphics_pipeline(const SDL_GPUGraphicsPipelineCreateInfo& info) {
-    if (!device_) return nullptr;
+    if (!device_) {
+        return nullptr;
+    }
     return SDL_CreateGPUGraphicsPipeline(device_, &info);
 }
 
 SDL_GPUShader* GPUDevice::create_shader(const SDL_GPUShaderCreateInfo& info) {
-    if (!device_) return nullptr;
+    if (!device_) {
+        return nullptr;
+    }
     return SDL_CreateGPUShader(device_, &info);
 }
 
@@ -192,7 +209,9 @@ void GPUDevice::release_shader(SDL_GPUShader* shader) {
 // =============================================================================
 
 void* GPUDevice::map_transfer_buffer(SDL_GPUTransferBuffer* buffer, bool cycle) {
-    if (!device_ || !buffer) return nullptr;
+    if (!device_ || !buffer) {
+        return nullptr;
+    }
     return SDL_MapGPUTransferBuffer(device_, buffer, cycle);
 }
 
@@ -207,14 +226,18 @@ void GPUDevice::unmap_transfer_buffer(SDL_GPUTransferBuffer* buffer) {
 // =============================================================================
 
 int GPUDevice::width() const {
-    if (!window_) return 0;
+    if (!window_) {
+        return 0;
+    }
     int w = 0;
     SDL_GetWindowSize(window_, &w, nullptr);
     return w;
 }
 
 int GPUDevice::height() const {
-    if (!window_) return 0;
+    if (!window_) {
+        return 0;
+    }
     int h = 0;
     SDL_GetWindowSize(window_, nullptr, &h);
     return h;
@@ -228,33 +251,39 @@ SDL_GPUTextureFormat GPUDevice::swapchain_format() const {
 }
 
 std::string GPUDevice::driver_name() const {
-    if (!device_) return "none";
+    if (!device_) {
+        return "none";
+    }
     const char* name = SDL_GetGPUDeviceDriver(device_);
     return name ? name : "unknown";
 }
 
 bool GPUDevice::supports_format(SDL_GPUTextureFormat format, SDL_GPUTextureType type,
-                                 SDL_GPUTextureUsageFlags usage) const {
-    if (!device_) return false;
+                                SDL_GPUTextureUsageFlags usage) const {
+    if (!device_) {
+        return false;
+    }
     return SDL_GPUTextureSupportsFormat(device_, format, type, usage);
 }
 
 bool GPUDevice::supports_present_mode(SDL_GPUPresentMode mode) const {
-    if (!device_ || !window_) return false;
+    if (!device_ || !window_) {
+        return false;
+    }
     return SDL_WindowSupportsGPUPresentMode(device_, window_, mode);
 }
 
 bool GPUDevice::set_swapchain_parameters(SDL_GPUPresentMode present_mode) {
-    if (!device_ || !window_) return false;
-
-    if (!SDL_SetGPUSwapchainParameters(device_, window_,
-                                        SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
-                                        present_mode)) {
-        SDL_Log("GPUDevice::set_swapchain_parameters: present_mode=%d not supported: %s",
-                (int)present_mode, SDL_GetError());
+    if (!device_ || !window_) {
         return false;
     }
-    SDL_Log("GPUDevice::set_swapchain_parameters: present_mode=%d", (int)present_mode);
+
+    if (!SDL_SetGPUSwapchainParameters(device_, window_, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, present_mode)) {
+        SDL_Log("GPUDevice::set_swapchain_parameters: present_mode=%d not supported: %s",
+                static_cast<int>(present_mode), SDL_GetError());
+        return false;
+    }
+    SDL_Log("GPUDevice::set_swapchain_parameters: present_mode=%d", static_cast<int>(present_mode));
     return true;
 }
 

@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
 #include "engine/heightmap.hpp"
 #include <cmath>
+#include <gtest/gtest.h>
 
 using namespace mmo::engine;
 
@@ -166,7 +166,9 @@ TEST(Heightmap, WorldToGridConversion) {
 
 TEST(Heightmap, NormalOnFlatSurfacePointsUp) {
     auto h = make_flat(8, 10.0f, 0.0f);
-    float nx, ny, nz;
+    float nx = NAN;
+    float ny = NAN;
+    float nz = NAN;
     h.get_normal_world(5.0f, 5.0f, nx, ny, nz);
     // Flat surface normal should be (0, 1, 0)
     EXPECT_NEAR(nx, 0.0f, 0.01f);
@@ -191,7 +193,9 @@ TEST(Heightmap, NormalIsUnitLength) {
         }
     }
 
-    float nx, ny, nz;
+    float nx = NAN;
+    float ny = NAN;
+    float nz = NAN;
     h.get_normal_world(1.5f, 1.5f, nx, ny, nz);
     float len = std::sqrt(nx * nx + ny * ny + nz * nz);
     EXPECT_NEAR(len, 1.0f, 0.001f);
@@ -276,10 +280,10 @@ TEST(Heightmap, HeightAtExactGridCorners) {
     h.height_data.resize(16, encode_height(100.0f, 0.0f, 200.0f));
 
     // Set distinct corner heights
-    h.height_data[0 * 4 + 0] = encode_height(10.0f, 0.0f, 200.0f);  // top-left
-    h.height_data[0 * 4 + 3] = encode_height(30.0f, 0.0f, 200.0f);  // top-right
-    h.height_data[3 * 4 + 0] = encode_height(50.0f, 0.0f, 200.0f);  // bottom-left
-    h.height_data[3 * 4 + 3] = encode_height(70.0f, 0.0f, 200.0f);  // bottom-right
+    h.height_data[0 * 4 + 0] = encode_height(10.0f, 0.0f, 200.0f); // top-left
+    h.height_data[0 * 4 + 3] = encode_height(30.0f, 0.0f, 200.0f); // top-right
+    h.height_data[3 * 4 + 0] = encode_height(50.0f, 0.0f, 200.0f); // bottom-left
+    h.height_data[3 * 4 + 3] = encode_height(70.0f, 0.0f, 200.0f); // bottom-right
 
     // World corners: origin=(5,10), far=(35,40)
     EXPECT_NEAR(h.get_height_world(5.0f, 10.0f), 10.0f, 0.2f);
@@ -392,7 +396,9 @@ TEST(Heightmap, NormalOnSlope) {
         }
     }
 
-    float nx, ny, nz;
+    float nx = NAN;
+    float ny = NAN;
+    float nz = NAN;
     h.get_normal_world(1.5f, 1.5f, nx, ny, nz);
 
     // Normal should point away from the slope: negative x component (tilts away from rising slope)
@@ -410,7 +416,9 @@ TEST(Heightmap, NormalAtEdgeOfHeightmap) {
     // Normal at the very edge should still work (clamping prevents out-of-bounds)
     auto h = make_flat(8, 10.0f, 25.0f);
 
-    float nx, ny, nz;
+    float nx = NAN;
+    float ny = NAN;
+    float nz = NAN;
     // Bottom-left corner
     h.get_normal_world(0.0f, 0.0f, nx, ny, nz);
     float len = std::sqrt(nx * nx + ny * ny + nz * nz);

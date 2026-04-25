@@ -1,7 +1,7 @@
 #include "leveling_system.hpp"
-#include "skill_system.hpp"
 #include "server/ecs/game_components.hpp"
 #include "server/game_config.hpp"
+#include "skill_system.hpp"
 #include <algorithm>
 #include <cstdio>
 
@@ -12,25 +12,37 @@ namespace {
 float level_diff_xp_modifier(int player_level, int monster_level) {
     int diff = monster_level - player_level;
 
-    if (diff == 0) return 1.0f;
+    if (diff == 0) {
+        return 1.0f;
+    }
 
     if (diff < 0) {
         // Monster is lower level
         switch (diff) {
-            case -1: return 0.9f;
-            case -2: return 0.75f;
-            case -3: return 0.5f;
-            case -4: return 0.25f;
-            default: return 0.1f;
+            case -1:
+                return 0.9f;
+            case -2:
+                return 0.75f;
+            case -3:
+                return 0.5f;
+            case -4:
+                return 0.25f;
+            default:
+                return 0.1f;
         }
     } else {
         // Monster is higher level
         switch (diff) {
-            case 1: return 1.1f;
-            case 2: return 1.2f;
-            case 3: return 1.3f;
-            case 4: return 1.4f;
-            default: return 1.5f;
+            case 1:
+                return 1.1f;
+            case 2:
+                return 1.2f;
+            case 3:
+                return 1.3f;
+            case 4:
+                return 1.4f;
+            default:
+                return 1.5f;
         }
     }
 }
@@ -38,15 +50,19 @@ float level_diff_xp_modifier(int player_level, int monster_level) {
 } // anonymous namespace
 
 void award_kill_xp(entt::registry& registry, entt::entity player, entt::entity monster, const GameConfig& config) {
-    if (!registry.valid(player) || !registry.valid(monster)) return;
+    if (!registry.valid(player) || !registry.valid(monster)) {
+        return;
+    }
 
     auto* monster_type = registry.try_get<ecs::MonsterTypeId>(monster);
     auto* player_level = registry.try_get<ecs::PlayerLevel>(player);
-    if (!monster_type || !player_level) return;
+    if (!monster_type || !player_level) {
+        return;
+    }
 
     float modifier = level_diff_xp_modifier(player_level->level, monster_type->level);
     int xp_gained = static_cast<int>(monster_type->xp_reward * modifier);
-    if (xp_gained < 1) xp_gained = 1;
+    xp_gained = std::max(xp_gained, 1);
 
     player_level->xp += xp_gained;
     player_level->gold += monster_type->gold_reward;
@@ -63,14 +79,15 @@ void award_kill_xp(entt::registry& registry, entt::entity player, entt::entity m
 
 bool check_level_up(entt::registry& registry, entt::entity player, const GameConfig& config) {
     auto* player_level = registry.try_get<ecs::PlayerLevel>(player);
-    if (!player_level) return false;
+    if (!player_level) {
+        return false;
+    }
 
     const auto& leveling = config.leveling();
     const auto& xp_curve = leveling.xp_curve;
     bool leveled = false;
 
-    while (player_level->level < leveling.max_level &&
-           player_level->level < static_cast<int>(xp_curve.size()) &&
+    while (player_level->level < leveling.max_level && player_level->level < static_cast<int>(xp_curve.size()) &&
            player_level->xp >= xp_curve[player_level->level]) {
 
         player_level->level++;
@@ -100,8 +117,8 @@ bool check_level_up(entt::registry& registry, entt::entity player, const GameCon
         // Award talent point (respecting config thresholds)
         auto* talents = registry.try_get<ecs::TalentState>(player);
         const auto& talent_cfg = config.talent_config();
-        if (talents && player_level->level >= talent_cfg.first_talent_point_level
-            && talents->talent_points < talent_cfg.max_talent_points) {
+        if (talents && player_level->level >= talent_cfg.first_talent_point_level &&
+            talents->talent_points < talent_cfg.max_talent_points) {
             talents->talent_points++;
         }
 
@@ -114,7 +131,9 @@ bool check_level_up(entt::registry& registry, entt::entity player, const GameCon
 
 void apply_death_penalty(entt::registry& registry, entt::entity player, const GameConfig& config) {
     auto* player_level = registry.try_get<ecs::PlayerLevel>(player);
-    if (!player_level) return;
+    if (!player_level) {
+        return;
+    }
 
     const auto& leveling = config.leveling();
     const auto& xp_curve = leveling.xp_curve;
@@ -138,9 +157,7 @@ void apply_death_penalty(entt::registry& registry, entt::entity player, const Ga
     player_level->xp -= xp_loss;
 
     // Never go below the threshold for the current level (no deleveling)
-    if (player_level->xp < prev_threshold) {
-        player_level->xp = prev_threshold;
-    }
+    player_level->xp = std::max(player_level->xp, prev_threshold);
 }
 
 void update_mana_regen(entt::registry& registry, float dt) {
@@ -159,11 +176,16 @@ void update_mana_regen(entt::registry& registry, float dt) {
 
 const char* class_name_for_index(int index) {
     switch (index) {
-        case 0: return "warrior";
-        case 1: return "mage";
-        case 2: return "paladin";
-        case 3: return "archer";
-        default: return "warrior";
+        case 0:
+            return "warrior";
+        case 1:
+            return "mage";
+        case 2:
+            return "paladin";
+        case 3:
+            return "archer";
+        default:
+            return "warrior";
     }
 }
 

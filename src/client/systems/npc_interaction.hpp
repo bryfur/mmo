@@ -1,12 +1,12 @@
 #pragma once
 
-#include "client/network_client.hpp"
-#include "client/network_message_handler.hpp"  // NPCInteractionState
 #include "client/hud/hud_state.hpp"
 #include "client/hud/panel_state.hpp"
+#include "client/network_client.hpp"
+#include "client/network_message_handler.hpp" // NPCInteractionState
 
-#include <entt/entt.hpp>
 #include <cstdint>
+#include <entt/entt.hpp>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -24,8 +24,7 @@ struct ClosestNPC {
 // within `max_distance` world units (along the X/Z plane). Returns nullopt when
 // no NPC is in range. Pure over the registry — no input handling, no
 // component mutations — so it can be unit tested with a synthetic registry.
-std::optional<ClosestNPC> find_closest_npc(const entt::registry& registry,
-                                           float player_x, float player_z,
+std::optional<ClosestNPC> find_closest_npc(const entt::registry& registry, float player_x, float player_z,
                                            float max_distance);
 
 // Per-frame inputs to the NPC interaction handler. Bundled so callers can
@@ -41,12 +40,12 @@ struct NPCInteractionFrame {
     uint32_t local_player_id = 0;
 
     // Edge-detected key state for this frame.
-    bool interact_pressed = false;     // E (also accepts via dialogue)
-    bool menu_toggle_pressed = false;  // ESC
-    bool key_w_just_pressed = false;   // up in quest list
-    bool key_s_just_pressed = false;   // down in quest list
+    bool interact_pressed = false;    // E (also accepts via dialogue)
+    bool menu_toggle_pressed = false; // ESC
+    bool key_w_just_pressed = false;  // up in quest list
+    bool key_s_just_pressed = false;  // down in quest list
     bool key_enter_just_pressed = false;
-    bool key_q_just_pressed = false;   // back / decline
+    bool key_q_just_pressed = false; // back / decline
 };
 
 // Single entry-point that drives the NPC dialogue state machine for a frame:

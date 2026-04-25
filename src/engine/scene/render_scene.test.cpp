@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
 #include "engine/scene/render_scene.hpp"
 #include <glm/glm.hpp>
+#include <gtest/gtest.h>
 
 using namespace mmo::engine::scene;
 
@@ -15,7 +15,7 @@ TEST(RenderScene, InitiallyEmpty) {
 TEST(RenderScene, ClearResetsEverything) {
     RenderScene scene;
     scene.add_model("test", glm::mat4(1.0f));
-    scene.add_debug_line({0,0,0}, {1,1,1}, 0xFFFFFFFF);
+    scene.add_debug_line({0, 0, 0}, {1, 1, 1}, 0xFFFFFFFF);
     scene.set_draw_skybox(false);
     scene.set_draw_grass(false);
 
@@ -53,7 +53,7 @@ TEST(RenderScene, AddModelHandleVersion) {
 
 TEST(RenderScene, SkinnedModelStoresBonePointer) {
     RenderScene scene;
-    std::array<glm::mat4, 128> bones;
+    std::array<glm::mat4, 128> bones{};
     bones.fill(glm::mat4(1.0f));
     bones[0] = glm::mat4(2.0f);
 
@@ -145,7 +145,7 @@ TEST(RenderScene, AddManyModelsWorks) {
 
 TEST(RenderScene, MixedModelAndSkinnedModelCommands) {
     RenderScene scene;
-    std::array<glm::mat4, 128> bones;
+    std::array<glm::mat4, 128> bones{};
     bones.fill(glm::mat4(1.0f));
 
     scene.add_model("static_model", glm::mat4(1.0f));

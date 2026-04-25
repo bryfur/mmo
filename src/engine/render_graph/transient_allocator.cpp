@@ -1,6 +1,6 @@
 #include "engine/render_graph/transient_allocator.hpp"
-#include "engine/gpu/gpu_device.hpp"
 #include "engine/core/logger.hpp"
+#include "engine/gpu/gpu_device.hpp"
 
 #include <functional>
 
@@ -8,9 +8,7 @@ namespace mmo::engine::render_graph {
 
 size_t TransientAllocator::DescKeyHash::operator()(const DescKey& k) const noexcept {
     size_t h = 0;
-    auto mix = [&](uint64_t v) {
-        h ^= std::hash<uint64_t>{}(v) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2);
-    };
+    auto mix = [&](uint64_t v) { h ^= std::hash<uint64_t>{}(v) + 0x9e3779b97f4a7c15ULL + (h << 6) + (h >> 2); };
     mix(k.desc.width);
     mix(k.desc.height);
     mix(static_cast<uint64_t>(k.desc.format));
@@ -21,14 +19,19 @@ size_t TransientAllocator::DescKeyHash::operator()(const DescKey& k) const noexc
     return h;
 }
 
-TransientAllocator::~TransientAllocator() { shutdown(); }
+TransientAllocator::~TransientAllocator() {
+    shutdown();
+}
 
 bool TransientAllocator::init(gpu::GPUDevice& device) {
     device_ = &device;
     return true;
 }
 
-void TransientAllocator::shutdown() { evict_all(); device_ = nullptr; }
+void TransientAllocator::shutdown() {
+    evict_all();
+    device_ = nullptr;
+}
 
 SDL_GPUTexture* TransientAllocator::acquire_texture(const TextureDesc& desc, const char* debug_name) {
     ++acquires_;
@@ -44,8 +47,7 @@ SDL_GPUTexture* TransientAllocator::acquire_texture(const TextureDesc& desc, con
     if (!device_) {
         // Test mode: hand out a sentinel pointer keyed by bucket size so reuse logic still works.
         // Reinterpret a stable per-bucket index to a fake non-null pointer.
-        auto* fake = reinterpret_cast<SDL_GPUTexture*>(
-            reinterpret_cast<uintptr_t>(&bucket) + bucket.size() + 1);
+        auto* fake = reinterpret_cast<SDL_GPUTexture*>(reinterpret_cast<uintptr_t>(&bucket) + bucket.size() + 1);
         bucket.push_back(Entry{fake, true});
         return fake;
     }
@@ -59,10 +61,18 @@ SDL_GPUTexture* TransientAllocator::acquire_texture(const TextureDesc& desc, con
     info.num_levels = desc.mip_levels;
     SDL_GPUSampleCount samples = SDL_GPU_SAMPLECOUNT_1;
     switch (desc.sample_count) {
-        case 2: samples = SDL_GPU_SAMPLECOUNT_2; break;
-        case 4: samples = SDL_GPU_SAMPLECOUNT_4; break;
-        case 8: samples = SDL_GPU_SAMPLECOUNT_8; break;
-        default: samples = SDL_GPU_SAMPLECOUNT_1; break;
+        case 2:
+            samples = SDL_GPU_SAMPLECOUNT_2;
+            break;
+        case 4:
+            samples = SDL_GPU_SAMPLECOUNT_4;
+            break;
+        case 8:
+            samples = SDL_GPU_SAMPLECOUNT_8;
+            break;
+        default:
+            samples = SDL_GPU_SAMPLECOUNT_1;
+            break;
     }
     info.sample_count = samples;
     info.props = 0;
@@ -81,18 +91,25 @@ SDL_GPUTexture* TransientAllocator::acquire_texture(const TextureDesc& desc, con
 }
 
 void TransientAllocator::release_texture(const TextureDesc& desc, SDL_GPUTexture* tex) {
-    if (!tex) return;
+    if (!tex) {
+        return;
+    }
     DescKey key{desc};
     auto it = pool_.find(key);
-    if (it == pool_.end()) return;
+    if (it == pool_.end()) {
+        return;
+    }
     for (auto& e : it->second) {
-        if (e.tex == tex) { e.in_use = false; return; }
+        if (e.tex == tex) {
+            e.in_use = false;
+            return;
+        }
     }
 }
 
 uint32_t TransientAllocator::pool_size() const noexcept {
     uint32_t n = 0;
-    for (auto& [k, v] : pool_) n += static_cast<uint32_t>(v.size());
+    for (const auto& [k, v] : pool_) n += static_cast<uint32_t>(v.size());
     return n;
 }
 
@@ -104,10 +121,15 @@ void TransientAllocator::release_all() {
 }
 
 void TransientAllocator::evict_all() {
-    if (!device_) { pool_.clear(); return; }
+    if (!device_) {
+        pool_.clear();
+        return;
+    }
     for (auto& [k, bucket] : pool_) {
         for (auto& e : bucket) {
-            if (e.tex) SDL_ReleaseGPUTexture(device_->handle(), e.tex);
+            if (e.tex) {
+                SDL_ReleaseGPUTexture(device_->handle(), e.tex);
+            }
         }
         (void)k;
     }

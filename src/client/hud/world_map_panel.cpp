@@ -1,4 +1,5 @@
 #include "client/hud/panels.hpp"
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 
@@ -11,8 +12,7 @@ using namespace engine::ui_colors;
 // World Map Panel
 // ============================================================================
 
-void build_world_map_panel(UIScene& ui, const PanelState& state,
-                           float screen_w, float screen_h) {
+void build_world_map_panel(UIScene& ui, const PanelState& state, float screen_w, float screen_h) {
     // Panel dimensions: 80% of screen, centered
     const float PW = screen_w * 0.8f;
     const float PH = screen_h * 0.8f;
@@ -49,22 +49,28 @@ void build_world_map_panel(UIScene& ui, const PanelState& state,
     };
 
     // --- Zone regions ---
-    struct ZoneDisplay { const char* name; float cx, cz, radius; uint32_t color; const char* levels; };
+    struct ZoneDisplay {
+        const char* name;
+        float cx, cz, radius;
+        uint32_t color;
+        const char* levels;
+    };
     ZoneDisplay zones[] = {
-        {"Thornwall",           4000,  4000,  800,   0x3000FF00, "Lv 1-3"},
-        {"Greenhollow Meadows", 5500,  5500,  2500,  0x2044DD44, "Lv 3-6"},
-        {"Whispering Woods",    2000,  6000,  2500,  0x2022AA22, "Lv 5-8"},
-        {"Dustwind Flats",      7500,  4000,  2800,  0x20AABB44, "Lv 7-10"},
-        {"Ironpeak Foothills",  4000,  10000, 3000,  0x208888AA, "Lv 10-14"},
-        {"Shadewood Marsh",     12000, 7000,  3500,  0x20664488, "Lv 14-18"},
-        {"Fallen Citadel",      16000, 4000,  3500,  0x20444488, "Lv 18-22"},
-        {"Ashen Wastes",        22000, 10000, 4500,  0x20884444, "Lv 22-28"},
-        {"Void Rift",           26000, 20000, 4000,  0x20AA44AA, "Lv 28-35"},
-        {"Dragon's Reach",      28000, 28000, 4500,  0x20FF4400, "Lv 35-40"},
+        {"Thornwall", 4000, 4000, 800, 0x3000FF00, "Lv 1-3"},
+        {"Greenhollow Meadows", 5500, 5500, 2500, 0x2044DD44, "Lv 3-6"},
+        {"Whispering Woods", 2000, 6000, 2500, 0x2022AA22, "Lv 5-8"},
+        {"Dustwind Flats", 7500, 4000, 2800, 0x20AABB44, "Lv 7-10"},
+        {"Ironpeak Foothills", 4000, 10000, 3000, 0x208888AA, "Lv 10-14"},
+        {"Shadewood Marsh", 12000, 7000, 3500, 0x20664488, "Lv 14-18"},
+        {"Fallen Citadel", 16000, 4000, 3500, 0x20444488, "Lv 18-22"},
+        {"Ashen Wastes", 22000, 10000, 4500, 0x20884444, "Lv 22-28"},
+        {"Void Rift", 26000, 20000, 4000, 0x20AA44AA, "Lv 28-35"},
+        {"Dragon's Reach", 28000, 28000, 4500, 0x20FF4400, "Lv 35-40"},
     };
 
     for (const auto& zone : zones) {
-        float sx = 0.0f, sy = 0.0f;
+        float sx = 0.0f;
+        float sy = 0.0f;
         world_to_map(zone.cx, zone.cz, sx, sy);
         float sr = (zone.radius / WORLD_SIZE) * map_w;
 
@@ -85,21 +91,26 @@ void build_world_map_panel(UIScene& ui, const PanelState& state,
     }
 
     // --- Points of interest ---
-    struct POI { const char* name; float x, z; uint32_t color; };
+    struct POI {
+        const char* name;
+        float x, z;
+        uint32_t color;
+    };
     POI pois[] = {
-        {"Town",              4000,  4000,  0xFF00FF00},
-        {"Mining Camp",       8000,  2000,  0xFF88AAFF},
-        {"Forest Shrine",     12000, 6000,  0xFF44FF44},
-        {"Fishing Village",   6000,  14000, 0xFF88AAFF},
-        {"Western Ruins",     2000,  8000,  0xFFFF4444},
-        {"Central Crossroads",16000, 16000, 0xFFFFFFFF},
-        {"Mountain Pass",     20000, 10000, 0xFF888888},
-        {"Eastern Outpost",   28000, 16000, 0xFF88AAFF},
-        {"Dark Forest",       10000, 22000, 0xFF884488},
+        {"Town", 4000, 4000, 0xFF00FF00},
+        {"Mining Camp", 8000, 2000, 0xFF88AAFF},
+        {"Forest Shrine", 12000, 6000, 0xFF44FF44},
+        {"Fishing Village", 6000, 14000, 0xFF88AAFF},
+        {"Western Ruins", 2000, 8000, 0xFFFF4444},
+        {"Central Crossroads", 16000, 16000, 0xFFFFFFFF},
+        {"Mountain Pass", 20000, 10000, 0xFF888888},
+        {"Eastern Outpost", 28000, 16000, 0xFF88AAFF},
+        {"Dark Forest", 10000, 22000, 0xFF884488},
     };
 
     for (const auto& poi : pois) {
-        float sx = 0.0f, sy = 0.0f;
+        float sx = 0.0f;
+        float sy = 0.0f;
         world_to_map(poi.x, poi.z, sx, sy);
 
         // Small diamond shape using two triangles approximated with a small filled rect + outline
@@ -113,10 +124,11 @@ void build_world_map_panel(UIScene& ui, const PanelState& state,
 
     // --- Quest objective markers ---
     for (const auto& qm : state.map_quest_markers) {
-        float sx = 0.0f, sy = 0.0f;
+        float sx = 0.0f;
+        float sy = 0.0f;
         world_to_map(qm.world_x, qm.world_z, sx, sy);
         float sr = (qm.radius / WORLD_SIZE) * map_w;
-        if (sr < 6.0f) sr = 6.0f;
+        sr = std::max(sr, 6.0f);
 
         uint32_t area_color = qm.complete ? 0x2000FF00 : 0x20FFD700;
         uint32_t marker_color = qm.complete ? 0xFF00CC00 : 0xFFFFD700;
@@ -135,14 +147,15 @@ void build_world_map_panel(UIScene& ui, const PanelState& state,
 
     // --- Player position ---
     {
-        float sx = 0.0f, sy = 0.0f;
+        float sx = 0.0f;
+        float sy = 0.0f;
         world_to_map(state.player_x, state.player_z, sx, sy);
 
         // Player marker: white filled rect with outline
         constexpr float PL_SIZE = 6.0f;
         ui.add_filled_rect(sx - PL_SIZE, sy - PL_SIZE, PL_SIZE * 2.0f, PL_SIZE * 2.0f, 0xFFFFFFFF);
-        ui.add_rect_outline(sx - PL_SIZE - 1.0f, sy - PL_SIZE - 1.0f,
-                            PL_SIZE * 2.0f + 2.0f, PL_SIZE * 2.0f + 2.0f, 0xFF00CCFF, 2.0f);
+        ui.add_rect_outline(sx - PL_SIZE - 1.0f, sy - PL_SIZE - 1.0f, PL_SIZE * 2.0f + 2.0f, PL_SIZE * 2.0f + 2.0f,
+                            0xFF00CCFF, 2.0f);
 
         // "You" label
         ui.add_text("You", sx - 8.0f, sy - PL_SIZE - 14.0f, 0.7f, 0xFF00CCFF);
@@ -167,10 +180,10 @@ void build_world_map_panel(UIScene& ui, const PanelState& state,
 // Main entry point
 // ============================================================================
 
-void build_gameplay_panels(UIScene& ui, const PanelState& state,
-                           float screen_w, float screen_h) {
-    if (state.active_panel == ActivePanel::WorldMap)
+void build_gameplay_panels(UIScene& ui, const PanelState& state, float screen_w, float screen_h) {
+    if (state.active_panel == ActivePanel::WorldMap) {
         build_world_map_panel(ui, state, screen_w, screen_h);
+    }
 }
 
 } // namespace mmo::client

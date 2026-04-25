@@ -1,16 +1,16 @@
 #pragma once
 
-#include "engine/heightmap.hpp"
-#include "engine/gpu/gpu_device.hpp"
 #include "engine/gpu/gpu_buffer.hpp"
+#include "engine/gpu/gpu_device.hpp"
 #include "engine/gpu/gpu_texture.hpp"
 #include "engine/gpu/pipeline_registry.hpp"
+#include "engine/heightmap.hpp"
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
 
 namespace mmo::engine::scene {
-    class Frustum;
+class Frustum;
 }
 
 namespace mmo::engine::render {
@@ -22,15 +22,15 @@ namespace gpu = mmo::engine::gpu;
  * Matches the vertex attributes expected by terrain.vert.hlsl
  */
 struct TerrainVertex {
-    glm::vec3 position;  // POSITION
-    glm::vec2 texCoord;  // TEXCOORD0
-    glm::vec4 color;     // COLOR0
-    glm::vec3 normal;    // NORMAL
+    glm::vec3 position; // POSITION
+    glm::vec2 texCoord; // TEXCOORD0
+    glm::vec4 color;    // COLOR0
+    glm::vec3 normal;   // NORMAL
 };
 
 // Verify TerrainVertex is tightly packed as expected by pipeline_registry
 static_assert(sizeof(TerrainVertex) == sizeof(float) * 12,
-    "TerrainVertex must be 12 floats (48 bytes) to match pipeline vertex stride");
+              "TerrainVertex must be 12 floats (48 bytes) to match pipeline vertex stride");
 
 /**
  * Terrain transform uniforms - matches terrain.vert.hlsl cbuffer
@@ -66,11 +66,11 @@ class TerrainRenderer {
 public:
     TerrainRenderer();
     ~TerrainRenderer();
-    
+
     // Non-copyable
     TerrainRenderer(const TerrainRenderer&) = delete;
     TerrainRenderer& operator=(const TerrainRenderer&) = delete;
-    
+
     /**
      * Initialize terrain resources.
      * @param device The GPU device for resource creation
@@ -78,9 +78,8 @@ public:
      * @param world_width World X dimension
      * @param world_height World Z dimension
      */
-    bool init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry,
-              float world_width, float world_height);
-    
+    bool init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry, float world_width, float world_height);
+
     /**
      * Set heightmap from server data. Uploads to GPU texture.
      */
@@ -97,7 +96,7 @@ public:
      * Clean up terrain resources.
      */
     void shutdown();
-    
+
     /**
      * Render the terrain mesh using SDL3 GPU API.
      * @param pass The render pass to draw into
@@ -107,26 +106,20 @@ public:
      * @param camera_pos Camera position
      * @param light_dir Light direction
      */
-    void render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                const glm::mat4& view, const glm::mat4& projection,
-                const glm::vec3& camera_pos,
-                const glm::vec3& light_dir,
-                const SDL_GPUTextureSamplerBinding* shadow_bindings = nullptr,
-                int shadow_binding_count = 0,
+    void render(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const glm::mat4& view, const glm::mat4& projection,
+                const glm::vec3& camera_pos, const glm::vec3& light_dir,
+                const SDL_GPUTextureSamplerBinding* shadow_bindings = nullptr, int shadow_binding_count = 0,
                 const scene::Frustum* frustum = nullptr);
 
     // Per-frame cluster lighting plumbing. Buffers and uniform are owned by
     // the SceneRenderer's ClusterGrid; nullptr disables clustered lighting.
-    void set_cluster_lighting(SDL_GPUBuffer* light_data,
-                              SDL_GPUBuffer* cluster_offsets,
-                              SDL_GPUBuffer* light_indices,
+    void set_cluster_lighting(SDL_GPUBuffer* light_data, SDL_GPUBuffer* cluster_offsets, SDL_GPUBuffer* light_indices,
                               const void* params, size_t params_size);
 
     /**
      * Render terrain into a shadow depth map.
      */
-    void render_shadow(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                       const glm::mat4& light_view_projection,
+    void render_shadow(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const glm::mat4& light_view_projection,
                        const scene::Frustum* frustum = nullptr);
 
     /**
@@ -134,36 +127,39 @@ public:
      * Samples from CPU-side heightmap data (for physics, placement, etc.)
      */
     float get_height(float x, float z) const;
-    
+
     /**
      * Get terrain normal at any world position.
      */
     glm::vec3 get_normal(float x, float z) const;
-    
+
     // Accessors
     float world_width() const { return world_width_; }
     float world_height() const { return world_height_; }
     bool has_heightmap() const { return heightmap_ != nullptr; }
     gpu::GPUTexture* heightmap_texture() { return heightmap_texture_.get(); }
     gpu::GPUTexture* material_array_texture() { return material_array_texture_.get(); }
-    
+
     // Settings
     void set_fog_color(const glm::vec3& color) { fog_color_ = color; }
-    void set_fog_range(float start, float end) { fog_start_ = start; fog_end_ = end; }
+    void set_fog_range(float start, float end) {
+        fog_start_ = start;
+        fog_end_ = end;
+    }
     void set_lighting_tunables(float ambient_strength, float sun_intensity) {
         ambient_strength_ = ambient_strength;
         sun_intensity_ = sun_intensity;
     }
-    
+
     /**
      * Set anisotropic filter level for terrain textures.
      * Recreates the grass sampler with the new anisotropy level.
      */
     void set_anisotropic_filter(float level);
-    
+
 private:
     void generate_terrain_mesh();
-    void generate_shadow_terrain_mesh();  // low-LOD mesh for shadow passes
+    void generate_shadow_terrain_mesh(); // low-LOD mesh for shadow passes
     void load_terrain_textures();
     void upload_heightmap_texture();
 
@@ -175,18 +171,18 @@ private:
     SDL_GPUBuffer* cluster_indices_ = nullptr;
     const void* cluster_params_ = nullptr;
     size_t cluster_params_size_ = 0;
-    
+
     float world_width_ = 0.0f;
     float world_height_ = 0.0f;
-    
+
     // Server-provided heightmap (CPU side for sampling)
     std::unique_ptr<engine::Heightmap> heightmap_;
-    
+
     // GPU resources
     std::unique_ptr<gpu::GPUTexture> heightmap_texture_;
 
     // Terrain material textures (using Texture2DArray to reduce sampler count)
-    std::unique_ptr<gpu::GPUTexture> material_array_texture_;  // 4 layers: grass, dirt, rock, sand
+    std::unique_ptr<gpu::GPUTexture> material_array_texture_; // 4 layers: grass, dirt, rock, sand
     std::unique_ptr<gpu::GPUTexture> splatmap_texture_;
 
     std::unique_ptr<gpu::GPUSampler> material_sampler_;
@@ -211,7 +207,7 @@ private:
     };
     std::vector<TerrainTile> tiles_;
     std::vector<TerrainTile> shadow_tiles_;
-    
+
     // Fog settings
     glm::vec3 fog_color_ = glm::vec3(0.35f, 0.45f, 0.6f);
     float fog_start_ = 1600.0f;

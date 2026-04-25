@@ -1,6 +1,6 @@
 #include "screens.hpp"
-#include "client/ui_colors.hpp"
 #include "client/hud/hud_layout.hpp"
+#include "client/ui_colors.hpp"
 
 #include <cmath>
 #include <cstdio>
@@ -11,11 +11,11 @@ namespace mmo::client::hud {
 using engine::scene::UIScene;
 using namespace engine::ui_colors;
 
-void build_class_select(UIScene& ui,
-                        const std::vector<protocol::ClassInfo>& classes,
-                        int selected_index,
+void build_class_select(UIScene& ui, const std::vector<protocol::ClassInfo>& classes, int selected_index,
                         float screen_w, float screen_h) {
-    if (classes.empty()) return;
+    if (classes.empty()) {
+        return;
+    }
 
     const float center_x = screen_w * 0.5f;
     const float center_y = screen_h * 0.5f;
@@ -43,10 +43,9 @@ void build_class_select(UIScene& ui,
         const bool selected = (i == selected_index);
 
         if (selected) {
-            ui.add_filled_rect(x - half - 10.0f, box_y - half - 10.0f,
-                               box_size + 20.0f, box_size + 20.0f, SELECTION);
-            ui.add_rect_outline(x - half - 10.0f, box_y - half - 10.0f,
-                                box_size + 20.0f, box_size + 20.0f, WHITE, 3.0f);
+            ui.add_filled_rect(x - half - 10.0f, box_y - half - 10.0f, box_size + 20.0f, box_size + 20.0f, SELECTION);
+            ui.add_rect_outline(x - half - 10.0f, box_y - half - 10.0f, box_size + 20.0f, box_size + 20.0f, WHITE,
+                                3.0f);
         }
 
         ui.add_filled_rect(x - half, box_y - half, box_size, box_size, cls.select_color);
@@ -56,11 +55,13 @@ void build_class_select(UIScene& ui,
         const uint32_t text_color = selected ? WHITE : TEXT_DIM;
         const float name_w = static_cast<float>(std::strlen(cls.name)) * 8.0f;
         const float desc_w = static_cast<float>(std::strlen(cls.short_desc)) * 8.0f * 0.8f;
-        ui.add_text(cls.name,       x - name_w * 0.5f, box_y + half + 15.0f, 1.0f, text_color);
+        ui.add_text(cls.name, x - name_w * 0.5f, box_y + half + 15.0f, 1.0f, text_color);
         ui.add_text(cls.short_desc, x - desc_w * 0.5f, box_y + half + 40.0f, 0.8f, TEXT_DIM);
     }
 
-    if (selected_index < 0 || selected_index >= num_classes) return;
+    if (selected_index < 0 || selected_index >= num_classes) {
+        return;
+    }
     const auto& sel = classes[selected_index];
     ui.add_filled_rect(center_x - 200.0f, screen_h - 120.0f, 400.0f, 80.0f, PANEL_BG);
     ui.add_rect_outline(center_x - 200.0f, screen_h - 120.0f, 400.0f, 80.0f, sel.select_color, 2.0f);
@@ -68,18 +69,15 @@ void build_class_select(UIScene& ui,
     const float d1 = static_cast<float>(std::strlen(sel.desc_line1)) * 8.0f * 0.9f;
     const float d2 = static_cast<float>(std::strlen(sel.desc_line2)) * 8.0f * 0.9f;
     ui.add_text(sel.desc_line1, center_x - d1 * 0.5f, screen_h - 105.0f, 0.9f, WHITE);
-    ui.add_text(sel.desc_line2, center_x - d2 * 0.5f, screen_h - 80.0f,  0.9f, WHITE);
+    ui.add_text(sel.desc_line2, center_x - d2 * 0.5f, screen_h - 80.0f, 0.9f, WHITE);
 
     const char* hint = "Press ESC anytime to open Settings Menu";
     const float hint_w = static_cast<float>(std::strlen(hint)) * 8.0f * 0.8f;
     ui.add_text(hint, center_x - hint_w * 0.5f, screen_h - 25.0f, 0.8f, TEXT_HINT);
 }
 
-void build_connecting(UIScene& ui,
-                      const std::string& host,
-                      uint16_t port,
-                      float connecting_timer,
-                      float screen_w, float screen_h) {
+void build_connecting(UIScene& ui, const std::string& host, uint16_t port, float connecting_timer, float screen_w,
+                      float screen_h) {
     const float center_x = screen_w * 0.5f;
     const float center_y = screen_h * 0.5f;
 
@@ -99,8 +97,7 @@ void build_connecting(UIScene& ui,
         const float x = center_x + std::cos(angle) * kRadius;
         const float y = center_y + std::sin(angle) * kRadius;
         const uint8_t alpha = static_cast<uint8_t>(255.0f * (i + 1) / static_cast<float>(kDots));
-        ui.add_filled_rect(x - kDotRadius, y - kDotRadius,
-                           kDotRadius * 2.0f, kDotRadius * 2.0f,
+        ui.add_filled_rect(x - kDotRadius, y - kDotRadius, kDotRadius * 2.0f, kDotRadius * 2.0f,
                            0x00FFFFFFu | (static_cast<uint32_t>(alpha) << 24));
     }
 
@@ -111,7 +108,9 @@ void build_connecting(UIScene& ui,
 void build_reticle(UIScene& ui, float screen_w, float screen_h) {
     const float cx = screen_w * 0.5f;
     const float cy = screen_h * 0.5f;
-    constexpr float outer = 12.0f, inner = 4.0f, dot = 2.0f;
+    constexpr float outer = 12.0f;
+    constexpr float inner = 4.0f;
+    constexpr float dot = 2.0f;
     ui.add_line(cx, cy - outer, cx, cy - inner, 0xCCFFFFFF, 2.0f);
     ui.add_line(cx, cy + inner, cx, cy + outer, 0xCCFFFFFF, 2.0f);
     ui.add_line(cx - outer, cy, cx - inner, cy, 0xCCFFFFFF, 2.0f);
@@ -119,8 +118,7 @@ void build_reticle(UIScene& ui, float screen_w, float screen_h) {
     ui.add_filled_rect(cx - dot * 0.5f, cy - dot * 0.5f, dot, dot, 0xCCFFFFFF);
 }
 
-void build_player_health_bar(UIScene& ui, float current, float max,
-                             float /*screen_w*/, float screen_h) {
+void build_player_health_bar(UIScene& ui, float current, float max, float /*screen_w*/, float screen_h) {
     constexpr float bar_width = 250.0f;
     constexpr float bar_height = 25.0f;
     constexpr float padding = 20.0f;
@@ -133,8 +131,11 @@ void build_player_health_bar(UIScene& ui, float current, float max,
 
     const float ratio = hud_layout::bar_ratio(current, max);
     uint32_t hp_color = HEALTH_LOW;
-    if (ratio > 0.5f) hp_color = HEALTH_HIGH;
-    else if (ratio > 0.25f) hp_color = HEALTH_MED;
+    if (ratio > 0.5f) {
+        hp_color = HEALTH_HIGH;
+    } else if (ratio > 0.25f) {
+        hp_color = HEALTH_MED;
+    }
     ui.add_filled_rect(hx, hy, bar_width * ratio, bar_height, hp_color);
 
     char hp_text[32];

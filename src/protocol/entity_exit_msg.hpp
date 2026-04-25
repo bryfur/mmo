@@ -10,13 +10,9 @@ struct EntityExitMsg : Serializable<EntityExitMsg> {
 
     static constexpr size_t serialized_size() { return 4; }
 
-    void serialize_impl(BufferWriter& w) const {
-        w.write(entity_id);
-    }
+    void serialize_impl(BufferWriter& w) const { w.write(entity_id); }
 
-    void deserialize_impl(BufferReader& r) {
-        entity_id = r.read<uint32_t>();
-    }
+    void deserialize_impl(BufferReader& r) { entity_id = r.read<uint32_t>(); }
 };
 
 } // namespace mmo::protocol

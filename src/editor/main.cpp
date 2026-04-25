@@ -5,7 +5,7 @@ int main(int argc, char* argv[]) {
     mmo::editor::EditorApplication editor;
 
     if (!editor.init()) {
-        std::cerr << "Failed to initialize editor" << std::endl;
+        std::cerr << "Failed to initialize editor" << '\n';
         return 1;
     }
 

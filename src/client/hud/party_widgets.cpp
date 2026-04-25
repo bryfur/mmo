@@ -1,5 +1,5 @@
-#include "client/hud/widgets.hpp"
 #include "client/hud/hud_layout.hpp"
+#include "client/hud/widgets.hpp"
 
 #include <cstdio>
 #include <string>
@@ -8,10 +8,11 @@ namespace mmo::client {
 
 using engine::scene::UIScene;
 
-void build_party_frames(UIScene& ui, const HUDState& hud, MouseUI& mui,
-                        float /*screen_w*/, float /*screen_h*/) {
+void build_party_frames(UIScene& ui, const HUDState& hud, MouseUI& mui, float /*screen_w*/, float /*screen_h*/) {
     const auto& party = hud.party;
-    if (!party.has_party()) return;
+    if (!party.has_party()) {
+        return;
+    }
 
     const float x = 20.0f;
     float y = 80.0f;
@@ -30,15 +31,13 @@ void build_party_frames(UIScene& ui, const HUDState& hud, MouseUI& mui,
         const bool is_leader = (m.player_id == party.leader_id);
         const uint32_t title_color = is_leader ? 0xFF00DDFF : 0xFFCCCCCC;
         char nbuf[48];
-        std::snprintf(nbuf, sizeof(nbuf), "%s%s  Lv %d",
-                      is_leader ? "* " : "  ", m.name.c_str(), m.level);
+        std::snprintf(nbuf, sizeof(nbuf), "%s%s  Lv %d", is_leader ? "* " : "  ", m.name.c_str(), m.level);
         ui.add_text(nbuf, x + 6, y + 4, 0.75f, title_color);
 
         // HP bar
         const float hp_ratio = hud_layout::bar_ratio(m.health, m.max_health);
         ui.add_filled_rect(x + 6, y + 22, w - 12, 7, 0xFF1A0000);
-        ui.add_filled_rect(x + 6, y + 22, (w - 12) * hp_ratio, 7,
-                           hud_layout::health_bar_color(hp_ratio));
+        ui.add_filled_rect(x + 6, y + 22, (w - 12) * hp_ratio, 7, hud_layout::health_bar_color(hp_ratio));
 
         // Mana bar
         const float mp_ratio = hud_layout::bar_ratio(m.mana, m.max_mana);
@@ -50,10 +49,11 @@ void build_party_frames(UIScene& ui, const HUDState& hud, MouseUI& mui,
     }
 }
 
-void build_party_invite_popup(UIScene& ui, const HUDState& hud,
-                              float screen_w, float screen_h) {
+void build_party_invite_popup(UIScene& ui, const HUDState& hud, float screen_w, float screen_h) {
     const auto& party = hud.party;
-    if (party.pending_inviter_id == 0) return;
+    if (party.pending_inviter_id == 0) {
+        return;
+    }
 
     const float w = 360.0f;
     const float h = 110.0f;
@@ -65,7 +65,9 @@ void build_party_invite_popup(UIScene& ui, const HUDState& hud,
 
     ui.add_text("Party Invite", x + 12, y + 8, 0.95f, 0xFF00DDFF);
     std::string msg = party.pending_inviter_name + " invited you to join their party.";
-    if (msg.size() > 48) msg = msg.substr(0, 48) + "...";
+    if (msg.size() > 48) {
+        msg = msg.substr(0, 48) + "...";
+    }
     ui.add_text(msg, x + 12, y + 34, 0.78f, 0xFFEEEEEE);
     ui.add_text("[Y] Accept    [N] Decline", x + 12, y + h - 24, 0.8f, 0xFFCCCCCC);
 }

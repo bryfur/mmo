@@ -4,8 +4,8 @@
 #include "server/ecs/game_components.hpp"
 #include "server/game_config.hpp"
 #include <cmath>
-#include <random>
 #include <glm/vec2.hpp>
+#include <random>
 
 namespace mmo::server::systems {
 
@@ -25,8 +25,7 @@ bool is_in_safe_zone(float x, float z, float center_x, float center_z, float rad
 
 } // anonymous namespace
 
-void update_ai(entt::registry& registry, float dt, const GameConfig& config,
-               const glm::vec2& town_center) {
+void update_ai(entt::registry& registry, float dt, const GameConfig& config, const glm::vec2& town_center) {
     const float town_center_x = town_center.x;
     const float town_center_z = town_center.y;
     const float safe_radius = config.safe_zone_radius();
@@ -34,15 +33,16 @@ void update_ai(entt::registry& registry, float dt, const GameConfig& config,
     // Thread-local RNG for town NPC wander behavior (replaces std::rand)
     static thread_local std::mt19937 rng{std::random_device{}()};
     // Update hostile NPCs
-    auto npc_view = registry.view<ecs::NPCTag, ecs::Transform, ecs::Velocity,
-                                   ecs::Combat, ecs::AIState, ecs::Health>();
+    auto npc_view = registry.view<ecs::NPCTag, ecs::Transform, ecs::Velocity, ecs::Combat, ecs::AIState, ecs::Health>();
 
     // Hoist player view outside the NPC loop to avoid recreating it per-NPC
     auto player_view = registry.view<ecs::PlayerTag, ecs::Transform, ecs::Health>();
 
     for (auto entity : npc_view) {
         auto& health = npc_view.get<ecs::Health>(entity);
-        if (!health.is_alive()) continue;
+        if (!health.is_alive()) {
+            continue;
+        }
 
         auto& transform = npc_view.get<ecs::Transform>(entity);
         auto& velocity = npc_view.get<ecs::Velocity>(entity);
@@ -66,15 +66,18 @@ void update_ai(entt::registry& registry, float dt, const GameConfig& config,
         float nearest_dist = ai.aggro_range;
         for (auto player : player_view) {
             const auto& player_health = player_view.get<ecs::Health>(player);
-            if (!player_health.is_alive()) continue;
+            if (!player_health.is_alive()) {
+                continue;
+            }
 
             const auto& player_transform = player_view.get<ecs::Transform>(player);
 
             // Don't aggro players in safe zone
-            if (is_in_safe_zone(player_transform.x, player_transform.z, town_center_x, town_center_z, safe_radius)) continue;
+            if (is_in_safe_zone(player_transform.x, player_transform.z, town_center_x, town_center_z, safe_radius)) {
+                continue;
+            }
 
-            float dist = distance(transform.x, transform.z,
-                                 player_transform.x, player_transform.z);
+            float dist = distance(transform.x, transform.z, player_transform.x, player_transform.z);
 
             if (dist < nearest_dist) {
                 nearest_dist = dist;
@@ -98,8 +101,7 @@ void update_ai(entt::registry& registry, float dt, const GameConfig& config,
 
             float dx = target_transform.x - transform.x;
             float dz = target_transform.z - transform.z;
-            float dist = distance(transform.x, transform.z,
-                                 target_transform.x, target_transform.z);
+            float dist = distance(transform.x, transform.z, target_transform.x, target_transform.z);
 
             if (rooted || dist <= combat.attack_range) {
                 velocity.x = 0;
@@ -110,7 +112,9 @@ void update_ai(entt::registry& registry, float dt, const GameConfig& config,
                 if (registry.all_of<ecs::MonsterTypeId>(entity)) {
                     const auto& type_id = registry.get<ecs::MonsterTypeId>(entity);
                     const auto* mt = config.find_monster_type(type_id.type_id);
-                    if (mt) base_speed = mt->speed;
+                    if (mt) {
+                        base_speed = mt->speed;
+                    }
                 }
                 float speed = base_speed * speed_mult;
                 velocity.x = (dx / dist) * speed;
@@ -141,11 +145,11 @@ void update_ai(entt::registry& registry, float dt, const GameConfig& config,
                 // Reached target, stop and idle
                 ai.is_moving = false;
                 std::uniform_real_distribution<float> idle_dist(2.0f, 5.0f);
-                ai.idle_timer = idle_dist(rng);  // 2-5 seconds
+                ai.idle_timer = idle_dist(rng); // 2-5 seconds
                 velocity.x = 0;
                 velocity.z = 0;
             } else {
-                float speed = 30.0f;  // Slow walking speed
+                float speed = 30.0f; // Slow walking speed
                 velocity.x = (dx / dist) * speed;
                 velocity.z = (dz / dist) * speed;
             }
@@ -170,7 +174,7 @@ void update_ai(entt::registry& registry, float dt, const GameConfig& config,
                 ai.target_x = ai.home_x + std::cos(angle) * radius;
                 ai.target_z = ai.home_z + std::sin(angle) * radius;
                 ai.is_moving = true;
-                ai.move_timer = 5.0f;  // Max move time
+                ai.move_timer = 5.0f; // Max move time
             }
         }
     }

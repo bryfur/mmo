@@ -1,27 +1,27 @@
 #include "editor_application.hpp"
-#include "world_save.hpp"
-#include "protocol/protocol.hpp"
-#include "protocol/heightmap.hpp"
-#include "server/heightmap_generator.hpp"
-#include "server/entity_config.hpp"
-#include "engine/model_loader.hpp"
 #include "engine/heightmap.hpp"
+#include "engine/model_loader.hpp"
 #include "engine/render/render_context.hpp"
 #include "engine/render/terrain_renderer.hpp"
 #include "engine/scene/scene_renderer.hpp"
+#include "protocol/heightmap.hpp"
+#include "protocol/protocol.hpp"
+#include "server/entity_config.hpp"
+#include "server/heightmap_generator.hpp"
+#include "world_save.hpp"
+#include <fstream>
+#include <glm/gtc/matrix_transform.hpp>
 #include <imgui.h>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_sdlgpu3.h>
 #include <iostream>
+#include <nlohmann/json.hpp>
+#include <random>
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_keyboard.h>
-#include <SDL3/SDL_scancode.h>
 #include <SDL3/SDL_mouse.h>
+#include <SDL3/SDL_scancode.h>
 #include <SDL3_image/SDL_image.h>
-#include <glm/gtc/matrix_transform.hpp>
-#include <nlohmann/json.hpp>
-#include <fstream>
-#include <random>
 #include <sys/stat.h>
 
 namespace mmo::editor {
@@ -34,12 +34,12 @@ EditorApplication::~EditorApplication() = default;
 
 bool EditorApplication::init() {
     if (!init_engine()) {
-        std::cerr << "Failed to initialize engine" << std::endl;
+        std::cerr << "Failed to initialize engine" << '\n';
         return false;
     }
 
     if (!on_init()) {
-        std::cerr << "Failed to initialize editor application" << std::endl;
+        std::cerr << "Failed to initialize editor application" << '\n';
         return false;
     }
 
@@ -48,17 +48,16 @@ bool EditorApplication::init() {
 
 bool EditorApplication::on_init() {
     // Load game configuration
-    std::cout << "Loading game configuration..." << std::endl;
+    std::cout << "Loading game configuration..." << '\n';
     if (!config_.load("data")) {
-        std::cerr << "Failed to load game config from data/" << std::endl;
+        std::cerr << "Failed to load game config from data/" << '\n';
         return false;
     }
 
     // Initialize renderer
-    std::cout << "Initializing renderer..." << std::endl;
-    if (!init_renderer(1280, 720, "MMO Editor",
-                      config_.world().width, config_.world().height)) {
-        std::cerr << "Failed to initialize renderer" << std::endl;
+    std::cout << "Initializing renderer..." << '\n';
+    if (!init_renderer(1280, 720, "MMO Editor", config_.world().width, config_.world().height)) {
+        std::cerr << "Failed to initialize renderer" << '\n';
         return false;
     }
 
@@ -66,7 +65,7 @@ bool EditorApplication::on_init() {
     init_imgui();
 
     // Generate heightmap (may be overridden by save load below)
-    std::cout << "Generating heightmap..." << std::endl;
+    std::cout << "Generating heightmap..." << '\n';
     protocol::HeightmapChunk hm_chunk;
     server::heightmap_init(hm_chunk, 0, 0, protocol::heightmap_config::CHUNK_RESOLUTION);
     server::heightmap_generator::generate_procedural(hm_chunk, config_.world().width, config_.world().height);
@@ -82,9 +81,9 @@ bool EditorApplication::on_init() {
     set_heightmap(heightmap_);
 
     // Load 3D models
-    std::cout << "Loading 3D models..." << std::endl;
+    std::cout << "Loading 3D models..." << '\n';
     if (!load_models("assets")) {
-        std::cerr << "Warning: Some models failed to load" << std::endl;
+        std::cerr << "Warning: Some models failed to load" << '\n';
     }
 
     // Initialize generation defaults from config
@@ -98,10 +97,10 @@ bool EditorApplication::on_init() {
 
     // Load saved world if it exists, otherwise start empty
     if (WorldSave::exists(save_dir_)) {
-        std::cout << "Loading saved world from " << save_dir_ << "..." << std::endl;
+        std::cout << "Loading saved world from " << save_dir_ << "..." << '\n';
         load_world();
     } else {
-        std::cout << "No save found. Use Procedural Generation to populate the world." << std::endl;
+        std::cout << "No save found. Use Procedural Generation to populate the world." << '\n';
     }
 
     // Load splatmap from PNG into CPU buffer so painting preserves existing data
@@ -138,8 +137,8 @@ bool EditorApplication::on_init() {
                             splatmap_data_[dst_idx + 3] = src[src_idx + 3];
                         }
                     }
-                    std::cout << "Loaded and upscaled splatmap from " << src_w << "x" << src_h
-                              << " to " << splatmap_resolution_ << "x" << splatmap_resolution_ << "\n";
+                    std::cout << "Loaded and upscaled splatmap from " << src_w << "x" << src_h << " to "
+                              << splatmap_resolution_ << "x" << splatmap_resolution_ << "\n";
                 }
                 SDL_DestroySurface(rgba);
             }
@@ -157,9 +156,7 @@ bool EditorApplication::on_init() {
 
     // Set post-UI callback for ImGui rendering
     scene_renderer().set_post_ui_callback(
-        [this](SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swapchain) {
-            imgui_render(cmd, swapchain);
-        });
+        [this](SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swapchain) { imgui_render(cmd, swapchain); });
 
     // Record initial mtime for hot-reload
     {
@@ -170,13 +167,13 @@ bool EditorApplication::on_init() {
         }
     }
 
-    std::cout << "Editor initialized successfully" << std::endl;
-    std::cout << "Controls:" << std::endl;
-    std::cout << "  RMB + WASD - Camera movement" << std::endl;
-    std::cout << "  RMB + Mouse - Look around" << std::endl;
-    std::cout << "  1/2/3 - Select/Terrain/Place tools" << std::endl;
-    std::cout << "  Ctrl+S - Save world" << std::endl;
-    std::cout << "  ESC - Quit" << std::endl;
+    std::cout << "Editor initialized successfully" << '\n';
+    std::cout << "Controls:" << '\n';
+    std::cout << "  RMB + WASD - Camera movement" << '\n';
+    std::cout << "  RMB + Mouse - Look around" << '\n';
+    std::cout << "  1/2/3 - Select/Terrain/Place tools" << '\n';
+    std::cout << "  Ctrl+S - Save world" << '\n';
+    std::cout << "  ESC - Quit" << '\n';
 
     return true;
 }
@@ -218,11 +215,13 @@ void EditorApplication::init_imgui() {
     ImGui_ImplSDLGPU3_Init(&init_info);
 
     imgui_initialized_ = true;
-    std::cout << "ImGui initialized with SDL3 GPU backend" << std::endl;
+    std::cout << "ImGui initialized with SDL3 GPU backend" << '\n';
 }
 
 void EditorApplication::shutdown_imgui() {
-    if (!imgui_initialized_) return;
+    if (!imgui_initialized_) {
+        return;
+    }
     ImGui_ImplSDLGPU3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
     ImGui::DestroyContext();
@@ -237,7 +236,9 @@ void EditorApplication::imgui_new_frame() {
 
 void EditorApplication::imgui_render(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swapchain) {
     ImDrawData* draw_data = ImGui::GetDrawData();
-    if (!draw_data) return;
+    if (!draw_data) {
+        return;
+    }
 
     Imgui_ImplSDLGPU3_PrepareDrawData(draw_data, cmd);
 
@@ -277,7 +278,9 @@ bool EditorApplication::on_event(const SDL_Event& event) {
             return true;
         }
         // If ImGui wants mouse, consume
-        if (io.WantCaptureMouse) return true;
+        if (io.WantCaptureMouse) {
+            return true;
+        }
 
         // Generation center placement mode
         if (gen_placing_ && event.button.button == SDL_BUTTON_LEFT && cursor_on_terrain_) {
@@ -303,7 +306,9 @@ bool EditorApplication::on_event(const SDL_Event& event) {
             SDL_SetWindowRelativeMouseMode(scene_renderer().context()->window(), false);
             return true;
         }
-        if (io.WantCaptureMouse) return true;
+        if (io.WantCaptureMouse) {
+            return true;
+        }
 
         if (active_tool_ && !camera_active_) {
             active_tool_->on_mouse_up(event.button.button, mouse_x_, mouse_y_, *this);
@@ -327,7 +332,9 @@ bool EditorApplication::on_event(const SDL_Event& event) {
     }
 
     if (event.type == SDL_EVENT_MOUSE_WHEEL) {
-        if (io.WantCaptureMouse) return true;
+        if (io.WantCaptureMouse) {
+            return true;
+        }
         if (active_tool_ && !camera_active_) {
             const bool* keys = SDL_GetKeyboardState(nullptr);
             bool shift = keys[SDL_SCANCODE_LSHIFT] || keys[SDL_SCANCODE_RSHIFT];
@@ -374,7 +381,9 @@ bool EditorApplication::on_event(const SDL_Event& event) {
 
         // Forward to active tool
         if (active_tool_ && !camera_active_) {
-            if (active_tool_->on_key_down(sc, *this)) return true;
+            if (active_tool_->on_key_down(sc, *this)) {
+                return true;
+            }
         }
     }
 
@@ -438,15 +447,31 @@ void EditorApplication::handle_camera_input(float dt) {
     const bool* keys = SDL_GetKeyboardState(nullptr);
 
     float move_speed = camera_.get_move_speed();
-    if (keys[SDL_SCANCODE_LSHIFT]) move_speed *= 0.3f;
-    if (keys[SDL_SCANCODE_LCTRL]) move_speed *= 3.0f;
+    if (keys[SDL_SCANCODE_LSHIFT]) {
+        move_speed *= 0.3f;
+    }
+    if (keys[SDL_SCANCODE_LCTRL]) {
+        move_speed *= 3.0f;
+    }
 
-    if (keys[SDL_SCANCODE_W]) camera_.move_forward(move_speed * dt);
-    if (keys[SDL_SCANCODE_S]) camera_.move_forward(-move_speed * dt);
-    if (keys[SDL_SCANCODE_A]) camera_.move_right(-move_speed * dt);
-    if (keys[SDL_SCANCODE_D]) camera_.move_right(move_speed * dt);
-    if (keys[SDL_SCANCODE_Q]) camera_.move_up(-move_speed * dt);
-    if (keys[SDL_SCANCODE_E]) camera_.move_up(move_speed * dt);
+    if (keys[SDL_SCANCODE_W]) {
+        camera_.move_forward(move_speed * dt);
+    }
+    if (keys[SDL_SCANCODE_S]) {
+        camera_.move_forward(-move_speed * dt);
+    }
+    if (keys[SDL_SCANCODE_A]) {
+        camera_.move_right(-move_speed * dt);
+    }
+    if (keys[SDL_SCANCODE_D]) {
+        camera_.move_right(move_speed * dt);
+    }
+    if (keys[SDL_SCANCODE_Q]) {
+        camera_.move_up(-move_speed * dt);
+    }
+    if (keys[SDL_SCANCODE_E]) {
+        camera_.move_up(move_speed * dt);
+    }
 }
 
 void EditorApplication::update_cursor_raycast() {
@@ -521,11 +546,11 @@ void EditorApplication::on_render() {
         };
 
         // Outer radius (environment/monsters)
-        draw_circle(cx, cz, radius, 0xFF44FF44);  // green
+        draw_circle(cx, cz, radius, 0xFF44FF44); // green
 
         // Inner exclusion / safe zone
         if (env_gen_.min_distance > 0.0f) {
-            draw_circle(cx, cz, env_gen_.min_distance, 0xFF4488FF);  // blue
+            draw_circle(cx, cz, env_gen_.min_distance, 0xFF4488FF); // blue
         }
 
         // Center crosshair
@@ -545,31 +570,31 @@ void EditorApplication::on_render() {
     {
         auto pos = camera_.get_position();
         char buf[256];
-        snprintf(buf, sizeof(buf), "Camera: (%.0f, %.0f, %.0f) | FPS: %.0f | Tool: %s",
-                pos.x, pos.y, pos.z, fps(),
-                active_tool_ ? active_tool_->name() : "None");
+        snprintf(buf, sizeof(buf), "Camera: (%.0f, %.0f, %.0f) | FPS: %.0f | Tool: %s", pos.x, pos.y, pos.z, fps(),
+                 active_tool_ ? active_tool_->name() : "None");
         ui_scene_.add_text(buf, 20, screen_height() - 30, 1.0f, 0xFFCCCCCC);
     }
 
     // Cursor position
     if (cursor_on_terrain_) {
         char buf[128];
-        snprintf(buf, sizeof(buf), "Cursor: (%.0f, %.1f, %.0f)",
-                cursor_world_pos_.x, cursor_world_pos_.y, cursor_world_pos_.z);
+        snprintf(buf, sizeof(buf), "Cursor: (%.0f, %.1f, %.0f)", cursor_world_pos_.x, cursor_world_pos_.y,
+                 cursor_world_pos_.z);
         ui_scene_.add_text(buf, 20, screen_height() - 50, 1.0f, 0xFF88BBFF);
     }
 
     // Placement mode hint
     if (gen_placing_) {
         ui_scene_.add_text("Click terrain to place generation center (ESC to cancel)",
-                          screen_width() / 2 - 200, screen_height() - 70, 1.0f, 0xFFFFAA44);
+                           static_cast<float>(screen_width()) * 0.5f - 200.0f,
+                           static_cast<float>(screen_height()) - 70.0f, 1.0f, 0xFFFFAA44);
     }
 
     // Toast notification
     if (toast_timer_ > 0.0f && !toast_message_.empty()) {
         float alpha = std::min(toast_timer_, 1.0f);
         uint32_t color = (static_cast<uint32_t>(alpha * 255) << 24) | 0x00FFFF44;
-        ui_scene_.add_text(toast_message_, screen_width() / 2 - 80, 40, 1.0f, color);
+        ui_scene_.add_text(toast_message_, static_cast<float>(screen_width()) * 0.5f - 80.0f, 40.0f, 1.0f, color);
     }
 
     // Render frame
@@ -586,14 +611,18 @@ void EditorApplication::build_imgui_ui() {
     // Tool buttons
     auto tool_button = [&](const char* label, ToolType type, EditorTool* tool, const char* key) {
         bool selected = (active_tool_type_ == type);
-        if (selected) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.2f, 1.0f));
+        if (selected) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.2f, 1.0f));
+        }
         char buf[64];
         snprintf(buf, sizeof(buf), "%s (%s)", label, key);
         if (ImGui::Button(buf, ImVec2(-1, 0))) {
             active_tool_ = tool;
             active_tool_type_ = type;
         }
-        if (selected) ImGui::PopStyleColor();
+        if (selected) {
+            ImGui::PopStyleColor();
+        }
     };
 
     tool_button("Select", ToolType::Select, select_tool_.get(), "1");
@@ -625,7 +654,10 @@ void EditorApplication::build_imgui_ui() {
     {
         size_t count = 0;
         auto view = registry_.view<Transform>();
-        for (auto e : view) { (void)e; count++; }
+        for (auto e : view) {
+            (void)e;
+            count++;
+        }
         ImGui::Text("Entities: %zu", count);
     }
 
@@ -641,8 +673,7 @@ void EditorApplication::build_imgui_ui() {
     auto pos = camera_.get_position();
     ImGui::Text("Camera: %.0f, %.0f, %.0f", pos.x, pos.y, pos.z);
     if (cursor_on_terrain_) {
-        ImGui::Text("Cursor: %.0f, %.1f, %.0f",
-                    cursor_world_pos_.x, cursor_world_pos_.y, cursor_world_pos_.z);
+        ImGui::Text("Cursor: %.0f, %.1f, %.0f", cursor_world_pos_.x, cursor_world_pos_.y, cursor_world_pos_.z);
     }
     ImGui::Text("RMB+WASD: Camera");
     ImGui::End();
@@ -675,7 +706,9 @@ void EditorApplication::add_entity_to_scene(entt::entity entity) {
     auto& info = registry_.get<EntityInfo>(entity);
 
     auto* model_ptr = models().get_model(info.model_name);
-    if (!model_ptr) return;
+    if (!model_ptr) {
+        return;
+    }
 
     glm::mat4 model = glm::mat4(1.0f);
     model = glm::translate(model, glm::vec3(transform.x, transform.y, transform.z));
@@ -740,12 +773,9 @@ void EditorApplication::save_world() {
         // Save splatmap to PNG
         if (!splatmap_data_.empty()) {
             std::string splatmap_path = "assets/textures/terrain_splatmap.png";
-            SDL_Surface* surface = SDL_CreateSurfaceFrom(
-                splatmap_resolution_, splatmap_resolution_,
-                SDL_PIXELFORMAT_RGBA32,
-                splatmap_data_.data(),
-                splatmap_resolution_ * 4
-            );
+            SDL_Surface* surface =
+                SDL_CreateSurfaceFrom(splatmap_resolution_, splatmap_resolution_, SDL_PIXELFORMAT_RGBA32,
+                                      splatmap_data_.data(), splatmap_resolution_ * 4);
             if (surface) {
                 if (IMG_SavePNG(surface, splatmap_path.c_str())) {
                     std::cout << "Splatmap saved to " << splatmap_path << '\n';
@@ -790,7 +820,7 @@ void EditorApplication::snap_entities_to_terrain() {
         t.y = get_terrain_height(t.x, t.z);
         count++;
     }
-    std::cout << "Snapped " << count << " entities to terrain" << std::endl;
+    std::cout << "Snapped " << count << " entities to terrain" << '\n';
 }
 
 // ============================================================================
@@ -800,21 +830,25 @@ void EditorApplication::snap_entities_to_terrain() {
 void EditorApplication::check_hot_reload() {
     std::string path = save_dir_ + "/world_entities.json";
     struct stat st;
-    if (stat(path.c_str(), &st) != 0) return;
+    if (stat(path.c_str(), &st) != 0) {
+        return;
+    }
 
     if (st.st_mtime != last_entity_mtime_ && last_entity_mtime_ != 0) {
-        std::cout << "Hot-reload: world_entities.json changed externally, reloading..." << std::endl;
+        std::cout << "Hot-reload: world_entities.json changed externally, reloading..." << '\n';
         last_entity_mtime_ = st.st_mtime;
 
         // Reload entities only (keep heightmap as-is)
         std::ifstream f(path);
-        if (!f) return;
+        if (!f) {
+            return;
+        }
 
         nlohmann::json j;
         try {
             f >> j;
         } catch (...) {
-            std::cerr << "Hot-reload: failed to parse JSON" << std::endl;
+            std::cerr << "Hot-reload: failed to parse JSON" << '\n';
             return;
         }
 
@@ -848,7 +882,7 @@ void EditorApplication::check_hot_reload() {
 
         toast_message_ = "Hot-reloaded " + std::to_string(j.size()) + " entities";
         toast_timer_ = 3.0f;
-        std::cout << "Hot-reload: loaded " << j.size() << " entities" << std::endl;
+        std::cout << "Hot-reload: loaded " << j.size() << " entities" << '\n';
     }
 }
 
@@ -864,7 +898,7 @@ void EditorApplication::build_generation_ui() {
     if (gen_placing_) {
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.7f, 0.5f, 0.1f, 1.0f));
         if (ImGui::Button("Click terrain...", ImVec2(-1, 0))) {
-            gen_placing_ = false;  // cancel
+            gen_placing_ = false; // cancel
         }
         ImGui::PopStyleColor();
         ImGui::TextDisabled("ESC to cancel");
@@ -890,7 +924,9 @@ void EditorApplication::build_generation_ui() {
 
     // Disable generate buttons if no center
     bool can_generate = gen_center_set_;
-    if (!can_generate) ImGui::BeginDisabled();
+    if (!can_generate) {
+        ImGui::BeginDisabled();
+    }
 
     // --- Town ---
     if (ImGui::CollapsingHeader("Town")) {
@@ -959,12 +995,16 @@ void EditorApplication::build_generation_ui() {
         }
     }
 
-    if (!can_generate) ImGui::EndDisabled();
+    if (!can_generate) {
+        ImGui::EndDisabled();
+    }
 
     ImGui::Separator();
 
     // --- Batch operations ---
-    if (!can_generate) ImGui::BeginDisabled();
+    if (!can_generate) {
+        ImGui::BeginDisabled();
+    }
     if (ImGui::Button("Generate All", ImVec2(-1, 0))) {
         registry_.clear();
         last_generated_.clear();
@@ -975,10 +1015,14 @@ void EditorApplication::build_generation_ui() {
         toast_message_ = "World: " + std::to_string(last_generated_.size()) + " entities";
         toast_timer_ = 3.0f;
     }
-    if (!can_generate) ImGui::EndDisabled();
+    if (!can_generate) {
+        ImGui::EndDisabled();
+    }
 
     // Clear last generation pass
-    if (last_generated_.empty()) ImGui::BeginDisabled();
+    if (last_generated_.empty()) {
+        ImGui::BeginDisabled();
+    }
     if (ImGui::Button("Undo Generate", ImVec2(-1, 0))) {
         int removed = 0;
         for (auto e : last_generated_) {
@@ -991,7 +1035,9 @@ void EditorApplication::build_generation_ui() {
         toast_message_ = "Removed " + std::to_string(removed) + " entities";
         toast_timer_ = 3.0f;
     }
-    if (last_generated_.empty()) ImGui::EndDisabled();
+    if (last_generated_.empty()) {
+        ImGui::EndDisabled();
+    }
 
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.6f, 0.1f, 0.1f, 1.0f));
     if (ImGui::Button("Clear All", ImVec2(-1, 0))) {
@@ -1070,23 +1116,40 @@ void EditorApplication::generate_town_entities() {
             spawned++;
         };
 
+        // Walls. Iterate with an integer counter so float drift can't drop
+        // the last log on long walls.
+        const float wall_start = -wd + 60.0f;
+        const float wall_end = wd - 60.0f;
+        const int n_logs = (ls > 0.0f) ? static_cast<int>((wall_end - wall_start) / ls) + 1 : 0;
+        const float half_gate = gw * 0.5f;
+
         // South wall (with gate)
-        for (float x = -wd + 60.0f; x <= wd - 60.0f; x += ls) {
-            if (std::abs(x) < gw / 2.0f) continue;
+        for (int i = 0; i < n_logs; ++i) {
+            float x = wall_start + ls * static_cast<float>(i);
+            if (std::abs(x) < half_gate) {
+                continue;
+            }
             place_log(x, -wd, 0.0f);
         }
         // North wall (with gate)
-        for (float x = -wd + 60.0f; x <= wd - 60.0f; x += ls) {
-            if (std::abs(x) < gw / 2.0f) continue;
+        for (int i = 0; i < n_logs; ++i) {
+            float x = wall_start + ls * static_cast<float>(i);
+            if (std::abs(x) < half_gate) {
+                continue;
+            }
             place_log(x, wd, 0.0f);
         }
         // West wall (solid)
-        for (float z = -wd + 60.0f; z <= wd - 60.0f; z += ls) {
+        for (int i = 0; i < n_logs; ++i) {
+            float z = wall_start + ls * static_cast<float>(i);
             place_log(-wd, z, 90.0f);
         }
         // East wall (with gate)
-        for (float z = -wd + 60.0f; z <= wd - 60.0f; z += ls) {
-            if (std::abs(z) < gw / 2.0f) continue;
+        for (int i = 0; i < n_logs; ++i) {
+            float z = wall_start + ls * static_cast<float>(i);
+            if (std::abs(z) < half_gate) {
+                continue;
+            }
             place_log(wd, z, 90.0f);
         }
     }
@@ -1165,7 +1228,9 @@ void EditorApplication::generate_environment_entities() {
         for (const auto& pos : tree_positions) {
             float dx = x - pos.first;
             float dz = z - pos.second;
-            if (dx * dx + dz * dz < min_dist_sq) return true;
+            if (dx * dx + dz * dz < min_dist_sq) {
+                return true;
+            }
         }
         return false;
     };
@@ -1180,13 +1245,12 @@ void EditorApplication::generate_environment_entities() {
             float z = cz + std::sin(angle) * dist;
 
             if (!is_too_close(x, z, env_gen_.tree_min_spacing)) {
-                float scale = env_gen_.tree_min_scale +
-                              (rng() / static_cast<float>(rng.max())) * (env_gen_.tree_max_scale - env_gen_.tree_min_scale);
+                float scale = env_gen_.tree_min_scale + (rng() / static_cast<float>(rng.max())) *
+                                                            (env_gen_.tree_max_scale - env_gen_.tree_min_scale);
                 float rotation = rotation_dist(rng);
-                auto tree_type = static_cast<EnvironmentType>(
-                    static_cast<int>(EnvironmentType::TreeOak) + (rng() % 2));
+                auto tree_type = static_cast<EnvironmentType>(static_cast<int>(EnvironmentType::TreeOak) + (rng() % 2));
                 spawn_env(tree_type, x, z, scale, rotation);
-                tree_positions.push_back({x, z});
+                tree_positions.emplace_back(x, z);
                 break;
             }
         }
@@ -1195,7 +1259,7 @@ void EditorApplication::generate_environment_entities() {
     // Clustered groves
     for (int grove = 0; grove < env_gen_.grove_count; ++grove) {
         float grove_angle = grove * (2.0f * 3.14159f / std::max(1, env_gen_.grove_count)) +
-                           (rng() / static_cast<float>(rng.max())) * 0.5f;
+                            (rng() / static_cast<float>(rng.max())) * 0.5f;
         float grove_dist = inner + (rng() / static_cast<float>(rng.max())) * (outer - inner) * 0.6f;
         float grove_x = cx + std::cos(grove_angle) * grove_dist;
         float grove_z = cz + std::sin(grove_angle) * grove_dist;
@@ -1209,22 +1273,23 @@ void EditorApplication::generate_environment_entities() {
                 float x = grove_x + std::cos(offset_angle) * offset_dist;
                 float z = grove_z + std::sin(offset_angle) * offset_dist;
                 if (!is_too_close(x, z, env_gen_.tree_min_spacing)) {
-                    float scale = env_gen_.tree_min_scale +
-                                  (rng() / static_cast<float>(rng.max())) * (env_gen_.tree_max_scale - env_gen_.tree_min_scale) * 0.7f;
+                    float scale = env_gen_.tree_min_scale + (rng() / static_cast<float>(rng.max())) *
+                                                                (env_gen_.tree_max_scale - env_gen_.tree_min_scale) *
+                                                                0.7f;
                     float rotation = rotation_dist(rng);
                     int final_type = (rng() % 10 < 7) ? grove_tree_type : (1 - grove_tree_type);
-                    auto tree_type = static_cast<EnvironmentType>(
-                        static_cast<int>(EnvironmentType::TreeOak) + final_type);
+                    auto tree_type =
+                        static_cast<EnvironmentType>(static_cast<int>(EnvironmentType::TreeOak) + final_type);
                     spawn_env(tree_type, x, z, scale, rotation);
-                    tree_positions.push_back({x, z});
+                    tree_positions.emplace_back(x, z);
                     break;
                 }
             }
         }
     }
 
-    std::cout << "[Editor] Generated environment: " << rocks_spawned << " rocks + "
-              << tree_positions.size() << " trees\n";
+    std::cout << "[Editor] Generated environment: " << rocks_spawned << " rocks + " << tree_positions.size()
+              << " trees\n";
 }
 
 void EditorApplication::generate_monster_entities() {
@@ -1236,9 +1301,7 @@ void EditorApplication::generate_monster_entities() {
     const float safe_r = monster_gen_.safe_zone_radius;
     const float max_r = monster_gen_.max_radius;
 
-    unsigned seed = monster_gen_.seed != 0
-        ? static_cast<unsigned>(monster_gen_.seed)
-        : std::random_device{}();
+    unsigned seed = monster_gen_.seed != 0 ? static_cast<unsigned>(monster_gen_.seed) : std::random_device{}();
     std::mt19937 rng(seed);
     std::uniform_real_distribution<float> angle_dist(0.0f, 2.0f * 3.14159f);
 
@@ -1251,8 +1314,7 @@ void EditorApplication::generate_monster_entities() {
         float z = cz + std::sin(angle) * dist;
 
         // Clamp to world bounds
-        if (x < 100.0f || x > config_.world().width - 100.0f ||
-            z < 100.0f || z > config_.world().height - 100.0f) {
+        if (x < 100.0f || x > config_.world().width - 100.0f || z < 100.0f || z > config_.world().height - 100.0f) {
             continue;
         }
 
@@ -1286,7 +1348,7 @@ bool EditorApplication::load_models(const std::string& assets_path) {
     // Load model manifest
     std::ifstream manifest_file("data/models.json");
     if (!manifest_file.is_open()) {
-        std::cerr << "Failed to open data/models.json" << std::endl;
+        std::cerr << "Failed to open data/models.json" << '\n';
         return false;
     }
 
@@ -1294,7 +1356,7 @@ bool EditorApplication::load_models(const std::string& assets_path) {
     try {
         manifest_file >> manifest;
     } catch (const std::exception& e) {
-        std::cerr << "Failed to parse data/models.json: " << e.what() << std::endl;
+        std::cerr << "Failed to parse data/models.json: " << e.what() << '\n';
         return false;
     }
 
@@ -1313,11 +1375,11 @@ bool EditorApplication::load_models(const std::string& assets_path) {
             loaded++;
         } else {
             failed++;
-            std::cerr << "Warning: Failed to load model '" << id << "'" << std::endl;
+            std::cerr << "Warning: Failed to load model '" << id << "'" << '\n';
         }
     }
 
-    std::cout << "Models: " << loaded << " loaded, " << failed << " failed" << std::endl;
+    std::cout << "Models: " << loaded << " loaded, " << failed << " failed" << '\n';
     return failed == 0;
 }
 

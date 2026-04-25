@@ -1,7 +1,7 @@
 #include "menu_system.hpp"
 #include "client/menu_types.hpp"
-#include "engine/input_handler.hpp"
 #include "client/ui_colors.hpp"
+#include "engine/input_handler.hpp"
 #include "engine/scene/ui_scene.hpp"
 #include <algorithm>
 #include <cstdint>
@@ -17,7 +17,9 @@ using namespace mmo::engine;
 using namespace mmo::engine::scene;
 
 MenuSystem::MenuSystem(InputHandler& input, std::function<void()> on_quit, int max_vsync_mode)
-    : input_(input), on_quit_(std::move(on_quit)), max_vsync_mode_(max_vsync_mode) {
+    : input_(input),
+      on_quit_(std::move(on_quit)),
+      max_vsync_mode_(max_vsync_mode) {
     init_menu_items();
 }
 
@@ -384,10 +386,13 @@ void MenuSystem::update(float dt) {
         return;
     }
 
-    if (!menu_open_) return;
+    if (!menu_open_) {
+        return;
+    }
 
     if (input_.menu_up_pressed()) {
-        menu_selected_index_ = (menu_selected_index_ - 1 + static_cast<int>(menu_items_.size())) % static_cast<int>(menu_items_.size());
+        menu_selected_index_ =
+            (menu_selected_index_ - 1 + static_cast<int>(menu_items_.size())) % static_cast<int>(menu_items_.size());
     }
     if (input_.menu_down_pressed()) {
         menu_selected_index_ = (menu_selected_index_ + 1) % static_cast<int>(menu_items_.size());
@@ -404,17 +409,19 @@ void MenuSystem::update(float dt) {
     } else if (item.type == MenuItemType::Slider) {
         if (item.slider_value) {
             if (input_.menu_left_pressed()) {
-                if (*item.slider_value <= item.slider_min)
+                if (*item.slider_value <= item.slider_min) {
                     *item.slider_value = item.slider_max;
-                else
+                } else {
                     *item.slider_value -= 1;
+                }
                 settings_dirty_ = true;
             }
             if (input_.menu_right_pressed()) {
-                if (*item.slider_value >= item.slider_max)
+                if (*item.slider_value >= item.slider_max) {
                     *item.slider_value = item.slider_min;
-                else
+                } else {
                     *item.slider_value += 1;
+                }
                 settings_dirty_ = true;
             }
         }
@@ -456,7 +463,9 @@ void MenuSystem::update(float dt) {
 }
 
 void MenuSystem::build_ui(UIScene& ui, float screen_w, float screen_h) {
-    if (!menu_open_) return;
+    if (!menu_open_) {
+        return;
+    }
 
     float panel_w = 550.0f;
     float panel_h = 70.0f + menu_items_.size() * 50.0f + 50.0f;
@@ -468,9 +477,15 @@ void MenuSystem::build_ui(UIScene& ui, float screen_w, float screen_h) {
 
     const char* title = "SETTINGS";
     switch (current_menu_page_) {
-        case MenuPage::Main: title = "SETTINGS"; break;
-        case MenuPage::Controls: title = "CONTROLS"; break;
-        case MenuPage::Graphics: title = "GRAPHICS"; break;
+        case MenuPage::Main:
+            title = "SETTINGS";
+            break;
+        case MenuPage::Controls:
+            title = "CONTROLS";
+            break;
+        case MenuPage::Graphics:
+            title = "GRAPHICS";
+            break;
     }
     // Center title based on estimated character width (~8px per char)
     float title_width = static_cast<float>(strlen(title)) * 8.0f * 1.5f;
@@ -508,17 +523,19 @@ void MenuSystem::build_ui(UIScene& ui, float screen_w, float screen_h) {
             std::string display = "< " + value_str + " >";
             // Right-align slider value based on text width (~8px per char)
             float display_width = static_cast<float>(display.length()) * 8.0f;
-            ui.add_text(display, panel_x + panel_w - 30.0f - display_width, item_y + 10.0f, 1.0f, ui_colors::VALUE_SLIDER);
+            ui.add_text(display, panel_x + panel_w - 30.0f - display_width, item_y + 10.0f, 1.0f,
+                        ui_colors::VALUE_SLIDER);
         } else if (item.type == MenuItemType::FloatSlider && item.float_value) {
             float slider_x = panel_x + panel_w - 200.0f;
             float slider_w = 120.0f;
             float slider_h = 8.0f;
             float slider_y_center = item_y + 18.0f;
 
-            ui.add_filled_rect(slider_x, slider_y_center - slider_h/2, slider_w, slider_h, 0xFF444444);
+            ui.add_filled_rect(slider_x, slider_y_center - slider_h / 2, slider_w, slider_h, 0xFF444444);
 
             float fill_pct = (*item.float_value - item.float_min) / (item.float_max - item.float_min);
-            ui.add_filled_rect(slider_x, slider_y_center - slider_h/2, slider_w * fill_pct, slider_h, ui_colors::VALUE_SLIDER);
+            ui.add_filled_rect(slider_x, slider_y_center - slider_h / 2, slider_w * fill_pct, slider_h,
+                               ui_colors::VALUE_SLIDER);
 
             char value_buf[32];
             snprintf(value_buf, sizeof(value_buf), "%.2f", *item.float_value);

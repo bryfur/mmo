@@ -13,7 +13,7 @@
 
 namespace mmo::server::ecs {
 
-template <typename T>
+template<typename T>
 concept TickableState = requires(T t, float dt) {
     { t.tick(dt) } -> std::same_as<void>;
 };

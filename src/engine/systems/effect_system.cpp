@@ -1,7 +1,7 @@
 #include "effect_system.hpp"
+#include <algorithm>
 #include <glm/gtc/constants.hpp>
 #include <random>
-#include <algorithm>
 
 namespace mmo::engine::systems {
 
@@ -9,23 +9,19 @@ using mmo::engine::VelocityType;
 
 namespace {
 
-// Random number generator for particle spread
-std::random_device rd;
-std::mt19937 gen(rd());
-
+// Lazy thread-local PRNG. Avoids throwing std::random_device construction at
+// static-init time (which can't be caught) and keeps the generator MT-safe
+// without a mutex.
 float random_float(float min, float max) {
+    thread_local std::mt19937 gen{std::random_device{}()};
     std::uniform_real_distribution<float> dist(min, max);
     return dist(gen);
 }
 
 } // anonymous namespace
 
-int EffectSystem::spawn_effect(
-    const EffectDefinition* definition,
-    const glm::vec3& position,
-    const glm::vec3& direction,
-    float range
-) {
+int EffectSystem::spawn_effect(const EffectDefinition* definition, const glm::vec3& position,
+                               const glm::vec3& direction, float range) {
     if (!definition) {
         return -1;
     }
@@ -56,14 +52,14 @@ int EffectSystem::spawn_effect(
 
 void EffectSystem::compact_effects() {
     effects_.erase(
-        std::remove_if(effects_.begin(), effects_.end(),
-            [](const EffectInstance& e) { return e.is_complete(); }),
-        effects_.end()
-    );
+        std::remove_if(effects_.begin(), effects_.end(), [](const EffectInstance& e) { return e.is_complete(); }),
+        effects_.end());
 }
 
 void EffectSystem::spawn_particles(EmitterInstance& emitter, int count) {
-    if (!emitter.definition) return;
+    if (!emitter.definition) {
+        return;
+    }
 
     const auto& def = *emitter.definition;
 
@@ -109,11 +105,8 @@ void EffectSystem::spawn_particles(EmitterInstance& emitter, int count) {
     }
 }
 
-glm::vec3 EffectSystem::calculate_initial_velocity(
-    const VelocityDefinition& vel_def,
-    const glm::vec3& direction,
-    int particle_index
-) {
+glm::vec3 EffectSystem::calculate_initial_velocity(const VelocityDefinition& vel_def, const glm::vec3& direction,
+                                                   int particle_index) {
     glm::vec3 velocity = {0, 0, 0};
 
     switch (vel_def.type) {
@@ -128,11 +121,8 @@ glm::vec3 EffectSystem::calculate_initial_velocity(
                 // Rotate velocity by spread angle (simplified 2D rotation in XZ plane)
                 float cos_a = std::cos(angle_offset);
                 float sin_a = std::sin(angle_offset);
-                velocity = glm::vec3(
-                    velocity.x * cos_a - velocity.z * sin_a,
-                    velocity.y,
-                    velocity.x * sin_a + velocity.z * cos_a
-                );
+                velocity = glm::vec3(velocity.x * cos_a - velocity.z * sin_a, velocity.y,
+                                     velocity.x * sin_a + velocity.z * cos_a);
             }
             break;
         }
@@ -140,11 +130,7 @@ glm::vec3 EffectSystem::calculate_initial_velocity(
         case VelocityType::RADIAL: {
             // Random direction outward
             float angle = random_float(0, glm::two_pi<float>());
-            velocity = glm::vec3(
-                std::cos(angle) * vel_def.speed,
-                0,
-                std::sin(angle) * vel_def.speed
-            );
+            velocity = glm::vec3(std::cos(angle) * vel_def.speed, 0, std::sin(angle) * vel_def.speed);
             break;
         }
 
@@ -191,8 +177,8 @@ void EffectSystem::update_particle(Particle& particle, const EmitterDefinition& 
         particle.position.z = particle.arc_origin.z + std::cos(rotation) * arc_radius;
 
         // Height oscillates with a sine wave
-        particle.position.y = particle.arc_origin.y + vel_def.arc_height_base
-                            + std::sin(t * glm::pi<float>()) * vel_def.arc_height_amplitude;
+        particle.position.y = particle.arc_origin.y + vel_def.arc_height_base +
+                              std::sin(t * glm::pi<float>()) * vel_def.arc_height_amplitude;
 
         // Tilt rotates with progress
         float tilt = std::sin(t * glm::pi<float>()) * vel_def.arc_tilt_amplitude;
@@ -200,7 +186,7 @@ void EffectSystem::update_particle(Particle& particle, const EmitterDefinition& 
 
         // Face the direction of the arc
         particle.rotation.y = rotation + glm::half_pi<float>(); // +90 degrees
-        particle.rotation.z = -0.5f; // Fixed roll
+        particle.rotation.z = -0.5f;                            // Fixed roll
 
     } else if (vel_def.type == VelocityType::ORBITAL) {
         // Orbital motion - calculate position from orbit parameters
@@ -247,11 +233,7 @@ void EffectSystem::update_particle(Particle& particle, const EmitterDefinition& 
 
     // Color gradient
     if (emitter_def.appearance.use_color_gradient) {
-        particle.color = glm::mix(
-            emitter_def.appearance.color_tint,
-            emitter_def.appearance.color_end,
-            t
-        );
+        particle.color = glm::mix(emitter_def.appearance.color_tint, emitter_def.appearance.color_end, t);
     }
 }
 

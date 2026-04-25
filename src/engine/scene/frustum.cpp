@@ -5,8 +5,9 @@ namespace mmo::engine::scene {
 
 void Frustum::extract_from_matrix(const glm::mat4& vp) {
     // Gribb-Hartmann method using transposed VP for clean row access
-    // Reference: https://www.gamedevs.org/uploads/fast-extraction-viewing-frustum-planes-from-world-view-projection-matrix.pdf
-    // GLM is column-major, so transpose to get rows as vec4s
+    // Reference:
+    // https://www.gamedevs.org/uploads/fast-extraction-viewing-frustum-planes-from-world-view-projection-matrix.pdf GLM
+    // is column-major, so transpose to get rows as vec4s
     glm::mat4 vpt = glm::transpose(vp);
 
     auto set_plane = [](Plane& p, const glm::vec4& v) {
@@ -19,7 +20,7 @@ void Frustum::extract_from_matrix(const glm::mat4& vp) {
     set_plane(planes_[1], vpt[3] - vpt[0]); // Right
     set_plane(planes_[2], vpt[3] + vpt[1]); // Bottom
     set_plane(planes_[3], vpt[3] - vpt[1]); // Top
-    set_plane(planes_[4], vpt[2]);           // Near (depth [0,1] with GLM_FORCE_DEPTH_ZERO_TO_ONE)
+    set_plane(planes_[4], vpt[2]);          // Near (depth [0,1] with GLM_FORCE_DEPTH_ZERO_TO_ONE)
     set_plane(planes_[5], vpt[3] - vpt[2]); // Far
 }
 

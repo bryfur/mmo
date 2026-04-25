@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include "server/math/combat_targeting.hpp"
+#include <gtest/gtest.h>
 
 using namespace mmo::server::math;
 

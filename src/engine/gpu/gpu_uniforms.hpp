@@ -65,8 +65,8 @@ struct alignas(16) GridVertexUniforms {
  * UI vertex shader uniforms (set 1, b0)
  */
 struct alignas(16) UIScreenUniforms {
-    float width;
-    float height;
+    float width{};
+    float height{};
     float _padding[2] = {0.0f, 0.0f};
 };
 
@@ -74,7 +74,7 @@ struct alignas(16) UIScreenUniforms {
  * UI fragment shader uniforms (set 3, b0)
  */
 struct alignas(16) UIFragmentUniforms {
-    int hasTexture;
+    int hasTexture{};
     int _padding[3] = {0, 0, 0};
 };
 
@@ -158,10 +158,10 @@ struct alignas(16) ShadowTerrainUniforms {
  * Contains cascade view-projection matrices and PCSS parameters.
  */
 struct alignas(16) ShadowDataUniforms {
-    glm::mat4 lightViewProjection[4];  // Per-cascade light-space matrices
-    glm::vec4 cascadeSplits;           // View-space far depth per cascade
+    glm::mat4 lightViewProjection[4]; // Per-cascade light-space matrices
+    glm::vec4 cascadeSplits;          // View-space far depth per cascade
     float shadowMapResolution;
-    float lightSize;                   // PCSS penumbra size
+    float lightSize; // PCSS penumbra size
     float shadowEnabled;
     float _pad0 = 0.0f;
 };
@@ -228,15 +228,15 @@ struct alignas(16) BloomUpsampleUniforms {
  * Volumetric fog pass fragment uniforms (set 3, b0)
  */
 struct alignas(16) VolumetricFogUniforms {
-    glm::mat4 invViewProjection;
-    glm::mat4 shadowLightViewProjection;
-    glm::vec3 lightDir;
+    glm::mat4 invViewProjection{};
+    glm::mat4 shadowLightViewProjection{};
+    glm::vec3 lightDir{};
     float fogDensity = 0.02f;
-    glm::vec3 lightColor;
+    glm::vec3 lightColor{};
     float scatterStrength = 0.3f;
-    glm::vec3 fogColor;
+    glm::vec3 fogColor{};
     float fogHeight = 50.0f;
-    glm::vec3 cameraPos;
+    glm::vec3 cameraPos{};
     float fogFalloff = 0.01f;
     float nearPlane = 0.1f;
     float farPlane = 5000.0f;
@@ -252,10 +252,10 @@ struct alignas(16) VolumetricFogUniforms {
 struct alignas(16) ClusterParamsUniforms {
     glm::mat4 view;
     glm::mat4 invProjection;
-    glm::vec4 screenSize;       // (width, height, 1/width, 1/height)
-    glm::vec4 zPlanes;          // (near, far, log(far/near), 1/log(far/near))
-    glm::uvec4 gridDim;         // (X, Y, Z, totalLightCount)
-    glm::uvec4 maxPerCluster;   // (max_lights_per_cluster, _, _, _)
+    glm::vec4 screenSize;     // (width, height, 1/width, 1/height)
+    glm::vec4 zPlanes;        // (near, far, log(far/near), 1/log(far/near))
+    glm::uvec4 gridDim;       // (X, Y, Z, totalLightCount)
+    glm::uvec4 maxPerCluster; // (max_lights_per_cluster, _, _, _)
 };
 
 } // namespace mmo::engine::gpu

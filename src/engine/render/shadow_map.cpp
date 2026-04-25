@@ -1,9 +1,9 @@
 #include "shadow_map.hpp"
 #include "SDL3/SDL_gpu.h"
-#include <SDL3/SDL_log.h>
-#include <glm/gtc/matrix_transform.hpp>
 #include <algorithm>
 #include <cmath>
+#include <glm/gtc/matrix_transform.hpp>
+#include <SDL3/SDL_log.h>
 
 namespace mmo::engine::render {
 
@@ -22,11 +22,10 @@ bool ShadowMap::init(gpu::GPUDevice& device, int resolution) {
     // Cascade 3 (distant) at 1/4 res — visually indistinguishable, 16x less fill.
     // Aggregate: ~3x less shadow fragment work per frame vs all-full-res.
     for (int i = 0; i < CSM_MAX_CASCADES; ++i) {
-        int res_divisor = 1 << std::min(i, 2);  // 1, 2, 4, 4
+        int res_divisor = 1 << std::min(i, 2); // 1, 2, 4, 4
         int cascade_res = std::max(256, resolution_ / res_divisor);
         cascade_resolutions_[i] = cascade_res;
-        cascade_textures_[i] = gpu::GPUTexture::create_depth(
-            device, cascade_res, cascade_res);
+        cascade_textures_[i] = gpu::GPUTexture::create_depth(device, cascade_res, cascade_res);
         if (!cascade_textures_[i]) {
             SDL_Log("ShadowMap::init: Failed to create cascade depth texture %d", i);
             return false;
@@ -65,8 +64,12 @@ void ShadowMap::shutdown() {
 }
 
 bool ShadowMap::reinit(int resolution) {
-    if (!device_) return false;
-    if (resolution == resolution_) return true;
+    if (!device_) {
+        return false;
+    }
+    if (resolution == resolution_) {
+        return true;
+    }
 
     // Destroy old textures
     for (auto& tex : cascade_textures_) {
@@ -80,17 +83,15 @@ bool ShadowMap::reinit(int resolution) {
         int res_divisor = 1 << std::min(i, 2);
         int cascade_res = std::max(256, resolution_ / res_divisor);
         cascade_resolutions_[i] = cascade_res;
-        cascade_textures_[i] = gpu::GPUTexture::create_depth(
-            *device_, cascade_res, cascade_res);
+        cascade_textures_[i] = gpu::GPUTexture::create_depth(*device_, cascade_res, cascade_res);
         if (!cascade_textures_[i]) {
             SDL_Log("ShadowMap::reinit: Failed to create cascade depth texture %d", i);
             return false;
         }
     }
 
-    SDL_Log("ShadowMap: Reinitialized base=%d (cascade resolutions: %d, %d, %d, %d)",
-            resolution_, cascade_resolutions_[0], cascade_resolutions_[1],
-            cascade_resolutions_[2], cascade_resolutions_[3]);
+    SDL_Log("ShadowMap: Reinitialized base=%d (cascade resolutions: %d, %d, %d, %d)", resolution_,
+            cascade_resolutions_[0], cascade_resolutions_[1], cascade_resolutions_[2], cascade_resolutions_[3]);
     return true;
 }
 
@@ -109,9 +110,8 @@ void ShadowMap::compute_cascade_splits(float near_plane, float far_plane) {
 }
 
 glm::mat4 ShadowMap::compute_cascade_matrix(const glm::mat4& camera_view, const glm::mat4& camera_proj,
-                                              const glm::vec3& light_dir,
-                                              float near_split, float far_split,
-                                              int cascade_index) {
+                                            const glm::vec3& light_dir, float near_split, float far_split,
+                                            int cascade_index) {
     glm::mat4 slice_proj = camera_proj;
 
     float n = near_split;
@@ -123,8 +123,8 @@ glm::mat4 ShadowMap::compute_cascade_matrix(const glm::mat4& camera_view, const 
 
     // 8 NDC corners: x,y in [-1,1], z in [0,1] (depth zero to one)
     static const glm::vec4 ndc_corners[8] = {
-        {-1, -1, 0, 1}, { 1, -1, 0, 1}, {-1,  1, 0, 1}, { 1,  1, 0, 1},
-        {-1, -1, 1, 1}, { 1, -1, 1, 1}, {-1,  1, 1, 1}, { 1,  1, 1, 1},
+        {-1, -1, 0, 1}, {1, -1, 0, 1}, {-1, 1, 0, 1}, {1, 1, 0, 1},
+        {-1, -1, 1, 1}, {1, -1, 1, 1}, {-1, 1, 1, 1}, {1, 1, 1, 1},
     };
 
     glm::vec3 world_corners[8];
@@ -174,14 +174,14 @@ glm::mat4 ShadowMap::compute_cascade_matrix(const glm::mat4& camera_view, const 
     return light_proj * light_view;
 }
 
-void ShadowMap::update(const glm::mat4& camera_view, const glm::mat4& camera_proj,
-                        const glm::vec3& light_dir, float near_plane, float far_plane) {
+void ShadowMap::update(const glm::mat4& camera_view, const glm::mat4& camera_proj, const glm::vec3& light_dir,
+                       float near_plane, float far_plane) {
     compute_cascade_splits(near_plane, far_plane);
 
     float prev_split = near_plane;
     for (int i = 0; i < active_cascades_; ++i) {
-        cascades_[i].light_view_projection = compute_cascade_matrix(
-            camera_view, camera_proj, light_dir, prev_split, cascades_[i].split_depth, i);
+        cascades_[i].light_view_projection =
+            compute_cascade_matrix(camera_view, camera_proj, light_dir, prev_split, cascades_[i].split_depth, i);
         prev_split = cascades_[i].split_depth;
     }
 }
@@ -244,7 +244,9 @@ SDL_GPUTexture* ShadowMap::shadow_texture(int cascade) const {
 
 bool ShadowMap::is_ready() const {
     for (int i = 0; i < active_cascades_; ++i) {
-        if (!cascade_textures_[i]) return false;
+        if (!cascade_textures_[i]) {
+            return false;
+        }
     }
     return shadow_sampler_ != nullptr;
 }
@@ -255,12 +257,8 @@ gpu::ShadowDataUniforms ShadowMap::get_shadow_uniforms(int shadow_mode) const {
         uniforms.lightViewProjection[i] = cascades_[i].light_view_projection;
     }
     // Set cascade splits - unused cascades get max float so they're never selected
-    float splits[4] = {
-        std::numeric_limits<float>::max(),
-        std::numeric_limits<float>::max(),
-        std::numeric_limits<float>::max(),
-        std::numeric_limits<float>::max()
-    };
+    float splits[4] = {std::numeric_limits<float>::max(), std::numeric_limits<float>::max(),
+                       std::numeric_limits<float>::max(), std::numeric_limits<float>::max()};
     for (int i = 0; i < active_cascades_; ++i) {
         splits[i] = cascades_[i].split_depth;
     }

@@ -1,12 +1,12 @@
 #pragma once
 
-#include <glm/glm.hpp>
 #include <cstdint>
+#include <glm/glm.hpp>
 #include <memory>
 #include <string>
 
 namespace mmo::engine {
-    struct Model;
+struct Model;
 }
 
 namespace mmo::engine::procedural {
@@ -18,14 +18,14 @@ namespace mmo::engine::procedural {
  */
 struct RockParams {
     uint32_t seed = 880;
-    int resolution = 40;          // Grid resolution (40 = fast, 80 = detailed)
-    float scale = 1.0f;           // Output mesh scale
-    int steps = 20;               // SDF iteration count (more = more complex shape)
-    float smoothness = 0.05f;     // Boolean blend smoothness
-    float displacement_scale = 0.15f;  // Surface noise amplitude
-    float displacement_spread = 10.0f; // Surface noise frequency
-    glm::vec4 color = {0.5f, 0.48f, 0.45f, 1.0f};  // Base rock color
-    std::string texture_path;     // Optional texture path
+    int resolution = 40;                          // Grid resolution (40 = fast, 80 = detailed)
+    float scale = 1.0f;                           // Output mesh scale
+    int steps = 20;                               // SDF iteration count (more = more complex shape)
+    float smoothness = 0.05f;                     // Boolean blend smoothness
+    float displacement_scale = 0.15f;             // Surface noise amplitude
+    float displacement_spread = 10.0f;            // Surface noise frequency
+    glm::vec4 color = {0.5f, 0.48f, 0.45f, 1.0f}; // Base rock color
+    std::string texture_path;                     // Optional texture path
 };
 
 /**

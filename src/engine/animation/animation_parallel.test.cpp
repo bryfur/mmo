@@ -48,7 +48,9 @@ AnimationClip make_clip(float duration) {
 bool nearly_equal(const glm::mat4& a, const glm::mat4& b, float eps = 1e-4f) {
     for (int c = 0; c < 4; ++c) {
         for (int r = 0; r < 4; ++r) {
-            if (std::fabs(a[c][r] - b[c][r]) > eps) return false;
+            if (std::fabs(a[c][r] - b[c][r]) > eps) {
+                return false;
+            }
         }
     }
     return true;
@@ -57,7 +59,9 @@ bool nearly_equal(const glm::mat4& a, const glm::mat4& b, float eps = 1e-4f) {
 class AnimationParallelTest : public ::testing::Test {
 protected:
     void SetUp() override {
-        if (!JobSystem::instance().is_initialized()) JobSystem::instance().init();
+        if (!JobSystem::instance().is_initialized()) {
+            JobSystem::instance().init();
+        }
     }
 };
 
@@ -95,8 +99,7 @@ TEST_F(AnimationParallelTest, ParallelTickMatchesSerialOnIndependentInstances) {
         auto pm = parallel[i].bone_matrices();
         ASSERT_EQ(sm.size(), pm.size()) << "instance " << i;
         for (std::size_t b = 0; b < sm.size(); ++b) {
-            ASSERT_TRUE(nearly_equal(sm[b], pm[b]))
-                << "instance " << i << " bone " << b;
+            ASSERT_TRUE(nearly_equal(sm[b], pm[b])) << "instance " << i << " bone " << b;
         }
     }
 }

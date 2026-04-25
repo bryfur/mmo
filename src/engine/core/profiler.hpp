@@ -15,23 +15,25 @@
 
 #if defined(MMO_ENABLE_TRACY) && MMO_ENABLE_TRACY
 
-#include <tracy/Tracy.hpp>
 #include <cstring>
+#include <tracy/Tracy.hpp>
 
-#define ENGINE_PROFILE_FRAME()        FrameMark
+#define ENGINE_PROFILE_FRAME() FrameMark
 #define ENGINE_PROFILE_FRAME_NAMED(n) FrameMarkNamed(n)
-#define ENGINE_PROFILE_ZONE(name)     ZoneScopedN(name)
-#define ENGINE_PROFILE_ZONE_TAG(t)    ZoneScoped; ZoneText((t), std::strlen(t))
-#define ENGINE_PROFILE_PLOT(n, v)     TracyPlot(n, v)
-#define ENGINE_PROFILE_MESSAGE(m)     TracyMessage(m, std::strlen(m))
+#define ENGINE_PROFILE_ZONE(name) ZoneScopedN(name)
+#define ENGINE_PROFILE_ZONE_TAG(t) \
+    ZoneScoped;                    \
+    ZoneText((t), std::strlen(t))
+#define ENGINE_PROFILE_PLOT(n, v) TracyPlot(n, v)
+#define ENGINE_PROFILE_MESSAGE(m) TracyMessage(m, std::strlen(m))
 
 #else
 
-#define ENGINE_PROFILE_FRAME()        ((void)0)
+#define ENGINE_PROFILE_FRAME() ((void)0)
 #define ENGINE_PROFILE_FRAME_NAMED(n) ((void)0)
-#define ENGINE_PROFILE_ZONE(name)     ((void)0)
-#define ENGINE_PROFILE_ZONE_TAG(t)    ((void)0)
-#define ENGINE_PROFILE_PLOT(n, v)     ((void)0)
-#define ENGINE_PROFILE_MESSAGE(m)     ((void)0)
+#define ENGINE_PROFILE_ZONE(name) ((void)0)
+#define ENGINE_PROFILE_ZONE_TAG(t) ((void)0)
+#define ENGINE_PROFILE_PLOT(n, v) ((void)0)
+#define ENGINE_PROFILE_MESSAGE(m) ((void)0)
 
 #endif

@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
 #include "server/math/movement_speed.hpp"
 #include <cmath>
+#include <gtest/gtest.h>
 
 using namespace mmo::server::math;
 using Inputs = MovementSpeed::Inputs;
@@ -10,17 +10,17 @@ using Inputs = MovementSpeed::Inputs;
 // ============================================================================
 
 TEST(MovementSpeed, BaseClassSpeedAlone) {
-    Inputs s{ .class_base_speed = 200.0f };
+    Inputs s{.class_base_speed = 200.0f};
     EXPECT_FLOAT_EQ(MovementSpeed::compute(s), 200.0f);
 }
 
 TEST(MovementSpeed, EquipmentBonusAdds) {
-    Inputs s{ .class_base_speed = 200.0f, .equipment_bonus = 25.0f };
+    Inputs s{.class_base_speed = 200.0f, .equipment_bonus = 25.0f};
     EXPECT_FLOAT_EQ(MovementSpeed::compute(s), 225.0f);
 }
 
 TEST(MovementSpeed, TalentMultiplierApplies) {
-    Inputs s{ .class_base_speed = 200.0f, .talent_speed_mult = 1.10f };
+    Inputs s{.class_base_speed = 200.0f, .talent_speed_mult = 1.10f};
     EXPECT_FLOAT_EQ(MovementSpeed::compute(s), 220.0f);
 }
 
@@ -34,27 +34,27 @@ TEST(MovementSpeed, BuffMultiplierStacksWithTalent) {
 }
 
 TEST(MovementSpeed, SprintMultiplies) {
-    Inputs s{ .class_base_speed = 100.0f, .is_sprinting = true };
+    Inputs s{.class_base_speed = 100.0f, .is_sprinting = true};
     EXPECT_FLOAT_EQ(MovementSpeed::compute(s), 100.0f * MovementSpeed::SPRINT_MULTIPLIER);
 }
 
 TEST(MovementSpeed, RootedReturnsZero) {
-    Inputs s{ .class_base_speed = 200.0f, .is_sprinting = true, .is_rooted = true };
+    Inputs s{.class_base_speed = 200.0f, .is_sprinting = true, .is_rooted = true};
     EXPECT_FLOAT_EQ(MovementSpeed::compute(s), 0.0f);
 }
 
 TEST(MovementSpeed, StunnedReturnsZero) {
-    Inputs s{ .class_base_speed = 200.0f, .buff_speed_mult = 5.0f, .is_stunned = true };
+    Inputs s{.class_base_speed = 200.0f, .buff_speed_mult = 5.0f, .is_stunned = true};
     EXPECT_FLOAT_EQ(MovementSpeed::compute(s), 0.0f);
 }
 
 TEST(MovementSpeed, SlowDebuffViaBuffMult) {
-    Inputs s{ .class_base_speed = 200.0f, .buff_speed_mult = 0.5f };
+    Inputs s{.class_base_speed = 200.0f, .buff_speed_mult = 0.5f};
     EXPECT_FLOAT_EQ(MovementSpeed::compute(s), 100.0f);
 }
 
 TEST(MovementSpeed, NeverNegative) {
-    Inputs s{ .class_base_speed = 200.0f, .equipment_bonus = -1000.0f };
+    Inputs s{.class_base_speed = 200.0f, .equipment_bonus = -1000.0f};
     EXPECT_GE(MovementSpeed::compute(s), 0.0f);
 }
 

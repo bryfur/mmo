@@ -10,13 +10,9 @@ struct PlayerLeftMsg : Serializable<PlayerLeftMsg> {
 
     static constexpr size_t serialized_size() { return 4; }
 
-    void serialize_impl(BufferWriter& w) const {
-        w.write(player_id);
-    }
+    void serialize_impl(BufferWriter& w) const { w.write(player_id); }
 
-    void deserialize_impl(BufferReader& r) {
-        player_id = r.read<uint32_t>();
-    }
+    void deserialize_impl(BufferReader& r) { player_id = r.read<uint32_t>(); }
 };
 
 } // namespace mmo::protocol

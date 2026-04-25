@@ -1,26 +1,24 @@
 #include "world_save.hpp"
 #include "client/ecs/components.hpp"
 #include "server/entity_config.hpp"
-#include <nlohmann/json.hpp>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <nlohmann/json.hpp>
 
 namespace mmo::editor {
 
 using namespace mmo::client::ecs;
 using namespace mmo::protocol;
 
-bool WorldSave::save(const std::string& save_dir,
-                      const engine::Heightmap& heightmap,
-                      const entt::registry& registry) {
+bool WorldSave::save(const std::string& save_dir, const engine::Heightmap& heightmap, const entt::registry& registry) {
     std::filesystem::create_directories(save_dir);
 
     // Save heightmap binary
     {
         std::ofstream f(save_dir + "/heightmap.bin", std::ios::binary);
         if (!f) {
-            std::cerr << "WorldSave: failed to open heightmap.bin for writing" << std::endl;
+            std::cerr << "WorldSave: failed to open heightmap.bin for writing" << '\n';
             return false;
         }
 
@@ -41,8 +39,8 @@ bool WorldSave::save(const std::string& save_dir,
 
         auto view = registry.view<Transform, EntityInfo>();
         for (auto entity : view) {
-            auto& t = view.get<Transform>(entity);
-            auto& info = view.get<EntityInfo>(entity);
+            const auto& t = view.get<Transform>(entity);
+            const auto& info = view.get<EntityInfo>(entity);
 
             nlohmann::json ej;
             ej["entity_type"] = server::config::entity_type_to_string(info.type);
@@ -61,24 +59,22 @@ bool WorldSave::save(const std::string& save_dir,
 
         std::ofstream f(save_dir + "/world_entities.json");
         if (!f) {
-            std::cerr << "WorldSave: failed to open world_entities.json for writing" << std::endl;
+            std::cerr << "WorldSave: failed to open world_entities.json for writing" << '\n';
             return false;
         }
         f << j.dump(2);
     }
 
-    std::cout << "World saved to " << save_dir << std::endl;
+    std::cout << "World saved to " << save_dir << '\n';
     return true;
 }
 
-bool WorldSave::load(const std::string& save_dir,
-                      engine::Heightmap& heightmap,
-                      entt::registry& registry) {
+bool WorldSave::load(const std::string& save_dir, engine::Heightmap& heightmap, entt::registry& registry) {
     // Load heightmap binary
     {
         std::ifstream f(save_dir + "/heightmap.bin", std::ios::binary);
         if (!f) {
-            std::cerr << "WorldSave: failed to open heightmap.bin for reading" << std::endl;
+            std::cerr << "WorldSave: failed to open heightmap.bin for reading" << '\n';
             return false;
         }
 
@@ -91,15 +87,14 @@ bool WorldSave::load(const std::string& save_dir,
 
         size_t data_size = static_cast<size_t>(heightmap.resolution) * heightmap.resolution;
         heightmap.height_data.resize(data_size);
-        f.read(reinterpret_cast<char*>(heightmap.height_data.data()),
-               data_size * sizeof(uint16_t));
+        f.read(reinterpret_cast<char*>(heightmap.height_data.data()), data_size * sizeof(uint16_t));
     }
 
     // Load entities from JSON
     {
         std::ifstream f(save_dir + "/world_entities.json");
         if (!f) {
-            std::cerr << "WorldSave: failed to open world_entities.json for reading" << std::endl;
+            std::cerr << "WorldSave: failed to open world_entities.json for reading" << '\n';
             return false;
         }
 
@@ -126,7 +121,7 @@ bool WorldSave::load(const std::string& save_dir,
                 info.type = static_cast<EntityType>(ej.value("type", 0));
             }
             info.target_size = ej.value("target_size", 30.0f);
-            info.color = ej.value("color", (uint32_t)0xFFFFFFFF);
+            info.color = ej.value("color", static_cast<uint32_t>(0xFFFFFFFF));
             registry.emplace<EntityInfo>(entity, info);
 
             if (ej.contains("name")) {
@@ -134,7 +129,7 @@ bool WorldSave::load(const std::string& save_dir,
             }
         }
 
-        std::cout << "Loaded " << j.size() << " entities from " << save_dir << std::endl;
+        std::cout << "Loaded " << j.size() << " entities from " << save_dir << '\n';
     }
 
     return true;

@@ -76,9 +76,7 @@ TEST_F(JobSystemTest, WaitByHelpingDrainsNestedSubmits) {
             outer.fetch_add(1);
             std::vector<TaskHandle> inner_handles;
             for (int k = 0; k < 8; ++k) {
-                inner_handles.push_back(js.submit([&]() {
-                    inner.fetch_add(1);
-                }));
+                inner_handles.push_back(js.submit([&]() { inner.fetch_add(1); }));
             }
             for (auto& ih : inner_handles) JobSystem::instance().wait(ih);
         }));
@@ -99,7 +97,9 @@ TEST_F(JobSystemTest, ExceptionPropagatesViaWait) {
 TEST_F(JobSystemTest, ExceptionDoesNotKillPool) {
     auto& js = JobSystem::instance();
     auto bad = js.submit([]() { throw std::logic_error("x"); });
-    try { js.wait(bad); } catch (...) {}
+    try {
+        js.wait(bad);
+    } catch (...) {}
 
     std::atomic<int> ok{0};
     auto good = js.submit([&]() { ok.fetch_add(1); });
@@ -134,9 +134,7 @@ TEST_F(JobSystemTest, MultiThreadSubmitters) {
             std::vector<TaskHandle> handles;
             handles.reserve(PER_THREAD);
             for (int i = 0; i < PER_THREAD; ++i) {
-                handles.push_back(js.submit([&]() {
-                    counter.fetch_add(1, std::memory_order_relaxed);
-                }));
+                handles.push_back(js.submit([&]() { counter.fetch_add(1, std::memory_order_relaxed); }));
             }
             for (auto& h : handles) JobSystem::instance().wait(h);
         });

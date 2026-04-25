@@ -1,8 +1,8 @@
 #pragma once
 
+#include "engine/input_state.hpp"
 #include "SDL3/SDL_gamepad.h"
 #include "SDL3/SDL_joystick.h"
-#include "engine/input_state.hpp"
 #include <SDL3/SDL.h>
 #include <string>
 
@@ -36,7 +36,10 @@ public:
     void reset_changed() { input_changed_ = false; }
 
     // Set player position for mouse direction calculation
-    void set_player_screen_pos(float x, float y) { player_screen_x_ = x; player_screen_y_ = y; }
+    void set_player_screen_pos(float x, float y) {
+        player_screen_x_ = x;
+        player_screen_y_ = y;
+    }
 
     // Get raw mouse position
     float mouse_x() const { return mouse_x_; }
@@ -72,7 +75,10 @@ public:
     bool move_right() const { return move_right_; }
 
     // Set actual camera forward direction (accounting for shoulder offset)
-    void set_camera_forward(float x, float z) { camera_forward_x_ = x; camera_forward_z_ = z; }
+    void set_camera_forward(float x, float z) {
+        camera_forward_x_ = x;
+        camera_forward_z_ = z;
+    }
 
     // Menu controls
     bool menu_toggle_pressed() const { return menu_toggle_pressed_; }
@@ -93,6 +99,10 @@ public:
     // Generic one-shot key press detection (true only on the frame the key was first pressed)
     bool was_key_just_pressed(SDL_Scancode scancode) const;
 
+    // Clear per-frame key-press edge flags. Called from the application loop
+    // before the next round of event polling.
+    void clear_key_edges();
+
     // Enable/disable game input (for menu mode)
     void set_game_input_enabled(bool enabled) { game_input_enabled_ = enabled; }
     bool is_game_input_enabled() const { return game_input_enabled_; }
@@ -101,11 +111,19 @@ public:
     void set_text_input_enabled(bool enabled);
     bool is_text_input_enabled() const { return text_input_enabled_; }
     // Returns pending text since last call, clearing the buffer.
-    std::string take_text_input() { std::string s = std::move(text_input_buffer_); text_input_buffer_.clear(); return s; }
+    std::string take_text_input() {
+        std::string s = std::move(text_input_buffer_);
+        text_input_buffer_.clear();
+        return s;
+    }
     bool text_backspace_pressed() const { return text_backspace_pressed_; }
     bool text_enter_pressed() const { return text_enter_pressed_; }
     bool text_escape_pressed() const { return text_escape_pressed_; }
-    void clear_text_events() { text_backspace_pressed_ = false; text_enter_pressed_ = false; text_escape_pressed_ = false; }
+    void clear_text_events() {
+        text_backspace_pressed_ = false;
+        text_enter_pressed_ = false;
+        text_escape_pressed_ = false;
+    }
 
     // Controller support
     bool has_controller() const { return gamepad_ != nullptr; }
@@ -185,9 +203,9 @@ private:
     bool text_enter_pressed_ = false;
     bool text_escape_pressed_ = false;
 
-    // Key state tracking for was_key_just_pressed()
-    const bool* prev_key_state_ = nullptr;
-    bool key_state_buffer_[SDL_SCANCODE_COUNT] = {};
+    // Per-frame edge flags set on SDL_EVENT_KEY_DOWN (!repeat). Cleared at
+    // the top of each event-poll cycle in process_events()/Application.
+    bool key_just_pressed_[SDL_SCANCODE_COUNT] = {};
 
     // Sensitivity settings (configurable)
     float mouse_sensitivity_ = 0.35f;

@@ -1,22 +1,23 @@
-#include <gtest/gtest.h>
 #include "engine/model_utils.hpp"
-#include "engine/model_loader.hpp"
 #include "engine/gpu/gpu_types.hpp"
+#include "engine/model_loader.hpp"
+#include <cmath>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <cmath>
+#include <gtest/gtest.h>
 
 using namespace mmo::engine;
 
 // Helper: build a Model with known axis-aligned bounding box.
 // Does not need meshes/skeleton -- only the bounding fields are used.
-static Model make_test_model(float min_x, float max_x,
-                             float min_y, float max_y,
-                             float min_z, float max_z) {
+static Model make_test_model(float min_x, float max_x, float min_y, float max_y, float min_z, float max_z) {
     Model m;
-    m.min_x = min_x; m.max_x = max_x;
-    m.min_y = min_y; m.max_y = max_y;
-    m.min_z = min_z; m.max_z = max_z;
+    m.min_x = min_x;
+    m.max_x = max_x;
+    m.min_y = min_y;
+    m.max_y = max_y;
+    m.min_z = min_z;
+    m.max_z = max_z;
     return m;
 }
 
@@ -28,14 +29,16 @@ static glm::vec3 xform(const glm::mat4& m, const glm::vec3& p) {
 
 // A 2x2x2 cube centered at origin: bounds [-1,1] on each axis.
 // max_dimension = 2, center pivot = (0, -1, 0).
-static Model unit_cube() { return make_test_model(-1, 1, -1, 1, -1, 1); }
+static Model unit_cube() {
+    return make_test_model(-1, 1, -1, 1, -1, 1);
+}
 
 // ----- Identity / baseline case -----
 
 TEST(BuildModelTransform, IdentityCase) {
     // Position at origin, zero yaw, target_size chosen so scale = 1.
     // scale = (target_size * 1.5) / max_dim  =>  1.0 when target_size = max_dim / 1.5
-    Model m = unit_cube();  // max_dim = 2
+    Model m = unit_cube(); // max_dim = 2
     float target_size = 2.0f / 1.5f;
 
     glm::mat4 mat = build_model_transform(m, {0, 0, 0}, 0.0f, target_size);
@@ -59,7 +62,7 @@ TEST(BuildModelTransform, IdentityCase) {
 
 TEST(BuildModelTransform, TranslationApplied) {
     Model m = unit_cube();
-    float target_size = 2.0f / 1.5f;  // scale = 1
+    float target_size = 2.0f / 1.5f; // scale = 1
 
     glm::vec3 pos(10.0f, 5.0f, 3.0f);
     glm::mat4 mat = build_model_transform(m, pos, 0.0f, target_size);
@@ -74,8 +77,8 @@ TEST(BuildModelTransform, TranslationApplied) {
 // ----- Column-3 holds translation -----
 
 TEST(BuildModelTransform, MatrixColumn3ContainsTranslation) {
-    Model m = make_test_model(0, 2, 0, 2, 0, 2);  // pivot = (1, 0, 1)
-    float target_size = 2.0f / 1.5f;  // max_dim=2, scale=1
+    Model m = make_test_model(0, 2, 0, 2, 0, 2); // pivot = (1, 0, 1)
+    float target_size = 2.0f / 1.5f;             // max_dim=2, scale=1
 
     glm::vec3 pos(10.0f, 5.0f, 3.0f);
     glm::mat4 mat = build_model_transform(m, pos, 0.0f, target_size);
@@ -93,7 +96,7 @@ TEST(BuildModelTransform, MatrixColumn3ContainsTranslation) {
 
 TEST(BuildModelTransform, Yaw90DegreeRotation) {
     Model m = unit_cube();
-    float target_size = 2.0f / 1.5f;  // scale = 1
+    float target_size = 2.0f / 1.5f; // scale = 1
     float yaw = glm::radians(90.0f);
 
     glm::mat4 mat = build_model_transform(m, {0, 0, 0}, yaw, target_size);
@@ -157,7 +160,7 @@ TEST(BuildModelTransform, ScaleDifferentMaxDimension) {
     // Width-dominated model: 10 wide, 2 tall, 2 deep.
     Model m = make_test_model(-5, 5, 0, 2, -1, 1);
     float target_size = 1.0f;
-    float expected_scale = (1.0f * 1.5f) / 10.0f;  // 0.15
+    float expected_scale = (1.0f * 1.5f) / 10.0f; // 0.15
 
     glm::mat4 mat = build_model_transform(m, {0, 0, 0}, 0.0f, target_size);
 
@@ -170,7 +173,7 @@ TEST(BuildModelTransform, ScaleDifferentMaxDimension) {
 
 TEST(BuildModelTransform, AttackTiltApplied) {
     Model m = unit_cube();
-    float target_size = 2.0f / 1.5f;  // scale = 1
+    float target_size = 2.0f / 1.5f; // scale = 1
     float tilt = glm::radians(90.0f);
 
     glm::mat4 mat = build_model_transform(m, {0, 0, 0}, 0.0f, target_size, tilt);
@@ -204,9 +207,9 @@ TEST(BuildModelTransform, ZeroAttackTiltMatchesDefault) {
     glm::mat4 with_zero = build_model_transform(m, {5, 3, 1}, 1.0f, target_size, 0.0f);
     glm::mat4 default_tilt = build_model_transform(m, {5, 3, 1}, 1.0f, target_size);
 
-    for (int c = 0; c < 4; c++)
-        for (int r = 0; r < 4; r++)
-            EXPECT_NEAR(with_zero[c][r], default_tilt[c][r], 1e-6f);
+    for (int c = 0; c < 4; c++) {
+        for (int r = 0; r < 4; r++) EXPECT_NEAR(with_zero[c][r], default_tilt[c][r], 1e-6f);
+    }
 }
 
 // ----- Centering: non-symmetric bounding box -----
@@ -215,7 +218,7 @@ TEST(BuildModelTransform, CenteringOffsetsApplied) {
     // Model not centered at origin: bounds [2, 6] x [1, 5] x [3, 7].
     // Pivot: cx=4, cy=1 (min_y), cz=5.
     Model m = make_test_model(2, 6, 1, 5, 3, 7);
-    float target_size = 4.0f / 1.5f;  // max_dim=4, scale=1
+    float target_size = 4.0f / 1.5f; // max_dim=4, scale=1
 
     glm::mat4 mat = build_model_transform(m, {0, 0, 0}, 0.0f, target_size);
 
@@ -245,7 +248,7 @@ TEST(BuildModelTransform, CenteringWithTranslation) {
 TEST(BuildModelTransform, CombinedTransform) {
     // 4x4x4 cube at [0,4] on all axes. Pivot = (2, 0, 2).
     Model m = make_test_model(0, 4, 0, 4, 0, 4);
-    float target_size = 2.0f;  // scale = (2*1.5)/4 = 0.75
+    float target_size = 2.0f; // scale = (2*1.5)/4 = 0.75
     float yaw = glm::radians(90.0f);
     glm::vec3 pos(100, 0, 0);
 

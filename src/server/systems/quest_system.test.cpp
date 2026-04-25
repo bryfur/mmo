@@ -1,8 +1,8 @@
-#include <gtest/gtest.h>
 #include "server/systems/quest_system.hpp"
 #include "server/ecs/game_components.hpp"
 #include <entt/entt.hpp>
 #include <filesystem>
+#include <gtest/gtest.h>
 
 using namespace mmo::server;
 using namespace mmo::server::systems;
@@ -14,9 +14,14 @@ std::string find_data_dir() {
     fs::path cur = fs::current_path();
     for (int i = 0; i < 6; ++i) {
         fs::path candidate = cur / "data";
-        if (fs::exists(candidate / "classes.json")) return candidate.string();
-        if (cur.has_parent_path()) cur = cur.parent_path();
-        else break;
+        if (fs::exists(candidate / "classes.json")) {
+            return candidate.string();
+        }
+        if (cur.has_parent_path()) {
+            cur = cur.parent_path();
+        } else {
+            break;
+        }
     }
     return "data";
 }
@@ -34,11 +39,8 @@ entt::entity make_player(entt::registry& r) {
 // Manually inject an active quest with a single kill objective so we can
 // test on_monster_killed without going through accept_quest (which requires
 // a full GameConfig and matching NPC giver type).
-void inject_kill_quest(entt::registry& r, entt::entity player,
-                       const std::string& quest_id,
-                       const std::string& type,
-                       const std::string& target,
-                       int required) {
+void inject_kill_quest(entt::registry& r, entt::entity player, const std::string& quest_id, const std::string& type,
+                       const std::string& target, int required) {
     auto& qs = r.get<ecs::QuestState>(player);
     ecs::ActiveQuest aq;
     aq.quest_id = quest_id;

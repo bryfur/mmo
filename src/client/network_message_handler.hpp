@@ -1,16 +1,16 @@
 #pragma once
 
-#include "protocol/message_type.hpp"
-#include "protocol/gameplay_msgs.hpp"
+#include "client/game_state.hpp"
 #include "client/hud/hud_state.hpp"
 #include "client/hud/panel_state.hpp"
-#include "client/game_state.hpp"
+#include "protocol/gameplay_msgs.hpp"
+#include "protocol/message_type.hpp"
+#include <cstdint>
 #include <entt/entt.hpp>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include <cstdint>
-#include <string>
 
 namespace mmo::client {
 
@@ -22,7 +22,13 @@ struct QuestOfferData {
     std::string dialogue;
     int xp_reward = 0;
     int gold_reward = 0;
-    struct Objective { std::string description; int count; float loc_x = 0; float loc_z = 0; float radius = 0; };
+    struct Objective {
+        std::string description;
+        int count;
+        float loc_x = 0;
+        float loc_z = 0;
+        float radius = 0;
+    };
     std::vector<Objective> objectives;
 };
 
@@ -34,7 +40,12 @@ struct NPCInteractionState {
     int selected_quest = 0;
     bool showing_quest_detail = false;
 
-    void close() { showing_dialogue = false; available_quests.clear(); selected_quest = 0; showing_quest_detail = false; }
+    void close() {
+        showing_dialogue = false;
+        available_quests.clear();
+        selected_quest = 0;
+        showing_quest_detail = false;
+    }
 };
 
 // Handles gameplay-related network messages (combat, quests, inventory, skills, talents, dialogue).

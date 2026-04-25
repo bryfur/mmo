@@ -1,9 +1,9 @@
 #pragma once
 
 #include <sqlite3.h>
+#include <stdexcept>
 #include <string>
 #include <string_view>
-#include <stdexcept>
 
 namespace mmo::server::persistence {
 
@@ -11,6 +11,7 @@ class DbError : public std::runtime_error {
 public:
     DbError(const std::string& msg, int code) : std::runtime_error(msg), code_(code) {}
     int code() const { return code_; }
+
 private:
     int code_;
 };
@@ -27,7 +28,11 @@ public:
     Database& operator=(const Database&) = delete;
     Database(Database&& other) noexcept : db_(other.db_) { other.db_ = nullptr; }
     Database& operator=(Database&& other) noexcept {
-        if (this != &other) { close(); db_ = other.db_; other.db_ = nullptr; }
+        if (this != &other) {
+            close();
+            db_ = other.db_;
+            other.db_ = nullptr;
+        }
         return *this;
     }
 
@@ -61,8 +66,8 @@ public:
 
     sqlite3_stmt* handle() { return stmt_; }
 
-    void reset();   // SQLITE_OK on already-bound statements; clears bindings.
-    bool step();    // returns true if a row is available; false at end.
+    void reset(); // SQLITE_OK on already-bound statements; clears bindings.
+    bool step();  // returns true if a row is available; false at end.
 
     // Bind by 1-based index (SQLite convention).
     void bind_int(int idx, int value);
@@ -72,10 +77,10 @@ public:
     void bind_null(int idx);
 
     // Column access by 0-based index. Caller must ensure step() returned true.
-    int          column_int(int idx) const;
+    int column_int(int idx) const;
     sqlite3_int64 column_int64(int idx) const;
-    double       column_double(int idx) const;
-    std::string  column_text(int idx) const;
+    double column_double(int idx) const;
+    std::string column_text(int idx) const;
 
 private:
     sqlite3_stmt* stmt_ = nullptr;

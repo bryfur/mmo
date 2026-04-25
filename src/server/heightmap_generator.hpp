@@ -1,8 +1,8 @@
 #pragma once
 
 #include "protocol/heightmap.hpp"
-#include <cmath>
 #include <algorithm>
+#include <cmath>
 
 namespace mmo::server {
 
@@ -19,20 +19,24 @@ inline void heightmap_init(mmo::protocol::HeightmapChunk& chunk, int32_t cx, int
 }
 
 inline void heightmap_set(mmo::protocol::HeightmapChunk& chunk, uint32_t local_x, uint32_t local_z, float height) {
-    if (local_x >= chunk.resolution || local_z >= chunk.resolution) return;
+    if (local_x >= chunk.resolution || local_z >= chunk.resolution) {
+        return;
+    }
     float clamped = std::fmax(mmo::protocol::heightmap_config::MIN_HEIGHT,
                               std::fmin(mmo::protocol::heightmap_config::MAX_HEIGHT, height));
     float normalized = (clamped - mmo::protocol::heightmap_config::MIN_HEIGHT) /
-                      (mmo::protocol::heightmap_config::MAX_HEIGHT - mmo::protocol::heightmap_config::MIN_HEIGHT);
+                       (mmo::protocol::heightmap_config::MAX_HEIGHT - mmo::protocol::heightmap_config::MIN_HEIGHT);
     chunk.height_data[local_z * chunk.resolution + local_x] = static_cast<uint16_t>(normalized * 65535.0f);
 }
 
 inline float heightmap_get_local(const mmo::protocol::HeightmapChunk& chunk, uint32_t local_x, uint32_t local_z) {
-    if (local_x >= chunk.resolution || local_z >= chunk.resolution) return 0.0f;
+    if (local_x >= chunk.resolution || local_z >= chunk.resolution) {
+        return 0.0f;
+    }
     uint16_t raw = chunk.height_data[local_z * chunk.resolution + local_x];
     float normalized = raw / 65535.0f;
-    return normalized * (mmo::protocol::heightmap_config::MAX_HEIGHT - mmo::protocol::heightmap_config::MIN_HEIGHT)
-           + mmo::protocol::heightmap_config::MIN_HEIGHT;
+    return normalized * (mmo::protocol::heightmap_config::MAX_HEIGHT - mmo::protocol::heightmap_config::MIN_HEIGHT) +
+           mmo::protocol::heightmap_config::MIN_HEIGHT;
 }
 
 inline float heightmap_get_world(const mmo::protocol::HeightmapChunk& chunk, float world_x, float world_z) {
@@ -68,8 +72,8 @@ namespace heightmap_generator {
 
 namespace detail {
 
-inline float terrain_height(float x, float z, float world_width, float world_height,
-                            float town_center_x = -1.0f, float town_center_z = -1.0f) {
+inline float terrain_height(float x, float z, float world_width, float world_height, float town_center_x = -1.0f,
+                            float town_center_z = -1.0f) {
     // Flatten terrain around the town center, not the world center.
     // The town may be at (4000, 4000) in a 32000x32000 world.
     float flat_center_x = (town_center_x >= 0.0f) ? town_center_x : (world_width / 2.0f);
@@ -126,8 +130,8 @@ inline void generate_procedural(mmo::protocol::HeightmapChunk& chunk, float worl
             float world_x = chunk.world_origin_x + u * chunk.world_size;
             float world_z = chunk.world_origin_z + v * chunk.world_size;
 
-            float height = detail::terrain_height(world_x, world_z, world_width, world_height,
-                                                  town_center_x, town_center_z);
+            float height =
+                detail::terrain_height(world_x, world_z, world_width, world_height, town_center_x, town_center_z);
             heightmap_set(chunk, x, z, height);
         }
     }

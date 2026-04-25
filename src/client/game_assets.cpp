@@ -1,10 +1,10 @@
 // Game asset loading — model registration for the runtime ModelManager.
 // Method of mmo::client::Game (declared in game.hpp).
 
-#include "game.hpp"
 #include "engine/model_loader.hpp"
 #include "engine/procedural/rock_generator.hpp"
 #include "engine/procedural/tree_generator.hpp"
+#include "game.hpp"
 #include <future>
 #include <iostream>
 #include <memory>
@@ -24,18 +24,28 @@ bool Game::load_models(const std::string& assets_path) {
 
     using mmo::engine::INVALID_MODEL_HANDLE;
     if (mdl.load_model("warrior", models_path + "warrior_rigged.glb") == INVALID_MODEL_HANDLE) {
-        if (mdl.load_model("warrior", models_path + "warrior.glb") == INVALID_MODEL_HANDLE) success = false;
+        if (mdl.load_model("warrior", models_path + "warrior.glb") == INVALID_MODEL_HANDLE) {
+            success = false;
+        }
     }
     if (mdl.load_model("mage", models_path + "mage_rigged.glb") == INVALID_MODEL_HANDLE) {
-        if (mdl.load_model("mage", models_path + "mage.glb") == INVALID_MODEL_HANDLE) success = false;
+        if (mdl.load_model("mage", models_path + "mage.glb") == INVALID_MODEL_HANDLE) {
+            success = false;
+        }
     }
     if (mdl.load_model("paladin", models_path + "paladin_rigged.glb") == INVALID_MODEL_HANDLE) {
-        if (mdl.load_model("paladin", models_path + "paladin.glb") == INVALID_MODEL_HANDLE) success = false;
+        if (mdl.load_model("paladin", models_path + "paladin.glb") == INVALID_MODEL_HANDLE) {
+            success = false;
+        }
     }
     if (mdl.load_model("archer", models_path + "archer_rigged.glb") == INVALID_MODEL_HANDLE) {
-        if (mdl.load_model("archer", models_path + "archer.glb") == INVALID_MODEL_HANDLE) success = false;
+        if (mdl.load_model("archer", models_path + "archer.glb") == INVALID_MODEL_HANDLE) {
+            success = false;
+        }
     }
-    if (mdl.load_model("npc_enemy", models_path + "npc_enemy.glb") == INVALID_MODEL_HANDLE) success = false;
+    if (mdl.load_model("npc_enemy", models_path + "npc_enemy.glb") == INVALID_MODEL_HANDLE) {
+        success = false;
+    }
 
     mdl.load_model("ground_grass", models_path + "ground_grass.glb");
     mdl.load_model("ground_stone", models_path + "ground_stone.glb");
@@ -72,38 +82,38 @@ bool Game::load_models(const std::string& assets_path) {
     std::vector<ModelTask> tasks;
     tasks.reserve(26);
 
-    using RockGen = std::unique_ptr<Model>(*)(uint32_t, const std::string&);
+    using RockGen = std::unique_ptr<Model> (*)(uint32_t, const std::string&);
     auto launch_rock = [&](const char* name, RockGen gen_fn) {
         tasks.push_back(std::async(std::launch::async, [name, gen_fn]() {
             return std::make_pair(std::string(name), gen_fn(42, std::string{}));
         }));
     };
     launch_rock("rock_boulder", &procedural::RockGenerator::generate_boulder);
-    launch_rock("rock_slate",   &procedural::RockGenerator::generate_slate);
-    launch_rock("rock_spire",   &procedural::RockGenerator::generate_spire);
+    launch_rock("rock_slate", &procedural::RockGenerator::generate_slate);
+    launch_rock("rock_spire", &procedural::RockGenerator::generate_spire);
     launch_rock("rock_cluster", &procedural::RockGenerator::generate_cluster);
-    launch_rock("rock_mossy",   &procedural::RockGenerator::generate_mossy);
+    launch_rock("rock_mossy", &procedural::RockGenerator::generate_mossy);
 
     std::string tex_path = assets_path + "/textures";
     struct TreePreset {
         const char* name;
-        std::unique_ptr<Model>(*gen)(uint32_t, const std::string&);
+        std::unique_ptr<Model> (*gen)(uint32_t, const std::string&);
     };
     TreePreset presets[] = {
-        {"tree_oak",    procedural::TreeGenerator::generate_oak},
-        {"tree_pine",   procedural::TreeGenerator::generate_pine},
-        {"tree_dead",   procedural::TreeGenerator::generate_dead},
+        {"tree_oak", procedural::TreeGenerator::generate_oak},
+        {"tree_pine", procedural::TreeGenerator::generate_pine},
+        {"tree_dead", procedural::TreeGenerator::generate_dead},
         {"tree_willow", procedural::TreeGenerator::generate_willow},
-        {"tree_birch",  procedural::TreeGenerator::generate_birch},
-        {"tree_maple",  procedural::TreeGenerator::generate_maple},
-        {"tree_aspen",  procedural::TreeGenerator::generate_aspen},
+        {"tree_birch", procedural::TreeGenerator::generate_birch},
+        {"tree_maple", procedural::TreeGenerator::generate_maple},
+        {"tree_aspen", procedural::TreeGenerator::generate_aspen},
     };
     for (auto& preset : presets) {
         for (int v = 0; v < 3; v++) {
             std::string variant_name = std::string(preset.name) + "_" + std::to_string(v);
             uint32_t seed = static_cast<uint32_t>(v * 1000 + 42);
-            tasks.push_back(std::async(std::launch::async,
-                [name = std::move(variant_name), seed, tex_path, gen = preset.gen]() {
+            tasks.push_back(
+                std::async(std::launch::async, [name = std::move(variant_name), seed, tex_path, gen = preset.gen]() {
                     return std::make_pair(name, gen(seed, tex_path));
                 }));
         }
@@ -117,9 +127,9 @@ bool Game::load_models(const std::string& assets_path) {
     }
 
     if (success) {
-        std::cout << "All 3D models loaded successfully" << std::endl;
+        std::cout << "All 3D models loaded successfully" << '\n';
     } else {
-        std::cerr << "Warning: Some models failed to load" << std::endl;
+        std::cerr << "Warning: Some models failed to load" << '\n';
     }
 
     return success;

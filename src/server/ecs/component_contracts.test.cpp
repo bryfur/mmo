@@ -1,7 +1,7 @@
 // Force the static_asserts in component_contracts.hpp to be evaluated.
 
 #include "server/ecs/component_contracts.hpp"
-#include "server/math/movement_speed.hpp"  // also asserts Formula<MovementSpeed>
+#include "server/math/movement_speed.hpp" // also asserts Formula<MovementSpeed>
 
 #include <gtest/gtest.h>
 

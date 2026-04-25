@@ -11,7 +11,9 @@ void update_buffs(entt::registry& registry, float dt) {
     for (auto entity : view) {
         auto& buff_state = view.get<ecs::BuffState>(entity);
 
-        if (buff_state.effects.empty()) continue;
+        if (buff_state.effects.empty()) {
+            continue;
+        }
 
         // Process each effect
         for (auto& effect : buff_state.effects) {
@@ -19,8 +21,7 @@ void update_buffs(entt::registry& registry, float dt) {
             effect.duration -= dt;
 
             // Tick DoT/HoT effects
-            if (effect.type == ecs::StatusEffect::Type::Burn ||
-                effect.type == ecs::StatusEffect::Type::Poison) {
+            if (effect.type == ecs::StatusEffect::Type::Burn || effect.type == ecs::StatusEffect::Type::Poison) {
                 effect.tick_timer -= dt;
                 if (effect.tick_timer <= 0.0f) {
                     effect.tick_timer += effect.tick_interval;
@@ -50,11 +51,9 @@ void update_buffs(entt::registry& registry, float dt) {
         }
 
         // Remove expired effects
-        buff_state.effects.erase(
-            std::remove_if(buff_state.effects.begin(), buff_state.effects.end(),
-                [](const ecs::StatusEffect& e) { return e.duration <= 0.0f; }),
-            buff_state.effects.end()
-        );
+        buff_state.effects.erase(std::remove_if(buff_state.effects.begin(), buff_state.effects.end(),
+                                                [](const ecs::StatusEffect& e) { return e.duration <= 0.0f; }),
+                                 buff_state.effects.end());
 
         // Don't remove BuffState component - it's a permanent component on all
         // entities that can receive effects. Removing it while iterating
@@ -63,7 +62,9 @@ void update_buffs(entt::registry& registry, float dt) {
 }
 
 void apply_effect(entt::registry& registry, entt::entity target, ecs::StatusEffect effect) {
-    if (!registry.valid(target)) return;
+    if (!registry.valid(target)) {
+        return;
+    }
 
     // CC immunity: block crowd control effects on players with the talent
     if (registry.all_of<ecs::TalentPassiveState>(target)) {
@@ -73,7 +74,7 @@ void apply_effect(entt::registry& registry, entt::entity target, ecs::StatusEffe
                 case ecs::StatusEffect::Type::Root:
                 case ecs::StatusEffect::Type::Freeze:
                 case ecs::StatusEffect::Type::Slow:
-                    return;  // Blocked by Unstoppable Force
+                    return; // Blocked by Unstoppable Force
                 default:
                     break;
             }
@@ -121,19 +122,23 @@ void apply_effect(entt::registry& registry, entt::entity target, ecs::StatusEffe
 }
 
 void remove_effect(entt::registry& registry, entt::entity target, ecs::StatusEffect::Type type) {
-    if (!registry.valid(target)) return;
-    if (!registry.all_of<ecs::BuffState>(target)) return;
+    if (!registry.valid(target)) {
+        return;
+    }
+    if (!registry.all_of<ecs::BuffState>(target)) {
+        return;
+    }
 
     auto& buff_state = registry.get<ecs::BuffState>(target);
-    buff_state.effects.erase(
-        std::remove_if(buff_state.effects.begin(), buff_state.effects.end(),
-            [type](const ecs::StatusEffect& e) { return e.type == type; }),
-        buff_state.effects.end()
-    );
+    buff_state.effects.erase(std::remove_if(buff_state.effects.begin(), buff_state.effects.end(),
+                                            [type](const ecs::StatusEffect& e) { return e.type == type; }),
+                             buff_state.effects.end());
 }
 
 void clear_effects(entt::registry& registry, entt::entity target) {
-    if (!registry.valid(target)) return;
+    if (!registry.valid(target)) {
+        return;
+    }
     if (registry.all_of<ecs::BuffState>(target)) {
         registry.get<ecs::BuffState>(target).effects.clear();
     }

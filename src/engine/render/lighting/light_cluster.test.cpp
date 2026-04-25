@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 
-#include "engine/render/lighting/light_cluster.hpp"
 #include "engine/render/lighting/light.hpp"
+#include "engine/render/lighting/light_cluster.hpp"
 #include "engine/scene/camera_state.hpp"
 
 #include <glm/ext/matrix_clip_space.hpp>
@@ -27,9 +27,9 @@ public:
 };
 
 CameraState make_camera(uint32_t /*w*/, uint32_t /*h*/, float fov_deg = 60.0f, float aspect = 16.0f / 9.0f,
-                       float near_plane = 0.1f, float far_plane = 100.0f) {
+                        float near_plane = 0.1f, float far_plane = 100.0f) {
     CameraState c;
-    c.view = glm::mat4(1.0f);  // camera at origin looking down -Z
+    c.view = glm::mat4(1.0f); // camera at origin looking down -Z
     c.projection = glm::perspective(glm::radians(fov_deg), aspect, near_plane, far_plane);
     c.view_projection = c.projection * c.view;
     c.position = glm::vec3(0.0f);
@@ -44,13 +44,12 @@ struct CpuOnlyClusterGrid {
     bool inited = false;
 
     // Simulate the begin/add/build pipeline using a stub allocator: skip init().
-    void run(const CameraState& cam, uint32_t w, uint32_t h, float n, float f,
-             const std::vector<PointLight>& points,
+    void run(const CameraState& cam, uint32_t w, uint32_t h, float n, float f, const std::vector<PointLight>& points,
              const std::vector<SpotLight>& spots) {
         // begin_frame() doesn't touch GPU buffers - safe even without init().
         g.begin_frame(cam, w, h, n, f);
-        for (auto& p : points) g.add_point_light(p);
-        for (auto& s : spots)  g.add_spot_light(s);
+        for (const auto& p : points) g.add_point_light(p);
+        for (const auto& s : spots) g.add_spot_light(s);
         g.build();
     }
 };
@@ -72,9 +71,9 @@ TEST(ClusterGrid, EmptySceneAllOffsetsZero) {
 
 TEST(ClusterGrid, SingleLightAtOriginTouchesNearClusters) {
     PointLight p{};
-    p.position  = glm::vec3(0.0f, 0.0f, -5.0f);
-    p.radius    = 3.0f;
-    p.color     = glm::vec3(1.0f);
+    p.position = glm::vec3(0.0f, 0.0f, -5.0f);
+    p.radius = 3.0f;
+    p.color = glm::vec3(1.0f);
     p.intensity = 1.0f;
 
     CpuOnlyClusterGrid cg;
@@ -97,9 +96,9 @@ TEST(ClusterGrid, SingleLightAtOriginTouchesNearClusters) {
 TEST(ClusterGrid, LightFarBehindCameraTouchesNoClusters) {
     PointLight p{};
     // Place light far behind camera (positive Z is behind for default view).
-    p.position  = glm::vec3(0.0f, 0.0f, 500.0f);
-    p.radius    = 1.0f;
-    p.color     = glm::vec3(1.0f);
+    p.position = glm::vec3(0.0f, 0.0f, 500.0f);
+    p.radius = 1.0f;
+    p.color = glm::vec3(1.0f);
     p.intensity = 1.0f;
 
     CpuOnlyClusterGrid cg;
@@ -124,9 +123,9 @@ TEST(ClusterGrid, RandomLightsAllIndicesInBounds) {
     std::vector<PointLight> lights;
     for (int i = 0; i < 100; ++i) {
         PointLight p{};
-        p.position  = glm::vec3(px(rng), py(rng), pz(rng));
-        p.radius    = pr(rng);
-        p.color     = glm::vec3(1.0f);
+        p.position = glm::vec3(px(rng), py(rng), pz(rng));
+        p.radius = pr(rng);
+        p.color = glm::vec3(1.0f);
         p.intensity = 1.0f;
         lights.push_back(p);
     }
@@ -156,9 +155,9 @@ TEST(ClusterGrid, LightLimitTruncatesPastMaxLights) {
     cg.g.begin_frame(cam, 1920, 1080, 0.1f, 100.0f);
     for (uint32_t i = 0; i < MAX_LIGHTS + 50; ++i) {
         PointLight p{};
-        p.position  = glm::vec3(0.0f, 0.0f, -2.0f);
-        p.radius    = 0.5f;
-        p.color     = glm::vec3(1.0f);
+        p.position = glm::vec3(0.0f, 0.0f, -2.0f);
+        p.radius = 0.5f;
+        p.color = glm::vec3(1.0f);
         p.intensity = 1.0f;
         cg.g.add_point_light(p);
     }
@@ -177,14 +176,15 @@ TEST(ClusterGrid, ParallelBuildIsDeterministic) {
     std::vector<PointLight> lights;
     for (int i = 0; i < 200; ++i) {
         PointLight p{};
-        p.position  = glm::vec3(px(rng), py(rng), pz(rng));
-        p.radius    = pr(rng);
-        p.color     = glm::vec3(1.0f);
+        p.position = glm::vec3(px(rng), py(rng), pz(rng));
+        p.radius = pr(rng);
+        p.color = glm::vec3(1.0f);
         p.intensity = 1.0f;
         lights.push_back(p);
     }
 
-    CpuOnlyClusterGrid a, b;
+    CpuOnlyClusterGrid a;
+    CpuOnlyClusterGrid b;
     a.run(make_camera(1920, 1080), 1920, 1080, 0.1f, 100.0f, lights, {});
     b.run(make_camera(1920, 1080), 1920, 1080, 0.1f, 100.0f, lights, {});
 
@@ -194,6 +194,6 @@ TEST(ClusterGrid, ParallelBuildIsDeterministic) {
 
 TEST(LightStruct, SizesMatchSpec) {
     EXPECT_EQ(sizeof(PointLight), 32u);
-    EXPECT_EQ(sizeof(SpotLight),  64u);
+    EXPECT_EQ(sizeof(SpotLight), 64u);
     EXPECT_EQ(sizeof(LightHeader), 8u);
 }

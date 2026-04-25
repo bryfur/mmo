@@ -2,16 +2,16 @@
 // Lives in its own translation unit so game.cpp keeps a manageable size; the
 // methods below are still members of mmo::client::Game declared in game.hpp.
 
-#include "game.hpp"
 #include "client/ecs/components.hpp"
 #include "client/game_state.hpp"
 #include "client/systems/npc_interaction.hpp"
+#include "game.hpp"
 #include "protocol/gameplay_msgs.hpp"
-#include <SDL3/SDL_keyboard.h>
-#include <SDL3/SDL_scancode.h>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <SDL3/SDL_keyboard.h>
+#include <SDL3/SDL_scancode.h>
 #include <string>
 #include <vector>
 
@@ -25,10 +25,11 @@ using namespace mmo::protocol;
 // ---------------------------------------------------------------------------
 
 void Game::send_player_input(float dt) {
-    const float send_interval =
-        world_config_.tick_rate > 0 ? (1.0f / world_config_.tick_rate) : 0.05f;
+    const float send_interval = world_config_.tick_rate > 0 ? (1.0f / world_config_.tick_rate) : 0.05f;
     input_send_timer_ += dt;
-    if (input_send_timer_ < send_interval) return;
+    if (input_send_timer_ < send_interval) {
+        return;
+    }
     input_send_timer_ -= send_interval;
 
     const auto& eng_input = input().get_input();
@@ -45,7 +46,7 @@ void Game::send_player_input(float dt) {
     net_input.attack_dir_y = eng_input.attack_dir_y;
 
     // Skip the wire if nothing changed — saves bandwidth on idle frames.
-    if (std::memcmp(&net_input, &last_sent_input_, sizeof(PlayerInput)) != 0) {
+    if (net_input != last_sent_input_) {
         network_.send_input(net_input);
         last_sent_input_ = net_input;
     }
@@ -71,12 +72,8 @@ void Game::process_global_hotkeys() {
 
     // Open chat on Enter — only when no other modal is grabbing input and the
     // player is alive (death overlay must block all input).
-    if (key_chat_open_.just_pressed(keys[SDL_SCANCODE_RETURN])
-        && !menu_open
-        && !panel_state_.is_panel_open()
-        && !hud_state_.dialogue.visible
-        && !hud_state_.vendor.visible
-        && !player_dead_) {
+    if (key_chat_open_.just_pressed(keys[SDL_SCANCODE_RETURN]) && !menu_open && !panel_state_.is_panel_open() &&
+        !hud_state_.dialogue.visible && !hud_state_.vendor.visible && !player_dead_) {
         hud_state_.chat.input_active = true;
         hud_state_.chat.input_buffer.clear();
         input().set_text_input_enabled(true);
@@ -84,12 +81,16 @@ void Game::process_global_hotkeys() {
 }
 
 void Game::process_party_invite_input() {
-    if (hud_state_.party.pending_inviter_id == 0) return;
+    if (hud_state_.party.pending_inviter_id == 0) {
+        return;
+    }
 
     const bool* keys = SDL_GetKeyboardState(nullptr);
     const bool yes = key_party_y_.just_pressed(keys[SDL_SCANCODE_Y]);
-    const bool no  = key_party_n_.just_pressed(keys[SDL_SCANCODE_N]);
-    if (!yes && !no) return;
+    const bool no = key_party_n_.just_pressed(keys[SDL_SCANCODE_N]);
+    if (!yes && !no) {
+        return;
+    }
 
     PartyInviteRespondMsg m;
     m.inviter_id = hud_state_.party.pending_inviter_id;
@@ -130,11 +131,17 @@ void Game::update_npc_interaction_frame() {
 
 void Game::process_skill_keys() {
     const int skill_key = input_bindings_->skill_pressed();
-    if (skill_key < 1 || skill_key > 5) return;
-    if (panel_state_.any_panel_open()) return;
+    if (skill_key < 1 || skill_key > 5) {
+        return;
+    }
+    if (panel_state_.any_panel_open()) {
+        return;
+    }
 
     auto& slot = hud_state_.skill_slots[skill_key - 1];
-    if (!slot.available || slot.cooldown > 0.0f) return;
+    if (!slot.available || slot.cooldown > 0.0f) {
+        return;
+    }
 
     const auto& eng_input = input().get_input();
     SkillUseMsg msg;
@@ -153,14 +160,18 @@ void Game::tick_combat_cooldowns(float dt) {
         auto& combat = view.get<ecs::Combat>(entity);
         if (combat.current_cooldown > 0.0f) {
             combat.current_cooldown -= dt;
-            if (combat.current_cooldown < 0.0f) combat.current_cooldown = 0.0f;
+            if (combat.current_cooldown < 0.0f) {
+                combat.current_cooldown = 0.0f;
+            }
         }
     }
 }
 
 void Game::sync_local_player_to_camera_and_hud() {
     auto it = network_to_entity_.find(local_player_id_);
-    if (it == network_to_entity_.end() || !registry_.valid(it->second)) return;
+    if (it == network_to_entity_.end() || !registry_.valid(it->second)) {
+        return;
+    }
 
     const auto entity = it->second;
     const auto& transform = registry_.get<ecs::Transform>(entity);
@@ -188,9 +199,8 @@ void Game::update_camera_for_player() {
     camera().set_yaw(input().get_camera_yaw());
     camera().set_pitch(input().get_camera_pitch());
 
-    const bool sprinting = input_bindings_->sprinting()
-        && (input().move_forward() || input().move_backward()
-            || input().move_left() || input().move_right());
+    const bool sprinting = input_bindings_->sprinting() && (input().move_forward() || input().move_backward() ||
+                                                            input().move_left() || input().move_right());
     camera().set_config(sprinting ? sprint_camera_config_ : exploration_camera_config_);
 
     const float zoom_delta = input().get_camera_zoom_delta();
@@ -233,7 +243,8 @@ void Game::update_panel_input(float /*dt*/) {
             if (panel_dlg_up_.just_pressed(dlg_up_now) && hud_state_.dialogue.selected_option > 0) {
                 hud_state_.dialogue.selected_option--;
             }
-            if (panel_dlg_down_.just_pressed(dlg_down_now) && hud_state_.dialogue.selected_option < hud_state_.dialogue.quest_count - 1) {
+            if (panel_dlg_down_.just_pressed(dlg_down_now) &&
+                hud_state_.dialogue.selected_option < hud_state_.dialogue.quest_count - 1) {
                 hud_state_.dialogue.selected_option++;
             }
 
@@ -272,7 +283,8 @@ void Game::update_panel_input(float /*dt*/) {
         if (panel_inv_up_.just_pressed(up_now) && panel_state_.inventory_cursor > 0) {
             panel_state_.inventory_cursor--;
         }
-        if (panel_inv_down_.just_pressed(down_now) && panel_state_.inventory_cursor < PanelState::MAX_INVENTORY_SLOTS - 1) {
+        if (panel_inv_down_.just_pressed(down_now) &&
+            panel_state_.inventory_cursor < PanelState::MAX_INVENTORY_SLOTS - 1) {
             panel_state_.inventory_cursor++;
         }
 
@@ -315,7 +327,9 @@ void Game::update_panel_input(float /*dt*/) {
         bool enter_now = keys[SDL_SCANCODE_RETURN];
 
         int max_cursor = static_cast<int>(panel_state_.talent_tree.size()) - 1;
-        if (max_cursor < 0) max_cursor = 0;
+        if (max_cursor < 0) {
+            max_cursor = 0;
+        }
 
         if (panel_talent_up_.just_pressed(up_now) && panel_state_.talent_cursor > 0) {
             panel_state_.talent_cursor--;
@@ -325,13 +339,16 @@ void Game::update_panel_input(float /*dt*/) {
         }
 
         // Unlock talent on Enter if we have points and a valid selection
-        if (panel_talent_enter_.just_pressed(enter_now) && panel_state_.talent_points > 0
-            && panel_state_.talent_cursor < static_cast<int>(panel_state_.talent_tree.size())) {
+        if (panel_talent_enter_.just_pressed(enter_now) && panel_state_.talent_points > 0 &&
+            panel_state_.talent_cursor < static_cast<int>(panel_state_.talent_tree.size())) {
             const auto& talent = panel_state_.talent_tree[panel_state_.talent_cursor];
             // Only unlock if not already unlocked
             bool already_unlocked = false;
             for (const auto& ut : panel_state_.unlocked_talents) {
-                if (ut == talent.id) { already_unlocked = true; break; }
+                if (ut == talent.id) {
+                    already_unlocked = true;
+                    break;
+                }
             }
             if (!already_unlocked) {
                 TalentUnlockMsg msg;
@@ -357,8 +374,7 @@ void Game::update_panel_input(float /*dt*/) {
         // Abandon quest on Delete/X (local removal)
         if (panel_quest_del_.just_pressed(del_now) &&
             panel_state_.quest_cursor < static_cast<int>(hud_state_.tracked_quests.size())) {
-            hud_state_.tracked_quests.erase(
-                hud_state_.tracked_quests.begin() + panel_state_.quest_cursor);
+            hud_state_.tracked_quests.erase(hud_state_.tracked_quests.begin() + panel_state_.quest_cursor);
             if (panel_state_.quest_cursor > 0 &&
                 panel_state_.quest_cursor >= static_cast<int>(hud_state_.tracked_quests.size())) {
                 panel_state_.quest_cursor--;
@@ -376,23 +392,21 @@ void Game::update_panel_input(float /*dt*/) {
 void Game::update_damage_numbers(float dt) {
     for (auto& dn : hud_state_.damage_numbers) {
         dn.timer -= dt;
-        dn.y += 40.0f * dt;  // Float upward
+        dn.y += 40.0f * dt; // Float upward
     }
     // Remove expired
-    hud_state_.damage_numbers.erase(
-        std::remove_if(hud_state_.damage_numbers.begin(), hud_state_.damage_numbers.end(),
-            [](const DamageNumber& d) { return d.timer <= 0.0f; }),
-        hud_state_.damage_numbers.end());
+    hud_state_.damage_numbers.erase(std::remove_if(hud_state_.damage_numbers.begin(), hud_state_.damage_numbers.end(),
+                                                   [](const DamageNumber& d) { return d.timer <= 0.0f; }),
+                                    hud_state_.damage_numbers.end());
 }
 
 void Game::update_notifications(float dt) {
     for (auto& n : hud_state_.notifications) {
         n.timer -= dt;
     }
-    hud_state_.notifications.erase(
-        std::remove_if(hud_state_.notifications.begin(), hud_state_.notifications.end(),
-            [](const Notification& n) { return n.timer <= 0.0f; }),
-        hud_state_.notifications.end());
+    hud_state_.notifications.erase(std::remove_if(hud_state_.notifications.begin(), hud_state_.notifications.end(),
+                                                  [](const Notification& n) { return n.timer <= 0.0f; }),
+                                   hud_state_.notifications.end());
 }
 
 
@@ -412,14 +426,18 @@ void Game::update_chat_input() {
         input().set_text_input_enabled(false);
     }
 
-    if (!chat.input_active) return;
+    if (!chat.input_active) {
+        return;
+    }
 
     auto& ih = input();
 
     // Consume characters typed since the last frame.
     std::string typed = ih.take_text_input();
     for (char c : typed) {
-        if (chat.input_buffer.size() < 180) chat.input_buffer.push_back(c);
+        if (chat.input_buffer.size() < 180) {
+            chat.input_buffer.push_back(c);
+        }
     }
 
     if (ih.text_backspace_pressed() && !chat.input_buffer.empty()) {
@@ -451,8 +469,7 @@ void Game::update_chat_input() {
                     network_.send_raw(protocol::build_packet(protocol::MessageType::PartyInvite, m));
                 }
             } else if (txt == "/leave" || txt == "/disband") {
-                network_.send_raw(protocol::build_packet(
-                    protocol::MessageType::PartyLeave, std::vector<uint8_t>{}));
+                network_.send_raw(protocol::build_packet(protocol::MessageType::PartyLeave, std::vector<uint8_t>{}));
             } else if (txt.rfind("/craft ", 0) == 0) {
                 std::string rid = txt.substr(7);
                 while (!rid.empty() && rid.front() == ' ') rid.erase(rid.begin());
@@ -467,8 +484,8 @@ void Game::update_chat_input() {
                 hud_state_.chat.lines.push_back(header);
                 for (const auto& r : hud_state_.crafting.recipes) {
                     char buf[128];
-                    snprintf(buf, sizeof(buf), "  /craft %s  (%s, lvl %d)",
-                             r.id.c_str(), r.name.c_str(), r.required_level);
+                    snprintf(buf, sizeof(buf), "  /craft %s  (%s, lvl %d)", r.id.c_str(), r.name.c_str(),
+                             r.required_level);
                     hud_state_.chat.add_line(3, "System", buf);
                 }
             } else {
@@ -527,6 +544,19 @@ void Game::process_mouse_ui() {
         npc_interaction_.close();
         hud_state_.dialogue.visible = false;
     }
+    // Bottom-right shortcut bar: each button toggles its panel (or opens
+    // the settings menu) just like its keyboard hotkey would.
+    else if (w == WidgetId::MenuBarInventory) {
+        panel_state_.toggle_panel(ActivePanel::Inventory);
+    } else if (w == WidgetId::MenuBarQuestLog) {
+        panel_state_.toggle_panel(ActivePanel::QuestLog);
+    } else if (w == WidgetId::MenuBarTalents) {
+        panel_state_.toggle_panel(ActivePanel::Talents);
+    } else if (w == WidgetId::MenuBarWorldMap) {
+        panel_state_.toggle_panel(ActivePanel::WorldMap);
+    } else if (w == WidgetId::MenuBarMenu) {
+        menu_system_->open();
+    }
     // Vendor tab toggle
     else if (w == WidgetId::VendorTab) {
         hud_state_.vendor.buying = !hud_state_.vendor.buying;
@@ -534,12 +564,10 @@ void Game::process_mouse_ui() {
         hud_state_.vendor.sell_cursor = hud_state_.vendor.buying ? -1 : 0;
     }
     // Vendor row click → select + purchase
-    else if (raw >= static_cast<int>(WidgetId::VendorRowFirst)
-          && raw <= static_cast<int>(WidgetId::VendorRowLast)) {
+    else if (raw >= static_cast<int>(WidgetId::VendorRowFirst) && raw <= static_cast<int>(WidgetId::VendorRowLast)) {
         int idx = raw - static_cast<int>(WidgetId::VendorRowFirst);
         hud_state_.vendor.cursor = idx;
-        if (hud_state_.vendor.buying
-            && idx < static_cast<int>(hud_state_.vendor.stock.size())) {
+        if (hud_state_.vendor.buying && idx < static_cast<int>(hud_state_.vendor.stock.size())) {
             protocol::VendorBuyMsg msg;
             msg.npc_id = hud_state_.vendor.npc_id;
             msg.stock_index = static_cast<uint8_t>(idx);
@@ -550,10 +578,8 @@ void Game::process_mouse_ui() {
     // Inventory slot click → select + double-click-to-equip-or-use
     // Dialogue quest list click: first click selects, second click on same
     // entry opens the quest detail view (matches Enter key behavior).
-    else if (raw >= static_cast<int>(WidgetId::QuestRowFirst)
-          && raw <= static_cast<int>(WidgetId::QuestRowLast)
-          && npc_interaction_.showing_dialogue
-          && !npc_interaction_.showing_quest_detail) {
+    else if (raw >= static_cast<int>(WidgetId::QuestRowFirst) && raw <= static_cast<int>(WidgetId::QuestRowLast) &&
+             npc_interaction_.showing_dialogue && !npc_interaction_.showing_quest_detail) {
         int idx = raw - static_cast<int>(WidgetId::QuestRowFirst);
         if (idx >= 0 && idx < static_cast<int>(npc_interaction_.available_quests.size())) {
             if (npc_interaction_.selected_quest == idx) {
@@ -565,8 +591,7 @@ void Game::process_mouse_ui() {
     }
     // Talent row click → select the row; clicking the already-selected row
     // unlocks the talent (two-step so misclicks don't burn points).
-    else if (raw >= static_cast<int>(WidgetId::TalentRowFirst)
-          && raw <= static_cast<int>(WidgetId::TalentRowLast)) {
+    else if (raw >= static_cast<int>(WidgetId::TalentRowFirst) && raw <= static_cast<int>(WidgetId::TalentRowLast)) {
         int idx = raw - static_cast<int>(WidgetId::TalentRowFirst);
         if (idx >= 0 && idx < static_cast<int>(panel_state_.talent_tree.size())) {
             if (panel_state_.talent_cursor == idx) {
@@ -581,13 +606,12 @@ void Game::process_mouse_ui() {
         }
     }
     // Skill bar click → fire skill at the mouse direction.
-    else if (raw >= static_cast<int>(WidgetId::SkillSlotFirst)
-          && raw <= static_cast<int>(WidgetId::SkillSlotLast)) {
+    else if (raw >= static_cast<int>(WidgetId::SkillSlotFirst) && raw <= static_cast<int>(WidgetId::SkillSlotLast)) {
         int idx = raw - static_cast<int>(WidgetId::SkillSlotFirst);
         if (idx >= 0 && idx < 5) {
             auto& slot = hud_state_.skill_slots[idx];
             if (slot.available && slot.cooldown <= 0.0f && !slot.skill_id.empty()) {
-                auto& eng_input = input().get_input();
+                const auto& eng_input = input().get_input();
                 protocol::SkillUseMsg msg;
                 std::strncpy(msg.skill_id, slot.skill_id.c_str(), 31);
                 msg.dir_x = eng_input.attack_dir_x;
@@ -596,9 +620,8 @@ void Game::process_mouse_ui() {
                 slot.cooldown = slot.max_cooldown;
             }
         }
-    }
-    else if (raw >= static_cast<int>(WidgetId::InventorySlotFirst)
-          && raw <= static_cast<int>(WidgetId::InventorySlotLast)) {
+    } else if (raw >= static_cast<int>(WidgetId::InventorySlotFirst) &&
+               raw <= static_cast<int>(WidgetId::InventorySlotLast)) {
         int idx = raw - static_cast<int>(WidgetId::InventorySlotFirst);
         if (idx < 0 || idx >= PanelState::MAX_INVENTORY_SLOTS) {
             ih.clear_mouse_edges();
@@ -638,13 +661,11 @@ void Game::process_mouse_ui() {
     // frames → leader kicks a member.
     if (mui.right_clicked != WidgetId::None) {
         int rraw = static_cast<int>(mui.right_clicked);
-        if (rraw >= static_cast<int>(WidgetId::PartyKickFirst)
-         && rraw <= static_cast<int>(WidgetId::PartyKickLast)) {
+        if (rraw >= static_cast<int>(WidgetId::PartyKickFirst) && rraw <= static_cast<int>(WidgetId::PartyKickLast)) {
             int idx = rraw - static_cast<int>(WidgetId::PartyKickFirst);
             const auto& party = hud_state_.party;
-            if (idx >= 0 && idx < static_cast<int>(party.members.size())
-                && party.leader_id == local_player_id_
-                && party.members[idx].player_id != local_player_id_) {
+            if (idx >= 0 && idx < static_cast<int>(party.members.size()) && party.leader_id == local_player_id_ &&
+                party.members[idx].player_id != local_player_id_) {
                 protocol::PartyKickMsg m;
                 m.target_id = party.members[idx].player_id;
                 network_.send_raw(protocol::build_packet(protocol::MessageType::PartyKick, m));
@@ -661,7 +682,9 @@ void Game::process_mouse_ui() {
 
 void Game::update_vendor_input() {
     auto& v = hud_state_.vendor;
-    if (!v.visible) return;
+    if (!v.visible) {
+        return;
+    }
 
     const bool* keys = SDL_GetKeyboardState(nullptr);
 
@@ -672,8 +695,12 @@ void Game::update_vendor_input() {
 
     if (!v.stock.empty()) {
         int count = static_cast<int>(v.stock.size());
-        if (vendor_up_.just_pressed(keys[SDL_SCANCODE_UP]) && v.cursor > 0) v.cursor--;
-        if (vendor_down_.just_pressed(keys[SDL_SCANCODE_DOWN]) && v.cursor < count - 1) v.cursor++;
+        if (vendor_up_.just_pressed(keys[SDL_SCANCODE_UP]) && v.cursor > 0) {
+            v.cursor--;
+        }
+        if (vendor_down_.just_pressed(keys[SDL_SCANCODE_DOWN]) && v.cursor < count - 1) {
+            v.cursor++;
+        }
 
         bool enter_active = keys[SDL_SCANCODE_RETURN] && !suppress_enter_this_frame_;
         if (vendor_enter_.just_pressed(enter_active)) {

@@ -1,14 +1,13 @@
 #include "engine/model_utils.hpp"
-#include "engine/model_loader.hpp"
 #include "engine/gpu/gpu_types.hpp"
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/geometric.hpp>
+#include "engine/model_loader.hpp"
 #include <cmath>
+#include <glm/geometric.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 namespace mmo::engine {
 
-glm::mat4 build_model_transform(const Model& model, const glm::vec3& position,
-                                float yaw_radians, float target_size,
+glm::mat4 build_model_transform(const Model& model, const glm::vec3& position, float yaw_radians, float target_size,
                                 float attack_tilt) {
     float scale = (target_size * 1.5f) / model.max_dimension();
 
@@ -27,9 +26,10 @@ glm::mat4 build_model_transform(const Model& model, const glm::vec3& position,
     return mat;
 }
 
-void compute_tangents_from_uvs(std::vector<gpu::Vertex3D>& vertices,
-                                const std::vector<uint32_t>& indices) {
-    if (vertices.empty() || indices.size() < 3) return;
+void compute_tangents_from_uvs(std::vector<gpu::Vertex3D>& vertices, const std::vector<uint32_t>& indices) {
+    if (vertices.empty() || indices.size() < 3) {
+        return;
+    }
 
     std::vector<glm::vec3> tan(vertices.size(), glm::vec3(0.0f));
     std::vector<glm::vec3> btn(vertices.size(), glm::vec3(0.0f));
@@ -39,7 +39,9 @@ void compute_tangents_from_uvs(std::vector<gpu::Vertex3D>& vertices,
         uint32_t i0 = indices[t * 3 + 0];
         uint32_t i1 = indices[t * 3 + 1];
         uint32_t i2 = indices[t * 3 + 2];
-        if (i0 >= vertices.size() || i1 >= vertices.size() || i2 >= vertices.size()) continue;
+        if (i0 >= vertices.size() || i1 >= vertices.size() || i2 >= vertices.size()) {
+            continue;
+        }
 
         const glm::vec3& p0 = vertices[i0].position;
         const glm::vec3& p1 = vertices[i1].position;
@@ -55,13 +57,19 @@ void compute_tangents_from_uvs(std::vector<gpu::Vertex3D>& vertices,
         float y1 = w1.y - w0.y;
         float y2 = w2.y - w0.y;
         float det = x1 * y2 - x2 * y1;
-        if (std::abs(det) < 1e-8f) continue;
+        if (std::abs(det) < 1e-8f) {
+            continue;
+        }
         float inv = 1.0f / det;
         glm::vec3 t_dir = (e1 * y2 - e2 * y1) * inv;
         glm::vec3 b_dir = (e2 * x1 - e1 * x2) * inv;
 
-        tan[i0] += t_dir; tan[i1] += t_dir; tan[i2] += t_dir;
-        btn[i0] += b_dir; btn[i1] += b_dir; btn[i2] += b_dir;
+        tan[i0] += t_dir;
+        tan[i1] += t_dir;
+        tan[i2] += t_dir;
+        btn[i0] += b_dir;
+        btn[i1] += b_dir;
+        btn[i2] += b_dir;
     }
 
     for (size_t i = 0; i < vertices.size(); ++i) {
@@ -76,7 +84,7 @@ void compute_tangents_from_uvs(std::vector<gpu::Vertex3D>& vertices,
         glm::vec3 t = tan[i] - n * glm::dot(n, tan[i]);
         float tlen = glm::length(t);
         if (tlen < 1e-6f) {
-            glm::vec3 axis = std::abs(n.y) < 0.9f ? glm::vec3(0,1,0) : glm::vec3(1,0,0);
+            glm::vec3 axis = std::abs(n.y) < 0.9f ? glm::vec3(0, 1, 0) : glm::vec3(1, 0, 0);
             t = glm::normalize(glm::cross(axis, n));
         } else {
             t /= tlen;

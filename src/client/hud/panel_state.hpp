@@ -23,17 +23,28 @@ struct ItemSlot {
 // Simple item name lookup (client-side, by item_id)
 inline const char* item_name(uint16_t id) {
     switch (id) {
-        case 1: return "Iron Sword";
-        case 2: return "Steel Sword";
-        case 3: return "Leather Armor";
-        case 4: return "Chain Mail";
-        case 5: return "Health Potion";
-        case 6: return "Mana Potion";
-        case 7: return "Wolf Pelt";
-        case 8: return "Boar Tusk";
-        case 9: return "Spider Silk";
-        case 10: return "Goblin Ear";
-        default: return "Unknown Item";
+        case 1:
+            return "Iron Sword";
+        case 2:
+            return "Steel Sword";
+        case 3:
+            return "Leather Armor";
+        case 4:
+            return "Chain Mail";
+        case 5:
+            return "Health Potion";
+        case 6:
+            return "Mana Potion";
+        case 7:
+            return "Wolf Pelt";
+        case 8:
+            return "Boar Tusk";
+        case 9:
+            return "Spider Silk";
+        case 10:
+            return "Goblin Ear";
+        default:
+            return "Unknown Item";
     }
 }
 
@@ -52,7 +63,7 @@ struct TalentNode {
     std::string name;
     std::string description;
     bool unlocked = false;
-    bool available = false;   // Has prerequisites met
+    bool available = false; // Has prerequisites met
     int row = 0;
     int col = 0;
 };
@@ -138,7 +149,7 @@ struct PanelState {
 
     // Talent data (client branch)
     uint8_t talent_points = 0;
-    std::vector<std::string> unlocked_talents;  // String IDs from server
+    std::vector<std::string> unlocked_talents; // String IDs from server
     int talent_cursor = 0;
 
     // Talent tree definition (received from server)
@@ -150,8 +161,8 @@ struct PanelState {
         std::string prerequisite;
         std::string branch_name;
     };
-    std::vector<ClientTalent> talent_tree;  // Full list for player's class
-    float talent_scroll_offset = 0.0f;      // Pixel scroll for talent tree view
+    std::vector<ClientTalent> talent_tree; // Full list for player's class
+    float talent_scroll_offset = 0.0f;     // Pixel scroll for talent tree view
 
     // Quest log cursor (client branch)
     int quest_cursor = 0;
@@ -179,10 +190,18 @@ struct PanelState {
 // ============================================================================
 
 inline uint32_t rarity_color(const std::string& rarity) {
-    if (rarity == "uncommon")  return 0xFF00CC00;
-    if (rarity == "rare")      return 0xFF0088FF;
-    if (rarity == "epic")      return 0xFFCC00CC;
-    if (rarity == "legendary") return 0xFF00AAFF;
+    if (rarity == "uncommon") {
+        return 0xFF00CC00;
+    }
+    if (rarity == "rare") {
+        return 0xFF0088FF;
+    }
+    if (rarity == "epic") {
+        return 0xFFCC00CC;
+    }
+    if (rarity == "legendary") {
+        return 0xFF00AAFF;
+    }
     return 0xFF888888; // common
 }
 

@@ -1,9 +1,9 @@
 #include "volumetric_fog.hpp"
 #include "engine/gpu/gpu_pipeline.hpp"
+#include <algorithm>
+#include <glm/gtc/matrix_inverse.hpp>
 #include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_log.h>
-#include <glm/gtc/matrix_inverse.hpp>
-#include <algorithm>
 
 namespace mmo::engine::render {
 
@@ -44,8 +44,12 @@ void VolumetricFog::shutdown() {
 }
 
 void VolumetricFog::resize(int width, int height) {
-    if (width == width_ && height == height_) return;
-    if (!device_) return;
+    if (width == width_ && height == height_) {
+        return;
+    }
+    if (!device_) {
+        return;
+    }
 
     width_ = width;
     height_ = height;
@@ -59,10 +63,9 @@ void VolumetricFog::resize(int width, int height) {
 void VolumetricFog::create_textures(int width, int height) {
     (void)width;
     (void)height;
-    fog_texture_ = gpu::GPUTexture::create_2d(
-        *device_, fog_width_, fog_height_,
-        SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
-        SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER);
+    fog_texture_ =
+        gpu::GPUTexture::create_2d(*device_, fog_width_, fog_height_, SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
+                                   SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER);
 }
 
 void VolumetricFog::create_sampler() {
@@ -77,7 +80,7 @@ void VolumetricFog::create_sampler() {
 }
 
 bool VolumetricFog::is_ready() const {
-    return fog_texture_ && linear_sampler_;
+    return fog_texture_ && (linear_sampler_ != nullptr);
 }
 
 SDL_GPUTexture* VolumetricFog::fog_texture() const {
@@ -87,18 +90,17 @@ SDL_GPUTexture* VolumetricFog::fog_texture() const {
     return nullptr;
 }
 
-void VolumetricFog::render(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& registry,
-                           SDL_GPUTexture* depth_texture,
-                           const ShadowMap& shadow_map,
-                           const scene::CameraState& camera,
-                           const glm::vec3& light_dir,
-                           bool god_rays_enabled,
-                           bool fog_enabled,
-                           float density_multiplier) {
-    if (!is_ready() || !cmd || !depth_texture) return;
+void VolumetricFog::render(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& registry, SDL_GPUTexture* depth_texture,
+                           const ShadowMap& shadow_map, const scene::CameraState& camera, const glm::vec3& light_dir,
+                           bool god_rays_enabled, bool fog_enabled, float density_multiplier) {
+    if (!is_ready() || !cmd || !depth_texture) {
+        return;
+    }
 
     auto* pipeline = registry.get_pipeline(gpu::PipelineType::VolumetricFog);
-    if (!pipeline) return;
+    if (!pipeline) {
+        return;
+    }
 
     // Build uniforms
     gpu::VolumetricFogUniforms uniforms = {};
@@ -134,7 +136,9 @@ void VolumetricFog::render(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& reg
     color_target.store_op = SDL_GPU_STOREOP_STORE;
 
     SDL_GPURenderPass* pass = SDL_BeginGPURenderPass(cmd, &color_target, 1, nullptr);
-    if (!pass) return;
+    if (!pass) {
+        return;
+    }
 
     pipeline->bind(pass);
     SDL_PushGPUFragmentUniformData(cmd, 0, &uniforms, sizeof(uniforms));

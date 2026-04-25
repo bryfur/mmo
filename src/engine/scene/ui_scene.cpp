@@ -1,4 +1,5 @@
 #include "ui_scene.hpp"
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <utility>
@@ -27,8 +28,7 @@ void UIScene::add_circle(float x, float y, float radius, uint32_t color, int seg
     commands_.push_back(std::move(cmd));
 }
 
-void UIScene::add_circle_outline(float x, float y, float radius, uint32_t color, 
-                                  float line_width, int segments) {
+void UIScene::add_circle_outline(float x, float y, float radius, uint32_t color, float line_width, int segments) {
     UICommand cmd;
     cmd.data = CircleOutlineCommand{x, y, radius, color, line_width, segments};
     commands_.push_back(std::move(cmd));
@@ -52,13 +52,15 @@ void UIScene::add_text(const std::string& text, float x, float y, float scale, u
     commands_.push_back(std::move(cmd));
 }
 
-float UIScene::add_text_wrapped(const std::string& text, float x, float y, float max_width,
-                                 float scale, uint32_t color, float line_height) {
+float UIScene::add_text_wrapped(const std::string& text, float x, float y, float max_width, float scale, uint32_t color,
+                                float line_height) {
     constexpr float CHAR_WIDTH_BASE = 8.0f;
     float char_w = CHAR_WIDTH_BASE * scale;
-    if (line_height <= 0.0f) line_height = 18.0f * scale;
+    if (line_height <= 0.0f) {
+        line_height = 18.0f * scale;
+    }
     int max_chars = static_cast<int>(max_width / char_w);
-    if (max_chars < 1) max_chars = 1;
+    max_chars = std::max(max_chars, 1);
 
     float cur_y = y;
     size_t pos = 0;
@@ -81,13 +83,14 @@ float UIScene::add_text_wrapped(const std::string& text, float x, float y, float
         cur_y += line_height;
         pos = wrap;
         // Skip the space we broke at
-        if (pos < text.size() && text[pos] == ' ') ++pos;
+        if (pos < text.size() && text[pos] == ' ') {
+            ++pos;
+        }
     }
     return cur_y - y;
 }
 
-void UIScene::add_button(float x, float y, float w, float h, const std::string& label,
-                          uint32_t color, bool selected) {
+void UIScene::add_button(float x, float y, float w, float h, const std::string& label, uint32_t color, bool selected) {
     UICommand cmd;
     ButtonCommand btn_cmd;
     btn_cmd.x = x;

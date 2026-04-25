@@ -1,7 +1,7 @@
 #pragma once
 
-#include <glm/glm.hpp>
 #include <cstdint>
+#include <glm/glm.hpp>
 
 namespace mmo::engine::render::lighting {
 
@@ -34,7 +34,7 @@ struct LightHeader {
 };
 
 inline constexpr uint32_t LIGHT_TYPE_POINT = 0;
-inline constexpr uint32_t LIGHT_TYPE_SPOT  = 1;
+inline constexpr uint32_t LIGHT_TYPE_SPOT = 1;
 
 // Cluster grid configuration. Must match clusters.hlsli.
 inline constexpr uint32_t CLUSTER_DIM_X = 16;

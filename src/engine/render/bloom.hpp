@@ -42,8 +42,8 @@ public:
      * @param registry    Pipeline registry for bloom pipelines
      * @param scene_color The offscreen scene color texture to extract bloom from
      */
-    void render(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& registry,
-                SDL_GPUTexture* scene_color, float threshold = 1.0f);
+    void render(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& registry, SDL_GPUTexture* scene_color,
+                float threshold = 1.0f);
 
     /**
      * Get the final bloom result texture for the composite pass.

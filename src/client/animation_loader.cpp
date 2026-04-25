@@ -1,8 +1,8 @@
 #include "animation_loader.hpp"
-#include <nlohmann/json.hpp>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
-#include <filesystem>
+#include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
@@ -14,12 +14,24 @@ namespace {
 using namespace mmo::engine::animation;
 
 TransitionCondition::Op parse_op(const std::string& str) {
-    if (str == "gt") return TransitionCondition::Op::GT;
-    if (str == "lt") return TransitionCondition::Op::LT;
-    if (str == "eq") return TransitionCondition::Op::EQ;
-    if (str == "ne") return TransitionCondition::Op::NE;
-    if (str == "is_true") return TransitionCondition::Op::IS_TRUE;
-    if (str == "is_false") return TransitionCondition::Op::IS_FALSE;
+    if (str == "gt") {
+        return TransitionCondition::Op::GT;
+    }
+    if (str == "lt") {
+        return TransitionCondition::Op::LT;
+    }
+    if (str == "eq") {
+        return TransitionCondition::Op::EQ;
+    }
+    if (str == "ne") {
+        return TransitionCondition::Op::NE;
+    }
+    if (str == "is_true") {
+        return TransitionCondition::Op::IS_TRUE;
+    }
+    if (str == "is_false") {
+        return TransitionCondition::Op::IS_FALSE;
+    }
     return TransitionCondition::Op::GT;
 }
 
@@ -94,7 +106,7 @@ AnimationConfig parse_config(const json& j) {
 
     // Parse states
     if (j.contains("states") && j["states"].is_object()) {
-        for (auto& [name, state_json] : j["states"].items()) {
+        for (const auto& [name, state_json] : j["states"].items()) {
             config.state_machine.add_state(parse_state(name, state_json));
         }
     }
@@ -118,7 +130,7 @@ bool AnimationRegistry::load_config(const std::string& file_path) {
     try {
         std::ifstream file(file_path);
         if (!file.is_open()) {
-            std::cerr << "Failed to open animation config: " << file_path << std::endl;
+            std::cerr << "Failed to open animation config: " << file_path << '\n';
             return false;
         }
 
@@ -134,18 +146,18 @@ bool AnimationRegistry::load_config(const std::string& file_path) {
         std::string config_name = config.name;
         configs_[config_name] = std::move(config);
 
-        std::cout << "Loaded animation config: " << config_name << " from " << file_path << std::endl;
+        std::cout << "Loaded animation config: " << config_name << " from " << file_path << '\n';
         return true;
 
     } catch (const std::exception& e) {
-        std::cerr << "Error loading animation config from " << file_path << ": " << e.what() << std::endl;
+        std::cerr << "Error loading animation config from " << file_path << ": " << e.what() << '\n';
         return false;
     }
 }
 
 bool AnimationRegistry::load_directory(const std::string& directory_path) {
     if (!fs::exists(directory_path) || !fs::is_directory(directory_path)) {
-        std::cerr << "Animation config directory does not exist: " << directory_path << std::endl;
+        std::cerr << "Animation config directory does not exist: " << directory_path << '\n';
         return false;
     }
 
@@ -170,7 +182,7 @@ const AnimationConfig* AnimationRegistry::get_config(const std::string& name) co
 }
 
 bool AnimationRegistry::has_config(const std::string& name) const {
-    return configs_.find(name) != configs_.end();
+    return configs_.contains(name);
 }
 
 void AnimationRegistry::clear() {

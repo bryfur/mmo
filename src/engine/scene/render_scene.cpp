@@ -27,8 +27,8 @@ void RenderScene::clear() {
     draw_grass_ = true;
 }
 
-void RenderScene::add_model(mmo::engine::ModelHandle handle, const glm::mat4& transform,
-                            const glm::vec4& tint, bool force_non_instanced, bool no_fog) {
+void RenderScene::add_model(mmo::engine::ModelHandle handle, const glm::mat4& transform, const glm::vec4& tint,
+                            bool force_non_instanced, bool no_fog) {
     ModelCommand cmd;
     cmd.model_handle = handle;
     cmd.transform = transform;
@@ -38,8 +38,8 @@ void RenderScene::add_model(mmo::engine::ModelHandle handle, const glm::mat4& tr
     model_commands_.push_back(std::move(cmd));
 }
 
-void RenderScene::add_model(std::string model_name, const glm::mat4& transform,
-                            const glm::vec4& tint, bool force_non_instanced, bool no_fog) {
+void RenderScene::add_model(std::string model_name, const glm::mat4& transform, const glm::vec4& tint,
+                            bool force_non_instanced, bool no_fog) {
     ModelCommand cmd;
     cmd.model_name = std::move(model_name);
     cmd.transform = transform;
@@ -50,8 +50,7 @@ void RenderScene::add_model(std::string model_name, const glm::mat4& transform,
 }
 
 void RenderScene::add_skinned_model(mmo::engine::ModelHandle handle, const glm::mat4& transform,
-                                    const std::array<glm::mat4, 128>& bone_matrices,
-                                    const glm::vec4& tint) {
+                                    const std::array<glm::mat4, 128>& bone_matrices, const glm::vec4& tint) {
     SkinnedModelCommand cmd;
     cmd.model_handle = handle;
     cmd.transform = transform;
@@ -61,8 +60,7 @@ void RenderScene::add_skinned_model(mmo::engine::ModelHandle handle, const glm::
 }
 
 void RenderScene::add_skinned_model(std::string model_name, const glm::mat4& transform,
-                                    const std::array<glm::mat4, 128>& bone_matrices,
-                                    const glm::vec4& tint) {
+                                    const std::array<glm::mat4, 128>& bone_matrices, const glm::vec4& tint) {
     SkinnedModelCommand cmd;
     cmd.model_name = std::move(model_name);
     cmd.transform = transform;
@@ -71,10 +69,8 @@ void RenderScene::add_skinned_model(std::string model_name, const glm::mat4& tra
     skinned_commands_.push_back(std::move(cmd));
 }
 
-void RenderScene::add_particle_effect_spawn(const mmo::engine::EffectDefinition* definition,
-                                             const glm::vec3& position,
-                                             const glm::vec3& direction,
-                                             float range) {
+void RenderScene::add_particle_effect_spawn(const mmo::engine::EffectDefinition* definition, const glm::vec3& position,
+                                            const glm::vec3& direction, float range) {
     ParticleEffectSpawnCommand cmd;
     cmd.definition = definition;
     cmd.position = position;
@@ -96,11 +92,9 @@ void RenderScene::clear_lights() {
     spot_lights_.clear();
 }
 
-void RenderScene::add_billboard_3d(float world_x, float world_y, float world_z,
-                                    float width, float fill_ratio,
-                                    uint32_t fill_color, uint32_t bg_color, uint32_t frame_color) {
-    billboards_.push_back({world_x, world_y, world_z, width, fill_ratio,
-                           fill_color, bg_color, frame_color});
+void RenderScene::add_billboard_3d(float world_x, float world_y, float world_z, float width, float fill_ratio,
+                                   uint32_t fill_color, uint32_t bg_color, uint32_t frame_color) {
+    billboards_.push_back({world_x, world_y, world_z, width, fill_ratio, fill_color, bg_color, frame_color});
 }
 
 // ============================================================================
@@ -145,14 +139,14 @@ void RenderScene::add_debug_sphere(const glm::vec3& center, float radius, uint32
 void RenderScene::add_debug_box(const glm::vec3& min, const glm::vec3& max, uint32_t color) {
     // 8 corners of the AABB
     glm::vec3 c[8] = {
-        {min.x, min.y, min.z},  // 0: ---
-        {max.x, min.y, min.z},  // 1: +--
-        {max.x, min.y, max.z},  // 2: +-+
-        {min.x, min.y, max.z},  // 3: --+
-        {min.x, max.y, min.z},  // 4: -+-
-        {max.x, max.y, min.z},  // 5: ++-
-        {max.x, max.y, max.z},  // 6: +++
-        {min.x, max.y, max.z},  // 7: -++
+        {min.x, min.y, min.z}, // 0: ---
+        {max.x, min.y, min.z}, // 1: +--
+        {max.x, min.y, max.z}, // 2: +-+
+        {min.x, min.y, max.z}, // 3: --+
+        {min.x, max.y, min.z}, // 4: -+-
+        {max.x, max.y, min.z}, // 5: ++-
+        {max.x, max.y, max.z}, // 6: +++
+        {min.x, max.y, max.z}, // 7: -++
     };
 
     // 12 edges

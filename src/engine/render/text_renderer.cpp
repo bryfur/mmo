@@ -1,20 +1,20 @@
 #include "text_renderer.hpp"
-#include "../gpu/gpu_device.hpp"
 #include "../gpu/gpu_buffer.hpp"
+#include "../gpu/gpu_device.hpp"
 #include "../gpu/gpu_pipeline.hpp"
 #include "../gpu/pipeline_registry.hpp"
+#include "engine/core/logger.hpp"
+#include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/vector_float4.hpp"
 #include "SDL3/SDL_error.h"
 #include "SDL3/SDL_gpu.h"
 #include "SDL3/SDL_pixels.h"
 #include "SDL3/SDL_stdinc.h"
 #include "SDL3/SDL_surface.h"
 #include "SDL3_ttf/SDL_ttf.h"
-#include "engine/core/logger.hpp"
-#include "glm/ext/matrix_float4x4.hpp"
-#include "glm/ext/vector_float4.hpp"
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
-#include <algorithm>
 #include <string>
 #include <vector>
 
@@ -22,34 +22,34 @@ namespace mmo::engine::render {
 
 namespace gpu = mmo::engine::gpu;
 
-TextRenderer::TextRenderer() {}
+TextRenderer::TextRenderer() = default;
 
 TextRenderer::~TextRenderer() {
     shutdown();
 }
 
 bool TextRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry) {
-    if (initialized_) return true;
-    
+    if (initialized_) {
+        return true;
+    }
+
     device_ = &device;
     pipeline_registry_ = &pipeline_registry;
-    
+
     if (!TTF_Init()) {
         ENGINE_LOG_ERROR("text", "Failed to initialize SDL_ttf: {}", SDL_GetError());
         return false;
     }
-    
+
     // Try to load a default font
-    const char* font_paths[] = {
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/TTF/DejaVuSans.ttf",
-        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
-        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-        "/System/Library/Fonts/Helvetica.ttc",
-        "C:\\Windows\\Fonts\\arial.ttf"
-    };
-    
+    const char* font_paths[] = {"/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                                "/usr/share/fonts/TTF/DejaVuSans.ttf",
+                                "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+                                "/usr/share/fonts/truetype/ubuntu/Ubuntu-R.ttf",
+                                "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+                                "/System/Library/Fonts/Helvetica.ttc",
+                                R"(C:\Windows\Fonts\arial.ttf)"};
+
     for (const char* path : font_paths) {
         font_ = TTF_OpenFont(path, font_size_);
         if (font_) {
@@ -57,26 +57,23 @@ bool TextRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_
             break;
         }
     }
-    
+
     if (!font_) {
         ENGINE_LOG_WARN("text", "Could not load any font, text rendering disabled");
         // Continue without font - not fatal
     }
-    
+
     // Create dynamic vertex buffer for text quads (batched)
     // Each vertex: x, y, u, v (4 floats), 6 vertices per quad
     // Support up to MAX_QUEUED_TEXTS quads
     vertex_buffer_ = gpu::GPUBuffer::create_dynamic(
-        device,
-        gpu::GPUBuffer::Type::Vertex,
-        MAX_QUEUED_TEXTS * VERTICES_PER_QUAD * FLOATS_PER_VERTEX * sizeof(float)
-    );
-    
+        device, gpu::GPUBuffer::Type::Vertex, MAX_QUEUED_TEXTS * VERTICES_PER_QUAD * FLOATS_PER_VERTEX * sizeof(float));
+
     if (!vertex_buffer_) {
         ENGINE_LOG_ERROR("text", "Failed to create text vertex buffer");
         return false;
     }
-    
+
     // Create sampler for text textures
     SDL_GPUSamplerCreateInfo sampler_info = {};
     sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
@@ -85,13 +82,13 @@ bool TextRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_
     sampler_info.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     sampler_info.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
     sampler_info.address_mode_w = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    
+
     sampler_ = SDL_CreateGPUSampler(device.handle(), &sampler_info);
     if (!sampler_) {
         ENGINE_LOG_ERROR("text", "Failed to create text sampler: {}", SDL_GetError());
         return false;
     }
-    
+
     initialized_ = true;
     return true;
 }
@@ -135,7 +132,9 @@ void TextRenderer::set_projection(const glm::mat4& projection) {
 }
 
 void TextRenderer::release_pending_resources() {
-    if (!device_) return;
+    if (!device_) {
+        return;
+    }
 
     current_frame_++;
 
@@ -156,7 +155,7 @@ void TextRenderer::release_pending_resources() {
     pending_transfers_.clear();
 
     // Clean up old cached textures that haven't been used recently
-    for (auto it = text_cache_.begin(); it != text_cache_.end(); ) {
+    for (auto it = text_cache_.begin(); it != text_cache_.end();) {
         if (current_frame_ - it->second.last_used_frame > CACHE_EXPIRY_FRAMES) {
             if (it->second.texture) {
                 SDL_ReleaseGPUTexture(device_->handle(), it->second.texture);
@@ -168,8 +167,8 @@ void TextRenderer::release_pending_resources() {
     }
 }
 
-TextRenderer::CachedText* TextRenderer::get_or_create_text_texture(
-    SDL_GPUCommandBuffer* cmd, const std::string& text, bool in_render_pass) {
+TextRenderer::CachedText* TextRenderer::get_or_create_text_texture(SDL_GPUCommandBuffer* cmd, const std::string& text,
+                                                                   bool in_render_pass) {
 
     // Check cache first
     auto it = text_cache_.find(text);
@@ -290,7 +289,9 @@ void TextRenderer::prepare_text_textures(SDL_GPUCommandBuffer* cmd, const std::v
 }
 
 void TextRenderer::create_pending_textures(SDL_GPUCommandBuffer* cmd) {
-    if (pending_text_creates_.empty()) return;
+    if (pending_text_creates_.empty()) {
+        return;
+    }
 
     // Create textures for all pending text strings
     for (const auto& text : pending_text_creates_) {
@@ -299,9 +300,8 @@ void TextRenderer::create_pending_textures(SDL_GPUCommandBuffer* cmd) {
     pending_text_creates_.clear();
 }
 
-void TextRenderer::draw_text(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* render_pass,
-                             const std::string& text, float x, float y,
-                             uint32_t color, float scale) {
+void TextRenderer::draw_text(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* render_pass, const std::string& text,
+                             float x, float y, uint32_t color, float scale) {
     if (!font_ || text.empty() || !device_ || !pipeline_registry_ || !cmd || !render_pass) {
         return;
     }
@@ -325,15 +325,9 @@ void TextRenderer::draw_text(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* rende
     float h = cached->height * scale;
 
     // Build quad vertices (pos.x, pos.y, tex.x, tex.y)
-    float vertices[] = {
-        x,     y,     0.0f, 0.0f,
-        x + w, y,     1.0f, 0.0f,
-        x + w, y + h, 1.0f, 1.0f,
+    float vertices[] = {x, y, 0.0f, 0.0f, x + w, y,     1.0f, 0.0f, x + w, y + h, 1.0f, 1.0f,
 
-        x,     y,     0.0f, 0.0f,
-        x + w, y + h, 1.0f, 1.0f,
-        x,     y + h, 0.0f, 1.0f
-    };
+                        x, y, 0.0f, 0.0f, x + w, y + h, 1.0f, 1.0f, x,     y + h, 0.0f, 1.0f};
 
     // Upload vertex data
     vertex_buffer_->update(cmd, vertices, sizeof(vertices));
@@ -368,35 +362,42 @@ void TextRenderer::draw_text(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* rende
 }
 
 void TextRenderer::draw_text_centered(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* render_pass,
-                                      const std::string& text, float x, float y, 
-                                      uint32_t color, float scale) {
+                                      const std::string& text, float x, float y, uint32_t color, float scale) {
     int width = get_text_width(text, scale);
     draw_text(cmd, render_pass, text, x - width / 2.0f, y, color, scale);
 }
 
 int TextRenderer::get_text_width(const std::string& text, float scale) {
-    if (!font_ || text.empty()) return 0;
-    
-    int w = 0, h = 0;
+    if (!font_ || text.empty()) {
+        return 0;
+    }
+
+    int w = 0;
+    int h = 0;
     TTF_GetStringSize(font_, text.c_str(), 0, &w, &h);
     return static_cast<int>(w * scale);
 }
 
 int TextRenderer::get_text_height(float scale) {
-    if (!font_) return 0;
+    if (!font_) {
+        return 0;
+    }
     return static_cast<int>(TTF_GetFontHeight(font_) * scale);
 }
 
-void TextRenderer::queue_text_draw(const std::string& text, float x, float y,
-                                    uint32_t color, float scale) {
-    if (!font_ || text.empty()) return;
-    if (queued_texts_.size() >= MAX_QUEUED_TEXTS) return;
+void TextRenderer::queue_text_draw(const std::string& text, float x, float y, uint32_t color, float scale) {
+    if (!font_ || text.empty()) {
+        return;
+    }
+    if (queued_texts_.size() >= MAX_QUEUED_TEXTS) {
+        return;
+    }
 
     // Check if text is cached - if not, queue for texture creation
     auto it = text_cache_.find(text);
     if (it == text_cache_.end()) {
         pending_text_creates_.insert(text);
-        return;  // Text will be rendered next frame after texture is created
+        return; // Text will be rendered next frame after texture is created
     }
 
     CachedText& cached = it->second;
@@ -410,14 +411,8 @@ void TextRenderer::queue_text_draw(const std::string& text, float x, float y,
     float h = cached.height * scale;
 
     // Add quad vertices (pos.x, pos.y, tex.x, tex.y)
-    float vertices[] = {
-        x,     y,     0.0f, 0.0f,
-        x + w, y,     1.0f, 0.0f,
-        x + w, y + h, 1.0f, 1.0f,
-        x,     y,     0.0f, 0.0f,
-        x + w, y + h, 1.0f, 1.0f,
-        x,     y + h, 0.0f, 1.0f
-    };
+    float vertices[] = {x, y, 0.0f, 0.0f, x + w, y,     1.0f, 0.0f, x + w, y + h, 1.0f, 1.0f,
+                        x, y, 0.0f, 0.0f, x + w, y + h, 1.0f, 1.0f, x,     y + h, 0.0f, 1.0f};
 
     // Add vertices to batch
     batch_vertices_.insert(batch_vertices_.end(), std::begin(vertices), std::end(vertices));
@@ -425,7 +420,7 @@ void TextRenderer::queue_text_draw(const std::string& text, float x, float y,
     // Queue the text draw with cached pointer to avoid a second hash lookup in draw_queued_text.
     // unordered_map pointer stability holds across insertions, and we never erase during a frame
     // (release_pending_resources runs at frame boundary).
-    QueuedText qt;
+    QueuedText qt{};
     qt.cached = &cached;
     qt.x = x;
     qt.y = y;
@@ -436,19 +431,24 @@ void TextRenderer::queue_text_draw(const std::string& text, float x, float y,
 }
 
 void TextRenderer::upload_queued_text(SDL_GPUCommandBuffer* cmd) {
-    if (batch_vertices_.empty() || !vertex_buffer_ || !cmd) return;
+    if (batch_vertices_.empty() || !vertex_buffer_ || !cmd) {
+        return;
+    }
 
     // Upload all batched vertex data in one copy pass
-    vertex_buffer_->update(cmd, batch_vertices_.data(),
-                           batch_vertices_.size() * sizeof(float));
+    vertex_buffer_->update(cmd, batch_vertices_.data(), batch_vertices_.size() * sizeof(float));
 }
 
 void TextRenderer::draw_queued_text(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* render_pass) {
-    if (queued_texts_.empty() || !cmd || !render_pass || !pipeline_registry_) return;
+    if (queued_texts_.empty() || !cmd || !render_pass || !pipeline_registry_) {
+        return;
+    }
 
     // Bind text pipeline once before the loop
     auto* text_pipeline = pipeline_registry_->get_text_pipeline();
-    if (!text_pipeline) return;
+    if (!text_pipeline) {
+        return;
+    }
     text_pipeline->bind(render_pass);
 
     // Hoist projection push outside loop - it's invariant across all queued text.
@@ -459,7 +459,9 @@ void TextRenderer::draw_queued_text(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass
     bool first = true;
 
     for (const auto& qt : queued_texts_) {
-        if (!qt.cached || !qt.cached->texture) continue;
+        if (!qt.cached || !qt.cached->texture) {
+            continue;
+        }
         const CachedText& cached = *qt.cached;
 
         // Push color only when it changes (common case: same color for many labels).
@@ -499,8 +501,7 @@ void TextRenderer::draw_queued_text(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass
 }
 
 void TextRenderer::draw_text_immediate(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass* render_pass,
-                                        const std::string& text, float x, float y,
-                                        uint32_t color, float scale) {
+                                       const std::string& text, float x, float y, uint32_t color, float scale) {
     // For immediate mode, we use the queued text system but process just this one
     // This assumes upload_queued_text was already called for any previously queued text
 
@@ -510,7 +511,7 @@ void TextRenderer::draw_text_immediate(SDL_GPUCommandBuffer* cmd, SDL_GPURenderP
 
     // Get cached texture
     auto it = text_cache_.find(text);
-    if (it == text_cache_.end() || !it->second.texture) {
+    if (it == text_cache_.end() || (it->second.texture == nullptr)) {
         // Queue for next frame
         pending_text_creates_.insert(text);
         return;
@@ -530,14 +531,8 @@ void TextRenderer::draw_text_immediate(SDL_GPUCommandBuffer* cmd, SDL_GPURenderP
     float h = cached.height * scale;
 
     // Build quad vertices
-    float vertices[] = {
-        x,     y,     0.0f, 0.0f,
-        x + w, y,     1.0f, 0.0f,
-        x + w, y + h, 1.0f, 1.0f,
-        x,     y,     0.0f, 0.0f,
-        x + w, y + h, 1.0f, 1.0f,
-        x,     y + h, 0.0f, 1.0f
-    };
+    float vertices[] = {x, y, 0.0f, 0.0f, x + w, y,     1.0f, 0.0f, x + w, y + h, 1.0f, 1.0f,
+                        x, y, 0.0f, 0.0f, x + w, y + h, 1.0f, 1.0f, x,     y + h, 0.0f, 1.0f};
 
     // For immediate mode, we need to upload this single quad
     // Since we're in a render pass, we can't do copy pass - so we use

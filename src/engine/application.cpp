@@ -1,8 +1,4 @@
 #include "application.hpp"
-#include "SDL3/SDL_error.h"
-#include "SDL3/SDL_filesystem.h"
-#include "SDL3/SDL_init.h"
-#include "SDL3/SDL_timer.h"
 #include "engine/core/asset/file_watcher.hpp"
 #include "engine/core/jobs/job_system.hpp"
 #include "engine/core/logger.hpp"
@@ -11,6 +7,11 @@
 #include "engine/render/render_context.hpp"
 #include "engine/scene/scene_renderer.hpp"
 #include "engine/systems/camera_system.hpp"
+#include "SDL3/SDL_error.h"
+#include "SDL3/SDL_filesystem.h"
+#include "SDL3/SDL_init.h"
+#include "SDL3/SDL_timer.h"
+#include <algorithm>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -31,6 +32,8 @@ bool Application::init_engine() {
         return false;
     }
 
+    // getenv is single-threaded at engine boot, before any worker thread is spawned.
+    // NOLINTNEXTLINE(concurrency-mt-unsafe)
     if (const char* env = std::getenv("MMO_HOT_RELOAD"); env && env[0] == '1') {
         core::asset::FileWatcher::instance().init();
         ENGINE_LOG_INFO("app", "Hot-reload enabled (MMO_HOT_RELOAD=1)");
@@ -49,7 +52,7 @@ void Application::run() {
         last_frame_time_ = current_time;
 
         // Clamp delta time to avoid huge jumps
-        if (dt > 0.1f) dt = 0.1f;
+        dt = std::min(dt, 0.1f);
 
         // FPS counter
         frame_count_++;
@@ -68,6 +71,7 @@ void Application::run() {
             ENGINE_PROFILE_ZONE("App::poll_events");
             input_.reset_camera_deltas();
             input_.clear_menu_inputs();
+            input_.clear_key_edges();
             SDL_Event event;
             while (SDL_PollEvent(&event)) {
                 if (event.type == SDL_EVENT_QUIT) {
@@ -79,7 +83,9 @@ void Application::run() {
                     input_.process_event(event);
                 }
             }
-            if (!running_) break;
+            if (!running_) {
+                break;
+            }
             input_.post_process_events();
         }
 
@@ -104,14 +110,18 @@ void Application::shutdown_engine() {
 
 // ========== Rendering facade ==========
 
-bool Application::init_renderer(int width, int height, const std::string& title,
-                                float world_width, float world_height) {
+bool Application::init_renderer(int width, int height, const std::string& title, float world_width,
+                                float world_height) {
     context_ = std::make_unique<RenderContext>();
-    if (!context_->init(width, height, title)) return false;
+    if (!context_->init(width, height, title)) {
+        return false;
+    }
     context_->query_display_modes();
 
     scene_renderer_ = std::make_unique<SceneRenderer>();
-    if (!scene_renderer_->init(*context_, world_width, world_height)) return false;
+    if (!scene_renderer_->init(*context_, world_width, world_height)) {
+        return false;
+    }
 
     if (auto* pr = scene_renderer_->pipeline_registry()) {
         pr->enable_hot_reload(core::asset::FileWatcher::instance());
@@ -140,14 +150,17 @@ void Application::shutdown_renderer() {
     }
 
     camera_.reset();
-    if (scene_renderer_) scene_renderer_->shutdown();
-    if (context_) context_->shutdown();
+    if (scene_renderer_) {
+        scene_renderer_->shutdown();
+    }
+    if (context_) {
+        context_->shutdown();
+    }
     scene_renderer_.reset();
     context_.reset();
 }
 
-void Application::render_frame(const RenderScene& scene, const UIScene& ui_scene,
-                               const CameraState& camera, float dt) {
+void Application::render_frame(RenderScene& scene, const UIScene& ui_scene, const CameraState& camera, float dt) {
     scene_renderer_->render_frame(scene, ui_scene, camera, dt);
 }
 
@@ -221,7 +234,9 @@ void Application::apply_all_graphics_settings(const GraphicsSettings& settings) 
 
 std::string Application::settings_file_path() const {
     char* pref_path = SDL_GetPrefPath("mmo4", "mmo4");
-    if (!pref_path) return {};
+    if (!pref_path) {
+        return {};
+    }
     std::string result = std::string(pref_path) + "settings.cfg";
     SDL_free(pref_path);
     return result;

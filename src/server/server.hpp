@@ -1,30 +1,30 @@
 #pragma once
 
-#include "protocol/protocol.hpp"
-#include "game_config.hpp"
-#include "world.hpp"
-#include "session.hpp"
 #include "client_view_state.hpp"
+#include "game_config.hpp"
 #include "persistence/database.hpp"
 #include "persistence/player_repository.hpp"
+#include "protocol/protocol.hpp"
+#include "session.hpp"
+#include "world.hpp"
 #include <asio.hpp>
-#include <memory>
-#include <unordered_map>
-#include <mutex>
 #include <atomic>
+#include <memory>
+#include <mutex>
+#include <unordered_map>
 
 namespace mmo::server {
 
 class Server {
 public:
     using tcp = asio::ip::tcp;
-    
+
     Server(asio::io_context& io_context, uint16_t port, const GameConfig& config);
     ~Server();
-    
+
     void start();
     void stop();
-    
+
     void on_client_connect(std::shared_ptr<Session> session, const std::string& name);
     void on_class_select(std::shared_ptr<Session> session, uint8_t class_index);
     void on_player_disconnect(uint32_t player_id);
@@ -54,7 +54,7 @@ public:
     void broadcast(const std::vector<uint8_t>& data);
     void broadcast_except(const std::vector<uint8_t>& data, uint32_t exclude_id);
     void broadcast_system_chat(const std::string& message);
-    
+
     World& world() { return world_; }
 
 private:
@@ -91,11 +91,10 @@ private:
     void disband_party_if_small(uint32_t party_id);
 
     // Delta compression helpers
-    float get_update_interval(mmo::protocol::EntityType type) const;
-    bool has_changes(const mmo::protocol::NetEntityState& current,
-                     const mmo::protocol::NetEntityState& last) const;
-    mmo::protocol::EntityDeltaUpdate create_delta(const mmo::protocol::NetEntityState& current,
-                                                   const mmo::protocol::NetEntityState& last) const;
+    static float get_update_interval(mmo::protocol::EntityType type);
+    static bool has_changes(const mmo::protocol::NetEntityState& current, const mmo::protocol::NetEntityState& last);
+    static mmo::protocol::EntityDeltaUpdate create_delta(const mmo::protocol::NetEntityState& current,
+                                                         const mmo::protocol::NetEntityState& last);
 
     // Persistence helpers used by on_class_select / on_player_disconnect /
     // periodic autosave.
@@ -126,7 +125,7 @@ private:
     std::atomic<bool> running_{false};
 
     std::chrono::steady_clock::time_point last_tick_;
-    std::chrono::steady_clock::time_point next_tick_time_{};
+    std::chrono::steady_clock::time_point next_tick_time_;
 
     // Fixed-timestep physics accumulator. Physics steps at kFixedDt regardless
     // of wall-clock jitter; gameplay systems still consume the wall-clock dt.
@@ -146,12 +145,15 @@ private:
     float delta_interval_seconds_ = 1.0f / 20.0f;
 
     // Party membership
-    std::unordered_map<uint32_t, Party> parties_;        // party_id -> Party
-    std::unordered_map<uint32_t, uint32_t> player_party_;  // player_id -> party_id
+    std::unordered_map<uint32_t, Party> parties_;         // party_id -> Party
+    std::unordered_map<uint32_t, uint32_t> player_party_; // player_id -> party_id
     uint32_t next_party_id_ = 1;
     // Pending party invites, one outstanding per inviter. TTL counts down
     // each tick; expired entries are dropped.
-    struct PendingInvite { uint32_t target_id = 0; float ttl_seconds = 0.0f; };
+    struct PendingInvite {
+        uint32_t target_id = 0;
+        float ttl_seconds = 0.0f;
+    };
     std::unordered_map<uint32_t, PendingInvite> pending_invites_;
     static constexpr float INVITE_TIMEOUT = 60.0f;
 

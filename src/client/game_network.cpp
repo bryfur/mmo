@@ -3,11 +3,11 @@
 // own translation unit so game.cpp keeps a manageable size; the methods below
 // are still members of the class declared in game.hpp.
 
-#include "game.hpp"
 #include "client/ecs/components.hpp"
 #include "client/effect_loader.hpp"
 #include "engine/heightmap.hpp"
 #include "engine/model_loader.hpp"
+#include "game.hpp"
 #include "protocol/heightmap.hpp"
 #include <algorithm>
 #include <cstring>
@@ -39,7 +39,7 @@ void Game::handle_network_message(MessageType type, const std::vector<uint8_t>& 
                 // latency for guaranteed smooth movement.
                 network_smoother_.set_interpolation_time(2.0f / world_config_.tick_rate);
                 std::cout << "Received world config: " << world_config_.world_width << "x" << world_config_.world_height
-                          << " tick_rate=" << world_config_.tick_rate << std::endl;
+                          << " tick_rate=" << world_config_.tick_rate << '\n';
             }
             break;
         case MessageType::ClassList:
@@ -73,10 +73,10 @@ void Game::on_connection_accepted(const std::vector<uint8_t>& payload) {
         ConnectionAcceptedMsg msg;
         msg.deserialize(payload);
         if (msg.player_id == 0) {
-            std::cout << "Connection accepted, waiting for class list..." << std::endl;
+            std::cout << "Connection accepted, waiting for class list..." << '\n';
         } else {
             local_player_id_ = msg.player_id;
-            std::cout << "Spawned with player ID: " << local_player_id_ << std::endl;
+            std::cout << "Spawned with player ID: " << local_player_id_ << '\n';
             if (game_state_ == GameState::Spawning) {
                 game_state_ = GameState::Playing;
             }
@@ -85,7 +85,9 @@ void Game::on_connection_accepted(const std::vector<uint8_t>& payload) {
 }
 
 void Game::on_class_list(const std::vector<uint8_t>& payload) {
-    if (payload.empty()) return;
+    if (payload.empty()) {
+        return;
+    }
 
     BufferReader r(payload);
     uint16_t count = r.get_array_size();
@@ -98,7 +100,7 @@ void Game::on_class_list(const std::vector<uint8_t>& payload) {
 
     r.read_array_into(std::span(available_classes_), count);
 
-    std::cout << "Received " << available_classes_.size() << " classes from server" << std::endl;
+    std::cout << "Received " << available_classes_.size() << " classes from server" << '\n';
 
     if (game_state_ == GameState::Connecting) {
         game_state_ = GameState::ClassSelect;
@@ -110,8 +112,8 @@ void Game::on_heightmap_chunk(const std::vector<uint8_t>& payload) {
     heightmap_ = std::make_unique<HeightmapChunk>();
     if (heightmap_->deserialize(payload)) {
         heightmap_received_ = true;
-        std::cout << "Received heightmap: " << heightmap_->resolution << "x" << heightmap_->resolution
-                  << " covering " << heightmap_->world_size << "x" << heightmap_->world_size << " world units" << std::endl;
+        std::cout << "Received heightmap: " << heightmap_->resolution << "x" << heightmap_->resolution << " covering "
+                  << heightmap_->world_size << "x" << heightmap_->world_size << " world units" << '\n';
 
         engine::Heightmap engine_hm;
         engine_hm.resolution = heightmap_->resolution;
@@ -124,7 +126,7 @@ void Game::on_heightmap_chunk(const std::vector<uint8_t>& payload) {
 
         set_heightmap(engine_hm);
     } else {
-        std::cerr << "Failed to deserialize heightmap!" << std::endl;
+        std::cerr << "Failed to deserialize heightmap!" << '\n';
         heightmap_.reset();
     }
 }
@@ -137,7 +139,7 @@ void Game::on_player_joined(const std::vector<uint8_t>& payload) {
         entt::entity entity = find_or_create_entity(state.id);
         update_entity_from_state(entity, state);
 
-        std::cout << "Player joined: " << state.name << " (ID: " << state.id << ")" << std::endl;
+        std::cout << "Player joined: " << state.name << " (ID: " << state.id << ")" << '\n';
     }
 }
 
@@ -151,7 +153,7 @@ void Game::on_player_left(const std::vector<uint8_t>& payload) {
             if (registry_.valid(it->second)) {
                 auto* name = registry_.try_get<ecs::Name>(it->second);
                 if (name) {
-                    std::cout << "Player left: " << name->value << " (ID: " << msg.player_id << ")" << std::endl;
+                    std::cout << "Player left: " << name->value << " (ID: " << msg.player_id << ")" << '\n';
                 }
             }
             remove_entity(msg.player_id);
@@ -206,7 +208,7 @@ void Game::update_entity_from_state(entt::entity entity, const NetEntityState& s
     transform.rotation = state.rotation;
 
     velocity.x = state.vx;
-    velocity.z = state.vy;  // protocol vy = velocity on Z axis (ground plane), not vertical (Y-up world)
+    velocity.z = state.vy; // protocol vy = velocity on Z axis (ground plane), not vertical (Y-up world)
 
     health.current = state.health;
     health.max = state.max_health;
@@ -257,7 +259,9 @@ void Game::remove_entity(uint32_t network_id) {
 }
 
 void Game::on_entity_enter(const std::vector<uint8_t>& payload) {
-    if (payload.size() < NetEntityState::serialized_size()) return;
+    if (payload.size() < NetEntityState::serialized_size()) {
+        return;
+    }
 
     // Deserialize full entity state
     NetEntityState state;
@@ -272,7 +276,9 @@ void Game::on_entity_enter(const std::vector<uint8_t>& payload) {
 }
 
 void Game::on_entity_update(const std::vector<uint8_t>& payload) {
-    if (payload.size() < sizeof(uint32_t) + sizeof(uint8_t)) return;
+    if (payload.size() < sizeof(uint32_t) + sizeof(uint8_t)) {
+        return;
+    }
 
     // Deserialize delta
     mmo::protocol::EntityDeltaUpdate delta;
@@ -281,11 +287,13 @@ void Game::on_entity_update(const std::vector<uint8_t>& payload) {
     // Find entity
     auto it = network_to_entity_.find(delta.id);
     if (it == network_to_entity_.end()) {
-        return;  // Unknown entity (shouldn't happen)
+        return; // Unknown entity (shouldn't happen)
     }
 
     entt::entity entity = it->second;
-    if (!registry_.valid(entity)) return;
+    if (!registry_.valid(entity)) {
+        return;
+    }
 
     // Apply delta to entity components
     apply_delta_to_entity(entity, delta);
@@ -329,8 +337,7 @@ void Game::apply_delta_to_entity(entt::entity entity, const mmo::protocol::Entit
 
     // Status effect bitmask
     if (delta.flags & mmo::protocol::EntityDeltaUpdate::FLAG_EFFECTS) {
-        registry_.emplace_or_replace<ecs::StatusEffects>(entity,
-            ecs::StatusEffects{delta.effects_mask});
+        registry_.emplace_or_replace<ecs::StatusEffects>(entity, ecs::StatusEffects{delta.effects_mask});
     }
 
     // Update health
@@ -391,9 +398,11 @@ void Game::apply_delta_to_entity(entt::entity entity, const mmo::protocol::Entit
 
                     float len = std::sqrt(dir_x * dir_x + dir_y * dir_y);
                     if (len < 0.001f) {
-                        dir_x = 0; dir_y = 1;
+                        dir_x = 0;
+                        dir_y = 1;
                     } else {
-                        dir_x /= len; dir_y /= len;
+                        dir_x /= len;
+                        dir_y /= len;
                     }
 
                     // Build state from cached entity components for effect spawning

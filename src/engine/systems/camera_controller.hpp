@@ -1,32 +1,32 @@
 #pragma once
 
 #include "engine/scene/camera_state.hpp"
-#include <glm/glm.hpp>
 #include <functional>
+#include <glm/glm.hpp>
 
 namespace mmo::engine::systems {
 
 // Configuration for camera behavior
 struct CameraModeConfig {
-    float distance = 280.0f;           // Base distance from target
-    float height_offset = 90.0f;       // Height above target
-    float shoulder_offset = 40.0f;     // Horizontal shoulder offset
-    float fov = 55.0f;                 // Field of view
-    float position_lag = 0.001f;       // Position smoothing (0-1, lower = more lag)
-    float rotation_lag = 0.001f;       // Rotation smoothing
-    float look_ahead_dist = 60.0f;     // How far to look ahead based on velocity
-    float pitch_min = -70.0f;          // Minimum pitch (looking up)
-    float pitch_max = 70.0f;           // Maximum pitch (looking down)
-    float auto_return_speed = 1.5f;    // Speed of auto-centering behind player
-    bool auto_center_enabled = true;   // Whether to auto-center
+    float distance = 280.0f;         // Base distance from target
+    float height_offset = 90.0f;     // Height above target
+    float shoulder_offset = 40.0f;   // Horizontal shoulder offset
+    float fov = 55.0f;               // Field of view
+    float position_lag = 0.001f;     // Position smoothing (0-1, lower = more lag)
+    float rotation_lag = 0.001f;     // Rotation smoothing
+    float look_ahead_dist = 60.0f;   // How far to look ahead based on velocity
+    float pitch_min = -70.0f;        // Minimum pitch (looking up)
+    float pitch_max = 70.0f;         // Maximum pitch (looking down)
+    float auto_return_speed = 1.5f;  // Speed of auto-centering behind player
+    bool auto_center_enabled = true; // Whether to auto-center
 };
 
 // Camera shake types for different feedback
 enum class ShakeType {
-    Impact,        // Quick punch
-    Heavy,         // Sustained rumble
-    Directional,   // Shake along a direction
-    Subtle         // Idle micro-movements
+    Impact,      // Quick punch
+    Heavy,       // Sustained rumble
+    Directional, // Shake along a direction
+    Subtle       // Idle micro-movements
 };
 
 /**

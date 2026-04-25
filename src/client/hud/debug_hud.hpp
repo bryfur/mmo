@@ -1,8 +1,8 @@
 #pragma once
 
-#include "engine/scene/ui_scene.hpp"
-#include "engine/render_stats.hpp"
 #include "client/network_client.hpp"
+#include "engine/render_stats.hpp"
+#include "engine/scene/ui_scene.hpp"
 
 #include <string>
 

@@ -1,10 +1,10 @@
 #pragma once
 
 #include "protocol/protocol.hpp"
+#include <cstdint>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include <cstdint>
 
 namespace mmo::server {
 
@@ -12,9 +12,7 @@ struct GridCell {
     int x;
     int y;
 
-    bool operator==(const GridCell& other) const {
-        return x == other.x && y == other.y;
-    }
+    bool operator==(const GridCell& other) const { return x == other.x && y == other.y; }
 };
 
 struct GridCellHash {
@@ -40,14 +38,9 @@ public:
     std::vector<uint32_t> query_radius(float center_x, float center_y, float radius) const;
 
     // Query entities with type-specific radii (smart filtering)
-    std::vector<uint32_t> query_with_type_radii(
-        float center_x, float center_y,
-        float building_radius,
-        float environment_radius,
-        float player_radius,
-        float npc_radius,
-        float town_npc_radius
-    ) const;
+    std::vector<uint32_t> query_with_type_radii(float center_x, float center_y, float building_radius,
+                                                float environment_radius, float player_radius, float npc_radius,
+                                                float town_npc_radius) const;
 
     // Clear all entities
     void clear();

@@ -1,19 +1,21 @@
 #pragma once
 
-#include "engine/render_graph/render_graph_resource.hpp"
-#include "engine/render_graph/render_graph_pass.hpp"
-#include "engine/render_graph/render_graph_context.hpp"
 #include "engine/render_graph/pass_builder.hpp"
+#include "engine/render_graph/render_graph_context.hpp"
+#include "engine/render_graph/render_graph_pass.hpp"
+#include "engine/render_graph/render_graph_resource.hpp"
 #include "engine/render_graph/transient_allocator.hpp"
 
-#include <SDL3/SDL_gpu.h>
 #include <iosfwd>
 #include <memory>
+#include <SDL3/SDL_gpu.h>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
-namespace mmo::engine::gpu { class GPUDevice; }
+namespace mmo::engine::gpu {
+class GPUDevice;
+}
 
 namespace mmo::engine::render_graph {
 
@@ -32,7 +34,7 @@ public:
     void begin_frame(SDL_GPUCommandBuffer* cb);
 
     // Add a pass with a typed data struct that lives across setup -> execute.
-    template <typename Data, typename SetupFn, typename ExecuteFn>
+    template<typename Data, typename SetupFn, typename ExecuteFn>
     void add_pass(const std::string& name, SetupFn&& setup, ExecuteFn&& execute) {
         auto data = std::make_shared<Data>();
         PassNode& node = create_pass_node(name);
@@ -46,8 +48,7 @@ public:
     }
 
     // Untyped overload: setup builds, execute uses captured locals.
-    void add_pass(const std::string& name, PassType type,
-                  std::function<void(PassBuilder&)> setup,
+    void add_pass(const std::string& name, PassType type, std::function<void(PassBuilder&)> setup,
                   PassExecuteFn execute);
 
     // Compile: topo-sort, resolve transient resources from the pool, compute lifetimes.
@@ -78,8 +79,8 @@ public:
 
     // Used by PassBuilder.
     ResourceHandle declare_transient_texture(const std::string& name, const TextureDesc& desc);
-    ResourceHandle declare_imported_texture(const std::string& name, SDL_GPUTexture* tex,
-                                            uint32_t w, uint32_t h, SDL_GPUTextureFormat fmt);
+    ResourceHandle declare_imported_texture(const std::string& name, SDL_GPUTexture* tex, uint32_t w, uint32_t h,
+                                            SDL_GPUTextureFormat fmt);
 
     // Stats.
     uint32_t last_compiled_passes() const noexcept { return last_compiled_passes_; }

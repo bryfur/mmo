@@ -14,11 +14,11 @@ namespace mmo::engine::core {
 enum class LogLevel : uint8_t {
     Trace = 0,
     Debug = 1,
-    Info  = 2,
-    Warn  = 3,
+    Info = 2,
+    Warn = 3,
     Error = 4,
     Fatal = 5,
-    Off   = 6,
+    Off = 6,
 };
 
 const char* to_string(LogLevel level) noexcept;
@@ -67,18 +67,21 @@ private:
 
 namespace detail {
 
-template <typename... Args>
-inline void log_formatted(LogLevel level, const char* category,
-                          std::format_string<Args...> fmt, Args&&... args) {
+template<typename... Args>
+inline void log_formatted(LogLevel level, const char* category, std::format_string<Args...> fmt, Args&&... args) {
     auto& logger = Logger::instance();
-    if (!logger.should_log(level)) return;
+    if (!logger.should_log(level)) {
+        return;
+    }
     std::string msg = std::format(fmt, std::forward<Args>(args)...);
     logger.dispatch(level, category, msg);
 }
 
 inline void log_plain(LogLevel level, const char* category, std::string_view msg) {
     auto& logger = Logger::instance();
-    if (!logger.should_log(level)) return;
+    if (!logger.should_log(level)) {
+        return;
+    }
     logger.dispatch(level, category, msg);
 }
 
@@ -87,25 +90,19 @@ inline void log_plain(LogLevel level, const char* category, std::string_view msg
 } // namespace mmo::engine::core
 
 #define ENGINE_LOG_TRACE(category, ...) \
-    ::mmo::engine::core::detail::log_formatted( \
-        ::mmo::engine::core::LogLevel::Trace, (category), __VA_ARGS__)
+    ::mmo::engine::core::detail::log_formatted(::mmo::engine::core::LogLevel::Trace, (category), __VA_ARGS__)
 
 #define ENGINE_LOG_DEBUG(category, ...) \
-    ::mmo::engine::core::detail::log_formatted( \
-        ::mmo::engine::core::LogLevel::Debug, (category), __VA_ARGS__)
+    ::mmo::engine::core::detail::log_formatted(::mmo::engine::core::LogLevel::Debug, (category), __VA_ARGS__)
 
 #define ENGINE_LOG_INFO(category, ...) \
-    ::mmo::engine::core::detail::log_formatted( \
-        ::mmo::engine::core::LogLevel::Info, (category), __VA_ARGS__)
+    ::mmo::engine::core::detail::log_formatted(::mmo::engine::core::LogLevel::Info, (category), __VA_ARGS__)
 
 #define ENGINE_LOG_WARN(category, ...) \
-    ::mmo::engine::core::detail::log_formatted( \
-        ::mmo::engine::core::LogLevel::Warn, (category), __VA_ARGS__)
+    ::mmo::engine::core::detail::log_formatted(::mmo::engine::core::LogLevel::Warn, (category), __VA_ARGS__)
 
 #define ENGINE_LOG_ERROR(category, ...) \
-    ::mmo::engine::core::detail::log_formatted( \
-        ::mmo::engine::core::LogLevel::Error, (category), __VA_ARGS__)
+    ::mmo::engine::core::detail::log_formatted(::mmo::engine::core::LogLevel::Error, (category), __VA_ARGS__)
 
 #define ENGINE_LOG_FATAL(category, ...) \
-    ::mmo::engine::core::detail::log_formatted( \
-        ::mmo::engine::core::LogLevel::Fatal, (category), __VA_ARGS__)
+    ::mmo::engine::core::detail::log_formatted(::mmo::engine::core::LogLevel::Fatal, (category), __VA_ARGS__)

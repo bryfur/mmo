@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
 #include "engine/animation/animation_types.hpp"
 #include <glm/gtc/quaternion.hpp>
+#include <gtest/gtest.h>
 #include <vector>
 
 using namespace mmo::engine::animation;
@@ -73,7 +73,7 @@ TEST(InterpolateKeyframes, QuarterPointInterpolation) {
 
 TEST(InterpolateKeyframes, CursorCachingSequentialAccess) {
     std::vector<float> times = {0.0f, 1.0f, 2.0f, 3.0f, 4.0f};
-    std::vector<glm::vec3> values = {{0,0,0}, {1,0,0}, {2,0,0}, {3,0,0}, {4,0,0}};
+    std::vector<glm::vec3> values = {{0, 0, 0}, {1, 0, 0}, {2, 0, 0}, {3, 0, 0}, {4, 0, 0}};
     size_t cursor = 0;
 
     // Sequential access should update cursor
@@ -88,7 +88,7 @@ TEST(InterpolateKeyframes, CursorCachingSequentialAccess) {
 
     // Cached cursor should hit fast path on next sequential call
     interpolate_keyframes(times, values, 2.7f, cursor);
-    EXPECT_EQ(cursor, 2u);  // still in same bracket
+    EXPECT_EQ(cursor, 2u); // still in same bracket
 }
 
 TEST(InterpolateKeyframes, MultiSegmentInterpolation) {
@@ -137,11 +137,11 @@ TEST(RotationSmoother, FirstCallSnapsToTarget) {
 
 TEST(RotationSmoother, SmoothingMovesTowardTarget) {
     RotationSmoother smoother;
-    smoother.smooth_toward(0.0f, 0.016f);  // init
-    smoother.smooth_toward(1.0f, 0.016f);  // smooth toward 1.0
+    smoother.smooth_toward(0.0f, 0.016f); // init
+    smoother.smooth_toward(1.0f, 0.016f); // smooth toward 1.0
 
-    EXPECT_GT(smoother.current, 0.0f);  // moved toward target
-    EXPECT_LT(smoother.current, 1.0f);  // didn't overshoot
+    EXPECT_GT(smoother.current, 0.0f); // moved toward target
+    EXPECT_LT(smoother.current, 1.0f); // didn't overshoot
 }
 
 TEST(RotationSmoother, ConvergesOverTime) {
@@ -227,7 +227,7 @@ TEST(InterpolateKeyframes, LargeNumberOfKeyframes) {
 
 TEST(InterpolateKeyframes, CursorCacheBackwardSeek) {
     std::vector<float> times = {0.0f, 1.0f, 2.0f, 3.0f, 4.0f};
-    std::vector<glm::vec3> values = {{0,0,0}, {1,0,0}, {2,0,0}, {3,0,0}, {4,0,0}};
+    std::vector<glm::vec3> values = {{0, 0, 0}, {1, 0, 0}, {2, 0, 0}, {3, 0, 0}, {4, 0, 0}};
     size_t cursor = 0;
 
     // Seek forward to segment [3, 4]
@@ -242,7 +242,7 @@ TEST(InterpolateKeyframes, CursorCacheBackwardSeek) {
 
 TEST(InterpolateKeyframes, CursorCacheJumpForward) {
     std::vector<float> times = {0.0f, 1.0f, 2.0f, 3.0f, 4.0f, 5.0f};
-    std::vector<glm::vec3> values = {{0,0,0}, {1,0,0}, {2,0,0}, {3,0,0}, {4,0,0}, {5,0,0}};
+    std::vector<glm::vec3> values = {{0, 0, 0}, {1, 0, 0}, {2, 0, 0}, {3, 0, 0}, {4, 0, 0}, {5, 0, 0}};
     size_t cursor = 0;
 
     // Start at segment [0, 1]
@@ -266,7 +266,7 @@ TEST(InterpolateKeyframes, NearlyIdenticalKeyframeTimes) {
 
 TEST(InterpolateKeyframes, NegativeTimeValues) {
     std::vector<float> times = {-2.0f, -1.0f, 0.0f, 1.0f};
-    std::vector<glm::vec3> values = {{-2,0,0}, {-1,0,0}, {0,0,0}, {1,0,0}};
+    std::vector<glm::vec3> values = {{-2, 0, 0}, {-1, 0, 0}, {0, 0, 0}, {1, 0, 0}};
 
     auto r1 = interpolate_keyframes(times, values, -1.5f);
     EXPECT_NEAR(r1.x, -1.5f, 1e-4f);
@@ -312,7 +312,7 @@ TEST(RotationSmoother, WrappingShortPath) {
     float near_pi = 3.1f;
     float near_neg_pi = -3.1f;
 
-    smoother.smooth_toward(near_pi, 0.016f);  // init snaps
+    smoother.smooth_toward(near_pi, 0.016f); // init snaps
     EXPECT_FLOAT_EQ(smoother.current, near_pi);
 
     // After one step toward near_neg_pi, smoother should move through PI boundary
@@ -331,7 +331,7 @@ TEST(RotationSmoother, WrappingShortPath) {
 
 TEST(RotationSmoother, VeryLargeDt) {
     RotationSmoother smoother;
-    smoother.smooth_toward(0.0f, 0.016f);  // init
+    smoother.smooth_toward(0.0f, 0.016f); // init
 
     // A very large dt should converge to target without exploding
     smoother.smooth_toward(1.0f, 1000.0f);
@@ -342,7 +342,7 @@ TEST(RotationSmoother, VeryLargeDt) {
 
 TEST(RotationSmoother, VerySmallDt) {
     RotationSmoother smoother;
-    smoother.smooth_toward(0.0f, 0.016f);  // init
+    smoother.smooth_toward(0.0f, 0.016f); // init
 
     // Very small dt should not cause NaN or inf
     smoother.smooth_toward(1.0f, 1e-10f);
@@ -359,7 +359,7 @@ TEST(RotationSmoother, VerySmallDt) {
 
 TEST(RotationSmoother, SpeedZeroMeansNoMovement) {
     RotationSmoother smoother;
-    smoother.smooth_toward(0.0f, 0.016f);  // init at 0
+    smoother.smooth_toward(0.0f, 0.016f); // init at 0
 
     // With speed=0, blend = 1 - exp(0) = 0, so no movement
     float before = smoother.current;

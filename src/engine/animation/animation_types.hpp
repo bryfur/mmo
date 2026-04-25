@@ -3,12 +3,12 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <string>
-#include <type_traits>
-#include <vector>
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <string>
+#include <type_traits>
+#include <vector>
 
 namespace mmo::engine::animation {
 
@@ -23,7 +23,7 @@ struct AnimationKeyframe {
 };
 
 struct AnimationChannel {
-    int bone_index;
+    int bone_index{};
     std::vector<float> position_times;
     std::vector<glm::vec3> positions;
     std::vector<float> rotation_times;
@@ -42,17 +42,17 @@ struct ChannelCursors {
 
 struct AnimationClip {
     std::string name;
-    float duration;
+    float duration{};
     std::vector<AnimationChannel> channels;
 };
 
 struct Joint {
     std::string name;
-    int parent_index;
-    glm::mat4 inverse_bind_matrix;
-    glm::vec3 local_translation;
-    glm::quat local_rotation;
-    glm::vec3 local_scale;
+    int parent_index{};
+    glm::mat4 inverse_bind_matrix{};
+    glm::vec3 local_translation{};
+    glm::quat local_rotation{};
+    glm::vec3 local_scale{};
 };
 
 struct Skeleton {
@@ -75,12 +75,12 @@ struct FootIKSmoother {
 // Configurable bone names for foot IK. Defaults match Mixamo conventions;
 // rigs from other DCCs can override.
 struct FootIKBoneNames {
-    std::string hips       = "Hips";
-    std::string spine      = "Spine";
-    std::string left_hip   = "LeftUpperLeg";
-    std::string left_knee  = "LeftLowerLeg";
-    std::string left_foot  = "LeftFoot";
-    std::string right_hip  = "RightUpperLeg";
+    std::string hips = "Hips";
+    std::string spine = "Spine";
+    std::string left_hip = "LeftUpperLeg";
+    std::string left_knee = "LeftLowerLeg";
+    std::string left_foot = "LeftFoot";
+    std::string right_hip = "RightUpperLeg";
     std::string right_knee = "RightLowerLeg";
     std::string right_foot = "RightFoot";
 };
@@ -96,18 +96,28 @@ struct FootIKData {
         for (size_t i = 0; i < skel.joints.size(); i++) {
             const auto& name = skel.joints[i].name;
             int idx = static_cast<int>(i);
-            if (name == names.hips) hips = idx;
-            else if (name == names.spine) spine = idx;
-            else if (name == names.left_hip) left_upper = idx;
-            else if (name == names.left_knee) left_lower = idx;
-            else if (name == names.left_foot) left_foot = idx;
-            else if (name == names.right_hip) right_upper = idx;
-            else if (name == names.right_knee) right_lower = idx;
-            else if (name == names.right_foot) right_foot = idx;
+            if (name == names.hips) {
+                {
+                    hips = idx;
+                }
+            } else if (name == names.spine) {
+                { spine = idx; }
+            } else if (name == names.left_hip) {
+                { left_upper = idx; }
+            } else if (name == names.left_knee) {
+                { left_lower = idx; }
+            } else if (name == names.left_foot) {
+                { left_foot = idx; }
+            } else if (name == names.right_hip) {
+                { right_upper = idx; }
+            } else if (name == names.right_knee) {
+                { right_lower = idx; }
+            } else if (name == names.right_foot) {
+                { right_foot = idx; }
+            }
         }
-        valid = (hips >= 0 && spine >= 0 &&
-                 left_upper >= 0 && left_lower >= 0 && left_foot >= 0 &&
-                 right_upper >= 0 && right_lower >= 0 && right_foot >= 0);
+        valid = (hips >= 0 && spine >= 0 && left_upper >= 0 && left_lower >= 0 && left_foot >= 0 && right_upper >= 0 &&
+                 right_lower >= 0 && right_foot >= 0);
     }
 };
 
@@ -123,16 +133,13 @@ struct RotationSmoother {
             return;
         }
         float blend = 1.0f - std::exp(-speed * dt);
-        float diff = std::fmod(target - current + glm::pi<float>(), glm::two_pi<float>())
-                     - glm::pi<float>();
+        float diff = std::fmod(target - current + glm::pi<float>(), glm::two_pi<float>()) - glm::pi<float>();
         float step = diff * blend;
         current += step;
         turn_rate = (dt > 0.0001f) ? (step / dt) : 0.0f;
     }
 
-    void decay_turn_rate(float factor = 0.9f) {
-        turn_rate *= factor;
-    }
+    void decay_turn_rate(float factor = 0.9f) { turn_rate *= factor; }
 };
 
 struct ProceduralConfig {
@@ -152,7 +159,10 @@ enum class ParamType : uint8_t { Float, Bool };
 
 struct ParamValue {
     ParamType type = ParamType::Float;
-    union { float f; bool b; };
+    union {
+        float f;
+        bool b;
+    };
 
     ParamValue() : type(ParamType::Float), f(0.0f) {}
     explicit ParamValue(float v) : type(ParamType::Float), f(v) {}
@@ -163,15 +173,23 @@ struct ParamValue {
 };
 
 template<typename T>
-T interpolate_keyframes(const std::vector<float>& times, const std::vector<T>& values,
-                        float t, size_t& last_cursor) {
-    if (times.empty() || values.empty()) return T{};
-    if (times.size() == 1 || t <= times.front()) { last_cursor = 0; return values.front(); }
-    if (t >= times.back()) { last_cursor = times.size() - 2; return values.back(); }
+T interpolate_keyframes(const std::vector<float>& times, const std::vector<T>& values, float t, size_t& last_cursor) {
+    if (times.empty() || values.empty()) {
+        {
+            return T{};
+        }
+    }
+    if (times.size() == 1 || t <= times.front()) {
+        last_cursor = 0;
+        return values.front();
+    }
+    if (t >= times.back()) {
+        last_cursor = times.size() - 2;
+        return values.back();
+    }
 
     size_t i = 0;
-    if (last_cursor < times.size() - 1 &&
-        times[last_cursor] <= t && t < times[last_cursor + 1]) {
+    if (last_cursor < times.size() - 1 && times[last_cursor] <= t && t < times[last_cursor + 1]) {
         i = last_cursor;
     } else {
         auto it = std::upper_bound(times.begin(), times.end(), t);
@@ -179,7 +197,8 @@ T interpolate_keyframes(const std::vector<float>& times, const std::vector<T>& v
         last_cursor = i;
     }
 
-    float t0 = times[i], t1 = times[i + 1];
+    float t0 = times[i];
+    float t1 = times[i + 1];
     float f = (t - t0) / (t1 - t0);
 
     if constexpr (std::is_same_v<T, glm::quat>) {
@@ -189,8 +208,7 @@ T interpolate_keyframes(const std::vector<float>& times, const std::vector<T>& v
     }
 }
 
-template<typename T>
-T interpolate_keyframes(const std::vector<float>& times, const std::vector<T>& values, float t) {
+template<typename T> T interpolate_keyframes(const std::vector<float>& times, const std::vector<T>& values, float t) {
     size_t cursor = 0;
     return interpolate_keyframes(times, values, t, cursor);
 }

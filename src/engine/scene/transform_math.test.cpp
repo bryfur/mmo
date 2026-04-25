@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
 #include "engine/scene/transform_math.hpp"
 #include <glm/gtc/matrix_transform.hpp>
+#include <gtest/gtest.h>
 
 using namespace mmo::engine::scene;
 
@@ -34,18 +34,18 @@ TEST(TransformMath, NormalMatrixFastPathReturnsModelForUniformScale) {
     m = glm::scale(m, glm::vec3(1.5f));
     glm::mat4 n = compute_normal_matrix(m);
     // Fast path: should return model itself unchanged.
-    for (int i = 0; i < 4; ++i)
-        for (int j = 0; j < 4; ++j)
-            EXPECT_NEAR(n[i][j], m[i][j], 1e-5f);
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) EXPECT_NEAR(n[i][j], m[i][j], 1e-5f);
+    }
 }
 
 TEST(TransformMath, NormalMatrixSlowPathForNonUniformScale) {
     glm::mat4 m = glm::scale(glm::mat4(1.0f), glm::vec3(2.0f, 1.0f, 0.5f));
     glm::mat4 n = compute_normal_matrix(m);
     glm::mat4 expected = glm::transpose(glm::inverse(m));
-    for (int i = 0; i < 4; ++i)
-        for (int j = 0; j < 4; ++j)
-            EXPECT_NEAR(n[i][j], expected[i][j], 1e-4f);
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) EXPECT_NEAR(n[i][j], expected[i][j], 1e-4f);
+    }
 }
 
 TEST(TransformMath, MaxScaleFactorOfIdentity) {

@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
 #include "physics_system.hpp"
 #include "server/ecs/game_components.hpp"
+#include <gtest/gtest.h>
 
 #include <entt/entt.hpp>
 
@@ -27,7 +27,7 @@ entt::entity make_character(entt::registry& r, uint32_t net_id) {
 
     ecs::RigidBody rb;
     rb.motion_type = ecs::PhysicsMotionType::Dynamic;
-    rb.lock_rotation = true;  // -> CharacterVirtual path
+    rb.lock_rotation = true; // -> CharacterVirtual path
     rb.mass = 70.0f;
     r.emplace<ecs::RigidBody>(e, rb);
     return e;
@@ -77,7 +77,7 @@ TEST(PhysicsSystem, InitializeShutdownIsIdempotent) {
     PhysicsSystem physics;
     physics.initialize();
     physics.shutdown();
-    physics.shutdown();  // second call is a no-op
+    physics.shutdown(); // second call is a no-op
     physics.initialize();
     physics.shutdown();
 }

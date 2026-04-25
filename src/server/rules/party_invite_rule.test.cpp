@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include "server/rules/party_invite_rule.hpp"
+#include <gtest/gtest.h>
 
 using namespace mmo::server::rules;
 
@@ -22,17 +22,20 @@ TEST(PartyInviteRule, SoloInviteAccepted) {
 }
 
 TEST(PartyInviteRule, SelfInviteRejected) {
-    auto i = baseline(); i.target_id = i.inviter_id;
+    auto i = baseline();
+    i.target_id = i.inviter_id;
     EXPECT_EQ(PartyInviteRule::check(i), PartyInviteRule::Result::SelfInvite);
 }
 
 TEST(PartyInviteRule, OfflineTargetRejected) {
-    auto i = baseline(); i.target_online = false;
+    auto i = baseline();
+    i.target_online = false;
     EXPECT_EQ(PartyInviteRule::check(i), PartyInviteRule::Result::TargetOffline);
 }
 
 TEST(PartyInviteRule, TargetAlreadyInPartyRejected) {
-    auto i = baseline(); i.target_in_party = true;
+    auto i = baseline();
+    i.target_in_party = true;
     EXPECT_EQ(PartyInviteRule::check(i), PartyInviteRule::Result::TargetAlreadyInAParty);
 }
 

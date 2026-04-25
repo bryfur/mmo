@@ -1,7 +1,7 @@
 #pragma once
 
-#include "serializable.hpp"
 #include "message_type.hpp"
+#include "serializable.hpp"
 #include <cstdint>
 #include <vector>
 
@@ -29,7 +29,7 @@ inline std::vector<uint8_t> build_packet(MessageType type, const std::vector<uin
     std::vector<uint8_t> data;
     data.reserve(PacketHeader::serialized_size() + payload.size());
     BufferWriter w(data);
-    PacketHeader hdr;
+    PacketHeader hdr{};
     hdr.type = type;
     hdr.payload_size = static_cast<uint32_t>(payload.size());
     hdr.serialize(w);
@@ -38,12 +38,11 @@ inline std::vector<uint8_t> build_packet(MessageType type, const std::vector<uin
 }
 
 // Build a ready-to-send packet from a Serializable message (no intermediate buffer)
-template<typename T>
-std::vector<uint8_t> build_packet(MessageType type, const T& msg) {
+template<typename T> std::vector<uint8_t> build_packet(MessageType type, const T& msg) {
     std::vector<uint8_t> data;
     data.reserve(PacketHeader::serialized_size() + msg.serialized_size());
     BufferWriter w(data);
-    PacketHeader hdr;
+    PacketHeader hdr{};
     hdr.type = type;
     hdr.payload_size = static_cast<uint32_t>(msg.serialized_size());
     hdr.serialize(w);
@@ -52,13 +51,12 @@ std::vector<uint8_t> build_packet(MessageType type, const T& msg) {
 }
 
 // Build a ready-to-send packet from an array of Serializable items (length-prefixed)
-template<typename T>
-std::vector<uint8_t> build_packet(MessageType type, const std::vector<T>& items) {
+template<typename T> std::vector<uint8_t> build_packet(MessageType type, const std::vector<T>& items) {
     uint32_t payload_size = static_cast<uint32_t>(sizeof(uint16_t) + items.size() * T::serialized_size());
     std::vector<uint8_t> data;
     data.reserve(PacketHeader::serialized_size() + payload_size);
     BufferWriter w(data);
-    PacketHeader hdr;
+    PacketHeader hdr{};
     hdr.type = type;
     hdr.payload_size = payload_size;
     hdr.serialize(w);

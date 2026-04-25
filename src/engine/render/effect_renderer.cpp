@@ -2,8 +2,6 @@
 #include "../gpu/gpu_texture.hpp"
 #include "../gpu/gpu_uniforms.hpp"
 #include "../render_constants.hpp"
-#include "SDL3/SDL_error.h"
-#include "SDL3/SDL_gpu.h"
 #include "engine/core/logger.hpp"
 #include "engine/gpu/gpu_device.hpp"
 #include "engine/gpu/pipeline_registry.hpp"
@@ -12,6 +10,8 @@
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/ext/vector_float3.hpp"
 #include "glm/ext/vector_float4.hpp"
+#include "SDL3/SDL_error.h"
+#include "SDL3/SDL_gpu.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -32,7 +32,7 @@ bool EffectRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipelin
     device_ = &device;
     pipeline_registry_ = &pipeline_registry;
     model_manager_ = model_manager;
-    
+
     // Create sampler for effect textures
     SDL_GPUSamplerCreateInfo sampler_info = {};
     sampler_info.min_filter = SDL_GPU_FILTER_LINEAR;
@@ -48,7 +48,7 @@ bool EffectRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipelin
         ENGINE_LOG_ERROR("effect", "Failed to create sampler: {}", SDL_GetError());
         return false;
     }
-    
+
     return true;
 }
 
@@ -57,7 +57,7 @@ void EffectRenderer::shutdown() {
         SDL_ReleaseGPUSampler(device_->handle(), sampler_);
         sampler_ = nullptr;
     }
-    
+
     device_ = nullptr;
     pipeline_registry_ = nullptr;
     model_manager_ = nullptr;
@@ -70,22 +70,21 @@ float EffectRenderer::get_terrain_height(float x, float z) const {
     return 0.0f;
 }
 
-void EffectRenderer::draw_model_effect(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                        Model* model, const glm::mat4& model_mat,
-                                        const glm::mat4& view, const glm::mat4& projection,
-                                        const glm::vec3& camera_pos,
-                                        const glm::vec4& tint_color,
-                                        const glm::vec3& light_color,
-                                        const glm::vec3& ambient_color) {
-    if (!model) return;
-    
+void EffectRenderer::draw_model_effect(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, Model* model,
+                                       const glm::mat4& model_mat, const glm::mat4& view, const glm::mat4& projection,
+                                       const glm::vec3& camera_pos, const glm::vec4& tint_color,
+                                       const glm::vec3& light_color, const glm::vec3& ambient_color) {
+    if (!model) {
+        return;
+    }
+
     // Ensure model has GPU buffers uploaded
     if (!model->meshes.empty() && !model->meshes[0].uploaded) {
         ModelLoader::upload_to_gpu(*device_, *model);
     }
-    
+
     // Pipeline is already bound by draw_particle_effects() or the caller
-    
+
     // Set up vertex uniforms
     gpu::ModelTransformUniforms vertex_uniforms = {};
     vertex_uniforms.model = model_mat;
@@ -118,7 +117,7 @@ void EffectRenderer::draw_model_effect(SDL_GPURenderPass* pass, SDL_GPUCommandBu
         // Update hasTexture based on mesh
         if (mesh.has_texture && mesh.texture) {
             frag_uniforms.hasTexture = 1;
-            
+
             // Bind texture
             SDL_GPUTextureSamplerBinding tex_binding;
             tex_binding.texture = mesh.texture->handle();
@@ -127,35 +126,39 @@ void EffectRenderer::draw_model_effect(SDL_GPURenderPass* pass, SDL_GPUCommandBu
         } else {
             frag_uniforms.hasTexture = 0;
         }
-        
+
         SDL_PushGPUFragmentUniformData(cmd, 0, &frag_uniforms, sizeof(frag_uniforms));
-        
+
         // Bind vertex buffer
         SDL_GPUBufferBinding vb_binding;
         vb_binding.buffer = mesh.vertex_buffer->handle();
         vb_binding.offset = 0;
         SDL_BindGPUVertexBuffers(pass, 0, &vb_binding, 1);
-        
+
         // Bind index buffer
         SDL_GPUBufferBinding ib_binding;
         ib_binding.buffer = mesh.index_buffer->handle();
         ib_binding.offset = 0;
         SDL_BindGPUIndexBuffer(pass, &ib_binding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-        
+
         // Draw
         SDL_DrawGPUIndexedPrimitives(pass, mesh.index_count(), 1, 0, 0, 0);
     }
 }
 
 void EffectRenderer::draw_particle_effects(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                            const mmo::engine::systems::EffectSystem& effect_system,
-                                            const glm::mat4& view, const glm::mat4& projection,
-                                            const glm::vec3& camera_pos) {
-    if (!pass || !cmd || !device_ || !pipeline_registry_) return;
+                                           const mmo::engine::systems::EffectSystem& effect_system,
+                                           const glm::mat4& view, const glm::mat4& projection,
+                                           const glm::vec3& camera_pos) {
+    if (!pass || !cmd || !device_ || !pipeline_registry_) {
+        return;
+    }
 
     // Bind pipeline once for all particles instead of per-particle
     auto* pipeline = pipeline_registry_->get_pipeline(gpu::PipelineType::Model);
-    if (!pipeline) return;
+    if (!pipeline) {
+        return;
+    }
     pipeline->bind(pass);
 
     // Render all particles from all effects
@@ -169,15 +172,16 @@ void EffectRenderer::draw_particle_effects(SDL_GPURenderPass* pass, SDL_GPUComma
 }
 
 void EffectRenderer::draw_particle(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                    const mmo::engine::systems::Particle& particle,
-                                    const glm::mat4& view, const glm::mat4& projection,
-                                    const glm::vec3& camera_pos) {
+                                   const mmo::engine::systems::Particle& particle, const glm::mat4& view,
+                                   const glm::mat4& projection, const glm::vec3& camera_pos) {
     if (!model_manager_) {
         return;
     }
 
     // Get the model for this particle
-    if (!particle.model) return;
+    if (!particle.model) {
+        return;
+    }
     Model* model = model_manager_->get_model(*particle.model);
     if (!model) {
         return;
@@ -212,8 +216,8 @@ void EffectRenderer::draw_particle(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer
     glm::vec3 ambient_color = glm::vec3(0.5f, 0.5f, 0.4f);
 
     // Render the particle model
-    draw_model_effect(pass, cmd, model, model_mat, view, projection, camera_pos,
-                      tint_color, light_color, ambient_color);
+    draw_model_effect(pass, cmd, model, model_mat, view, projection, camera_pos, tint_color, light_color,
+                      ambient_color);
 }
 
 } // namespace mmo::engine::render

@@ -24,9 +24,7 @@ namespace mmo::client {
 
 using namespace mmo::protocol;
 
-NetworkClient::NetworkClient()
-    : socket_(io_context_) {
-}
+NetworkClient::NetworkClient() : socket_(io_context_) {}
 
 NetworkClient::~NetworkClient() {
     disconnect();
@@ -62,17 +60,19 @@ bool NetworkClient::connect(const std::string& host, uint16_t port, const std::s
             }
         }
 
-        std::cout << "Connected to server " << host << ":" << port << std::endl;
+        std::cout << "Connected to server " << host << ":" << port << '\n';
         return true;
 
     } catch (const std::exception& e) {
-        std::cerr << "Connection failed: " << e.what() << std::endl;
+        std::cerr << "Connection failed: " << e.what() << '\n';
         return false;
     }
 }
 
 void NetworkClient::send_class_select(uint8_t class_index) {
-    if (!connected_) return;
+    if (!connected_) {
+        return;
+    }
 
     ClassSelectMsg msg;
     msg.class_index = class_index;
@@ -112,7 +112,9 @@ void NetworkClient::disconnect() {
 }
 
 void NetworkClient::send_input(const PlayerInput& input) {
-    if (!connected_) return;
+    if (!connected_) {
+        return;
+    }
 
     auto data = build_packet(MessageType::PlayerInput, input);
     {
@@ -126,7 +128,9 @@ void NetworkClient::send_input(const PlayerInput& input) {
 }
 
 void NetworkClient::send_raw(const std::vector<uint8_t>& data) {
-    if (!connected_) return;
+    if (!connected_) {
+        return;
+    }
 
     std::lock_guard<std::mutex> lock(write_mutex_);
     write_queue_.push(data);
@@ -160,52 +164,49 @@ void NetworkClient::io_thread_func() {
     try {
         io_context_.run();
     } catch (const std::exception& e) {
-        std::cerr << "IO thread error: " << e.what() << std::endl;
+        std::cerr << "IO thread error: " << e.what() << '\n';
     }
 }
 
 void NetworkClient::read_header() {
-    asio::async_read(socket_,
-        asio::buffer(header_buffer_),
-        [this](asio::error_code ec, std::size_t /*length*/) {
-            if (!ec) {
-                current_header_.deserialize(header_buffer_);
+    asio::async_read(socket_, asio::buffer(header_buffer_), [this](asio::error_code ec, std::size_t /*length*/) {
+        if (!ec) {
+            current_header_.deserialize(header_buffer_);
 
-                constexpr uint32_t MAX_PAYLOAD_SIZE = 4 * 1024 * 1024; // 4 MB
-                if (current_header_.payload_size > MAX_PAYLOAD_SIZE) {
-                    std::cerr << "Network: payload too large (" << current_header_.payload_size << " bytes), disconnecting" << std::endl;
-                    connected_ = false;
-                    return;
-                }
-
-                if (current_header_.payload_size > 0) {
-                    payload_buffer_.resize(current_header_.payload_size);
-                    read_payload();
-                } else {
-                    handle_message();
-                    read_header();
-                }
-            } else if (connected_) {
-                std::cerr << "Read error: " << ec.message() << std::endl;
+            constexpr uint32_t MAX_PAYLOAD_SIZE = 4 * 1024 * 1024; // 4 MB
+            if (current_header_.payload_size > MAX_PAYLOAD_SIZE) {
+                std::cerr << "Network: payload too large (" << current_header_.payload_size << " bytes), disconnecting"
+                          << '\n';
                 connected_ = false;
+                return;
             }
-        });
+
+            if (current_header_.payload_size > 0) {
+                payload_buffer_.resize(current_header_.payload_size);
+                read_payload();
+            } else {
+                handle_message();
+                read_header();
+            }
+        } else if (connected_) {
+            std::cerr << "Read error: " << ec.message() << '\n';
+            connected_ = false;
+        }
+    });
 }
 
 void NetworkClient::read_payload() {
-    asio::async_read(socket_,
-        asio::buffer(payload_buffer_),
-        [this](asio::error_code ec, std::size_t length) {
-            if (!ec) {
-                bytes_recv_total_ += length + mmo::protocol::PacketHeader::serialized_size();
-                packets_recv_total_++;
-                handle_message();
-                read_header();
-            } else if (connected_) {
-                std::cerr << "Payload read error: " << ec.message() << std::endl;
-                connected_ = false;
-            }
-        });
+    asio::async_read(socket_, asio::buffer(payload_buffer_), [this](asio::error_code ec, std::size_t length) {
+        if (!ec) {
+            bytes_recv_total_ += length + mmo::protocol::PacketHeader::serialized_size();
+            packets_recv_total_++;
+            handle_message();
+            read_header();
+        } else if (connected_) {
+            std::cerr << "Payload read error: " << ec.message() << '\n';
+            connected_ = false;
+        }
+    });
 }
 
 void NetworkClient::handle_message() {
@@ -227,9 +228,9 @@ void NetworkClient::handle_message() {
         ConnectionAcceptedMsg msg;
         msg.deserialize(payload_buffer_);
         local_player_id_ = msg.player_id;
-        std::cout << "Assigned player ID: " << local_player_id_ << std::endl;
+        std::cout << "Assigned player ID: " << local_player_id_ << '\n';
     }
-    
+
     // Queue message for main thread
     std::lock_guard<std::mutex> lock(message_mutex_);
     message_queue_.push({current_header_.type, payload_buffer_});
@@ -240,33 +241,30 @@ void NetworkClient::do_write() {
         writing_ = false;
         return;
     }
-    
+
     auto& front = write_queue_.front();
-    asio::async_write(socket_,
-        asio::buffer(front),
-        [this](asio::error_code ec, std::size_t length) {
-            std::lock_guard<std::mutex> lock(write_mutex_);
-            if (!ec) {
-                bytes_sent_total_ += length;
-                packets_sent_total_++;
-                write_queue_.pop();
-                if (!write_queue_.empty()) {
-                    do_write();
-                } else {
-                    writing_ = false;
-                }
+    asio::async_write(socket_, asio::buffer(front), [this](asio::error_code ec, std::size_t length) {
+        std::lock_guard<std::mutex> lock(write_mutex_);
+        if (!ec) {
+            bytes_sent_total_ += length;
+            packets_sent_total_++;
+            write_queue_.pop();
+            if (!write_queue_.empty()) {
+                do_write();
             } else {
-                std::cerr << "Write error: " << ec.message() << std::endl;
-                while (!write_queue_.empty()) write_queue_.pop();
                 writing_ = false;
             }
-        });
+        } else {
+            std::cerr << "Write error: " << ec.message() << '\n';
+            while (!write_queue_.empty()) write_queue_.pop();
+            writing_ = false;
+        }
+    });
 }
 
 void NetworkClient::update_stats() {
     auto now = static_cast<uint64_t>(
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now().time_since_epoch())
+        std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch())
             .count());
 
     uint64_t bs = bytes_sent_total_.load(std::memory_order_relaxed);

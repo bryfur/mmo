@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include "engine/animation/animation_state_machine.hpp"
+#include <gtest/gtest.h>
 
 using namespace mmo::engine::animation;
 
@@ -125,7 +125,7 @@ TEST_F(StateMachineTest, NoTransitionWhenConditionNotMet) {
     sm.update(player);
     EXPECT_EQ(sm.current_state(), "idle");
 
-    sm.set_float("speed", 0.3f);  // below 0.5 threshold
+    sm.set_float("speed", 0.3f); // below 0.5 threshold
     sm.update(player);
     EXPECT_EQ(sm.current_state(), "idle");
 }
@@ -172,12 +172,12 @@ TEST_F(StateMachineTest, UnboundMachineIsNotBound) {
 
 static std::vector<ParamValue> fparams(float v) {
     std::vector<ParamValue> out;
-    out.push_back(ParamValue{v});
+    out.emplace_back(v);
     return out;
 }
 static std::vector<ParamValue> bparams(bool v) {
     std::vector<ParamValue> out;
-    out.push_back(ParamValue{v});
+    out.emplace_back(v);
     return out;
 }
 
@@ -292,8 +292,12 @@ TEST(StateMachineEdgeCases, MultipleConditionsAllPass) {
     sm.add_state(attack);
     sm.set_default_state("idle");
 
-    AnimationClip c1; c1.name = "idle_anim"; c1.duration = 1.0f;
-    AnimationClip c2; c2.name = "attack_anim"; c2.duration = 1.0f;
+    AnimationClip c1;
+    c1.name = "idle_anim";
+    c1.duration = 1.0f;
+    AnimationClip c2;
+    c2.name = "attack_anim";
+    c2.duration = 1.0f;
     sm.bind_clips({c1, c2});
 
     AnimationPlayer player;
@@ -339,8 +343,12 @@ TEST(StateMachineEdgeCases, MultipleConditionsOneFailsNoTransition) {
     sm.add_state(attack);
     sm.set_default_state("idle");
 
-    AnimationClip c1; c1.name = "idle_anim"; c1.duration = 1.0f;
-    AnimationClip c2; c2.name = "attack_anim"; c2.duration = 1.0f;
+    AnimationClip c1;
+    c1.name = "idle_anim";
+    c1.duration = 1.0f;
+    AnimationClip c2;
+    c2.name = "attack_anim";
+    c2.duration = 1.0f;
     sm.bind_clips({c1, c2});
 
     AnimationPlayer player;
@@ -372,7 +380,7 @@ TEST(StateMachineEdgeCases, PriorityOrderingHigherWins) {
 
     StateTransition to_run;
     to_run.target_state = "run";
-    to_run.priority = 10;  // higher priority
+    to_run.priority = 10; // higher priority
     TransitionCondition speed_gt_high;
     speed_gt_high.param_name = "speed";
     speed_gt_high.op = TransitionCondition::Op::GT;
@@ -397,9 +405,15 @@ TEST(StateMachineEdgeCases, PriorityOrderingHigherWins) {
     sm.add_state(run);
     sm.set_default_state("idle");
 
-    AnimationClip c1; c1.name = "idle_anim"; c1.duration = 1.0f;
-    AnimationClip c2; c2.name = "walk_anim"; c2.duration = 1.0f;
-    AnimationClip c3; c3.name = "run_anim"; c3.duration = 1.0f;
+    AnimationClip c1;
+    c1.name = "idle_anim";
+    c1.duration = 1.0f;
+    AnimationClip c2;
+    c2.name = "walk_anim";
+    c2.duration = 1.0f;
+    AnimationClip c3;
+    c3.name = "run_anim";
+    c3.duration = 1.0f;
     sm.bind_clips({c1, c2, c3});
 
     AnimationPlayer player;
@@ -442,8 +456,12 @@ TEST(StateMachineEdgeCases, BoolParameterTransitionsIsTrueIsFalse) {
     sm.add_state(attack);
     sm.set_default_state("idle");
 
-    AnimationClip c1; c1.name = "idle_anim"; c1.duration = 1.0f;
-    AnimationClip c2; c2.name = "attack_anim"; c2.duration = 1.0f;
+    AnimationClip c1;
+    c1.name = "idle_anim";
+    c1.duration = 1.0f;
+    AnimationClip c2;
+    c2.name = "attack_anim";
+    c2.duration = 1.0f;
     sm.bind_clips({c1, c2});
 
     AnimationPlayer player;
@@ -473,7 +491,9 @@ TEST(StateMachineEdgeCases, SetFloatOverwritesBoolParam) {
     sm.add_state(idle);
     sm.set_default_state("idle");
 
-    AnimationClip c; c.name = "idle_anim"; c.duration = 1.0f;
+    AnimationClip c;
+    c.name = "idle_anim";
+    c.duration = 1.0f;
     sm.bind_clips({c});
 
     sm.set_bool("param", true);
@@ -508,7 +528,9 @@ TEST(StateMachineEdgeCases, BindClipsMatchingClipsReturnsTrue) {
     sm.add_state(s);
     sm.set_default_state("idle");
 
-    AnimationClip c; c.name = "idle_anim"; c.duration = 1.0f;
+    AnimationClip c;
+    c.name = "idle_anim";
+    c.duration = 1.0f;
     EXPECT_TRUE(sm.bind_clips({c}));
     EXPECT_TRUE(sm.is_bound());
 }
@@ -559,15 +581,19 @@ TEST(StateMachineEdgeCases, RapidParameterChangesOnlyFinalValueMatters) {
     sm.add_state(walk);
     sm.set_default_state("idle");
 
-    AnimationClip c1; c1.name = "idle_anim"; c1.duration = 1.0f;
-    AnimationClip c2; c2.name = "walk_anim"; c2.duration = 1.0f;
+    AnimationClip c1;
+    c1.name = "idle_anim";
+    c1.duration = 1.0f;
+    AnimationClip c2;
+    c2.name = "walk_anim";
+    c2.duration = 1.0f;
     sm.bind_clips({c1, c2});
 
     AnimationPlayer player;
 
     // Set speed high, then low, in the same frame before update
     sm.set_float("speed", 5.0f);
-    sm.set_float("speed", 0.1f);  // final value is below threshold
+    sm.set_float("speed", 0.1f); // final value is below threshold
     sm.update(player);
     EXPECT_EQ(sm.current_state(), "idle");
 
@@ -616,9 +642,15 @@ TEST(StateMachineEdgeCases, CurrentStateAfterMultipleRapidTransitions) {
     sm.add_state(c);
     sm.set_default_state("A");
 
-    AnimationClip ca; ca.name = "clip_a"; ca.duration = 1.0f;
-    AnimationClip cb; cb.name = "clip_b"; cb.duration = 1.0f;
-    AnimationClip cc; cc.name = "clip_c"; cc.duration = 1.0f;
+    AnimationClip ca;
+    ca.name = "clip_a";
+    ca.duration = 1.0f;
+    AnimationClip cb;
+    cb.name = "clip_b";
+    cb.duration = 1.0f;
+    AnimationClip cc;
+    cc.name = "clip_c";
+    cc.duration = 1.0f;
     sm.bind_clips({ca, cb, cc});
 
     AnimationPlayer player;

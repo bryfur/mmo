@@ -84,7 +84,10 @@ Database::Database(const std::string& path) {
     if (rc != SQLITE_OK) {
         std::string msg = "sqlite3_open(" + path + ") failed: ";
         msg += db_ ? sqlite3_errmsg(db_) : sqlite3_errstr(rc);
-        if (db_) { sqlite3_close(db_); db_ = nullptr; }
+        if (db_) {
+            sqlite3_close(db_);
+            db_ = nullptr;
+        }
         throw DbError(msg, rc);
     }
     // Sensible defaults. WAL gives concurrent readers + a single writer; we
@@ -95,7 +98,9 @@ Database::Database(const std::string& path) {
     exec("PRAGMA busy_timeout = 5000;");
 }
 
-Database::~Database() { close(); }
+Database::~Database() {
+    close();
+}
 
 void Database::close() {
     if (db_) {
@@ -110,7 +115,9 @@ void Database::exec(std::string_view sql) {
     if (rc != SQLITE_OK) {
         std::string msg = "sqlite3_exec failed: ";
         msg += err ? err : "unknown";
-        if (err) sqlite3_free(err);
+        if (err) {
+            sqlite3_free(err);
+        }
         throw DbError(msg, rc);
     }
 }
@@ -122,7 +129,9 @@ void Database::migrate() {
     int version = 0;
     {
         Statement q(*this, "SELECT version FROM schema_version LIMIT 1;");
-        if (q.step()) version = q.column_int(0);
+        if (q.step()) {
+            version = q.column_int(0);
+        }
     }
 
     auto bump_version_to = [this](int v) {
@@ -152,29 +161,35 @@ void Database::migrate() {
     }
 
     if (version < kCurrentSchemaVersion) {
-        LOG_ERROR("DB") << "Schema version " << version
-                        << " < current " << kCurrentSchemaVersion
+        LOG_ERROR("DB") << "Schema version " << version << " < current " << kCurrentSchemaVersion
                         << " — missing migration step. Refusing to continue.";
         throw DbError("missing schema migration", -1);
     }
 }
 
-void Database::begin()    { exec("BEGIN;"); }
-void Database::commit()   { exec("COMMIT;"); }
-void Database::rollback() { exec("ROLLBACK;"); }
+void Database::begin() {
+    exec("BEGIN;");
+}
+void Database::commit() {
+    exec("COMMIT;");
+}
+void Database::rollback() {
+    exec("ROLLBACK;");
+}
 
 // -------------------- Statement --------------------
 
 Statement::Statement(Database& db, std::string_view sql) : db_(db) {
-    int rc = sqlite3_prepare_v2(db.handle(), sql.data(), static_cast<int>(sql.size()),
-                                &stmt_, nullptr);
+    int rc = sqlite3_prepare_v2(db.handle(), sql.data(), static_cast<int>(sql.size()), &stmt_, nullptr);
     if (rc != SQLITE_OK) {
         throw_db_error(db.handle(), "sqlite3_prepare_v2");
     }
 }
 
 Statement::~Statement() {
-    if (stmt_) sqlite3_finalize(stmt_);
+    if (stmt_) {
+        sqlite3_finalize(stmt_);
+    }
 }
 
 void Statement::reset() {
@@ -184,23 +199,41 @@ void Statement::reset() {
 
 bool Statement::step() {
     int rc = sqlite3_step(stmt_);
-    if (rc == SQLITE_ROW) return true;
-    if (rc == SQLITE_DONE) return false;
+    if (rc == SQLITE_ROW) {
+        return true;
+    }
+    if (rc == SQLITE_DONE) {
+        return false;
+    }
     throw_db_error(db_.handle(), "sqlite3_step");
 }
 
-void Statement::bind_int(int idx, int value)               { sqlite3_bind_int(stmt_, idx, value); }
-void Statement::bind_int64(int idx, sqlite3_int64 value)   { sqlite3_bind_int64(stmt_, idx, value); }
-void Statement::bind_double(int idx, double value)         { sqlite3_bind_double(stmt_, idx, value); }
-void Statement::bind_null(int idx)                         { sqlite3_bind_null(stmt_, idx); }
+void Statement::bind_int(int idx, int value) {
+    sqlite3_bind_int(stmt_, idx, value);
+}
+void Statement::bind_int64(int idx, sqlite3_int64 value) {
+    sqlite3_bind_int64(stmt_, idx, value);
+}
+void Statement::bind_double(int idx, double value) {
+    sqlite3_bind_double(stmt_, idx, value);
+}
+void Statement::bind_null(int idx) {
+    sqlite3_bind_null(stmt_, idx);
+}
 void Statement::bind_text(int idx, std::string_view value) {
     sqlite3_bind_text(stmt_, idx, value.data(), static_cast<int>(value.size()), SQLITE_TRANSIENT);
 }
 
-int           Statement::column_int(int idx) const    { return sqlite3_column_int(stmt_, idx); }
-sqlite3_int64 Statement::column_int64(int idx) const  { return sqlite3_column_int64(stmt_, idx); }
-double        Statement::column_double(int idx) const { return sqlite3_column_double(stmt_, idx); }
-std::string   Statement::column_text(int idx) const {
+int Statement::column_int(int idx) const {
+    return sqlite3_column_int(stmt_, idx);
+}
+sqlite3_int64 Statement::column_int64(int idx) const {
+    return sqlite3_column_int64(stmt_, idx);
+}
+double Statement::column_double(int idx) const {
+    return sqlite3_column_double(stmt_, idx);
+}
+std::string Statement::column_text(int idx) const {
     const unsigned char* p = sqlite3_column_text(stmt_, idx);
     int n = sqlite3_column_bytes(stmt_, idx);
     return p ? std::string(reinterpret_cast<const char*>(p), n) : std::string{};

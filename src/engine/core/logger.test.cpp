@@ -22,7 +22,7 @@ public:
 
     void write(LogLevel level, const char* category, std::string_view msg) override {
         std::lock_guard<std::mutex> lock(mutex_);
-        entries.push_back(Entry{ level, std::string(category ? category : ""), std::string(msg) });
+        entries.push_back(Entry{level, std::string(category ? category : ""), std::string(msg)});
     }
 
     std::mutex mutex_;

@@ -1,43 +1,47 @@
 #pragma once
 
-#include "protocol/heightmap.hpp"
-#include "network_client.hpp"
-#include "engine/application.hpp"
-#include "network_smoother.hpp"
-#include "engine/scene/render_scene.hpp"
-#include "engine/scene/ui_scene.hpp"
-#include "engine/scene/camera_state.hpp"
-#include "engine/systems/camera_controller.hpp"
-#include "client/effect_loader.hpp"
 #include "client/animation_loader.hpp"
-#include "client/input_bindings.hpp"
 #include "client/combat_camera.hpp"
-#include "game_state.hpp"
-#include "menu_system.hpp"
+#include "client/effect_loader.hpp"
 #include "client/hud/hud_state.hpp"
 #include "client/hud/panel_state.hpp"
-#include "network_message_handler.hpp"
+#include "client/input_bindings.hpp"
+#include "engine/application.hpp"
+#include "engine/scene/camera_state.hpp"
+#include "engine/scene/render_scene.hpp"
+#include "engine/scene/ui_scene.hpp"
+#include "engine/systems/camera_controller.hpp"
+#include "game_state.hpp"
+#include "menu_system.hpp"
 #include "mouse_ui.hpp"
-#include <glm/glm.hpp>
+#include "network_client.hpp"
+#include "network_message_handler.hpp"
+#include "network_smoother.hpp"
+#include "protocol/heightmap.hpp"
 #include <entt/entt.hpp>
+#include <glm/glm.hpp>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include <memory>
 
 namespace mmo::client {
 
 // Edge detector for key press events (replaces static bool prev_X patterns)
 struct KeyEdge {
     bool prev = false;
-    bool just_pressed(bool current) { bool r = current && !prev; prev = current; return r; }
+    bool just_pressed(bool current) {
+        bool r = current && !prev;
+        prev = current;
+        return r;
+    }
 };
 
 class Game : public engine::Application {
 public:
     Game();
-    ~Game();
+    ~Game() override;
 
     bool init(const std::string& host, uint16_t port);
     void shutdown();
@@ -164,7 +168,7 @@ private:
     bool camera_height_func_set_ = false;
 
     // Frame timing
-    float last_dt_ = 0.016f;  // Last frame's delta time for rendering
+    float last_dt_ = 0.016f; // Last frame's delta time for rendering
 
     // Camera configurations
     engine::systems::CameraModeConfig exploration_camera_config_;
@@ -187,8 +191,8 @@ private:
     std::unique_ptr<NetworkMessageHandler> msg_handler_;
 
     // NPC quest availability (updated by server)
-    std::unordered_set<uint32_t> npcs_with_quests_;      // NPCs that have "!" (available quest)
-    std::unordered_set<uint32_t> npcs_with_turnins_;     // NPCs that have "?" (quest ready to turn in)
+    std::unordered_set<uint32_t> npcs_with_quests_;  // NPCs that have "!" (available quest)
+    std::unordered_set<uint32_t> npcs_with_turnins_; // NPCs that have "?" (quest ready to turn in)
 
     // World-to-screen projection cache (updated each frame)
     glm::mat4 cached_vp_matrix_ = glm::mat4(1.0f);
@@ -201,11 +205,11 @@ private:
     bool player_dead_ = false;
 
     // Key edge detectors (replaces static bool patterns for key-down detection)
-    KeyEdge key_class_select_;          // class select screen any-key
-    KeyEdge key_i_, key_l_, key_t_, key_m_;  // panel toggles in update_playing
-    KeyEdge key_npc_w_, key_npc_s_;     // NPC dialogue navigation W/S
-    KeyEdge key_npc_enter_;             // NPC dialogue enter
-    KeyEdge key_npc_q_;                 // NPC dialogue Q (decline/back)
+    KeyEdge key_class_select_;              // class select screen any-key
+    KeyEdge key_i_, key_l_, key_t_, key_m_; // panel toggles in update_playing
+    KeyEdge key_npc_w_, key_npc_s_;         // NPC dialogue navigation W/S
+    KeyEdge key_npc_enter_;                 // NPC dialogue enter
+    KeyEdge key_npc_q_;                     // NPC dialogue Q (decline/back)
 
     // Panel input key edges (update_panel_input)
     KeyEdge panel_i_, panel_t_, panel_l_, panel_e_, panel_esc_, panel_space_;

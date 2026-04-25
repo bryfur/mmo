@@ -3,8 +3,7 @@
 
 namespace mmo::engine::gpu {
 
-GPUDebugGroup::GPUDebugGroup(SDL_GPUCommandBuffer* cb, const char* name) noexcept
-    : cb_(cb) {
+GPUDebugGroup::GPUDebugGroup(SDL_GPUCommandBuffer* cb, const char* name) noexcept : cb_(cb) {
     if (cb_ && name) {
         SDL_PushGPUDebugGroup(cb_, name);
     } else {
@@ -32,8 +31,12 @@ void GPUTimestampPool::shutdown() {
 }
 
 int GPUTimestampPool::reserve_pair(const char* pass_name) {
-    if (!pass_name) return -1;
-    if (pass_names_.size() >= capacity_) return -1;
+    if (!pass_name) {
+        return -1;
+    }
+    if (pass_names_.size() >= capacity_) {
+        return -1;
+    }
     const int idx = static_cast<int>(pass_names_.size());
     pass_names_.emplace_back(pass_name);
     return idx;
@@ -64,7 +67,8 @@ void GPUTimestampPool::end_frame(SDL_GPUCommandBuffer* /*cb*/) {
 }
 
 GPUTimerScope::GPUTimerScope(GPUTimestampPool& pool, SDL_GPUCommandBuffer* cb, const char* pass_name) noexcept
-    : pool_(&pool), cb_(cb) {
+    : pool_(&pool),
+      cb_(cb) {
     pair_idx_ = pool_->reserve_pair(pass_name);
     if (pair_idx_ >= 0) {
         pool_->write_begin(cb_, pair_idx_);

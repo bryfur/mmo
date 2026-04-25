@@ -1,8 +1,8 @@
 #pragma once
 
 #include "engine/input_handler.hpp"
-#include <SDL3/SDL_scancode.h>
 #include <array>
+#include <SDL3/SDL_scancode.h>
 
 namespace mmo::client {
 

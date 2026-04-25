@@ -9,18 +9,18 @@ namespace mmo::engine::gpu {
 
 /**
  * @brief GPU Texture abstraction for 2D textures, render targets, and depth buffers
- * 
+ *
  * This class simplifies texture creation and data upload. It handles the transfer
  * buffer lifecycle for uploads automatically and supports common texture types.
- * 
+ *
  * Usage:
  *   // Load from file
  *   auto diffuse = GPUTexture::load_from_file(device, "assets/textures/grass.png");
- *   
+ *
  *   // Create render target
- *   auto color_target = GPUTexture::create_render_target(device, 1920, 1080, 
+ *   auto color_target = GPUTexture::create_render_target(device, 1920, 1080,
  *                                                          TextureFormat::RGBA8);
- *   
+ *
  *   // Create depth buffer
  *   auto depth = GPUTexture::create_depth(device, 1920, 1080);
  */
@@ -36,19 +36,18 @@ public:
 
     /**
      * @brief Load a texture from a file (PNG, JPG, etc. via SDL_image)
-     * 
+     *
      * @param device The GPU device
      * @param path Path to the image file
      * @param generate_mipmaps Whether to generate mipmaps (default true)
      * @return Unique pointer to the texture, or nullptr on failure
      */
-    static std::unique_ptr<GPUTexture> load_from_file(GPUDevice& device, 
-                                                        const std::string& path,
-                                                        bool generate_mipmaps = true);
+    static std::unique_ptr<GPUTexture> load_from_file(GPUDevice& device, const std::string& path,
+                                                      bool generate_mipmaps = true);
 
     /**
      * @brief Create a 2D texture from raw pixel data
-     * 
+     *
      * @param device The GPU device
      * @param width Texture width
      * @param height Texture height
@@ -57,18 +56,15 @@ public:
      * @param generate_mipmaps Whether to generate mipmaps
      * @return Unique pointer to the texture, or nullptr on failure
      */
-    static std::unique_ptr<GPUTexture> create_2d(GPUDevice& device,
-                                                   int width, int height,
-                                                   TextureFormat format,
-                                                   const void* pixels = nullptr,
-                                                   bool generate_mipmaps = false);
+    static std::unique_ptr<GPUTexture> create_2d(GPUDevice& device, int width, int height, TextureFormat format,
+                                                 const void* pixels = nullptr, bool generate_mipmaps = false);
 
     /**
      * @brief Create a 2D texture with explicit SDL format and usage flags
-     * 
+     *
      * This overload provides direct access to SDL GPU texture formats and usage flags
      * for advanced use cases that need more control over texture creation.
-     * 
+     *
      * @param device The GPU device
      * @param width Texture width
      * @param height Texture height
@@ -76,27 +72,24 @@ public:
      * @param usage SDL GPU texture usage flags
      * @return Unique pointer to the texture, or nullptr on failure
      */
-    static std::unique_ptr<GPUTexture> create_2d(GPUDevice& device,
-                                                   int width, int height,
-                                                   SDL_GPUTextureFormat format,
-                                                   SDL_GPUTextureUsageFlags usage);
+    static std::unique_ptr<GPUTexture> create_2d(GPUDevice& device, int width, int height, SDL_GPUTextureFormat format,
+                                                 SDL_GPUTextureUsageFlags usage);
 
     /**
      * @brief Create a render target texture
-     * 
+     *
      * @param device The GPU device
      * @param width Texture width
      * @param height Texture height
      * @param format Pixel format
      * @return Unique pointer to the texture, or nullptr on failure
      */
-    static std::unique_ptr<GPUTexture> create_render_target(GPUDevice& device,
-                                                              int width, int height,
-                                                              TextureFormat format);
+    static std::unique_ptr<GPUTexture> create_render_target(GPUDevice& device, int width, int height,
+                                                            TextureFormat format);
 
     /**
      * @brief Create a depth buffer texture
-     * 
+     *
      * @param device The GPU device
      * @param width Texture width
      * @param height Texture height
@@ -126,9 +119,8 @@ public:
      * @param layer_data Array of pointers to pixel data for each layer (can be nullptr)
      * @return Unique pointer to the texture, or nullptr on failure
      */
-    static std::unique_ptr<GPUTexture> create_2d_array(GPUDevice& device, int width, int height,
-                                                         int layers, TextureFormat format,
-                                                         const void** layer_data = nullptr);
+    static std::unique_ptr<GPUTexture> create_2d_array(GPUDevice& device, int width, int height, int layers,
+                                                       TextureFormat format, const void** layer_data = nullptr);
 
     /**
      * @brief Get the number of array layers (1 for non-array textures)
@@ -137,14 +129,13 @@ public:
 
     /**
      * @brief Create a depth-stencil buffer texture
-     * 
+     *
      * @param device The GPU device
      * @param width Texture width
      * @param height Texture height
      * @return Unique pointer to the texture, or nullptr on failure
      */
-    static std::unique_ptr<GPUTexture> create_depth_stencil(GPUDevice& device, 
-                                                              int width, int height);
+    static std::unique_ptr<GPUTexture> create_depth_stencil(GPUDevice& device, int width, int height);
 
     /**
      * @brief Upload pixel data to the texture

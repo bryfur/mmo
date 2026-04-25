@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include "server/rules/party_leadership.hpp"
+#include <gtest/gtest.h>
 
 using namespace mmo::server::rules;
 

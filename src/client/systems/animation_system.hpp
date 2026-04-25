@@ -1,8 +1,8 @@
 #pragma once
 
 #include <entt/entt.hpp>
-#include <glm/glm.hpp>
 #include <functional>
+#include <glm/glm.hpp>
 
 namespace mmo::engine {
 class ModelManager;
@@ -37,12 +37,8 @@ void update_rotation_smoothing(entt::registry& registry, float dt);
 // Entities beyond `cull_distance` from `camera_pos` skip the full pipeline —
 // they will not be drawn this frame, so their pose does not matter. Pass a
 // negative cull_distance to disable distance culling.
-void update_animations(entt::registry& registry,
-                       float dt,
-                       engine::ModelManager& models,
-                       const AnimationRegistry& animation_registry,
-                       const TerrainHeightFn& get_terrain_height,
-                       const glm::vec3& camera_pos,
-                       float cull_distance);
+void update_animations(entt::registry& registry, float dt, engine::ModelManager& models,
+                       const AnimationRegistry& animation_registry, const TerrainHeightFn& get_terrain_height,
+                       const glm::vec3& camera_pos, float cull_distance);
 
 } // namespace mmo::client::systems

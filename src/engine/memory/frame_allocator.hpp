@@ -10,7 +10,7 @@ class FrameAllocator {
 public:
     FrameAllocator() = default;
     explicit FrameAllocator(std::size_t initial_chunk_size)
-        : arenas_{ Arena(initial_chunk_size), Arena(initial_chunk_size) } {}
+        : arenas_{Arena(initial_chunk_size), Arena(initial_chunk_size)} {}
 
     FrameAllocator(const FrameAllocator&) = delete;
     FrameAllocator& operator=(const FrameAllocator&) = delete;

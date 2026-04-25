@@ -1,9 +1,9 @@
 #pragma once
 
 #include "protocol/protocol.hpp"
+#include <cstdint>
 #include <string>
 #include <vector>
-#include <cstdint>
 
 namespace mmo::server::ecs {
 
@@ -14,14 +14,14 @@ namespace mmo::server::ecs {
 // Coordinate system: Y-up. x,z form the horizontal ground plane; y is vertical (height/elevation)
 struct Transform {
     float x = 0.0f;
-    float y = 0.0f;      // Height/elevation
+    float y = 0.0f; // Height/elevation
     float z = 0.0f;
-    float rotation = 0.0f;  // Rotation in radians (around vertical axis)
+    float rotation = 0.0f; // Rotation in radians (around vertical axis)
 };
 
 struct Velocity {
     float x = 0.0f;
-    float y = 0.0f;      // Vertical velocity
+    float y = 0.0f; // Vertical velocity
     float z = 0.0f;
 };
 
@@ -53,7 +53,7 @@ struct EntityInfo {
     uint8_t npc_type = 0;
     uint8_t building_type = 0;
     uint8_t environment_type = 0;
-    uint8_t tree_variant = 0;  // visual variant index for tree diversity
+    uint8_t tree_variant = 0; // visual variant index for tree diversity
     uint32_t color = 0xFFFFFFFF;
 
     // Render data (sent to client via protocol)
@@ -121,9 +121,9 @@ enum class ColliderType : uint8_t {
 };
 
 enum class PhysicsMotionType : uint8_t {
-    Static = 0,      // Never moves (buildings, terrain)
-    Kinematic = 1,   // Moved by code, affects dynamic bodies
-    Dynamic = 2,     // Fully simulated
+    Static = 0,    // Never moves (buildings, terrain)
+    Kinematic = 1, // Moved by code, affects dynamic bodies
+    Dynamic = 2,   // Fully simulated
 };
 
 struct Collider {
@@ -213,7 +213,7 @@ struct PlayerLevel {
     // Mana for skills
     float mana = 100.0f;
     float max_mana = 100.0f;
-    float mana_regen = 5.0f;  // per second
+    float mana_regen = 5.0f; // per second
 };
 
 // ============================================================================
@@ -235,11 +235,19 @@ struct Inventory {
         for (int i = 0; i < used_slots; ++i) {
             if (slots[i].item_id == id) {
                 int can_add = max_stack - slots[i].count;
-                if (can_add <= 0) continue;  // This stack is full, try another or new slot
+                if (can_add <= 0) {
+                    {
+                        continue; // This stack is full, try another or new slot
+                    }
+                }
                 int to_add = (count <= can_add) ? count : can_add;
                 slots[i].count += to_add;
                 count -= to_add;
-                if (count <= 0) return true;
+                if (count <= 0) {
+                    {
+                        return true;
+                    }
+                }
             }
         }
         // Remaining items go into new slots
@@ -256,7 +264,11 @@ struct Inventory {
     // Removes `count` of `id`, consuming across multiple stacks if needed.
     // Returns false if the inventory doesn't contain enough.
     bool remove_item(const std::string& id, int count = 1) {
-        if (count_item(id) < count) return false;
+        if (count_item(id) < count) {
+            {
+                return false;
+            }
+        }
         for (int i = 0; i < used_slots && count > 0;) {
             if (slots[i].item_id == id) {
                 int take = (slots[i].count <= count) ? slots[i].count : count;
@@ -264,11 +276,10 @@ struct Inventory {
                 count -= take;
                 if (slots[i].count <= 0) {
                     // Compact: shift subsequent slots left.
-                    for (int j = i; j < used_slots - 1; ++j)
-                        slots[j] = slots[j + 1];
+                    for (int j = i; j < used_slots - 1; ++j) slots[j] = slots[j + 1];
                     slots[used_slots - 1] = {};
                     --used_slots;
-                    continue;  // don't advance i; new occupant is at this index
+                    continue; // don't advance i; new occupant is at this index
                 }
             }
             ++i;
@@ -279,8 +290,15 @@ struct Inventory {
     // Total count of an item across ALL stacks in the inventory.
     int count_item(const std::string& id) const {
         int total = 0;
-        for (int i = 0; i < used_slots; ++i)
-            if (slots[i].item_id == id) total += slots[i].count;
+        for (int i = 0; i < used_slots; ++i) {
+            {
+                if (slots[i].item_id == id) {
+                    {
+                        total += slots[i].count;
+                    }
+                }
+            }
+        }
         return total;
     }
 };
@@ -291,7 +309,7 @@ struct Inventory {
 struct ChannelingSkill {
     std::string skill_id;
     float time_remaining = 0.0f;
-    float tick_timer = 0.0f;       // counts down; fires when <= 0
+    float tick_timer = 0.0f; // counts down; fires when <= 0
     float tick_interval = 0.5f;
     float dir_x = 1.0f;
     float dir_z = 0.0f;
@@ -302,24 +320,50 @@ struct ConsumableCooldowns {
     // Remaining cooldown seconds keyed by item_id.
     // We use a small fixed array to avoid a std::unordered_map allocation
     // on every frame. Up to 8 simultaneously-cooling-down items.
-    struct Entry { std::string item_id; float remaining = 0.0f; };
+    struct Entry {
+        std::string item_id;
+        float remaining = 0.0f;
+    };
     static constexpr int MAX = 8;
     Entry entries[MAX];
 
     void tick(float dt) {
-        for (auto& e : entries) if (e.remaining > 0.0f) e.remaining -= dt;
+        for (auto& e : entries) {
+            {
+                if (e.remaining > 0.0f) {
+                    {
+                        e.remaining -= dt;
+                    }
+                }
+            }
+        }
     }
     float remaining(const std::string& id) const {
-        for (const auto& e : entries) if (e.item_id == id && e.remaining > 0.0f) return e.remaining;
+        for (const auto& e : entries) {
+            {
+                if (e.item_id == id && e.remaining > 0.0f) {
+                    {
+                        return e.remaining;
+                    }
+                }
+            }
+        }
         return 0.0f;
     }
     void set(const std::string& id, float cooldown) {
         for (auto& e : entries) {
-            if (e.item_id == id) { e.remaining = cooldown; return; }
+            if (e.item_id == id) {
+                e.remaining = cooldown;
+                return;
+            }
         }
         // Otherwise, take the first empty/expired slot.
         for (auto& e : entries) {
-            if (e.remaining <= 0.0f) { e.item_id = id; e.remaining = cooldown; return; }
+            if (e.remaining <= 0.0f) {
+                e.item_id = id;
+                e.remaining = cooldown;
+                return;
+            }
         }
     }
 };
@@ -344,8 +388,8 @@ struct Equipment {
 // ============================================================================
 
 struct QuestObjectiveProgress {
-    std::string type;       // "kill", "visit", "gather" - copied from config
-    std::string target;     // target id - copied from config
+    std::string type;   // "kill", "visit", "gather" - copied from config
+    std::string target; // target id - copied from config
     int current = 0;
     int required = 0;
     bool complete = false;
@@ -362,20 +406,41 @@ struct QuestState {
     std::vector<std::string> completed_quests;
 
     bool has_completed(const std::string& id) const {
-        for (const auto& q : completed_quests)
-            if (q == id) return true;
+        for (const auto& q : completed_quests) {
+            {
+                if (q == id) {
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
         return false;
     }
 
     bool has_active(const std::string& id) const {
-        for (const auto& q : active_quests)
-            if (q.quest_id == id) return true;
+        for (const auto& q : active_quests) {
+            {
+                if (q.quest_id == id) {
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
         return false;
     }
 
     ActiveQuest* get_active(const std::string& id) {
-        for (auto& q : active_quests)
-            if (q.quest_id == id) return &q;
+        for (auto& q : active_quests) {
+            {
+                if (q.quest_id == id) {
+                    {
+                        return &q;
+                    }
+                }
+            }
+        }
         return nullptr;
     }
 };
@@ -393,22 +458,39 @@ struct SkillState {
     std::vector<SkillCooldown> cooldowns;
 
     float get_cooldown(const std::string& id) const {
-        for (const auto& cd : cooldowns)
-            if (cd.skill_id == id) return cd.remaining;
+        for (const auto& cd : cooldowns) {
+            {
+                if (cd.skill_id == id) {
+                    {
+                        return cd.remaining;
+                    }
+                }
+            }
+        }
         return 0.0f;
     }
 
     void set_cooldown(const std::string& id, float time) {
         for (auto& cd : cooldowns) {
-            if (cd.skill_id == id) { cd.remaining = time; return; }
+            if (cd.skill_id == id) {
+                cd.remaining = time;
+                return;
+            }
         }
         cooldowns.push_back({id, time});
     }
 
     /// Decrement all cooldown timers. Satisfies TickableState.
     void tick(float dt) {
-        for (auto& cd : cooldowns)
-            if (cd.remaining > 0.0f) cd.remaining -= dt;
+        for (auto& cd : cooldowns) {
+            {
+                if (cd.remaining > 0.0f) {
+                    {
+                        cd.remaining -= dt;
+                    }
+                }
+            }
+        }
     }
 };
 // Contract assertion lives in component_contracts.hpp (header-include
@@ -423,8 +505,15 @@ struct TalentState {
     int talent_points = 0;
 
     bool has_talent(const std::string& id) const {
-        for (const auto& t : unlocked_talents)
-            if (t == id) return true;
+        for (const auto& t : unlocked_talents) {
+            {
+                if (t == id) {
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
         return false;
     }
 };
@@ -434,7 +523,7 @@ struct TalentState {
 // ============================================================================
 
 struct MonsterTypeId {
-    std::string type_id;  // e.g. "goblin_scout"
+    std::string type_id; // e.g. "goblin_scout"
     int level = 1;
     int xp_reward = 25;
     int gold_reward = 5;
@@ -454,19 +543,19 @@ struct ZoneInfo {
 
 struct StatusEffect {
     enum class Type : uint8_t {
-        Stun,        // Cannot move or attack
-        Slow,        // Reduced movement speed
-        Root,        // Cannot move but can attack
-        Freeze,      // Cannot move or attack (ice visual)
-        Burn,        // Damage over time
-        Poison,      // Damage over time (weaker but longer)
-        Heal,        // Heal over time
-        Shield,      // Damage absorption
-        SpeedBoost,  // Increased movement speed
-        DamageBoost, // Increased damage
-        DefenseBoost,// Reduced damage taken
-        Lifesteal,   // Heal on hit
-        Invulnerable // Cannot take damage
+        Stun,         // Cannot move or attack
+        Slow,         // Reduced movement speed
+        Root,         // Cannot move but can attack
+        Freeze,       // Cannot move or attack (ice visual)
+        Burn,         // Damage over time
+        Poison,       // Damage over time (weaker but longer)
+        Heal,         // Heal over time
+        Shield,       // Damage absorption
+        SpeedBoost,   // Increased movement speed
+        DamageBoost,  // Increased damage
+        DefenseBoost, // Reduced damage taken
+        Lifesteal,    // Heal on hit
+        Invulnerable  // Cannot take damage
     };
 
     Type type;
@@ -480,8 +569,8 @@ struct StatusEffect {
 // Helper to construct a StatusEffect in one call.
 // For non-DoT effects, tick_interval defaults to 0 (no ticking).
 // For DoT/HoT effects, pass the tick interval explicitly.
-inline StatusEffect make_status_effect(StatusEffect::Type type, float duration, float value,
-                                       uint32_t source_id = 0, float tick_interval = 0.0f) {
+inline StatusEffect make_status_effect(StatusEffect::Type type, float duration, float value, uint32_t source_id = 0,
+                                       float tick_interval = 0.0f) {
     return StatusEffect{type, duration, tick_interval, tick_interval, value, source_id};
 }
 
@@ -491,7 +580,15 @@ struct BuffState {
     void add(StatusEffect effect) { effects.push_back(effect); }
 
     bool has(StatusEffect::Type type) const {
-        for (auto& e : effects) if (e.type == type) return true;
+        for (const auto& e : effects) {
+            {
+                if (e.type == type) {
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
         return false;
     }
 
@@ -500,25 +597,41 @@ struct BuffState {
 
     float get_speed_multiplier() const {
         float mult = 1.0f;
-        for (auto& e : effects) {
-            if (e.type == StatusEffect::Type::Slow) mult *= (1.0f - e.value);
-            if (e.type == StatusEffect::Type::SpeedBoost) mult *= (1.0f + e.value);
+        for (const auto& e : effects) {
+            if (e.type == StatusEffect::Type::Slow) {
+                {
+                    mult *= (1.0f - e.value);
+                }
+            }
+            if (e.type == StatusEffect::Type::SpeedBoost) {
+                {
+                    mult *= (1.0f + e.value);
+                }
+            }
         }
         return mult;
     }
 
     float get_damage_multiplier() const {
         float mult = 1.0f;
-        for (auto& e : effects) {
-            if (e.type == StatusEffect::Type::DamageBoost) mult *= (1.0f + e.value);
+        for (const auto& e : effects) {
+            if (e.type == StatusEffect::Type::DamageBoost) {
+                {
+                    mult *= (1.0f + e.value);
+                }
+            }
         }
         return mult;
     }
 
     float get_defense_multiplier() const {
         float mult = 1.0f;
-        for (auto& e : effects) {
-            if (e.type == StatusEffect::Type::DefenseBoost) mult *= (1.0f - e.value);
+        for (const auto& e : effects) {
+            if (e.type == StatusEffect::Type::DefenseBoost) {
+                {
+                    mult *= (1.0f - e.value);
+                }
+            }
         }
         return mult;
     }
@@ -527,16 +640,24 @@ struct BuffState {
 
     float get_lifesteal() const {
         float total = 0.0f;
-        for (auto& e : effects) {
-            if (e.type == StatusEffect::Type::Lifesteal) total += e.value;
+        for (const auto& e : effects) {
+            if (e.type == StatusEffect::Type::Lifesteal) {
+                {
+                    total += e.value;
+                }
+            }
         }
         return total;
     }
 
     float get_shield_value() const {
         float total = 0.0f;
-        for (auto& e : effects) {
-            if (e.type == StatusEffect::Type::Shield) total += e.value;
+        for (const auto& e : effects) {
+            if (e.type == StatusEffect::Type::Shield) {
+                {
+                    total += e.value;
+                }
+            }
         }
         return total;
     }

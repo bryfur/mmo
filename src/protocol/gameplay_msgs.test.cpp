@@ -1,13 +1,12 @@
-#include <gtest/gtest.h>
 #include "protocol/gameplay_msgs.hpp"
 #include "protocol/buffer_reader.hpp"
 #include "protocol/buffer_writer.hpp"
 #include <cstring>
+#include <gtest/gtest.h>
 
 using namespace mmo::protocol;
 
-template <typename T>
-static void round_trip(const T& in, T& out) {
+template<typename T> static void round_trip(const T& in, T& out) {
     std::vector<uint8_t> buf(T::serialized_size());
     in.serialize(buf);
     out.deserialize(buf);
@@ -19,7 +18,7 @@ static void round_trip(const T& in, T& out) {
 
 TEST(ChatProtocol, SendRoundTrip) {
     ChatSendMsg a;
-    a.channel = 2;  // Global
+    a.channel = 2; // Global
     std::strncpy(a.message, "hello world!", sizeof(a.message) - 1);
 
     ChatSendMsg b;
@@ -86,8 +85,11 @@ TEST(VendorProtocol, OpenRoundTripWithMultipleStock) {
 
 TEST(VendorProtocol, BuyRoundTrip) {
     VendorBuyMsg a;
-    a.npc_id = 42; a.stock_index = 3; a.quantity = 5;
-    VendorBuyMsg b; round_trip(a, b);
+    a.npc_id = 42;
+    a.stock_index = 3;
+    a.quantity = 5;
+    VendorBuyMsg b;
+    round_trip(a, b);
     EXPECT_EQ(a.npc_id, b.npc_id);
     EXPECT_EQ(a.stock_index, b.stock_index);
     EXPECT_EQ(a.quantity, b.quantity);
@@ -95,8 +97,11 @@ TEST(VendorProtocol, BuyRoundTrip) {
 
 TEST(VendorProtocol, SellRoundTrip) {
     VendorSellMsg a;
-    a.npc_id = 1; a.inventory_slot = 7; a.quantity = 1;
-    VendorSellMsg b; round_trip(a, b);
+    a.npc_id = 1;
+    a.inventory_slot = 7;
+    a.quantity = 1;
+    VendorSellMsg b;
+    round_trip(a, b);
     EXPECT_EQ(a.npc_id, b.npc_id);
     EXPECT_EQ(a.inventory_slot, b.inventory_slot);
     EXPECT_EQ(a.quantity, b.quantity);
@@ -109,7 +114,8 @@ TEST(VendorProtocol, SellRoundTrip) {
 TEST(PartyProtocol, InviteRoundTrip) {
     PartyInviteMsg a;
     std::strncpy(a.target_name, "Alice", sizeof(a.target_name) - 1);
-    PartyInviteMsg b; round_trip(a, b);
+    PartyInviteMsg b;
+    round_trip(a, b);
     EXPECT_STREQ(a.target_name, b.target_name);
 }
 
@@ -117,7 +123,8 @@ TEST(PartyProtocol, InviteOfferRoundTrip) {
     PartyInviteOfferMsg a;
     a.inviter_id = 1234;
     std::strncpy(a.inviter_name, "Bob", sizeof(a.inviter_name) - 1);
-    PartyInviteOfferMsg b; round_trip(a, b);
+    PartyInviteOfferMsg b;
+    round_trip(a, b);
     EXPECT_EQ(a.inviter_id, b.inviter_id);
     EXPECT_STREQ(a.inviter_name, b.inviter_name);
 }
@@ -207,17 +214,18 @@ TEST(CraftingProtocol, ResultRoundTrip) {
 
 TEST(PacketHeader, RoundTripWithVendorPayload) {
     VendorBuyMsg src;
-    src.npc_id = 7; src.stock_index = 2; src.quantity = 1;
+    src.npc_id = 7;
+    src.stock_index = 2;
+    src.quantity = 1;
     auto packet = build_packet(MessageType::VendorBuy, src);
 
-    PacketHeader hdr;
+    PacketHeader hdr{};
     hdr.deserialize(std::span<const uint8_t>(packet.data(), PacketHeader::serialized_size()));
     EXPECT_EQ(hdr.type, MessageType::VendorBuy);
     EXPECT_EQ(hdr.payload_size, VendorBuyMsg::serialized_size());
 
     VendorBuyMsg dst;
-    dst.deserialize(std::span<const uint8_t>(packet.data() + PacketHeader::serialized_size(),
-                                              hdr.payload_size));
+    dst.deserialize(std::span<const uint8_t>(packet.data() + PacketHeader::serialized_size(), hdr.payload_size));
     EXPECT_EQ(src.npc_id, dst.npc_id);
     EXPECT_EQ(src.stock_index, dst.stock_index);
     EXPECT_EQ(src.quantity, dst.quantity);

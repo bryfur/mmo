@@ -3,11 +3,11 @@
 #include "entt/entity/entity.hpp"
 #include "entt/entity/fwd.hpp"
 #include "protocol/protocol.hpp"
-#include "server/game_config.hpp"
 #include "server/ecs/game_components.hpp"
+#include "server/game_config.hpp"
+#include <algorithm>
 #include <cmath>
 #include <random>
-#include <algorithm>
 #include <vector>
 
 namespace mmo::server::systems {
@@ -22,8 +22,8 @@ float distance(float x1, float z1, float x2, float z2) {
     return std::sqrt(dx * dx + dz * dz);
 }
 
-entt::entity find_nearest_target(entt::registry& registry, entt::entity attacker,
-                                  EntityType target_type, float max_range) {
+entt::entity find_nearest_target(entt::registry& registry, entt::entity attacker, EntityType target_type,
+                                 float max_range) {
     const auto& attacker_transform = registry.get<ecs::Transform>(attacker);
 
     entt::entity nearest = entt::null;
@@ -31,17 +31,22 @@ entt::entity find_nearest_target(entt::registry& registry, entt::entity attacker
 
     auto view = registry.view<ecs::Transform, ecs::Health, ecs::EntityInfo>();
     for (auto entity : view) {
-        if (entity == attacker) continue;
+        if (entity == attacker) {
+            continue;
+        }
 
         const auto& info = view.get<ecs::EntityInfo>(entity);
-        if (info.type != target_type) continue;
+        if (info.type != target_type) {
+            continue;
+        }
 
         const auto& health = view.get<ecs::Health>(entity);
-        if (!health.is_alive()) continue;
+        if (!health.is_alive()) {
+            continue;
+        }
 
         const auto& transform = view.get<ecs::Transform>(entity);
-        float dist = distance(attacker_transform.x, attacker_transform.z,
-                             transform.x, transform.z);
+        float dist = distance(attacker_transform.x, attacker_transform.z, transform.x, transform.z);
 
         if (dist < nearest_dist) {
             nearest_dist = dist;
@@ -54,10 +59,13 @@ entt::entity find_nearest_target(entt::registry& registry, entt::entity attacker
 
 } // anonymous namespace
 
-bool apply_damage(entt::registry& registry, entt::entity target, float damage,
-                   entt::entity attacker) {
-    if (target == entt::null) return false;
-    if (!registry.all_of<ecs::Health>(target)) return false;
+bool apply_damage(entt::registry& registry, entt::entity target, float damage, entt::entity attacker) {
+    if (target == entt::null) {
+        return false;
+    }
+    if (!registry.all_of<ecs::Health>(target)) {
+        return false;
+    }
 
     // Moving dodge check for players
     if (attacker != entt::null && registry.all_of<ecs::TalentStats>(target)) {
@@ -99,8 +107,12 @@ bool apply_damage(entt::registry& registry, entt::entity target, float damage,
                     float to_absorb = std::min(e.value, absorbed);
                     e.value -= to_absorb;
                     absorbed -= to_absorb;
-                    if (e.value <= 0.0f) e.duration = 0.0f;
-                    if (absorbed <= 0.0f) break;
+                    if (e.value <= 0.0f) {
+                        e.duration = 0.0f;
+                    }
+                    if (absorbed <= 0.0f) {
+                        break;
+                    }
                 }
             }
         }
@@ -123,8 +135,7 @@ bool apply_damage(entt::registry& registry, entt::entity target, float damage,
             health.current = health.max * ts.cheat_death_hp;
             tr->cheat_death_timer = ts.cheat_death_cooldown_max;
             // Grant brief invulnerability
-            apply_effect(registry, target,
-                ecs::make_status_effect(ecs::StatusEffect::Type::Invulnerable, 2.0f, 0.0f));
+            apply_effect(registry, target, ecs::make_status_effect(ecs::StatusEffect::Type::Invulnerable, 2.0f, 0.0f));
         }
     }
 
@@ -133,8 +144,7 @@ bool apply_damage(entt::registry& registry, entt::entity target, float damage,
         float lifesteal = registry.get<ecs::BuffState>(attacker).get_lifesteal();
         if (lifesteal > 0.0f && registry.all_of<ecs::Health>(attacker)) {
             auto& attacker_health = registry.get<ecs::Health>(attacker);
-            attacker_health.current = std::min(attacker_health.max,
-                attacker_health.current + damage * lifesteal);
+            attacker_health.current = std::min(attacker_health.max, attacker_health.current + damage * lifesteal);
         }
     }
 
@@ -164,27 +174,35 @@ bool apply_damage(entt::registry& registry, entt::entity target, float damage,
 
 // Find targets in a cone/area based on attack direction
 std::vector<entt::entity> find_targets_in_direction(entt::registry& registry, entt::entity attacker,
-                                                     EntityType target_type, float range,
-                                                     float dir_x, float dir_y, float cone_angle) {
+                                                    EntityType target_type, float range, float dir_x, float dir_y,
+                                                    float cone_angle) {
     const auto& attacker_transform = registry.get<ecs::Transform>(attacker);
     std::vector<entt::entity> targets;
 
     auto view = registry.view<ecs::Transform, ecs::Health, ecs::EntityInfo>();
     for (auto entity : view) {
-        if (entity == attacker) continue;
+        if (entity == attacker) {
+            continue;
+        }
 
         const auto& info = view.get<ecs::EntityInfo>(entity);
-        if (info.type != target_type) continue;
+        if (info.type != target_type) {
+            continue;
+        }
 
         const auto& health = view.get<ecs::Health>(entity);
-        if (!health.is_alive()) continue;
+        if (!health.is_alive()) {
+            continue;
+        }
 
         const auto& transform = view.get<ecs::Transform>(entity);
         float dx = transform.x - attacker_transform.x;
         float dz = transform.z - attacker_transform.z;
         float dist = std::sqrt(dx * dx + dz * dz);
 
-        if (dist > range || dist < 0.001f) continue;
+        if (dist > range || dist < 0.001f) {
+            continue;
+        }
 
         // Check if in cone (dot product check)
         // dir_x/dir_y is a 2D direction on the ground plane (x, z)
@@ -210,7 +228,9 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
         auto& combat = view.get<ecs::Combat>(entity);
         auto& health = view.get<ecs::Health>(entity);
 
-        if (!health.is_alive()) continue;
+        if (!health.is_alive()) {
+            continue;
+        }
 
         if (combat.current_cooldown > 0) {
             combat.current_cooldown -= dt;
@@ -234,11 +254,15 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
         bool wants_attack = input.attacking;
         input.attacking = false;
 
-        if (!health.is_alive() || !wants_attack || !combat.can_attack()) continue;
+        if (!health.is_alive() || !wants_attack || !combat.can_attack()) {
+            continue;
+        }
 
         // Cannot attack while stunned or frozen
         if (registry.all_of<ecs::BuffState>(entity)) {
-            if (registry.get<ecs::BuffState>(entity).is_stunned()) continue;
+            if (registry.get<ecs::BuffState>(entity).is_stunned()) {
+                continue;
+            }
         }
 
         // Trigger attack regardless of target - visual effect will play
@@ -300,13 +324,10 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
         }
 
         // Find and damage all targets in attack cone
-        auto targets = find_targets_in_direction(registry, entity, EntityType::NPC,
-                                                  combat.attack_range,
-                                                  input.attack_dir_x, input.attack_dir_y,
-                                                  cone_angle);
+        auto targets = find_targets_in_direction(registry, entity, EntityType::NPC, combat.attack_range,
+                                                 input.attack_dir_x, input.attack_dir_y, cone_angle);
 
-        uint32_t player_net_id = registry.all_of<ecs::NetworkId>(entity)
-            ? registry.get<ecs::NetworkId>(entity).id : 0;
+        uint32_t player_net_id = registry.all_of<ecs::NetworkId>(entity) ? registry.get<ecs::NetworkId>(entity).id : 0;
 
         bool hit_any = false;
         for (auto target : targets) {
@@ -327,8 +348,7 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
             }
 
             // Stationary damage multiplier
-            if (tp && tp->stationary_damage_mult > 1.0f &&
-                tr && tr->stationary_timer >= tp->stationary_delay) {
+            if (tp && tp->stationary_damage_mult > 1.0f && tr && tr->stationary_timer >= tp->stationary_delay) {
                 hit_damage *= tp->stationary_damage_mult;
             }
 
@@ -341,8 +361,8 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
             }
 
             // Max-range damage bonus
-            if (tp && tp->max_range_damage_bonus > 0.0f &&
-                registry.all_of<ecs::Transform>(entity) && registry.all_of<ecs::Transform>(target)) {
+            if (tp && tp->max_range_damage_bonus > 0.0f && registry.all_of<ecs::Transform>(entity) &&
+                registry.all_of<ecs::Transform>(target)) {
                 const auto& at = registry.get<ecs::Transform>(entity);
                 const auto& tt = registry.get<ecs::Transform>(target);
                 float dx = tt.x - at.x, dz = tt.z - at.z;
@@ -366,26 +386,30 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
                 float chance = tp->slow_on_hit_chance > 0.0f ? tp->slow_on_hit_chance : 1.0f;
                 if (dist01(rng_combat) < chance) {
                     apply_effect(registry, target,
-                        ecs::make_status_effect(ecs::StatusEffect::Type::Slow, tp->slow_on_hit_dur, tp->slow_on_hit_value, player_net_id));
+                                 ecs::make_status_effect(ecs::StatusEffect::Type::Slow, tp->slow_on_hit_dur,
+                                                         tp->slow_on_hit_value, player_net_id));
                 }
             }
 
             // On-hit burn
             if (tp && tp->burn_on_hit_pct > 0.0f && tp->burn_on_hit_dur > 0.0f) {
                 apply_effect(registry, target,
-                    ecs::make_status_effect(ecs::StatusEffect::Type::Burn, tp->burn_on_hit_dur, effective_damage * tp->burn_on_hit_pct, player_net_id, 1.0f));
+                             ecs::make_status_effect(ecs::StatusEffect::Type::Burn, tp->burn_on_hit_dur,
+                                                     effective_damage * tp->burn_on_hit_pct, player_net_id, 1.0f));
             }
 
             // On-hit poison
             if (tp && tp->poison_on_hit_pct > 0.0f && tp->poison_on_hit_dur > 0.0f) {
                 apply_effect(registry, target,
-                    ecs::make_status_effect(ecs::StatusEffect::Type::Poison, tp->poison_on_hit_dur, effective_damage * tp->poison_on_hit_pct, player_net_id, 1.0f));
+                             ecs::make_status_effect(ecs::StatusEffect::Type::Poison, tp->poison_on_hit_dur,
+                                                     effective_damage * tp->poison_on_hit_pct, player_net_id, 1.0f));
             }
 
             // Empowered stun
             if (is_empowered && tp && tp->empowered_stun_dur > 0.0f) {
                 apply_effect(registry, target,
-                    ecs::make_status_effect(ecs::StatusEffect::Type::Stun, tp->empowered_stun_dur, 0.0f, player_net_id));
+                             ecs::make_status_effect(ecs::StatusEffect::Type::Stun, tp->empowered_stun_dur, 0.0f,
+                                                     player_net_id));
             }
 
             // Combo stack increment
@@ -414,7 +438,8 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
             // Hit speed boost
             if (tp && tp->hit_speed_bonus > 0.0f && tp->hit_speed_dur > 0.0f) {
                 apply_effect(registry, entity,
-                    ecs::make_status_effect(ecs::StatusEffect::Type::SpeedBoost, tp->hit_speed_dur, tp->hit_speed_bonus, player_net_id));
+                             ecs::make_status_effect(ecs::StatusEffect::Type::SpeedBoost, tp->hit_speed_dur,
+                                                     tp->hit_speed_bonus, player_net_id));
             }
         }
     }
@@ -426,11 +451,15 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
         const auto& ai = npc_view.get<ecs::AIState>(entity);
         const auto& health = npc_view.get<ecs::Health>(entity);
 
-        if (!health.is_alive() || ai.target_id == 0 || !combat.can_attack()) continue;
+        if (!health.is_alive() || ai.target_id == 0 || !combat.can_attack()) {
+            continue;
+        }
 
         // Cannot attack while stunned or frozen
         if (registry.all_of<ecs::BuffState>(entity)) {
-            if (registry.get<ecs::BuffState>(entity).is_stunned()) continue;
+            if (registry.get<ecs::BuffState>(entity).is_stunned()) {
+                continue;
+            }
         }
 
         auto target = find_nearest_target(registry, entity, EntityType::Player, combat.attack_range);
@@ -453,7 +482,7 @@ std::vector<CombatHit> update_combat(entt::registry& registry, float dt, const G
             CombatHit hit;
             hit.attacker = entity;
             hit.target = target;
-            hit.damage = effective_damage;  // Report pre-mitigation for consistency
+            hit.damage = effective_damage; // Report pre-mitigation for consistency
             hit.target_died = died;
             hits.push_back(hit);
         }

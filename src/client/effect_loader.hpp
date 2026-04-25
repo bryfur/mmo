@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../engine/effect_definition.hpp"
-#include <string>
 #include <memory>
+#include <string>
 #include <unordered_map>
 
 namespace mmo {

@@ -9,7 +9,6 @@ namespace mmo::server::systems {
 
 namespace ecs = mmo::server::ecs;
 
-void update_ai(entt::registry& registry, float dt, const GameConfig& config,
-               const glm::vec2& town_center);
+void update_ai(entt::registry& registry, float dt, const GameConfig& config, const glm::vec2& town_center);
 
 } // namespace mmo::server::systems

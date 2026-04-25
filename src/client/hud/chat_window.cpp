@@ -1,5 +1,6 @@
 #include "client/hud/widgets.hpp"
 
+#include <algorithm>
 #include <string>
 
 namespace mmo::client {
@@ -10,36 +11,46 @@ namespace {
 
 uint32_t chat_channel_color(uint8_t channel) {
     switch (channel) {
-        case 0: return 0xFFCCCCCC; // Say - light gray
-        case 1: return 0xFF88FFFF; // Zone - cyan
-        case 2: return 0xFF00CCFF; // Global - yellow
-        case 3: return 0xFF0088FF; // System - orange
-        case 4: return 0xFFFF88FF; // Whisper - magenta
-        default: return 0xFFCCCCCC;
+        case 0:
+            return 0xFFCCCCCC; // Say - light gray
+        case 1:
+            return 0xFF88FFFF; // Zone - cyan
+        case 2:
+            return 0xFF00CCFF; // Global - yellow
+        case 3:
+            return 0xFF0088FF; // System - orange
+        case 4:
+            return 0xFFFF88FF; // Whisper - magenta
+        default:
+            return 0xFFCCCCCC;
     }
 }
 
 const char* chat_channel_prefix(uint8_t channel) {
     switch (channel) {
-        case 0: return "[Say]";
-        case 1: return "[Zone]";
-        case 2: return "[Global]";
-        case 3: return "[System]";
-        case 4: return "[Whisper]";
-        default: return "";
+        case 0:
+            return "[Say]";
+        case 1:
+            return "[Zone]";
+        case 2:
+            return "[Global]";
+        case 3:
+            return "[System]";
+        case 4:
+            return "[Whisper]";
+        default:
+            return "";
     }
 }
 
 } // namespace
 
-void build_chat_window(UIScene& ui, const HUDState& hud, MouseUI& mui,
-                      float /*screen_w*/, float screen_h) {
+void build_chat_window(UIScene& ui, const HUDState& hud, MouseUI& mui, float /*screen_w*/, float screen_h) {
     const auto& chat = hud.chat;
     const float width = 460.0f;
     const float line_height = 14.0f;
     const int visible = ChatState::VISIBLE_LINES;
-    const float height = visible * line_height + 10.0f
-                       + (chat.input_active ? 22.0f : 0.0f) + 22.0f;
+    const float height = visible * line_height + 10.0f + (chat.input_active ? 22.0f : 0.0f) + 22.0f;
 
     // Default position sits at bottom-left, ABOVE the skill bar + health bar.
     // Skill bar occupies y=screen_h-80..screen_h; keep 12 px gap.
@@ -59,16 +70,17 @@ void build_chat_window(UIScene& ui, const HUDState& hud, MouseUI& mui,
 
     // Recent chat lines
     int start = static_cast<int>(chat.lines.size()) - visible;
-    if (start < 0) start = 0;
+    start = std::max(start, 0);
     float ty = y + 6.0f;
     for (int i = start; i < static_cast<int>(chat.lines.size()); ++i) {
         const auto& line = chat.lines[i];
         const uint32_t color = chat_channel_color(line.channel);
         const std::string prefix = chat_channel_prefix(line.channel);
-        std::string rendered = (line.channel == 3)
-            ? prefix + " " + line.text
-            : prefix + " " + line.sender + ": " + line.text;
-        if (rendered.size() > 80) rendered = rendered.substr(0, 80) + "...";
+        std::string rendered =
+            (line.channel == 3) ? prefix + " " + line.text : prefix + " " + line.sender + ": " + line.text;
+        if (rendered.size() > 80) {
+            rendered = rendered.substr(0, 80) + "...";
+        }
         ui.add_text(rendered, x + 6, ty, 0.75f, color);
         ty += line_height;
     }

@@ -1,11 +1,11 @@
 #include "gpu_buffer.hpp"
+#include "engine/gpu/gpu_device.hpp"
 #include "SDL3/SDL_error.h"
 #include "SDL3/SDL_gpu.h"
 #include "SDL3/SDL_stdinc.h"
-#include "engine/gpu/gpu_device.hpp"
-#include <SDL3/SDL_log.h>
 #include <cstring>
 #include <memory>
+#include <SDL3/SDL_log.h>
 
 namespace mmo::engine::gpu {
 
@@ -21,11 +21,11 @@ GPUBuffer::~GPUBuffer() {
 }
 
 GPUBuffer::GPUBuffer(GPUBuffer&& other) noexcept
-    : device_(other.device_)
-    , buffer_(other.buffer_)
-    , transfer_buffer_(other.transfer_buffer_)
-    , size_(other.size_)
-    , type_(other.type_) {
+    : device_(other.device_),
+      buffer_(other.buffer_),
+      transfer_buffer_(other.transfer_buffer_),
+      size_(other.size_),
+      type_(other.type_) {
     other.device_ = nullptr;
     other.buffer_ = nullptr;
     other.transfer_buffer_ = nullptr;
@@ -77,8 +77,7 @@ SDL_GPUBufferUsageFlags GPUBuffer::get_usage_flags(Type type) {
     return SDL_GPU_BUFFERUSAGE_VERTEX;
 }
 
-std::unique_ptr<GPUBuffer> GPUBuffer::create_static(GPUDevice& device, Type type,
-                                                       const void* data, size_t size) {
+std::unique_ptr<GPUBuffer> GPUBuffer::create_static(GPUDevice& device, Type type, const void* data, size_t size) {
     if (!data || size == 0) {
         SDL_Log("GPUBuffer::create_static: Invalid parameters");
         return nullptr;
@@ -209,8 +208,8 @@ void GPUBuffer::update(SDL_GPUCommandBuffer* cmd, const void* data, size_t size,
     }
 
     if (offset + size > size_) {
-        SDL_Log("GPUBuffer::update: Data exceeds buffer size (data=%zu + offset=%zu = %zu > buffer=%zu)",
-                size, offset, offset + size, size_);
+        SDL_Log("GPUBuffer::update: Data exceeds buffer size (data=%zu + offset=%zu = %zu > buffer=%zu)", size, offset,
+                offset + size, size_);
         return;
     }
 

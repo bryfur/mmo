@@ -52,14 +52,9 @@ public:
      * @param camera      Camera state for the frame
      * @param light_dir   Directional light direction (normalized)
      */
-    void render(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& registry,
-                SDL_GPUTexture* depth_texture,
-                const ShadowMap& shadow_map,
-                const scene::CameraState& camera,
-                const glm::vec3& light_dir,
-                bool god_rays_enabled = true,
-                bool fog_enabled = true,
-                float density_multiplier = 1.0f);
+    void render(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& registry, SDL_GPUTexture* depth_texture,
+                const ShadowMap& shadow_map, const scene::CameraState& camera, const glm::vec3& light_dir,
+                bool god_rays_enabled = true, bool fog_enabled = true, float density_multiplier = 1.0f);
 
     /**
      * Get the fog result texture for the composite pass.
@@ -71,7 +66,7 @@ private:
     void create_sampler();
 
     gpu::GPUDevice* device_ = nullptr;
-    std::unique_ptr<gpu::GPUTexture> fog_texture_;  // Half-res RGBA16F
+    std::unique_ptr<gpu::GPUTexture> fog_texture_; // Half-res RGBA16F
     SDL_GPUSampler* linear_sampler_ = nullptr;
 
     int width_ = 0;

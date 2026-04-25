@@ -1,13 +1,13 @@
 #pragma once
 
-#include <string>
-#include <vector>
-#include <unordered_map>
+#include <algorithm>
+#include <cstdint>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
-#include <cstdint>
-#include <algorithm>
 #include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 // Include GPU abstraction headers for proper type definitions
 #include "gpu/gpu_buffer.hpp"
@@ -21,7 +21,9 @@
 struct SDL_GPUDevice;
 struct SDL_GPUCommandBuffer;
 
-namespace mmo::engine::core::asset { class FileWatcher; }
+namespace mmo::engine::core::asset {
+class FileWatcher;
+}
 
 namespace mmo::engine {
 
@@ -30,8 +32,8 @@ using ModelHandle = uint32_t;
 static constexpr ModelHandle INVALID_MODEL_HANDLE = 0;
 
 // Use canonical vertex types from gpu module
-using gpu::Vertex3D;
 using gpu::SkinnedVertex;
+using gpu::Vertex3D;
 
 // PBR material parameters mirroring glTF pbrMetallicRoughness.
 // Textures are uploaded on demand; scalar factors act as fallbacks.
@@ -59,7 +61,7 @@ struct PBRMaterial {
 
 struct Mesh {
     std::vector<Vertex3D> vertices;
-    std::vector<SkinnedVertex> skinned_vertices;  // Used if model has skeleton
+    std::vector<SkinnedVertex> skinned_vertices; // Used if model has skeleton
     std::vector<uint32_t> indices;
 
     // SDL3 GPU resources
@@ -71,7 +73,7 @@ struct Mesh {
 
     bool has_texture = false;
     uint32_t base_color = 0xFFFFFFFF;
-    bool is_skinned = false;  // True if using skinned vertices
+    bool is_skinned = false; // True if using skinned vertices
 
     // Perf flags.
     //
@@ -96,8 +98,7 @@ struct Mesh {
 
     // Convenience accessors
     uint32_t vertex_count() const {
-        return is_skinned ? static_cast<uint32_t>(skinned_vertices.size())
-                          : static_cast<uint32_t>(vertices.size());
+        return is_skinned ? static_cast<uint32_t>(skinned_vertices.size()) : static_cast<uint32_t>(vertices.size());
     }
     uint32_t index_count() const {
         return cached_index_count > 0 ? cached_index_count : static_cast<uint32_t>(indices.size());
@@ -126,23 +127,21 @@ struct Model {
     float width() const { return max_x - min_x; }
     float height() const { return max_y - min_y; }
     float depth() const { return max_z - min_z; }
-    float max_dimension() const {
-        return std::max({width(), height(), depth()});
-    }
+    float max_dimension() const { return std::max({width(), height(), depth()}); }
 
     void compute_bounding_sphere() {
-        bounding_center = glm::vec3(
-            (min_x + max_x) * 0.5f,
-            (min_y + max_y) * 0.5f,
-            (min_z + max_z) * 0.5f
-        );
+        bounding_center = glm::vec3((min_x + max_x) * 0.5f, (min_y + max_y) * 0.5f, (min_z + max_z) * 0.5f);
         bounding_half_diag = glm::length(glm::vec3(width(), height(), depth())) * 0.5f;
     }
 
     // Animation helpers
     int find_animation(const std::string& name) const {
         for (size_t i = 0; i < animations.size(); i++) {
-            if (animations[i].name == name) return static_cast<int>(i);
+            if (animations[i].name == name) {
+                {
+                    return static_cast<int>(i);
+                }
+            }
         }
         return -1;
     }
@@ -193,7 +192,7 @@ private:
     gpu::GPUDevice* device_ = nullptr;
     // Slot 0 is reserved (INVALID_MODEL_HANDLE), models start at index 1
     std::vector<std::unique_ptr<Model>> models_;
-    std::vector<std::string> model_paths_;  // parallel to models_; "" for procedural
+    std::vector<std::string> model_paths_; // parallel to models_; "" for procedural
     std::unordered_map<std::string, ModelHandle> name_to_handle_;
     core::asset::FileWatcher* watcher_ = nullptr;
 };

@@ -1,8 +1,4 @@
 #include "model_loader.hpp"
-#include "SDL3/SDL_error.h"
-#include "SDL3/SDL_iostream.h"
-#include "SDL3/SDL_pixels.h"
-#include "SDL3/SDL_surface.h"
 #include "engine/gpu/gpu_types.hpp"
 #include "engine/model_utils.hpp"
 #include "glm/ext/matrix_float4x4.hpp"
@@ -11,16 +7,20 @@
 #include "glm/fwd.hpp"
 #include "glm/geometric.hpp"
 #include "glm/gtc/quaternion.hpp"
-#include "gpu/gpu_device.hpp"
 #include "gpu/gpu_buffer.hpp"
+#include "gpu/gpu_device.hpp"
 #include "gpu/gpu_texture.hpp"
+#include "SDL3/SDL_error.h"
+#include "SDL3/SDL_iostream.h"
+#include "SDL3/SDL_pixels.h"
+#include "SDL3/SDL_surface.h"
 
-#include <SDL3/SDL_gpu.h>
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <SDL3/SDL_gpu.h>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -40,11 +40,11 @@ namespace mmo::engine {
 // Implementation of Mesh::bind_buffers
 void Mesh::bind_buffers(SDL_GPURenderPass* pass) const {
     if (vertex_buffer) {
-        SDL_GPUBufferBinding vbuf = { vertex_buffer->handle(), 0 };
+        SDL_GPUBufferBinding vbuf = {vertex_buffer->handle(), 0};
         SDL_BindGPUVertexBuffers(pass, 0, &vbuf, 1);
     }
     if (index_buffer) {
-        SDL_GPUBufferBinding ibuf = { index_buffer->handle(), 0 };
+        SDL_GPUBufferBinding ibuf = {index_buffer->handle(), 0};
         SDL_BindGPUIndexBuffer(pass, &ibuf, SDL_GPU_INDEXELEMENTSIZE_32BIT);
     }
 }
@@ -54,9 +54,8 @@ void Mesh::bind_buffers(SDL_GPURenderPass* pass) const {
 namespace {
 
 // Custom image loader for tinygltf using SDL3_image
-bool load_image_data(tinygltf::Image* image, const int image_idx, std::string* err,
-                     std::string* warn, int req_width, int req_height,
-                     const unsigned char* bytes, int size, void* user_data) {
+bool load_image_data(tinygltf::Image* image, const int image_idx, std::string* err, std::string* warn, int req_width,
+                     int req_height, const unsigned char* bytes, int size, void* user_data) {
     (void)image_idx;
     (void)warn;
     (void)req_width;
@@ -65,13 +64,17 @@ bool load_image_data(tinygltf::Image* image, const int image_idx, std::string* e
 
     SDL_IOStream* io = SDL_IOFromConstMem(bytes, size);
     if (!io) {
-        if (err) *err = "Failed to create SDL IOStream from memory";
+        if (err) {
+            *err = "Failed to create SDL IOStream from memory";
+        }
         return false;
     }
 
-    SDL_Surface* surface = IMG_Load_IO(io, true);  // true = close IOStream when done
+    SDL_Surface* surface = IMG_Load_IO(io, true); // true = close IOStream when done
     if (!surface) {
-        if (err) *err = std::string("SDL_image failed to load: ") + SDL_GetError();
+        if (err) {
+            *err = std::string("SDL_image failed to load: ") + SDL_GetError();
+        }
         return false;
     }
 
@@ -80,7 +83,9 @@ bool load_image_data(tinygltf::Image* image, const int image_idx, std::string* e
     SDL_DestroySurface(surface);
 
     if (!rgba_surface) {
-        if (err) *err = std::string("Failed to convert to RGBA: ") + SDL_GetError();
+        if (err) {
+            *err = std::string("Failed to convert to RGBA: ") + SDL_GetError();
+        }
         return false;
     }
 
@@ -99,11 +104,9 @@ bool load_image_data(tinygltf::Image* image, const int image_idx, std::string* e
 }
 
 // Dummy write function (not used but required by tinygltf)
-bool write_image_data(const std::string* basepath, const std::string* filename,
-                      const tinygltf::Image* image, bool embedImages,
-                      const tinygltf::FsCallbacks* fs_cb,
-                      const tinygltf::URICallbacks* uri_cb, std::string* out_uri,
-                      void* user_pointer) {
+bool write_image_data(const std::string* basepath, const std::string* filename, const tinygltf::Image* image,
+                      bool embedImages, const tinygltf::FsCallbacks* fs_cb, const tinygltf::URICallbacks* uri_cb,
+                      std::string* out_uri, void* user_pointer) {
     (void)basepath;
     (void)filename;
     (void)image;
@@ -112,17 +115,18 @@ bool write_image_data(const std::string* basepath, const std::string* filename,
     (void)uri_cb;
     (void)out_uri;
     (void)user_pointer;
-    return false;  // Writing not supported
+    return false; // Writing not supported
 }
 
-}  // anonymous namespace
+} // anonymous namespace
 
 namespace mmo::engine {
 
 bool ModelLoader::load_glb(const std::string& path, Model& model) {
     tinygltf::Model gltf;
     tinygltf::TinyGLTF loader;
-    std::string err, warn;
+    std::string err;
+    std::string warn;
 
     // Set custom SDL3_image loader
     loader.SetImageLoader(load_image_data, nullptr);
@@ -180,9 +184,9 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
                     };
                 }
 
-                out_mesh.material.metallic_factor  = static_cast<float>(mat.pbrMetallicRoughness.metallicFactor);
+                out_mesh.material.metallic_factor = static_cast<float>(mat.pbrMetallicRoughness.metallicFactor);
                 out_mesh.material.roughness_factor = static_cast<float>(mat.pbrMetallicRoughness.roughnessFactor);
-                out_mesh.material.normal_scale     = static_cast<float>(mat.normalTexture.scale);
+                out_mesh.material.normal_scale = static_cast<float>(mat.normalTexture.scale);
                 out_mesh.material.occlusion_strength = static_cast<float>(mat.occlusionTexture.strength);
 
                 // Base color texture
@@ -199,7 +203,7 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
                     if (src >= 0 && src < static_cast<int>(gltf.images.size())) {
                         const auto& img = gltf.images[src];
                         out_mesh.material.metallic_roughness_pixels = img.image;
-                        out_mesh.material.metallic_roughness_width  = img.width;
+                        out_mesh.material.metallic_roughness_width = img.width;
                         out_mesh.material.metallic_roughness_height = img.height;
                     }
                 }
@@ -211,7 +215,7 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
                     if (src >= 0 && src < static_cast<int>(gltf.images.size())) {
                         const auto& img = gltf.images[src];
                         out_mesh.material.normal_pixels = img.image;
-                        out_mesh.material.normal_width  = img.width;
+                        out_mesh.material.normal_width = img.width;
                         out_mesh.material.normal_height = img.height;
                     }
                 }
@@ -223,7 +227,7 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
                     if (src >= 0 && src < static_cast<int>(gltf.images.size())) {
                         const auto& img = gltf.images[src];
                         out_mesh.material.occlusion_pixels = img.image;
-                        out_mesh.material.occlusion_width  = img.width;
+                        out_mesh.material.occlusion_width = img.width;
                         out_mesh.material.occlusion_height = img.height;
                     }
                 }
@@ -231,7 +235,9 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
 
             // Helper to get accessor data
             auto get_buffer_data = [&](int accessor_idx) -> const uint8_t* {
-                if (accessor_idx < 0) return nullptr;
+                if (accessor_idx < 0) {
+                    return nullptr;
+                }
                 const auto& accessor = gltf.accessors[accessor_idx];
                 const auto& bufferView = gltf.bufferViews[accessor.bufferView];
                 const auto& buffer = gltf.buffers[bufferView.buffer];
@@ -240,7 +246,9 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
 
             // Position
             auto pos_it = primitive.attributes.find("POSITION");
-            if (pos_it == primitive.attributes.end()) continue;
+            if (pos_it == primitive.attributes.end()) {
+                continue;
+            }
 
             const auto& pos_accessor = gltf.accessors[pos_it->second];
             const float* positions = reinterpret_cast<const float*>(get_buffer_data(pos_it->second));
@@ -349,7 +357,7 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
 
                 out_mesh.indices.reserve(idx_count);
                 for (int i = 0; i < idx_count; i++) {
-                    uint32_t index;
+                    uint32_t index = 0;
                     switch (idx_accessor.componentType) {
                         case TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT:
                             index = reinterpret_cast<const uint16_t*>(idx_data)[i];
@@ -427,8 +435,8 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
             const auto& accessor = gltf.accessors[skin.inverseBindMatrices];
             const auto& bufferView = gltf.bufferViews[accessor.bufferView];
             const auto& buffer = gltf.buffers[bufferView.buffer];
-            const float* data = reinterpret_cast<const float*>(
-                buffer.data.data() + bufferView.byteOffset + accessor.byteOffset);
+            const float* data =
+                reinterpret_cast<const float*>(buffer.data.data() + bufferView.byteOffset + accessor.byteOffset);
 
             for (size_t i = 0; i < accessor.count; i++) {
                 glm::mat4 mat;
@@ -478,11 +486,10 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
             }
 
             if (node.rotation.size() == 4) {
-                joint.local_rotation = glm::quat(
-                    static_cast<float>(node.rotation[3]),  // w
-                    static_cast<float>(node.rotation[0]),  // x
-                    static_cast<float>(node.rotation[1]),  // y
-                    static_cast<float>(node.rotation[2])   // z
+                joint.local_rotation = glm::quat(static_cast<float>(node.rotation[3]), // w
+                                                 static_cast<float>(node.rotation[0]), // x
+                                                 static_cast<float>(node.rotation[1]), // y
+                                                 static_cast<float>(node.rotation[2])  // z
                 );
             } else {
                 joint.local_rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
@@ -529,7 +536,9 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
         for (const auto& channel : gltf_anim.channels) {
             int node_idx = channel.target_node;
             auto joint_it = node_to_joint.find(node_idx);
-            if (joint_it == node_to_joint.end()) continue;
+            if (joint_it == node_to_joint.end()) {
+                continue;
+            }
 
             int joint_idx = joint_it->second;
             auto& anim_channel = channels_by_joint[joint_idx];
@@ -541,8 +550,8 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
             const auto& input_accessor = gltf.accessors[sampler.input];
             const auto& input_bufferView = gltf.bufferViews[input_accessor.bufferView];
             const auto& input_buffer = gltf.buffers[input_bufferView.buffer];
-            const float* times = reinterpret_cast<const float*>(
-                input_buffer.data.data() + input_bufferView.byteOffset + input_accessor.byteOffset);
+            const float* times = reinterpret_cast<const float*>(input_buffer.data.data() + input_bufferView.byteOffset +
+                                                                input_accessor.byteOffset);
 
             // Get output (value) data
             const auto& output_accessor = gltf.accessors[sampler.output];
@@ -556,19 +565,20 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
             if (channel.target_path == "translation") {
                 for (size_t i = 0; i < count; i++) {
                     anim_channel.position_times.push_back(times[i]);
-                    anim_channel.positions.push_back(glm::vec3(values[i*3], values[i*3+1], values[i*3+2]));
+                    anim_channel.positions.emplace_back(values[i * 3], values[i * 3 + 1], values[i * 3 + 2]);
                     clip.duration = std::max(clip.duration, times[i]);
                 }
             } else if (channel.target_path == "rotation") {
                 for (size_t i = 0; i < count; i++) {
                     anim_channel.rotation_times.push_back(times[i]);
-                    anim_channel.rotations.push_back(glm::quat(values[i*4+3], values[i*4], values[i*4+1], values[i*4+2]));
+                    anim_channel.rotations.emplace_back(values[i * 4 + 3], values[i * 4], values[i * 4 + 1],
+                                                        values[i * 4 + 2]);
                     clip.duration = std::max(clip.duration, times[i]);
                 }
             } else if (channel.target_path == "scale") {
                 for (size_t i = 0; i < count; i++) {
                     anim_channel.scale_times.push_back(times[i]);
-                    anim_channel.scales.push_back(glm::vec3(values[i*3], values[i*3+1], values[i*3+2]));
+                    anim_channel.scales.emplace_back(values[i * 3], values[i * 3 + 1], values[i * 3 + 2]);
                     clip.duration = std::max(clip.duration, times[i]);
                 }
             }
@@ -593,27 +603,28 @@ bool ModelLoader::load_glb(const std::string& path, Model& model) {
 
     model.loaded = true;
     model.compute_bounding_sphere();
-    ENGINE_LOG_INFO("model", "Loaded GLB model: {} ({} meshes) bounds: Y=[{}, {}]",
-                    path, model.meshes.size(), model.min_y, model.max_y);
+    ENGINE_LOG_INFO("model", "Loaded GLB model: {} ({} meshes) bounds: Y=[{}, {}]", path, model.meshes.size(),
+                    model.min_y, model.max_y);
     return true;
 }
 
 void ModelLoader::upload_to_gpu(gpu::GPUDevice& device, Model& model) {
     for (auto& mesh : model.meshes) {
-        if (mesh.uploaded) continue;
-        if (mesh.vertices.empty() && mesh.skinned_vertices.empty()) continue;
+        if (mesh.uploaded) {
+            continue;
+        }
+        if (mesh.vertices.empty() && mesh.skinned_vertices.empty()) {
+            continue;
+        }
 
         // Create vertex buffer
         if (mesh.is_skinned && !mesh.skinned_vertices.empty()) {
-            mesh.vertex_buffer = gpu::GPUBuffer::create_static(
-                device, gpu::GPUBuffer::Type::Vertex,
-                mesh.skinned_vertices.data(),
-                mesh.skinned_vertices.size() * sizeof(SkinnedVertex));
+            mesh.vertex_buffer =
+                gpu::GPUBuffer::create_static(device, gpu::GPUBuffer::Type::Vertex, mesh.skinned_vertices.data(),
+                                              mesh.skinned_vertices.size() * sizeof(SkinnedVertex));
         } else if (!mesh.vertices.empty()) {
             mesh.vertex_buffer = gpu::GPUBuffer::create_static(
-                device, gpu::GPUBuffer::Type::Vertex,
-                mesh.vertices.data(),
-                mesh.vertices.size() * sizeof(Vertex3D));
+                device, gpu::GPUBuffer::Type::Vertex, mesh.vertices.data(), mesh.vertices.size() * sizeof(Vertex3D));
         }
 
         if (!mesh.vertex_buffer) {
@@ -623,10 +634,8 @@ void ModelLoader::upload_to_gpu(gpu::GPUDevice& device, Model& model) {
 
         // Create index buffer
         if (!mesh.indices.empty()) {
-            mesh.index_buffer = gpu::GPUBuffer::create_static(
-                device, gpu::GPUBuffer::Type::Index,
-                mesh.indices.data(),
-                mesh.indices.size() * sizeof(uint32_t));
+            mesh.index_buffer = gpu::GPUBuffer::create_static(device, gpu::GPUBuffer::Type::Index, mesh.indices.data(),
+                                                              mesh.indices.size() * sizeof(uint32_t));
 
             if (!mesh.index_buffer) {
                 ENGINE_LOG_ERROR("model", "Failed to create index buffer for mesh");
@@ -636,12 +645,9 @@ void ModelLoader::upload_to_gpu(gpu::GPUDevice& device, Model& model) {
         // Create texture if available. Base-color textures are sRGB-encoded per
         // glTF; sampler linearizes on read so lighting math stays in linear.
         if (mesh.has_texture && !mesh.texture_pixels.empty()) {
-            mesh.texture = gpu::GPUTexture::create_2d(
-                device,
-                mesh.texture_width, mesh.texture_height,
-                gpu::TextureFormat::RGBA8_SRGB,
-                mesh.texture_pixels.data(),
-                true);  // Generate mipmaps
+            mesh.texture = gpu::GPUTexture::create_2d(device, mesh.texture_width, mesh.texture_height,
+                                                      gpu::TextureFormat::RGBA8_SRGB, mesh.texture_pixels.data(),
+                                                      true); // Generate mipmaps
 
             if (!mesh.texture) {
                 ENGINE_LOG_ERROR("model", "Failed to create texture for mesh");
@@ -656,12 +662,9 @@ void ModelLoader::upload_to_gpu(gpu::GPUDevice& device, Model& model) {
         // Normal map: stored UNORM (NOT sRGB) per glTF spec. Generate mipmaps so
         // distant fragments don't sample raw aliased high-frequency detail.
         if (!mesh.material.normal_pixels.empty()) {
-            mesh.material.normal_texture = gpu::GPUTexture::create_2d(
-                device,
-                mesh.material.normal_width, mesh.material.normal_height,
-                gpu::TextureFormat::RGBA8,
-                mesh.material.normal_pixels.data(),
-                true);
+            mesh.material.normal_texture =
+                gpu::GPUTexture::create_2d(device, mesh.material.normal_width, mesh.material.normal_height,
+                                           gpu::TextureFormat::RGBA8, mesh.material.normal_pixels.data(), true);
             if (mesh.material.normal_texture) {
                 mesh.material.normal_pixels.clear();
                 mesh.material.normal_pixels.shrink_to_fit();
@@ -721,10 +724,7 @@ ModelHandle ModelManager::load_model(const std::string& name, const std::string&
         name_to_handle_[name] = handle;
 
         if (watcher_) {
-            watcher_->watch_file(path,
-                [this, handle](const std::filesystem::path&) {
-                    reload_model(handle);
-                });
+            watcher_->watch_file(path, [this, handle](const std::filesystem::path&) { reload_model(handle); });
         }
         return handle;
     }
@@ -732,13 +732,17 @@ ModelHandle ModelManager::load_model(const std::string& name, const std::string&
 }
 
 Model* ModelManager::get_model(ModelHandle handle) const {
-    if (handle == INVALID_MODEL_HANDLE || handle >= models_.size()) return nullptr;
+    if (handle == INVALID_MODEL_HANDLE || handle >= models_.size()) {
+        return nullptr;
+    }
     return models_[handle].get();
 }
 
 Model* ModelManager::get_model(const std::string& name) const {
     auto it = name_to_handle_.find(name);
-    if (it == name_to_handle_.end()) return nullptr;
+    if (it == name_to_handle_.end()) {
+        return nullptr;
+    }
     return models_[it->second].get();
 }
 
@@ -748,16 +752,22 @@ ModelHandle ModelManager::register_model(const std::string& name, std::unique_pt
     }
     ModelHandle handle = static_cast<ModelHandle>(models_.size());
     models_.push_back(std::move(model));
-    model_paths_.emplace_back();  // procedural -- no source path
+    model_paths_.emplace_back(); // procedural -- no source path
     name_to_handle_[name] = handle;
     return handle;
 }
 
 bool ModelManager::reload_model(ModelHandle handle) {
-    if (handle == INVALID_MODEL_HANDLE || handle >= models_.size()) return false;
-    if (handle >= model_paths_.size()) return false;
+    if (handle == INVALID_MODEL_HANDLE || handle >= models_.size()) {
+        return false;
+    }
+    if (handle >= model_paths_.size()) {
+        return false;
+    }
     const auto& path = model_paths_[handle];
-    if (path.empty()) return false;  // procedural model, nothing to reload from
+    if (path.empty()) {
+        return false; // procedural model, nothing to reload from
+    }
 
     auto fresh = std::make_unique<Model>();
     if (!ModelLoader::load_glb(path, *fresh)) {
@@ -778,12 +788,11 @@ bool ModelManager::reload_model(ModelHandle handle) {
 void ModelManager::enable_hot_reload(core::asset::FileWatcher& watcher) {
     watcher_ = &watcher;
     for (size_t i = 1; i < model_paths_.size(); ++i) {
-        if (model_paths_[i].empty()) continue;
+        if (model_paths_[i].empty()) {
+            continue;
+        }
         ModelHandle h = static_cast<ModelHandle>(i);
-        watcher_->watch_file(model_paths_[i],
-            [this, h](const std::filesystem::path&) {
-                reload_model(h);
-            });
+        watcher_->watch_file(model_paths_[i], [this, h](const std::filesystem::path&) { reload_model(h); });
     }
 }
 
@@ -799,7 +808,7 @@ void ModelManager::unload_all() {
         }
     }
     models_.clear();
-    models_.push_back(nullptr);  // Re-reserve slot 0
+    models_.push_back(nullptr); // Re-reserve slot 0
     model_paths_.clear();
     model_paths_.emplace_back();
     name_to_handle_.clear();

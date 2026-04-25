@@ -6,14 +6,15 @@ std::optional<PlayerSnapshot> PlayerRepository::load(const std::string& name) {
     PlayerSnapshot snap;
 
     {
-        Statement q(db_,
-            "SELECT player_class, level, xp, gold, "
-            "       pos_x, pos_y, pos_z, rotation, "
-            "       health, max_health, mana, max_mana, mana_regen, "
-            "       talent_points, last_seen, was_dead "
-            "FROM players WHERE name = ?;");
+        Statement q(db_, "SELECT player_class, level, xp, gold, "
+                         "       pos_x, pos_y, pos_z, rotation, "
+                         "       health, max_health, mana, max_mana, mana_regen, "
+                         "       talent_points, last_seen, was_dead "
+                         "FROM players WHERE name = ?;");
         q.bind_text(1, name);
-        if (!q.step()) return std::nullopt;
+        if (!q.step()) {
+            return std::nullopt;
+        }
 
         snap.name = name;
         snap.player_class = q.column_int(0);
@@ -35,9 +36,8 @@ std::optional<PlayerSnapshot> PlayerRepository::load(const std::string& name) {
     }
 
     {
-        Statement q(db_,
-            "SELECT slot, item_id, count FROM player_inventory "
-            "WHERE name = ? ORDER BY slot;");
+        Statement q(db_, "SELECT slot, item_id, count FROM player_inventory "
+                         "WHERE name = ? ORDER BY slot;");
         q.bind_text(1, name);
         while (q.step()) {
             int slot = q.column_int(0);
@@ -51,8 +51,7 @@ std::optional<PlayerSnapshot> PlayerRepository::load(const std::string& name) {
     }
 
     {
-        Statement q(db_,
-            "SELECT weapon_id, armor_id FROM player_equipment WHERE name = ?;");
+        Statement q(db_, "SELECT weapon_id, armor_id FROM player_equipment WHERE name = ?;");
         q.bind_text(1, name);
         if (q.step()) {
             snap.equipped_weapon = q.column_text(0);
@@ -77,8 +76,7 @@ std::optional<PlayerSnapshot> PlayerRepository::load(const std::string& name) {
     }
 
     {
-        Statement q(db_,
-            "SELECT quest_id, objectives_json FROM player_active_quests WHERE name = ?;");
+        Statement q(db_, "SELECT quest_id, objectives_json FROM player_active_quests WHERE name = ?;");
         q.bind_text(1, name);
         while (q.step()) {
             snap.active_quests.push_back({q.column_text(0), q.column_text(1)});
@@ -92,18 +90,17 @@ void PlayerRepository::save(const PlayerSnapshot& snap) {
     db_.begin();
     try {
         {
-            Statement q(db_,
-                "INSERT OR REPLACE INTO players "
-                "(name, player_class, level, xp, gold, "
-                " pos_x, pos_y, pos_z, rotation, "
-                " health, max_health, mana, max_mana, mana_regen, "
-                " talent_points, last_seen, was_dead) "
-                "VALUES (?,?,?,?,?, ?,?,?,?, ?,?,?,?,?, ?,?,?);");
-            q.bind_text  (1, snap.name);
-            q.bind_int   (2, snap.player_class);
-            q.bind_int   (3, snap.level);
-            q.bind_int   (4, snap.xp);
-            q.bind_int   (5, snap.gold);
+            Statement q(db_, "INSERT OR REPLACE INTO players "
+                             "(name, player_class, level, xp, gold, "
+                             " pos_x, pos_y, pos_z, rotation, "
+                             " health, max_health, mana, max_mana, mana_regen, "
+                             " talent_points, last_seen, was_dead) "
+                             "VALUES (?,?,?,?,?, ?,?,?,?, ?,?,?,?,?, ?,?,?);");
+            q.bind_text(1, snap.name);
+            q.bind_int(2, snap.player_class);
+            q.bind_int(3, snap.level);
+            q.bind_int(4, snap.xp);
+            q.bind_int(5, snap.gold);
             q.bind_double(6, snap.pos_x);
             q.bind_double(7, snap.pos_y);
             q.bind_double(8, snap.pos_z);
@@ -113,9 +110,9 @@ void PlayerRepository::save(const PlayerSnapshot& snap) {
             q.bind_double(12, snap.mana);
             q.bind_double(13, snap.max_mana);
             q.bind_double(14, snap.mana_regen);
-            q.bind_int   (15, snap.talent_points);
-            q.bind_int64 (16, snap.last_seen_unix);
-            q.bind_int   (17, snap.was_dead ? 1 : 0);
+            q.bind_int(15, snap.talent_points);
+            q.bind_int64(16, snap.last_seen_unix);
+            q.bind_int(17, snap.was_dead ? 1 : 0);
             q.step();
         }
 
@@ -123,7 +120,8 @@ void PlayerRepository::save(const PlayerSnapshot& snap) {
         // these tables are small (<= 20 rows per player).
         auto delete_for_name = [&](const char* table) {
             std::string sql = "DELETE FROM ";
-            sql += table; sql += " WHERE name = ?;";
+            sql += table;
+            sql += " WHERE name = ?;";
             Statement q(db_, sql);
             q.bind_text(1, snap.name);
             q.step();
@@ -135,24 +133,24 @@ void PlayerRepository::save(const PlayerSnapshot& snap) {
         delete_for_name("player_active_quests");
 
         {
-            Statement q(db_,
-                "INSERT INTO player_inventory (name, slot, item_id, count) "
-                "VALUES (?,?,?,?);");
+            Statement q(db_, "INSERT INTO player_inventory (name, slot, item_id, count) "
+                             "VALUES (?,?,?,?);");
             for (size_t i = 0; i < snap.inventory.size(); ++i) {
-                if (snap.inventory[i].item_id.empty()) continue;
+                if (snap.inventory[i].item_id.empty()) {
+                    continue;
+                }
                 q.reset();
                 q.bind_text(1, snap.name);
-                q.bind_int (2, static_cast<int>(i));
+                q.bind_int(2, static_cast<int>(i));
                 q.bind_text(3, snap.inventory[i].item_id);
-                q.bind_int (4, snap.inventory[i].count);
+                q.bind_int(4, snap.inventory[i].count);
                 q.step();
             }
         }
 
         {
-            Statement q(db_,
-                "INSERT INTO player_equipment (name, weapon_id, armor_id) "
-                "VALUES (?,?,?);");
+            Statement q(db_, "INSERT INTO player_equipment (name, weapon_id, armor_id) "
+                             "VALUES (?,?,?);");
             q.bind_text(1, snap.name);
             q.bind_text(2, snap.equipped_weapon);
             q.bind_text(3, snap.equipped_armor);
@@ -160,8 +158,7 @@ void PlayerRepository::save(const PlayerSnapshot& snap) {
         }
 
         {
-            Statement q(db_,
-                "INSERT INTO player_talents (name, talent_id) VALUES (?,?);");
+            Statement q(db_, "INSERT INTO player_talents (name, talent_id) VALUES (?,?);");
             for (const auto& tid : snap.unlocked_talents) {
                 q.reset();
                 q.bind_text(1, snap.name);
@@ -171,8 +168,7 @@ void PlayerRepository::save(const PlayerSnapshot& snap) {
         }
 
         {
-            Statement q(db_,
-                "INSERT INTO player_completed_quests (name, quest_id) VALUES (?,?);");
+            Statement q(db_, "INSERT INTO player_completed_quests (name, quest_id) VALUES (?,?);");
             for (const auto& qid : snap.completed_quests) {
                 q.reset();
                 q.bind_text(1, snap.name);
@@ -182,9 +178,8 @@ void PlayerRepository::save(const PlayerSnapshot& snap) {
         }
 
         {
-            Statement q(db_,
-                "INSERT INTO player_active_quests (name, quest_id, objectives_json) "
-                "VALUES (?,?,?);");
+            Statement q(db_, "INSERT INTO player_active_quests (name, quest_id, objectives_json) "
+                             "VALUES (?,?,?);");
             for (const auto& aq : snap.active_quests) {
                 q.reset();
                 q.bind_text(1, snap.name);

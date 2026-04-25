@@ -17,8 +17,8 @@
 
 namespace mmo::server::math {
 
-template <typename T>
-concept Formula = requires(const typename T::Inputs& in) {
+template<typename T>
+concept Formula = requires(const T::Inputs& in) {
     typename T::Inputs;
     typename T::Output;
     { T::compute(in) } -> std::same_as<typename T::Output>;

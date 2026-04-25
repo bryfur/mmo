@@ -1,18 +1,18 @@
 #include "gpu_texture.hpp"
+#include "engine/gpu/gpu_device.hpp"
+#include "engine/gpu/gpu_types.hpp"
 #include "SDL3/SDL_error.h"
 #include "SDL3/SDL_gpu.h"
 #include "SDL3/SDL_pixels.h"
 #include "SDL3/SDL_stdinc.h"
 #include "SDL3/SDL_surface.h"
-#include "engine/gpu/gpu_device.hpp"
-#include "engine/gpu/gpu_types.hpp"
-#include <SDL3/SDL_log.h>
-#include <SDL3_image/SDL_image.h>
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <cmath>
 #include <memory>
+#include <SDL3/SDL_log.h>
+#include <SDL3_image/SDL_image.h>
 #include <string>
 
 namespace mmo::engine::gpu {
@@ -28,15 +28,15 @@ GPUTexture::~GPUTexture() {
 }
 
 GPUTexture::GPUTexture(GPUTexture&& other) noexcept
-    : device_(other.device_)
-    , texture_(other.texture_)
-    , width_(other.width_)
-    , height_(other.height_)
-    , format_(other.format_)
-    , is_render_target_(other.is_render_target_)
-    , is_depth_(other.is_depth_)
-    , layers_(other.layers_)
-    , mip_levels_(other.mip_levels_) {
+    : device_(other.device_),
+      texture_(other.texture_),
+      width_(other.width_),
+      height_(other.height_),
+      format_(other.format_),
+      is_render_target_(other.is_render_target_),
+      is_depth_(other.is_depth_),
+      layers_(other.layers_),
+      mip_levels_(other.mip_levels_) {
     other.device_ = nullptr;
     other.texture_ = nullptr;
 }
@@ -85,9 +85,13 @@ size_t GPUTexture::get_bytes_per_pixel(SDL_GPUTextureFormat format) {
 }
 
 bool GPUTexture::reload_from_file(const std::string& path, bool generate_mipmaps) {
-    if (!device_) return false;
+    if (!device_) {
+        return false;
+    }
     auto fresh = load_from_file(*device_, path, generate_mipmaps);
-    if (!fresh) return false;
+    if (!fresh) {
+        return false;
+    }
 
     if (texture_) {
         device_->release_texture(texture_);
@@ -104,39 +108,34 @@ bool GPUTexture::reload_from_file(const std::string& path, bool generate_mipmaps
     return true;
 }
 
-std::unique_ptr<GPUTexture> GPUTexture::load_from_file(GPUDevice& device,
-                                                         const std::string& path,
-                                                         bool generate_mipmaps) {
+std::unique_ptr<GPUTexture> GPUTexture::load_from_file(GPUDevice& device, const std::string& path,
+                                                       bool generate_mipmaps) {
     // Load image via SDL_image
     SDL_Surface* surface = IMG_Load(path.c_str());
     if (!surface) {
-        SDL_Log("GPUTexture::load_from_file: Failed to load '%s': %s", 
-                path.c_str(), SDL_GetError());
+        SDL_Log("GPUTexture::load_from_file: Failed to load '%s': %s", path.c_str(), SDL_GetError());
         return nullptr;
     }
 
     // Convert to RGBA8 format if needed
     SDL_Surface* converted = SDL_ConvertSurface(surface, SDL_PIXELFORMAT_RGBA32);
     SDL_DestroySurface(surface);
-    
+
     if (!converted) {
         SDL_Log("GPUTexture::load_from_file: Failed to convert surface: %s", SDL_GetError());
         return nullptr;
     }
 
     // Create texture from pixel data
-    auto texture = create_2d(device, converted->w, converted->h, TextureFormat::RGBA8,
-                              converted->pixels, generate_mipmaps);
-    
+    auto texture =
+        create_2d(device, converted->w, converted->h, TextureFormat::RGBA8, converted->pixels, generate_mipmaps);
+
     SDL_DestroySurface(converted);
     return texture;
 }
 
-std::unique_ptr<GPUTexture> GPUTexture::create_2d(GPUDevice& device,
-                                                    int width, int height,
-                                                    TextureFormat format,
-                                                    const void* pixels,
-                                                    bool generate_mipmaps) {
+std::unique_ptr<GPUTexture> GPUTexture::create_2d(GPUDevice& device, int width, int height, TextureFormat format,
+                                                  const void* pixels, bool generate_mipmaps) {
     auto texture = std::unique_ptr<GPUTexture>(new GPUTexture());
     texture->device_ = &device;
     texture->width_ = width;
@@ -166,7 +165,8 @@ std::unique_ptr<GPUTexture> GPUTexture::create_2d(GPUDevice& device,
     // Upload pixel data if provided
     if (pixels) {
         // Create transfer buffer
-        size_t data_size = width * height * get_bytes_per_pixel(texture->format_);
+        size_t data_size = static_cast<size_t>(width) * static_cast<size_t>(height) *
+                           get_bytes_per_pixel(texture->format_);
         SDL_GPUTransferBufferCreateInfo transfer_info = {};
         transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
         transfer_info.size = static_cast<Uint32>(data_size);
@@ -232,24 +232,23 @@ std::unique_ptr<GPUTexture> GPUTexture::create_2d(GPUDevice& device,
     return texture;
 }
 
-std::unique_ptr<GPUTexture> GPUTexture::create_2d(GPUDevice& device,
-                                                    int width, int height,
-                                                    SDL_GPUTextureFormat format,
-                                                    SDL_GPUTextureUsageFlags usage) {
+std::unique_ptr<GPUTexture> GPUTexture::create_2d(GPUDevice& device, int width, int height, SDL_GPUTextureFormat format,
+                                                  SDL_GPUTextureUsageFlags usage) {
     auto texture = std::unique_ptr<GPUTexture>(new GPUTexture());
     texture->device_ = &device;
     texture->width_ = width;
     texture->height_ = height;
     texture->format_ = format;
     texture->mip_levels_ = 1;
-    
+
     // Check if this is a depth format
-    texture->is_depth_ = (format == SDL_GPU_TEXTUREFORMAT_D32_FLOAT ||
-                          format == SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT ||
-                          format == SDL_GPU_TEXTUREFORMAT_D16_UNORM);
-    
+    texture->is_depth_ =
+        (format == SDL_GPU_TEXTUREFORMAT_D32_FLOAT || format == SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT ||
+         format == SDL_GPU_TEXTUREFORMAT_D16_UNORM);
+
     // Check if this is a render target (color or depth-stencil)
-    texture->is_render_target_ = (usage & (SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET)) != 0;
+    texture->is_render_target_ =
+        (usage & (SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET)) != 0;
 
     SDL_GPUTextureCreateInfo tex_info = {};
     tex_info.type = SDL_GPU_TEXTURETYPE_2D;
@@ -269,9 +268,8 @@ std::unique_ptr<GPUTexture> GPUTexture::create_2d(GPUDevice& device,
     return texture;
 }
 
-std::unique_ptr<GPUTexture> GPUTexture::create_render_target(GPUDevice& device,
-                                                               int width, int height,
-                                                               TextureFormat format) {
+std::unique_ptr<GPUTexture> GPUTexture::create_render_target(GPUDevice& device, int width, int height,
+                                                             TextureFormat format) {
     auto texture = std::unique_ptr<GPUTexture>(new GPUTexture());
     texture->device_ = &device;
     texture->width_ = width;
@@ -354,9 +352,8 @@ std::unique_ptr<GPUTexture> GPUTexture::create_depth_array(GPUDevice& device, in
     return texture;
 }
 
-std::unique_ptr<GPUTexture> GPUTexture::create_2d_array(GPUDevice& device, int width, int height,
-                                                          int layers, TextureFormat format,
-                                                          const void** layer_data) {
+std::unique_ptr<GPUTexture> GPUTexture::create_2d_array(GPUDevice& device, int width, int height, int layers,
+                                                        TextureFormat format, const void** layer_data) {
     auto texture = std::unique_ptr<GPUTexture>(new GPUTexture());
     texture->device_ = &device;
     texture->width_ = width;
@@ -450,8 +447,7 @@ std::unique_ptr<GPUTexture> GPUTexture::create_2d_array(GPUDevice& device, int w
     return texture;
 }
 
-std::unique_ptr<GPUTexture> GPUTexture::create_depth_stencil(GPUDevice& device,
-                                                               int width, int height) {
+std::unique_ptr<GPUTexture> GPUTexture::create_depth_stencil(GPUDevice& device, int width, int height) {
     auto texture = std::unique_ptr<GPUTexture>(new GPUTexture());
     texture->device_ = &device;
     texture->width_ = width;
@@ -489,8 +485,8 @@ void GPUTexture::upload(SDL_GPUCommandBuffer* cmd, const void* pixels, int width
         return;
     }
 
-    size_t data_size = width * height * get_bytes_per_pixel(format_);
-    
+    size_t data_size = static_cast<size_t>(width) * static_cast<size_t>(height) * get_bytes_per_pixel(format_);
+
     SDL_GPUTransferBufferCreateInfo transfer_info = {};
     transfer_info.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
     transfer_info.size = static_cast<Uint32>(data_size);
@@ -611,9 +607,7 @@ GPUSampler::~GPUSampler() {
     }
 }
 
-GPUSampler::GPUSampler(GPUSampler&& other) noexcept
-    : device_(other.device_)
-    , sampler_(other.sampler_) {
+GPUSampler::GPUSampler(GPUSampler&& other) noexcept : device_(other.device_), sampler_(other.sampler_) {
     other.device_ = nullptr;
     other.sampler_ = nullptr;
 }

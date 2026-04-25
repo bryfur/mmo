@@ -1,7 +1,7 @@
-#include <gtest/gtest.h>
 #include "engine/scene/frustum.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <gtest/gtest.h>
 
 using namespace mmo::engine::scene;
 
@@ -9,17 +9,16 @@ class FrustumTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // Standard perspective camera looking down -Z
-        glm::mat4 view = glm::lookAt(
-            glm::vec3(0, 0, 5),    // camera at Z=5
-            glm::vec3(0, 0, 0),    // looking at origin
-            glm::vec3(0, 1, 0));   // up
+        glm::mat4 view = glm::lookAt(glm::vec3(0, 0, 5),  // camera at Z=5
+                                     glm::vec3(0, 0, 0),  // looking at origin
+                                     glm::vec3(0, 1, 0)); // up
         glm::mat4 proj = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 100.0f);
         vp = proj * view;
         frustum.extract_from_matrix(vp);
     }
 
-    Frustum frustum;
-    glm::mat4 vp;
+    Frustum frustum{};
+    glm::mat4 vp{};
 };
 
 TEST_F(FrustumTest, SphereInFrontOfCameraIsVisible) {
@@ -112,15 +111,12 @@ class NarrowFOVFrustumTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // Very narrow 5-degree FOV looking down -Z
-        glm::mat4 view = glm::lookAt(
-            glm::vec3(0, 0, 10),
-            glm::vec3(0, 0, 0),
-            glm::vec3(0, 1, 0));
+        glm::mat4 view = glm::lookAt(glm::vec3(0, 0, 10), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
         glm::mat4 proj = glm::perspective(glm::radians(5.0f), 1.0f, 0.1f, 100.0f);
         frustum.extract_from_matrix(proj * view);
     }
 
-    Frustum frustum;
+    Frustum frustum{};
 };
 
 TEST_F(NarrowFOVFrustumTest, ObjectOnCenterAxisIsVisible) {
@@ -146,15 +142,12 @@ class OrthoFrustumTest : public ::testing::Test {
 protected:
     void SetUp() override {
         // Orthographic projection: 20x20 box, near=1, far=50, looking down -Z from Z=30
-        glm::mat4 view = glm::lookAt(
-            glm::vec3(0, 0, 30),
-            glm::vec3(0, 0, 0),
-            glm::vec3(0, 1, 0));
+        glm::mat4 view = glm::lookAt(glm::vec3(0, 0, 30), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
         glm::mat4 proj = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, 1.0f, 50.0f);
         frustum.extract_from_matrix(proj * view);
     }
 
-    Frustum frustum;
+    Frustum frustum{};
 };
 
 TEST_F(OrthoFrustumTest, ObjectInsideBoxIsVisible) {

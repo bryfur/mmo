@@ -1,8 +1,8 @@
 #pragma once
 
-#include <glm/glm.hpp>
 #include <algorithm>
 #include <cmath>
+#include <glm/glm.hpp>
 
 namespace mmo::engine::scene {
 
@@ -25,7 +25,9 @@ inline bool has_uniform_scale(const glm::mat4& m) {
 // Normal matrix with uniform-scale fast path.
 // For uniform scale (the overwhelmingly common case) this skips a 4x4 inverse.
 inline glm::mat4 compute_normal_matrix(const glm::mat4& model) {
-    if (has_uniform_scale(model)) return model;
+    if (has_uniform_scale(model)) {
+        return model;
+    }
     return glm::transpose(glm::inverse(model));
 }
 

@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include "server/rules/kill_objective.hpp"
+#include <gtest/gtest.h>
 
 using namespace mmo::server::rules;
 
@@ -7,7 +7,7 @@ static_assert(Rule<KillObjective>);
 
 TEST(KillObjective, AdvancesOnMatch) {
     KillObjective::Inputs in{
-        .def = { .type = "kill", .target = "wolf", .required = 3 },
+        .def = {.type = "kill", .target = "wolf", .required = 3},
         .state = {},
         .monster_type_id = "wolf",
     };
@@ -16,7 +16,7 @@ TEST(KillObjective, AdvancesOnMatch) {
 
 TEST(KillObjective, NonMatchingTargetRejected) {
     KillObjective::Inputs in{
-        .def = { .type = "kill", .target = "wolf", .required = 3 },
+        .def = {.type = "kill", .target = "wolf", .required = 3},
         .state = {},
         .monster_type_id = "goblin_scout",
     };
@@ -25,8 +25,8 @@ TEST(KillObjective, NonMatchingTargetRejected) {
 
 TEST(KillObjective, WouldCompleteAtRequiredCount) {
     KillObjective::Inputs in{
-        .def = { .type = "kill", .target = "wolf", .required = 3 },
-        .state = { .current = 2 },
+        .def = {.type = "kill", .target = "wolf", .required = 3},
+        .state = {.current = 2},
         .monster_type_id = "wolf",
     };
     EXPECT_EQ(KillObjective::check(in), KillObjective::Result::Ok);
@@ -35,8 +35,8 @@ TEST(KillObjective, WouldCompleteAtRequiredCount) {
 
 TEST(KillObjective, CompletedObjectiveIsNotApplicable) {
     KillObjective::Inputs in{
-        .def = { .type = "kill", .target = "wolf", .required = 3 },
-        .state = { .current = 3, .complete = true },
+        .def = {.type = "kill", .target = "wolf", .required = 3},
+        .state = {.current = 3, .complete = true},
         .monster_type_id = "wolf",
     };
     EXPECT_EQ(KillObjective::check(in), KillObjective::Result::NotApplicable);
@@ -44,7 +44,7 @@ TEST(KillObjective, CompletedObjectiveIsNotApplicable) {
 
 TEST(KillObjective, VisitObjectiveIsNotApplicable) {
     KillObjective::Inputs in{
-        .def = { .type = "visit", .target = "Town", .required = 1 },
+        .def = {.type = "visit", .target = "Town", .required = 1},
         .state = {},
         .monster_type_id = "wolf",
     };
@@ -53,8 +53,12 @@ TEST(KillObjective, VisitObjectiveIsNotApplicable) {
 
 TEST(KillObjective, KillInAreaRejectsKillOutsideCircle) {
     KillObjective::Inputs in{
-        .def = { .type = "kill_in_area", .target = "npc_enemy", .required = 5,
-                 .location_x = 1000, .location_z = 1000, .radius = 500 },
+        .def = {.type = "kill_in_area",
+                .target = "npc_enemy",
+                .required = 5,
+                .location_x = 1000,
+                .location_z = 1000,
+                .radius = 500},
         .state = {},
         .monster_type_id = "goblin_scout",
         .kill_x = 5000,
@@ -65,8 +69,12 @@ TEST(KillObjective, KillInAreaRejectsKillOutsideCircle) {
 
 TEST(KillObjective, KillInAreaAcceptsKillInsideCircle) {
     KillObjective::Inputs in{
-        .def = { .type = "kill_in_area", .target = "npc_enemy", .required = 5,
-                 .location_x = 1000, .location_z = 1000, .radius = 500 },
+        .def = {.type = "kill_in_area",
+                .target = "npc_enemy",
+                .required = 5,
+                .location_x = 1000,
+                .location_z = 1000,
+                .radius = 500},
         .state = {},
         .monster_type_id = "goblin_scout",
         .kill_x = 1200,

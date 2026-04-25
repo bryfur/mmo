@@ -4,8 +4,8 @@
 #include "engine/gpu/gpu_texture.hpp"
 #include "engine/gpu/gpu_uniforms.hpp"
 #include "engine/gpu/pipeline_registry.hpp"
-#include <glm/glm.hpp>
 #include <array>
+#include <glm/glm.hpp>
 #include <memory>
 
 namespace mmo::engine::render {
@@ -18,7 +18,7 @@ static constexpr int CSM_MAX_CASCADES = 4;
 /// Per-cascade data
 struct CascadeData {
     glm::mat4 light_view_projection;
-    float split_depth;  // view-space far distance for this cascade
+    float split_depth; // view-space far distance for this cascade
 };
 
 /**
@@ -50,8 +50,8 @@ public:
     int active_cascades() const { return active_cascades_; }
     int resolution() const { return resolution_; }
 
-    void update(const glm::mat4& camera_view, const glm::mat4& camera_proj,
-                const glm::vec3& light_dir, float near_plane, float far_plane);
+    void update(const glm::mat4& camera_view, const glm::mat4& camera_proj, const glm::vec3& light_dir,
+                float near_plane, float far_plane);
 
     SDL_GPURenderPass* begin_shadow_pass(SDL_GPUCommandBuffer* cmd, int cascade_index);
     void end_shadow_pass();
@@ -75,9 +75,7 @@ public:
 private:
     void compute_cascade_splits(float near_plane, float far_plane);
     glm::mat4 compute_cascade_matrix(const glm::mat4& camera_view, const glm::mat4& camera_proj,
-                                     const glm::vec3& light_dir,
-                                     float near_split, float far_split,
-                                     int cascade_index);
+                                     const glm::vec3& light_dir, float near_split, float far_split, int cascade_index);
 
     gpu::GPUDevice* device_ = nullptr;
     std::array<std::unique_ptr<gpu::GPUTexture>, CSM_MAX_CASCADES> cascade_textures_;
@@ -85,7 +83,7 @@ private:
     SDL_GPURenderPass* current_shadow_pass_ = nullptr;
 
     int active_cascades_ = CSM_MAX_CASCADES;
-    int resolution_ = 2048;  // cascade 0 (highest quality) resolution
+    int resolution_ = 2048; // cascade 0 (highest quality) resolution
     // Per-cascade resolution: tighter near cascades get higher res, far cascades lower.
     std::array<int, CSM_MAX_CASCADES> cascade_resolutions_ = {2048, 1024, 512, 512};
     std::array<CascadeData, CSM_MAX_CASCADES> cascades_ = {};

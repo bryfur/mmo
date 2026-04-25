@@ -22,9 +22,9 @@ entt::entity make_entity(entt::registry& r, uint32_t nid, EntityType type, float
 }
 
 TEST(MinimapColor, KnownTypesGetColors) {
-    EXPECT_EQ(*minimap_color_for(EntityType::TownNPC),  0xFF00CC00u);
-    EXPECT_EQ(*minimap_color_for(EntityType::NPC),      0xFF0000FFu);
-    EXPECT_EQ(*minimap_color_for(EntityType::Player),   0xFFFFFF00u);
+    EXPECT_EQ(*minimap_color_for(EntityType::TownNPC), 0xFF00CC00u);
+    EXPECT_EQ(*minimap_color_for(EntityType::NPC), 0xFF0000FFu);
+    EXPECT_EQ(*minimap_color_for(EntityType::Player), 0xFFFFFF00u);
     EXPECT_EQ(*minimap_color_for(EntityType::Building), 0xFF888888u);
 }
 
@@ -77,7 +77,7 @@ TEST(UpdateMinimap, DistanceCullsFarEntities) {
     HUDState hud;
     PanelState panel;
     auto local = make_entity(r, 1, EntityType::Player, 0.0f, 0.0f);
-    make_entity(r, 2, EntityType::TownNPC,  500.0f, 0.0f); // inside radius
+    make_entity(r, 2, EntityType::TownNPC, 500.0f, 0.0f);  // inside radius
     make_entity(r, 3, EntityType::TownNPC, 1500.0f, 0.0f); // outside radius
 
     update_minimap(r, hud, panel, local, 1, 1000.0f);

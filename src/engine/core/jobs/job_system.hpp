@@ -28,15 +28,9 @@ public:
     void init(unsigned thread_count = 0);
     void shutdown();
 
-    bool is_initialized() const noexcept {
-        return initialized_.load(std::memory_order_acquire);
-    }
-    unsigned worker_count() const noexcept {
-        return static_cast<unsigned>(workers_.size());
-    }
-    unsigned pending_count() const noexcept {
-        return pending_.load(std::memory_order_acquire);
-    }
+    bool is_initialized() const noexcept { return initialized_.load(std::memory_order_acquire); }
+    unsigned worker_count() const noexcept { return static_cast<unsigned>(workers_.size()); }
+    unsigned pending_count() const noexcept { return pending_.load(std::memory_order_acquire); }
 
     TaskHandle submit(std::function<void()> fn);
 

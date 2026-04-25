@@ -1,7 +1,7 @@
 #pragma once
 
-#include <SDL3/SDL_gpu.h>
 #include <cstddef>
+#include <SDL3/SDL_gpu.h>
 #include <string>
 #include <utility>
 #include <vector>
@@ -18,6 +18,7 @@ public:
     GPUDebugGroup& operator=(const GPUDebugGroup&) = delete;
     GPUDebugGroup(GPUDebugGroup&&) = delete;
     GPUDebugGroup& operator=(GPUDebugGroup&&) = delete;
+
 private:
     SDL_GPUCommandBuffer* cb_ = nullptr;
 };
@@ -59,6 +60,7 @@ public:
     ~GPUTimerScope() noexcept;
     GPUTimerScope(const GPUTimerScope&) = delete;
     GPUTimerScope& operator=(const GPUTimerScope&) = delete;
+
 private:
     GPUTimestampPool* pool_ = nullptr;
     SDL_GPUCommandBuffer* cb_ = nullptr;
@@ -73,8 +75,7 @@ private:
 #define ENGINE_GPU_SCOPE(cb, name) \
     ::mmo::engine::gpu::GPUDebugGroup ENGINE_GPU_DBG_CAT(_gpu_dbg_, __LINE__)((cb), (name))
 
-#define ENGINE_GPU_LABEL(cb, name) \
-    ::mmo::engine::gpu::insert_debug_label((cb), (name))
+#define ENGINE_GPU_LABEL(cb, name) ::mmo::engine::gpu::insert_debug_label((cb), (name))
 
 #define ENGINE_GPU_TIMER(pool, cb, name) \
     ::mmo::engine::gpu::GPUTimerScope ENGINE_GPU_DBG_CAT(_gpu_tm_, __LINE__)((pool), (cb), (name))

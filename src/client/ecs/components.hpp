@@ -1,25 +1,25 @@
 #pragma once
 
-#include "protocol/protocol.hpp"
-#include "engine/model_loader.hpp"  // ModelHandle
 #include "engine/animation/animation_player.hpp"
 #include "engine/animation/animation_state_machine.hpp"
-#include <string>
+#include "engine/model_loader.hpp" // ModelHandle
+#include "protocol/protocol.hpp"
 #include <cstdint>
+#include <string>
 
 namespace mmo::client::ecs {
 
 // Coordinate system: Y-up. x,z form the horizontal ground plane; y is vertical (height/elevation)
 struct Transform {
     float x = 0.0f;
-    float y = 0.0f;      // Height/elevation
+    float y = 0.0f; // Height/elevation
     float z = 0.0f;
-    float rotation = 0.0f;  // Rotation in radians (around vertical axis)
+    float rotation = 0.0f; // Rotation in radians (around vertical axis)
 };
 
 struct Velocity {
     float x = 0.0f;
-    float y = 0.0f;      // Vertical velocity
+    float y = 0.0f; // Vertical velocity
     float z = 0.0f;
 };
 
@@ -65,7 +65,7 @@ struct EntityInfo {
     mmo::engine::ModelHandle model_handle = mmo::engine::INVALID_MODEL_HANDLE;
     float target_size = 0.0f;
     std::string effect_type;
-    std::string animation;     // Animation config name (e.g. "humanoid")
+    std::string animation; // Animation config name (e.g. "humanoid")
     float cone_angle = 0.0f;
     bool shows_reticle = false;
 };
@@ -84,26 +84,26 @@ struct LocalPlayer {};
 
 struct Interpolation {
     float prev_x = 0.0f;
-    float prev_y = 0.0f;  // Height interpolation
+    float prev_y = 0.0f; // Height interpolation
     float prev_z = 0.0f;
     float target_x = 0.0f;
-    float target_y = 0.0f;  // Target height from server
+    float target_y = 0.0f; // Target height from server
     float target_z = 0.0f;
     float alpha = 1.0f;
 };
 
 // Attack visual effects
 struct AttackEffect {
-    std::string effect_type;   // "melee_swing", "projectile", "orbit", "arrow"
-    std::string effect_model;  // Model name for the effect (e.g. "weapon_sword")
-    float x = 0.0f;  // Origin position
+    std::string effect_type;  // "melee_swing", "projectile", "orbit", "arrow"
+    std::string effect_model; // Model name for the effect (e.g. "weapon_sword")
+    float x = 0.0f;           // Origin position
     float y = 0.0f;
-    float direction_x = 0.0f;  // Facing direction (normalized)
+    float direction_x = 0.0f; // Facing direction (normalized)
     float direction_y = 1.0f;
-    float timer = 0.0f;  // Time remaining for effect
-    float duration = 0.3f;  // Total duration
-    float range = 1.0f;  // Attack range for scaling effects
-    float cone_angle = 0.0f;  // Attack cone angle
+    float timer = 0.0f;      // Time remaining for effect
+    float duration = 0.3f;   // Total duration
+    float range = 1.0f;      // Attack range for scaling effects
+    float cone_angle = 0.0f; // Attack cone angle
 
     // For orbit/AOE effects
     float target_x = 0.0f;
@@ -121,7 +121,7 @@ struct Scale {
 // Health bar display component
 struct HealthBarRenderable {
     float width = 1.0f;
-    float y_offset = 2.0f;  // Height above entity
+    float y_offset = 2.0f; // Height above entity
     bool show_always = false;
 };
 

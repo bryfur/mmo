@@ -1,6 +1,6 @@
 #include "editor_camera.hpp"
-#include <glm/gtc/constants.hpp>
 #include <algorithm>
+#include <glm/gtc/constants.hpp>
 
 namespace mmo::editor {
 
@@ -17,7 +17,7 @@ void EditorCamera::move_right(float amount) {
 }
 
 void EditorCamera::move_up(float amount) {
-    position_.y += amount;  // World-space up, not camera-relative
+    position_.y += amount; // World-space up, not camera-relative
 }
 
 void EditorCamera::rotate_yaw(float delta) {

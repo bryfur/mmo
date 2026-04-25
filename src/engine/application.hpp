@@ -2,10 +2,10 @@
 
 #include "engine/graphics_settings.hpp"
 #include "engine/input_handler.hpp"
-#include <SDL3/SDL.h>
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <SDL3/SDL.h>
 #include <string>
 #include <vector>
 
@@ -13,17 +13,19 @@
 
 namespace mmo::engine {
 
-namespace render { class RenderContext; }
+namespace render {
+class RenderContext;
+}
 namespace scene {
-    class SceneRenderer;
-    class RenderScene;
-    class UIScene;
-    struct CameraState;
-}
+class SceneRenderer;
+class RenderScene;
+class UIScene;
+struct CameraState;
+} // namespace scene
 namespace systems {
-    class CameraController;
-    class CameraSystem;
-}
+class CameraController;
+class CameraSystem;
+} // namespace systems
 
 class ModelManager;
 struct Heightmap;
@@ -77,15 +79,15 @@ protected:
     // ========== Rendering facade ==========
 
     /** Initialize the rendering subsystems (window, GPU, scene renderer, camera). */
-    bool init_renderer(int width, int height, const std::string& title,
-                       float world_width = 32000.0f, float world_height = 32000.0f);
+    bool init_renderer(int width, int height, const std::string& title, float world_width = 32000.0f,
+                       float world_height = 32000.0f);
 
     /** Shut down all rendering subsystems. */
     void shutdown_renderer();
 
     /** Render a complete frame from scene descriptions. */
-    void render_frame(const scene::RenderScene& scene, const scene::UIScene& ui_scene,
-                      const scene::CameraState& camera, float dt);
+    void render_frame(scene::RenderScene& scene, const scene::UIScene& ui_scene, const scene::CameraState& camera,
+                      float dt);
 
     void set_heightmap(const Heightmap& heightmap);
     void set_graphics_settings(const GraphicsSettings& settings);
@@ -104,7 +106,9 @@ protected:
     /** Get the platform-appropriate settings file path. */
     std::string settings_file_path() const;
 
-    struct DisplayMode { int w, h; };
+    struct DisplayMode {
+        int w, h;
+    };
     std::vector<DisplayMode> available_resolutions() const;
 
     ModelManager& models();

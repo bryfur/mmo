@@ -2,7 +2,6 @@
 // Methods of mmo::client::Game (declared in game.hpp), peeled off so game.cpp
 // stays focused on the lifecycle / state machine.
 
-#include "game.hpp"
 #include "client/ecs/components.hpp"
 #include "client/game_state.hpp"
 #include "client/hud/debug_hud.hpp"
@@ -16,6 +15,7 @@
 #include "client/ui_colors.hpp"
 #include "engine/model_loader.hpp"
 #include "engine/model_utils.hpp"
+#include "game.hpp"
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -31,7 +31,7 @@ using namespace mmo::engine::ui_colors;
 using namespace mmo::protocol;
 
 void Game::render_class_select() {
-    player_x_ = 4000.0f;  // Town center from editor save
+    player_x_ = 4000.0f; // Town center from editor save
     player_z_ = 4000.0f;
     camera().set_yaw(0.0f);
     camera().set_pitch(30.0f);
@@ -53,7 +53,7 @@ void Game::render_spawning() {
     render_connecting();
 }
 void Game::render_connecting() {
-    player_x_ = 4000.0f;  // Town center from editor save
+    player_x_ = 4000.0f; // Town center from editor save
     player_z_ = 4000.0f;
     camera().set_yaw(0.0f);
     camera().set_pitch(30.0f);
@@ -98,16 +98,22 @@ void Game::render_playing() {
 
         // Filter trees/rocks by scene flags
         if (info.type == EntityType::Environment) {
-            bool is_tree = (info.model_name.compare(0, 5, "tree_") == 0);
-            if (is_tree && !render_scene_.should_draw_trees()) continue;
-            if (!is_tree && !render_scene_.should_draw_rocks()) continue;
+            bool is_tree = (info.model_name.starts_with("tree_"));
+            if (is_tree && !render_scene_.should_draw_trees()) {
+                continue;
+            }
+            if (!is_tree && !render_scene_.should_draw_rocks()) {
+                continue;
+            }
         }
 
         // Distance culling from player position (always render local player)
         if (!is_local) {
             float dx = transform.x - player_x_;
             float dz = transform.z - player_z_;
-            if (dx * dx + dz * dz > ENTITY_DRAW_DISTANCE_SQ) continue;
+            if (dx * dx + dz * dz > ENTITY_DRAW_DISTANCE_SQ) {
+                continue;
+            }
         }
 
         add_entity_to_scene(entity, is_local);
@@ -129,12 +135,15 @@ void Game::add_entity_to_scene(entt::entity entity, bool is_local) {
     auto& health = registry_.get<ecs::Health>(entity);
     auto& info = registry_.get<ecs::EntityInfo>(entity);
 
-    if (info.model_handle == mmo::engine::INVALID_MODEL_HANDLE && info.model_name.empty()) return;
+    if (info.model_handle == mmo::engine::INVALID_MODEL_HANDLE && info.model_name.empty()) {
+        return;
+    }
 
-    Model* model = (info.model_handle != mmo::engine::INVALID_MODEL_HANDLE)
-        ? models().get_model(info.model_handle)
-        : models().get_model(info.model_name);
-    if (!model) return;
+    Model* model = (info.model_handle != mmo::engine::INVALID_MODEL_HANDLE) ? models().get_model(info.model_handle)
+                                                                            : models().get_model(info.model_name);
+    if (!model) {
+        return;
+    }
 
     // Read rotation (already smoothed in update_playing)
     // Buildings and environment objects use fixed rotation (no smooth rotation, no dynamic updates)
@@ -149,22 +158,22 @@ void Game::add_entity_to_scene(entt::entity entity, bool is_local) {
     // Read attack tilt (already computed in update_playing)
     float attack_tilt = 0.0f;
     auto* anim_inst = registry_.try_get<ecs::AnimationInstance>(entity);
-    if (anim_inst) attack_tilt = anim_inst->attack_tilt;
+    if (anim_inst) {
+        attack_tilt = anim_inst->attack_tilt;
+    }
 
     // Build transform matrix
     glm::vec3 position(transform.x, transform.y, transform.z);
-    glm::mat4 model_mat = engine::build_model_transform(
-        *model, position, rotation, info.target_size, attack_tilt);
+    glm::mat4 model_mat = engine::build_model_transform(*model, position, rotation, info.target_size, attack_tilt);
 
     glm::vec4 tint(1.0f);
 
     // Submit draw command (bone matrices already have IK/lean applied from update_playing)
     if (model->has_skeleton && anim_inst && anim_inst->bound) {
-        render_scene_.add_skinned_model(info.model_handle, model_mat,
-                                         anim_inst->player.bone_matrix_array(), tint);
+        render_scene_.add_skinned_model(info.model_handle, model_mat, anim_inst->player.bone_matrix_array(), tint);
     } else if (model->has_skeleton) {
         static const auto identity_bones = []() {
-            std::array<glm::mat4, mmo::engine::animation::MAX_BONES> arr;
+            std::array<glm::mat4, mmo::engine::animation::MAX_BONES> arr{};
             arr.fill(glm::mat4(1.0f));
             return arr;
         }();
@@ -174,27 +183,23 @@ void Game::add_entity_to_scene(entt::entity entity, bool is_local) {
     }
 
     // Health bar
-    bool show_health_bar = (info.type != EntityType::Building &&
-                            info.type != EntityType::Environment &&
-                            info.type != EntityType::TownNPC);
+    bool show_health_bar =
+        (info.type != EntityType::Building && info.type != EntityType::Environment && info.type != EntityType::TownNPC);
     if (show_health_bar && !is_local) {
         float health_ratio = health.current / health.max;
         float bar_height_offset = transform.y + info.target_size * 1.3f;
-        render_scene_.add_billboard_3d(transform.x, bar_height_offset, transform.z,
-                                       info.target_size * 0.8f, health_ratio,
-                                       ui_colors::HEALTH_HIGH, ui_colors::HEALTH_BAR_BG, ui_colors::HEALTH_3D_BG);
+        render_scene_.add_billboard_3d(transform.x, bar_height_offset, transform.z, info.target_size * 0.8f,
+                                       health_ratio, ui_colors::HEALTH_HIGH, ui_colors::HEALTH_BAR_BG,
+                                       ui_colors::HEALTH_3D_BG);
     }
-
 }
 void Game::build_class_select_ui(UIScene& ui) {
-    hud::build_class_select(ui, available_classes_, selected_class_index_,
-                            static_cast<float>(screen_width()),
+    hud::build_class_select(ui, available_classes_, selected_class_index_, static_cast<float>(screen_width()),
                             static_cast<float>(screen_height()));
 }
 
 void Game::build_connecting_ui(UIScene& ui) {
-    hud::build_connecting(ui, host_, port_, connecting_timer_,
-                          static_cast<float>(screen_width()),
+    hud::build_connecting(ui, host_, port_, connecting_timer_, static_cast<float>(screen_width()),
                           static_cast<float>(screen_height()));
 }
 
@@ -208,16 +213,13 @@ void Game::build_playing_ui(UIScene& ui) {
         auto& ih = input();
         mouse_ui_.viewport_w = sw;
         mouse_ui_.viewport_h = sh;
-        mouse_ui_.begin_frame(
-            ih.mouse_x(), ih.mouse_y(),
-            ih.mouse_left_pressed(), ih.mouse_left_held(), ih.mouse_left_released(),
-            ih.mouse_right_pressed());
+        mouse_ui_.begin_frame(ih.mouse_x(), ih.mouse_y(), ih.mouse_left_pressed(), ih.mouse_left_held(),
+                              ih.mouse_left_released(), ih.mouse_right_pressed());
     }
 
     // Crosshair reticle for ranged-weapon classes.
-    if (selected_class_index_ >= 0
-        && selected_class_index_ < static_cast<int>(available_classes_.size())
-        && available_classes_[selected_class_index_].shows_reticle) {
+    if (selected_class_index_ >= 0 && selected_class_index_ < static_cast<int>(available_classes_.size()) &&
+        available_classes_[selected_class_index_].shows_reticle) {
         hud::build_reticle(ui, sw, sh);
     }
 
@@ -232,13 +234,8 @@ void Game::build_playing_ui(UIScene& ui) {
     {
         const auto& gfx = menu_system_->graphics_settings();
         hud::DebugHUDInputs dbg{
-            render_stats(),
-            network_.network_stats(),
-            gpu_driver_name(),
-            screen_width(), screen_height(),
-            fps(),
-            gfx.show_fps,
-            gfx.show_debug_hud,
+            render_stats(), network_.network_stats(), gpu_driver_name(), screen_width(), screen_height(), fps(),
+            gfx.show_fps,   gfx.show_debug_hud,
         };
         hud::build_debug_hud(ui, dbg);
     }
@@ -246,11 +243,8 @@ void Game::build_playing_ui(UIScene& ui) {
     // Quest markers ("!" / "?") above NPCs the local player has business with.
     {
         hud::QuestMarkerInputs qm{
-            npcs_with_quests_, npcs_with_turnins_,
-            cached_vp_matrix_,
-            cached_screen_w_, cached_screen_h_,
-            player_x_, player_z_,
-            800.0f,
+            npcs_with_quests_, npcs_with_turnins_, cached_vp_matrix_, cached_screen_w_,
+            cached_screen_h_,  player_x_,          player_z_,         800.0f,
         };
         hud::build_quest_markers(ui, registry_, qm);
     }
@@ -262,6 +256,7 @@ void Game::build_playing_ui(UIScene& ui) {
 
     // Persistent gameplay HUD overlay + panel widgets.
     build_gameplay_hud(ui, hud_state_, mouse_ui_, sw, sh);
+    build_menu_bar(ui, panel_state_, mouse_ui_, sw, sh);
     build_gameplay_panels(ui, panel_state_, sw, sh);
 
     hud::build_notifications(ui, hud_state_, sw);

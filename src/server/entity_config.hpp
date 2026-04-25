@@ -1,15 +1,15 @@
 #pragma once
 /**
  * Entity Configuration - Single Source of Truth
- * 
+ *
  * This file defines target sizes and model mappings for all entity types.
  * Both client and server should use these values to ensure consistent
  * scaling between visual rendering and physics collision.
  */
 
-#include "protocol/protocol.hpp"
 #include "game_types.hpp"
 #include "model_bounds_generated.hpp"
+#include "protocol/protocol.hpp"
 
 namespace mmo::server::config {
 
@@ -22,16 +22,26 @@ namespace mmo::server::config {
 /// Get the target visual size for a building type
 inline float get_building_target_size(BuildingType type) {
     switch (type) {
-        case BuildingType::Tower:       return 160.0f;
-        case BuildingType::Tavern:      return 140.0f;
-        case BuildingType::Blacksmith:  return 120.0f;
-        case BuildingType::Shop:        return 100.0f;
-        case BuildingType::House:       return 110.0f;
-        case BuildingType::Well:        return 60.0f;
-        case BuildingType::Inn:         return 150.0f;
-        case BuildingType::WoodenLog:   return 60.0f;
-        case BuildingType::LogTower:    return 140.0f;
-        default:                        return 100.0f;
+        case BuildingType::Tower:
+            return 160.0f;
+        case BuildingType::Tavern:
+            return 140.0f;
+        case BuildingType::Blacksmith:
+            return 120.0f;
+        case BuildingType::Shop:
+            return 100.0f;
+        case BuildingType::House:
+            return 110.0f;
+        case BuildingType::Well:
+            return 60.0f;
+        case BuildingType::Inn:
+            return 150.0f;
+        case BuildingType::WoodenLog:
+            return 60.0f;
+        case BuildingType::LogTower:
+            return 140.0f;
+        default:
+            return 100.0f;
     }
 }
 
@@ -40,20 +50,33 @@ inline float get_building_target_size(BuildingType type) {
 inline float get_environment_target_scale(EnvironmentType type) {
     switch (type) {
         // Rocks - scales range from small decorative to large obstacles
-        case EnvironmentType::RockBoulder:  return 25.0f;
-        case EnvironmentType::RockSlate:    return 30.0f;
-        case EnvironmentType::RockSpire:    return 35.0f;
-        case EnvironmentType::RockCluster:  return 28.0f;
-        case EnvironmentType::RockMossy:    return 22.0f;
+        case EnvironmentType::RockBoulder:
+            return 25.0f;
+        case EnvironmentType::RockSlate:
+            return 30.0f;
+        case EnvironmentType::RockSpire:
+            return 35.0f;
+        case EnvironmentType::RockCluster:
+            return 28.0f;
+        case EnvironmentType::RockMossy:
+            return 22.0f;
         // Trees - larger scale for proper forest feel
-        case EnvironmentType::TreeOak:      return 320.0f;
-        case EnvironmentType::TreePine:     return 360.0f;
-        case EnvironmentType::TreeDead:     return 280.0f;
-        case EnvironmentType::TreeWillow:   return 340.0f;
-        case EnvironmentType::TreeBirch:    return 300.0f;
-        case EnvironmentType::TreeMaple:    return 310.0f;
-        case EnvironmentType::TreeAspen:    return 290.0f;
-        default:                            return 25.0f;
+        case EnvironmentType::TreeOak:
+            return 320.0f;
+        case EnvironmentType::TreePine:
+            return 360.0f;
+        case EnvironmentType::TreeDead:
+            return 280.0f;
+        case EnvironmentType::TreeWillow:
+            return 340.0f;
+        case EnvironmentType::TreeBirch:
+            return 300.0f;
+        case EnvironmentType::TreeMaple:
+            return 310.0f;
+        case EnvironmentType::TreeAspen:
+            return 290.0f;
+        default:
+            return 25.0f;
     }
 }
 
@@ -63,10 +86,14 @@ constexpr float CHARACTER_NPC_SIZE = 36.0f;
 /// Get the target visual size for a character type
 inline float get_character_target_size(mmo::protocol::EntityType type) {
     switch (type) {
-        case mmo::protocol::EntityType::Player:  return CHARACTER_PLAYER_SIZE;
-        case mmo::protocol::EntityType::NPC:     return CHARACTER_NPC_SIZE;
-        case mmo::protocol::EntityType::TownNPC: return CHARACTER_PLAYER_SIZE * 0.9f;
-        default:                  return CHARACTER_PLAYER_SIZE;
+        case mmo::protocol::EntityType::Player:
+            return CHARACTER_PLAYER_SIZE;
+        case mmo::protocol::EntityType::NPC:
+            return CHARACTER_NPC_SIZE;
+        case mmo::protocol::EntityType::TownNPC:
+            return CHARACTER_PLAYER_SIZE * 0.9f;
+        default:
+            return CHARACTER_PLAYER_SIZE;
     }
 }
 
@@ -77,16 +104,26 @@ inline float get_character_target_size(mmo::protocol::EntityType type) {
 /// Get the model filename (without extension) for a building type
 inline const char* get_building_model_name(BuildingType type) {
     switch (type) {
-        case BuildingType::Tower:       return "building_tower";
-        case BuildingType::Tavern:      return "building_tavern";
-        case BuildingType::Blacksmith:  return "building_blacksmith";
-        case BuildingType::Shop:        return "building_shop";
-        case BuildingType::House:       return "building_house";
-        case BuildingType::Well:        return "building_well";
-        case BuildingType::Inn:         return "inn";
-        case BuildingType::WoodenLog:   return "wooden_log";
-        case BuildingType::LogTower:    return "log_tower";
-        default:                        return "building_house";
+        case BuildingType::Tower:
+            return "building_tower";
+        case BuildingType::Tavern:
+            return "building_tavern";
+        case BuildingType::Blacksmith:
+            return "building_blacksmith";
+        case BuildingType::Shop:
+            return "building_shop";
+        case BuildingType::House:
+            return "building_house";
+        case BuildingType::Well:
+            return "building_well";
+        case BuildingType::Inn:
+            return "inn";
+        case BuildingType::WoodenLog:
+            return "wooden_log";
+        case BuildingType::LogTower:
+            return "log_tower";
+        default:
+            return "building_house";
     }
 }
 
@@ -96,19 +133,32 @@ constexpr int TREE_VARIANTS = 3;
 /// Get the base model name for an environment type (no variant suffix)
 inline const char* get_environment_base_model(EnvironmentType type) {
     switch (type) {
-        case EnvironmentType::RockBoulder:  return "rock_boulder";
-        case EnvironmentType::RockSlate:    return "rock_slate";
-        case EnvironmentType::RockSpire:    return "rock_spire";
-        case EnvironmentType::RockCluster:  return "rock_cluster";
-        case EnvironmentType::RockMossy:    return "rock_mossy";
-        case EnvironmentType::TreeOak:      return "tree_oak";
-        case EnvironmentType::TreePine:     return "tree_pine";
-        case EnvironmentType::TreeDead:     return "tree_dead";
-        case EnvironmentType::TreeWillow:   return "tree_willow";
-        case EnvironmentType::TreeBirch:    return "tree_birch";
-        case EnvironmentType::TreeMaple:    return "tree_maple";
-        case EnvironmentType::TreeAspen:    return "tree_aspen";
-        default:                            return "rock_boulder";
+        case EnvironmentType::RockBoulder:
+            return "rock_boulder";
+        case EnvironmentType::RockSlate:
+            return "rock_slate";
+        case EnvironmentType::RockSpire:
+            return "rock_spire";
+        case EnvironmentType::RockCluster:
+            return "rock_cluster";
+        case EnvironmentType::RockMossy:
+            return "rock_mossy";
+        case EnvironmentType::TreeOak:
+            return "tree_oak";
+        case EnvironmentType::TreePine:
+            return "tree_pine";
+        case EnvironmentType::TreeDead:
+            return "tree_dead";
+        case EnvironmentType::TreeWillow:
+            return "tree_willow";
+        case EnvironmentType::TreeBirch:
+            return "tree_birch";
+        case EnvironmentType::TreeMaple:
+            return "tree_maple";
+        case EnvironmentType::TreeAspen:
+            return "tree_aspen";
+        default:
+            return "rock_boulder";
     }
 }
 
@@ -126,24 +176,36 @@ inline std::string get_environment_model_name(EnvironmentType type, int variant 
 /// Get the model filename for an NPC type
 inline const char* get_npc_model_name(NPCType type) {
     switch (type) {
-        case NPCType::Monster:    return "npc_enemy";
-        case NPCType::Merchant:   return "npc_merchant";
-        case NPCType::Guard:      return "npc_guard";
-        case NPCType::Blacksmith: return "npc_blacksmith";
-        case NPCType::Innkeeper:  return "npc_innkeeper";
-        case NPCType::Villager:   return "npc_villager";
-        default:                  return "npc_enemy";
+        case NPCType::Monster:
+            return "npc_enemy";
+        case NPCType::Merchant:
+            return "npc_merchant";
+        case NPCType::Guard:
+            return "npc_guard";
+        case NPCType::Blacksmith:
+            return "npc_blacksmith";
+        case NPCType::Innkeeper:
+            return "npc_innkeeper";
+        case NPCType::Villager:
+            return "npc_villager";
+        default:
+            return "npc_enemy";
     }
 }
 
 /// Get the model filename for a player class
 inline const char* get_player_model_name(PlayerClass pc) {
     switch (pc) {
-        case PlayerClass::Warrior: return "warrior";
-        case PlayerClass::Mage:    return "mage";
-        case PlayerClass::Paladin: return "paladin";
-        case PlayerClass::Archer:  return "archer";
-        default:                   return "warrior";
+        case PlayerClass::Warrior:
+            return "warrior";
+        case PlayerClass::Mage:
+            return "mage";
+        case PlayerClass::Paladin:
+            return "paladin";
+        case PlayerClass::Archer:
+            return "archer";
+        default:
+            return "warrior";
     }
 }
 
@@ -178,7 +240,7 @@ inline float calculate_base_scale(const ModelBounds& bounds, float target_size) 
 /// @param target_size The desired visual size in world units
 /// @param fallback_max_dim Fallback max dimension if model not found
 /// @return Scale factor to apply uniformly to the model
-inline float calculate_scale_for_model(const std::string& model_name, float target_size, 
+inline float calculate_scale_for_model(const std::string& model_name, float target_size,
                                        float fallback_max_dim = 1.0f) {
     const ModelBounds* bounds = get_model_bounds(model_name);
     if (bounds) {
@@ -211,19 +273,18 @@ inline float get_collision_half_height(float target_size, float instance_scale =
 /// @param half_x Output: half extent in X
 /// @param half_y Output: half extent in Y (vertical)
 /// @param half_z Output: half extent in Z
-inline void get_building_collision_size(BuildingType type, 
-                                        float& half_x, float& half_y, float& half_z,
+inline void get_building_collision_size(BuildingType type, float& half_x, float& half_y, float& half_z,
                                         float instance_scale = 1.0f) {
     const char* model_name = get_building_model_name(type);
     const ModelBounds* bounds = get_model_bounds(model_name);
-    
+
     if (bounds) {
         float target_size = get_building_target_size(type);
         float scale = calculate_base_scale(*bounds, target_size) * instance_scale;
-        
+
         // Apply scale to model dimensions, divide by 2 for half-extents
         half_x = (bounds->width() * scale) * STRUCTURE_COLLISION_FACTOR;
-        half_y = (bounds->height() * scale) * 0.5f;  // Full height for vertical
+        half_y = (bounds->height() * scale) * 0.5f; // Full height for vertical
         half_z = (bounds->depth() * scale) * STRUCTURE_COLLISION_FACTOR;
     } else {
         // Fallback if model bounds not found
@@ -236,13 +297,9 @@ inline void get_building_collision_size(BuildingType type,
 
 /// Check if an environment type is a tree (vs rock)
 inline bool is_tree_type(EnvironmentType type) {
-    return type == EnvironmentType::TreeOak ||
-           type == EnvironmentType::TreePine ||
-           type == EnvironmentType::TreeDead ||
-           type == EnvironmentType::TreeWillow ||
-           type == EnvironmentType::TreeBirch ||
-           type == EnvironmentType::TreeMaple ||
-           type == EnvironmentType::TreeAspen;
+    return type == EnvironmentType::TreeOak || type == EnvironmentType::TreePine || type == EnvironmentType::TreeDead ||
+           type == EnvironmentType::TreeWillow || type == EnvironmentType::TreeBirch ||
+           type == EnvironmentType::TreeMaple || type == EnvironmentType::TreeAspen;
 }
 
 /// Calculate collision size for environment objects (rocks and trees)
@@ -251,11 +308,11 @@ inline bool is_tree_type(EnvironmentType type) {
 /// @param half_x Output: half extent in X
 /// @param half_y Output: half extent in Y (vertical)
 /// @param half_z Output: half extent in Z
-inline void get_environment_collision_size(EnvironmentType type, float scale,
-                                           float& half_x, float& half_y, float& half_z) {
+inline void get_environment_collision_size(EnvironmentType type, float scale, float& half_x, float& half_y,
+                                           float& half_z) {
     const char* model_name = get_environment_base_model(type);
     const ModelBounds* bounds = get_model_bounds(model_name);
-    
+
     if (bounds) {
         // Apply the instance scale to model dimensions
         half_x = (bounds->width() * scale) * ENVIRONMENT_COLLISION_FACTOR;
@@ -273,14 +330,22 @@ inline void get_environment_collision_size(EnvironmentType type, float scale,
 inline float get_tree_collision_radius(EnvironmentType type, float scale) {
     // Trees use smaller radius (just trunk area)
     switch (type) {
-        case EnvironmentType::TreeOak:    return scale * 0.08f;
-        case EnvironmentType::TreePine:   return scale * 0.06f;
-        case EnvironmentType::TreeDead:   return scale * 0.05f;
-        case EnvironmentType::TreeWillow: return scale * 0.07f;
-        case EnvironmentType::TreeBirch:  return scale * 0.05f;
-        case EnvironmentType::TreeMaple:  return scale * 0.07f;
-        case EnvironmentType::TreeAspen:  return scale * 0.05f;
-        default:                          return scale * 0.07f;
+        case EnvironmentType::TreeOak:
+            return scale * 0.08f;
+        case EnvironmentType::TreePine:
+            return scale * 0.06f;
+        case EnvironmentType::TreeDead:
+            return scale * 0.05f;
+        case EnvironmentType::TreeWillow:
+            return scale * 0.07f;
+        case EnvironmentType::TreeBirch:
+            return scale * 0.05f;
+        case EnvironmentType::TreeMaple:
+            return scale * 0.07f;
+        case EnvironmentType::TreeAspen:
+            return scale * 0.05f;
+        default:
+            return scale * 0.07f;
     }
 }
 
@@ -289,64 +354,132 @@ inline float get_tree_collision_radius(EnvironmentType type, float scale) {
 // ============================================================================
 
 inline BuildingType building_type_from_model(const std::string& model) {
-    if (model == "building_tavern")      return BuildingType::Tavern;
-    if (model == "building_blacksmith")  return BuildingType::Blacksmith;
-    if (model == "building_tower")       return BuildingType::Tower;
-    if (model == "building_shop")        return BuildingType::Shop;
-    if (model == "building_well")        return BuildingType::Well;
-    if (model == "building_house")       return BuildingType::House;
-    if (model == "building_inn" || model == "inn") return BuildingType::Inn;
-    if (model == "wooden_log")           return BuildingType::WoodenLog;
-    if (model == "log_tower")            return BuildingType::LogTower;
+    if (model == "building_tavern") {
+        return BuildingType::Tavern;
+    }
+    if (model == "building_blacksmith") {
+        return BuildingType::Blacksmith;
+    }
+    if (model == "building_tower") {
+        return BuildingType::Tower;
+    }
+    if (model == "building_shop") {
+        return BuildingType::Shop;
+    }
+    if (model == "building_well") {
+        return BuildingType::Well;
+    }
+    if (model == "building_house") {
+        return BuildingType::House;
+    }
+    if (model == "building_inn" || model == "inn") {
+        return BuildingType::Inn;
+    }
+    if (model == "wooden_log") {
+        return BuildingType::WoodenLog;
+    }
+    if (model == "log_tower") {
+        return BuildingType::LogTower;
+    }
     return BuildingType::House;
 }
 
 inline EnvironmentType environment_type_from_model(const std::string& model) {
     // Match with or without variant suffix (e.g., "tree_oak" or "tree_oak_2")
     auto starts = [&](const char* prefix) { return model.compare(0, strlen(prefix), prefix) == 0; };
-    if (model == "rock_boulder")  return EnvironmentType::RockBoulder;
-    if (model == "rock_slate")    return EnvironmentType::RockSlate;
-    if (model == "rock_spire")    return EnvironmentType::RockSpire;
-    if (model == "rock_cluster")  return EnvironmentType::RockCluster;
-    if (model == "rock_mossy")    return EnvironmentType::RockMossy;
-    if (starts("tree_oak"))       return EnvironmentType::TreeOak;
-    if (starts("tree_pine"))      return EnvironmentType::TreePine;
-    if (starts("tree_dead"))      return EnvironmentType::TreeDead;
-    if (starts("tree_willow"))    return EnvironmentType::TreeWillow;
-    if (starts("tree_birch"))     return EnvironmentType::TreeBirch;
-    if (starts("tree_maple"))     return EnvironmentType::TreeMaple;
-    if (starts("tree_aspen"))     return EnvironmentType::TreeAspen;
+    if (model == "rock_boulder") {
+        return EnvironmentType::RockBoulder;
+    }
+    if (model == "rock_slate") {
+        return EnvironmentType::RockSlate;
+    }
+    if (model == "rock_spire") {
+        return EnvironmentType::RockSpire;
+    }
+    if (model == "rock_cluster") {
+        return EnvironmentType::RockCluster;
+    }
+    if (model == "rock_mossy") {
+        return EnvironmentType::RockMossy;
+    }
+    if (starts("tree_oak")) {
+        return EnvironmentType::TreeOak;
+    }
+    if (starts("tree_pine")) {
+        return EnvironmentType::TreePine;
+    }
+    if (starts("tree_dead")) {
+        return EnvironmentType::TreeDead;
+    }
+    if (starts("tree_willow")) {
+        return EnvironmentType::TreeWillow;
+    }
+    if (starts("tree_birch")) {
+        return EnvironmentType::TreeBirch;
+    }
+    if (starts("tree_maple")) {
+        return EnvironmentType::TreeMaple;
+    }
+    if (starts("tree_aspen")) {
+        return EnvironmentType::TreeAspen;
+    }
     return EnvironmentType::RockBoulder;
 }
 
 inline NPCType npc_type_from_model(const std::string& model) {
-    if (model == "npc_enemy")      return NPCType::Monster;
-    if (model == "npc_merchant")   return NPCType::Merchant;
-    if (model == "npc_guard")      return NPCType::Guard;
-    if (model == "npc_blacksmith") return NPCType::Blacksmith;
-    if (model == "npc_innkeeper")  return NPCType::Innkeeper;
-    if (model == "npc_villager")   return NPCType::Villager;
+    if (model == "npc_enemy") {
+        return NPCType::Monster;
+    }
+    if (model == "npc_merchant") {
+        return NPCType::Merchant;
+    }
+    if (model == "npc_guard") {
+        return NPCType::Guard;
+    }
+    if (model == "npc_blacksmith") {
+        return NPCType::Blacksmith;
+    }
+    if (model == "npc_innkeeper") {
+        return NPCType::Innkeeper;
+    }
+    if (model == "npc_villager") {
+        return NPCType::Villager;
+    }
     return NPCType::Monster;
 }
 
 /// Map entity_type string from world_entities.json → protocol EntityType
 inline mmo::protocol::EntityType entity_type_from_string(const std::string& s) {
-    if (s == "building")    return mmo::protocol::EntityType::Building;
-    if (s == "environment") return mmo::protocol::EntityType::Environment;
-    if (s == "town_npc")    return mmo::protocol::EntityType::TownNPC;
-    if (s == "monster")     return mmo::protocol::EntityType::NPC;
+    if (s == "building") {
+        return mmo::protocol::EntityType::Building;
+    }
+    if (s == "environment") {
+        return mmo::protocol::EntityType::Environment;
+    }
+    if (s == "town_npc") {
+        return mmo::protocol::EntityType::TownNPC;
+    }
+    if (s == "monster") {
+        return mmo::protocol::EntityType::NPC;
+    }
     return mmo::protocol::EntityType::Environment;
 }
 
 /// Map protocol EntityType → string for save files
 inline const char* entity_type_to_string(mmo::protocol::EntityType type) {
     switch (type) {
-        case mmo::protocol::EntityType::Building:    return "building";
-        case mmo::protocol::EntityType::Environment: return "environment";
-        case mmo::protocol::EntityType::TownNPC:     return "town_npc";
-        case mmo::protocol::EntityType::NPC:         return "monster";
-        case mmo::protocol::EntityType::Player:      return "player";
-        default:                                     return "environment";
+        case mmo::protocol::EntityType::Building:
+            return "building";
+        case mmo::protocol::EntityType::Environment:
+            return "environment";
+        case mmo::protocol::EntityType::TownNPC:
+            return "town_npc";
+        case mmo::protocol::EntityType::NPC:
+            return "monster";
+        case mmo::protocol::EntityType::Player:
+            return "player";
+        default:
+            return "environment";
     }
 }
 

@@ -1,32 +1,32 @@
 #include "world.hpp"
 #include "ecs/game_components.hpp"
+#include "entity_config.hpp"
 #include "entt/entity/entity.hpp"
 #include "entt/entity/fwd.hpp"
+#include "log.hpp"
 #include "protocol/heightmap.hpp"
 #include "protocol/protocol.hpp"
 #include "server/game_config.hpp"
 #include "server/game_types.hpp"
 #include "server/heightmap_generator.hpp"
-#include "systems/movement_system.hpp"
-#include "systems/combat_system.hpp"
 #include "systems/ai_system.hpp"
 #include "systems/buff_system.hpp"
-#include "systems/physics_system.hpp"
+#include "systems/combat_system.hpp"
+#include "systems/death_system.hpp"
 #include "systems/leveling_system.hpp"
 #include "systems/loot_system.hpp"
+#include "systems/movement_system.hpp"
+#include "systems/physics_system.hpp"
 #include "systems/quest_system.hpp"
 #include "systems/skill_system.hpp"
-#include "systems/zone_system.hpp"
 #include "systems/talent_passive_system.hpp"
-#include "systems/death_system.hpp"
-#include "entity_config.hpp"
-#include "log.hpp"
-#include <nlohmann/json.hpp>
+#include "systems/zone_system.hpp"
+#include <cmath>
 #include <cstdint>
 #include <cstring>
-#include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <nlohmann/json.hpp>
 #include <random>
 #include <string>
 #include <utility>
@@ -37,10 +37,10 @@ namespace mmo::server {
 using namespace mmo::protocol;
 
 World::World(const GameConfig& config)
-    : config_(&config)
-    , zone_system_(config)
-    , spatial_grid_(config.network().spatial_grid_cell_size)
-    , rng_(std::random_device{}()) {
+    : config_(&config),
+      zone_system_(config),
+      spatial_grid_(config.network().spatial_grid_cell_size),
+      rng_(std::random_device{}()) {
     // Cache town center from zone config
     for (const auto& zone : config.zones()) {
         if (zone.id == "town_safe_zone") {
@@ -67,13 +67,11 @@ World::World(const GameConfig& config)
         LOG_WARN("World") << "No editor world data found (data/editor_save/world_entities.json). "
                           << "Use the editor to generate and save a world.";
     }
-    
+
     // Spawn zone-based monsters across the world
     zone_system_.spawn_initial_monsters(
-        registry_,
-        [this]() { return next_network_id(); },
-        [this](float x, float z) { return get_terrain_height(x, z); }
-    );
+        registry_, [this]() { return next_network_id(); },
+        [this](float x, float z) { return get_terrain_height(x, z); });
 
     // Add zone monsters to spatial grid and network ID map
     auto zone_monsters = registry_.view<ecs::NetworkId, ecs::Transform, ecs::EntityInfo, ecs::MonsterTypeId>();
@@ -89,7 +87,7 @@ World::World(const GameConfig& config)
 
     // Create physics bodies for all spawned entities
     physics_.create_bodies(registry_);
-    
+
     // Count physics bodies by type
     int static_boxes = 0, static_capsules = 0, dynamic_capsules = 0;
     auto view = registry_.view<ecs::PhysicsBody, ecs::Collider, ecs::RigidBody>();
@@ -97,16 +95,20 @@ World::World(const GameConfig& config)
         const auto& collider = view.get<ecs::Collider>(entity);
         const auto& rb = view.get<ecs::RigidBody>(entity);
         if (rb.motion_type == ecs::PhysicsMotionType::Static) {
-            if (collider.type == ecs::ColliderType::Box) static_boxes++;
-            else if (collider.type == ecs::ColliderType::Capsule) static_capsules++;
+            if (collider.type == ecs::ColliderType::Box) {
+                static_boxes++;
+            } else if (collider.type == ecs::ColliderType::Capsule) {
+                static_capsules++;
+            }
         } else {
-            if (collider.type == ecs::ColliderType::Capsule) dynamic_capsules++;
+            if (collider.type == ecs::ColliderType::Capsule) {
+                dynamic_capsules++;
+            }
         }
     }
-    LOG_INFO("Physics") << "Bodies created - static boxes: " << static_boxes
-                        << ", static capsules: " << static_capsules
+    LOG_INFO("Physics") << "Bodies created - static boxes: " << static_boxes << ", static capsules: " << static_capsules
                         << ", dynamic capsules: " << dynamic_capsules;
-    
+
     // Optimize broadphase now that all static bodies are added
     // This is critical for efficient collision detection with static objects
     physics_.optimize_broadphase();
@@ -117,17 +119,16 @@ World::~World() {
 }
 
 void World::setup_collision_callbacks() {
-    physics_.set_collision_callback([this](entt::entity a, entt::entity b, 
-                                           const ecs::CollisionEvent& event) {
+    physics_.set_collision_callback([this](entt::entity a, entt::entity b, const ecs::CollisionEvent& event) {
         // Handle collision events here
         // For example: damage on collision, trigger effects, etc.
-        
+
         // Check collision types for gameplay logic
         bool a_is_player = registry_.all_of<ecs::PlayerTag>(a);
         bool b_is_player = registry_.all_of<ecs::PlayerTag>(b);
         bool a_is_npc = registry_.all_of<ecs::NPCTag>(a);
         bool b_is_npc = registry_.all_of<ecs::NPCTag>(b);
-        
+
         if ((a_is_player && b_is_npc) || (b_is_player && a_is_npc)) {
             // Player touched an NPC - could trigger aggro or damage
             // This is handled by combat system, but physics gives us precise collision
@@ -136,10 +137,10 @@ void World::setup_collision_callbacks() {
 }
 
 uint32_t World::add_player(const std::string& name, PlayerClass player_class) {
-    
+
     auto entity = registry_.create();
     uint32_t net_id = next_network_id();
-    
+
     // Spawn players in the town (safe zone)
     std::uniform_real_distribution<float> dist_offset(-50.0f, 50.0f);
     float spawn_x = town_center_.x + dist_offset(rng_);
@@ -156,27 +157,27 @@ uint32_t World::add_player(const std::string& name, PlayerClass player_class) {
     transform.z = spawn_z;
     registry_.emplace<ecs::Transform>(entity, transform);
     registry_.emplace<ecs::Velocity>(entity);
-    
+
     const auto& cls = config_->get_class(static_cast<int>(player_class));
     float max_health = cls.health;
     float damage = cls.damage;
     float range = cls.attack_range;
     float cooldown = cls.attack_cooldown;
-    
+
     registry_.emplace<ecs::Health>(entity, max_health, max_health);
     registry_.emplace<ecs::Combat>(entity, damage, range, cooldown, 0.0f, false);
-    
+
     ecs::EntityInfo info;
     info.type = EntityType::Player;
     info.player_class = static_cast<uint8_t>(player_class);
     info.color = generate_color(player_class);
     registry_.emplace<ecs::EntityInfo>(entity, info);
-    
+
     registry_.emplace<ecs::Name>(entity, name);
     registry_.emplace<ecs::PlayerTag>(entity);
     registry_.emplace<ecs::InputState>(entity);
-    registry_.emplace<ecs::Scale>(entity);  // Default scale = 1.0
-    registry_.emplace<ecs::BuffState>(entity);  // Empty buff state for status effects
+    registry_.emplace<ecs::Scale>(entity);     // Default scale = 1.0
+    registry_.emplace<ecs::BuffState>(entity); // Empty buff state for status effects
 
     // Progression components - use per-class mana from skills.json mana_system
     ecs::PlayerLevel player_level;
@@ -202,16 +203,18 @@ uint32_t World::add_player(const std::string& name, PlayerClass player_class) {
     // Offset so capsule is centered at player mid-height (feet at transform.y)
     collider.offset_y = collider.half_height + collider.radius;
     registry_.emplace<ecs::Collider>(entity, collider);
-    
+
     ecs::RigidBody rb;
     rb.motion_type = ecs::PhysicsMotionType::Dynamic; // Dynamic for collision response
     rb.lock_rotation = true;
-    rb.mass = 70.0f;  // ~70kg for a character
-    rb.linear_damping = 0.9f;  // High damping for responsive control
+    rb.mass = 70.0f;          // ~70kg for a character
+    rb.linear_damping = 0.9f; // High damping for responsive control
     registry_.emplace<ecs::RigidBody>(entity, rb);
 
-    // Create physics body immediately so the player has collision from the first tick
-    physics_.create_bodies(registry_);
+    // Create physics body immediately so the player has collision from the first tick.
+    // Use the per-entity helper to skip the full-registry rescan that
+    // create_bodies() would otherwise do on every join.
+    physics_.create_body_for_entity(registry_, entity);
 
     // Add to spatial grid
     spatial_grid_.update_entity(net_id, spawn_x, spawn_z, EntityType::Player);
@@ -241,21 +244,33 @@ void World::remove_player(uint32_t player_id) {
 void World::update_player_input(uint32_t player_id, const PlayerInput& input) {
 
     auto entity = find_entity_by_network_id(player_id);
-    if (entity == entt::null || !registry_.all_of<ecs::InputState>(entity)) return;
+    if (entity == entt::null || !registry_.all_of<ecs::InputState>(entity)) {
+        return;
+    }
 
     // Sanitize: clamp move_dir magnitude to <=1, normalize attack_dir to unit length.
     // Untrusted client input — never propagate raw values into the simulation.
     PlayerInput clean = input;
     auto sanitize_dir = [](float& x, float& y, bool unit) {
-        if (!std::isfinite(x) || !std::isfinite(y)) { x = 0.0f; y = unit ? 1.0f : 0.0f; return; }
+        if (!std::isfinite(x) || !std::isfinite(y)) {
+            x = 0.0f;
+            y = unit ? 1.0f : 0.0f;
+            return;
+        }
         float len_sq = x * x + y * y;
         if (unit) {
-            if (len_sq < 1e-6f) { x = 0.0f; y = 1.0f; return; }
+            if (len_sq < 1e-6f) {
+                x = 0.0f;
+                y = 1.0f;
+                return;
+            }
             float inv = 1.0f / std::sqrt(len_sq);
-            x *= inv; y *= inv;
+            x *= inv;
+            y *= inv;
         } else if (len_sq > 1.0f) {
             float inv = 1.0f / std::sqrt(len_sq);
-            x *= inv; y *= inv;
+            x *= inv;
+            y *= inv;
         }
     };
     sanitize_dir(clean.move_dir_x, clean.move_dir_y, false);
@@ -287,9 +302,7 @@ void World::update(float dt) {
     // Generate CombatEvent / EntityDeath events from combat hits.
     // Emit ONCE per hit (player_id=0 = "broadcast"); the server filters by
     // AOI when actually sending to clients. Avoids O(hits * players) fan-out.
-    auto emit_combat_pair = [this](uint32_t attacker_net_id,
-                                    uint32_t target_net_id,
-                                    float damage, bool died) {
+    auto emit_combat_pair = [this](uint32_t attacker_net_id, uint32_t target_net_id, float damage, bool died) {
         pending_events_.emplace_back(events::CombatHitEvent{attacker_net_id, target_net_id, damage});
         if (died) {
             pending_events_.emplace_back(events::EntityDeathEvent{target_net_id, attacker_net_id});
@@ -301,8 +314,7 @@ void World::update(float dt) {
     };
 
     for (const auto& hit : combat_hits) {
-        emit_combat_pair(net_id_or_zero(hit.attacker), net_id_or_zero(hit.target),
-                         hit.damage, hit.target_died);
+        emit_combat_pair(net_id_or_zero(hit.attacker), net_id_or_zero(hit.target), hit.damage, hit.target_died);
     }
 
     // Update progression systems
@@ -313,8 +325,7 @@ void World::update(float dt) {
     {
         auto channel_hits = systems::update_channeled_skills(registry_, dt, *config_);
         for (const auto& hit : channel_hits) {
-            emit_combat_pair(net_id_or_zero(hit.attacker), net_id_or_zero(hit.target),
-                             hit.damage, hit.target_died);
+            emit_combat_pair(net_id_or_zero(hit.attacker), net_id_or_zero(hit.target), hit.damage, hit.target_died);
         }
     }
 
@@ -322,28 +333,26 @@ void World::update(float dt) {
     auto quest_changes = systems::update_quests(registry_, dt, *config_);
     for (auto& [entity, change] : quest_changes) {
         auto* net_id = registry_.try_get<ecs::NetworkId>(entity);
-        if (!net_id) continue;
+        if (!net_id) {
+            continue;
+        }
 
         if (change.quest_complete) {
-            pending_events_.emplace_back(events::QuestComplete{
-                net_id->id, change.quest_id, change.quest_name});
+            pending_events_.emplace_back(events::QuestComplete{net_id->id, change.quest_id, change.quest_name});
         } else {
-            pending_events_.emplace_back(events::QuestProgress{
-                net_id->id, change.quest_id, change.objective_index,
-                change.current, change.required, change.objective_complete});
+            pending_events_.emplace_back(events::QuestProgress{net_id->id, change.quest_id, change.objective_index,
+                                                               change.current, change.required,
+                                                               change.objective_complete});
         }
     }
 
     // Handle dead monsters - award XP/loot, talent kill effects, respawn
-    systems::handle_monster_deaths(
-        registry_, *config_, pending_events_, spatial_grid_,
-        zone_system_, physics_, rng_,
-        [this](float x, float z) { return get_terrain_height(x, z); });
+    systems::handle_monster_deaths(registry_, *config_, pending_events_, spatial_grid_, zone_system_, physics_, rng_,
+                                   [this](float x, float z) { return get_terrain_height(x, z); });
 
     // Handle player deaths - death penalty, reset, teleport to town
-    systems::handle_player_deaths(
-        registry_, *config_, town_center_, physics_, rng_,
-        [this](float x, float z) { return get_terrain_height(x, z); });
+    systems::handle_player_deaths(registry_, *config_, town_center_, physics_, rng_,
+                                  [this](float x, float z) { return get_terrain_height(x, z); });
 
     // Update buff/debuff system (tick durations, apply DoT/HoT, remove expired)
     systems::update_buffs(registry_, dt);
@@ -356,7 +365,9 @@ void World::update(float dt) {
     auto view = registry_.view<ecs::NetworkId, ecs::Transform, ecs::EntityInfo, ecs::Velocity>();
     for (auto entity : view) {
         auto&& [net_id, transform, info, vel] = view.get(entity);
-        if (vel.x == 0.0f && vel.z == 0.0f) continue;
+        if (vel.x == 0.0f && vel.z == 0.0f) {
+            continue;
+        }
         spatial_grid_.update_entity(net_id.id, transform.x, transform.z, info.type);
     }
 
@@ -433,21 +444,42 @@ NetEntityState World::build_entity_state(entt::entity entity, bool include_rende
     if (const auto* buffs = registry_.try_get<ecs::BuffState>(entity)) {
         uint16_t m = 0;
         for (const auto& e : buffs->effects) {
-            if (e.duration <= 0.0f) continue;
+            if (e.duration <= 0.0f) {
+                continue;
+            }
             using T = ecs::StatusEffect::Type;
             switch (e.type) {
                 case T::Stun:
-                case T::Freeze:       m |= NetEntityState::EffectStun; break;
-                case T::Slow:         m |= NetEntityState::EffectSlow; break;
-                case T::Root:         m |= NetEntityState::EffectRoot; break;
+                case T::Freeze:
+                    m |= NetEntityState::EffectStun;
+                    break;
+                case T::Slow:
+                    m |= NetEntityState::EffectSlow;
+                    break;
+                case T::Root:
+                    m |= NetEntityState::EffectRoot;
+                    break;
                 case T::Burn:
-                case T::Poison:       m |= NetEntityState::EffectBurn; break;
-                case T::Shield:       m |= NetEntityState::EffectShield; break;
-                case T::DamageBoost:  m |= NetEntityState::EffectDamageBoost; break;
-                case T::SpeedBoost:   m |= NetEntityState::EffectSpeedBoost; break;
-                case T::Invulnerable: m |= NetEntityState::EffectInvuln; break;
-                case T::DefenseBoost: m |= NetEntityState::EffectDefBoost; break;
-                default: break;
+                case T::Poison:
+                    m |= NetEntityState::EffectBurn;
+                    break;
+                case T::Shield:
+                    m |= NetEntityState::EffectShield;
+                    break;
+                case T::DamageBoost:
+                    m |= NetEntityState::EffectDamageBoost;
+                    break;
+                case T::SpeedBoost:
+                    m |= NetEntityState::EffectSpeedBoost;
+                    break;
+                case T::Invulnerable:
+                    m |= NetEntityState::EffectInvuln;
+                    break;
+                case T::DefenseBoost:
+                    m |= NetEntityState::EffectDefBoost;
+                    break;
+                default:
+                    break;
             }
         }
         state.effects_mask = m;
@@ -467,21 +499,25 @@ NetEntityState World::build_entity_state(entt::entity entity, bool include_rende
 
 NetEntityState World::get_entity_state(uint32_t network_id) const {
     auto entity = find_entity_by_network_id(network_id);
-    if (entity == entt::null) return NetEntityState{};
+    if (entity == entt::null) {
+        return NetEntityState{};
+    }
     return build_entity_state(entity, /*include_render_static=*/false);
 }
 
 NetEntityState World::get_entity_state_full(uint32_t network_id) const {
     auto entity = find_entity_by_network_id(network_id);
-    if (entity == entt::null) return NetEntityState{};
+    if (entity == entt::null) {
+        return NetEntityState{};
+    }
     return build_entity_state(entity, /*include_render_static=*/true);
 }
 
 std::vector<NetEntityState> World::get_all_entities() const {
     std::vector<NetEntityState> result;
 
-    auto view = registry_.view<ecs::NetworkId, ecs::Transform, ecs::Velocity,
-                               ecs::Health, ecs::Combat, ecs::EntityInfo, ecs::Name>();
+    auto view = registry_.view<ecs::NetworkId, ecs::Transform, ecs::Velocity, ecs::Health, ecs::Combat, ecs::EntityInfo,
+                               ecs::Name>();
 
     for (auto entity : view) {
         result.push_back(build_entity_state(entity, /*include_render_static=*/true));
@@ -562,7 +598,8 @@ void World::populate_render_data(NetEntityState& state, const ecs::EntityInfo& i
             state.target_size = config::get_character_target_size(EntityType::TownNPC);
             break;
         case EntityType::Building:
-            strncpy_safe(state.model_name, config::get_building_model_name(static_cast<BuildingType>(info.building_type)), 32);
+            strncpy_safe(state.model_name,
+                         config::get_building_model_name(static_cast<BuildingType>(info.building_type)), 32);
             state.target_size = config::get_building_target_size(static_cast<BuildingType>(info.building_type));
             break;
         case EntityType::Environment: {
@@ -583,8 +620,7 @@ void World::load_heightmap() {
     const std::string path = "data/editor_save/heightmap.bin";
     std::ifstream f(path, std::ios::binary);
     if (!f.is_open()) {
-        LOG_WARN("World") << "No heightmap found at " << path
-                          << ". Use the editor to generate and save a world.";
+        LOG_WARN("World") << "No heightmap found at " << path << ". Use the editor to generate and save a world.";
         // Initialize a flat heightmap so the server doesn't crash
         heightmap_init(heightmap_, 0, 0, protocol::heightmap_config::CHUNK_RESOLUTION);
         return;
@@ -637,6 +673,13 @@ void World::load_heightmap() {
             }
             LOG_INFO("World") << "Re-encoded heightmap from range [" << min_h << ", " << max_h
                               << "] to protocol range [" << proto_min << ", " << proto_max << "]";
+        } else {
+            // Range header disagrees with proto but is degenerate — raw bytes
+            // are likely garbage. Surface this loudly instead of silently
+            // proceeding with whatever happens to be in the buffer.
+            LOG_ERROR("World") << "Heightmap header range [" << min_h << ", " << max_h << "] differs from proto ["
+                               << proto_min << ", " << proto_max << "] but file_range=" << file_range
+                               << " is too small to re-encode; raw heights will be used as-is.";
         }
     }
 
@@ -649,8 +692,8 @@ void World::load_heightmap() {
     heightmap_.world_size = world_size;
     heightmap_.height_data = std::move(data);
 
-    LOG_INFO("World") << "Loaded editor heightmap: " << resolution << "x" << resolution
-                      << " (" << heightmap_.serialized_size() / 1024 << " KB)";
+    LOG_INFO("World") << "Loaded editor heightmap: " << resolution << "x" << resolution << " ("
+                      << heightmap_.serialized_size() / 1024 << " KB)";
 }
 
 bool World::spawn_from_world_data() {
@@ -724,8 +767,8 @@ bool World::spawn_from_world_data() {
 
                 ecs::Collider collider;
                 collider.type = ecs::ColliderType::Box;
-                config::get_building_collision_size(bt,
-                    collider.half_extents_x, collider.half_extents_y, collider.half_extents_z);
+                config::get_building_collision_size(bt, collider.half_extents_x, collider.half_extents_y,
+                                                    collider.half_extents_z);
                 collider.offset_y = collider.half_extents_y;
                 registry_.emplace<ecs::Collider>(entity, collider);
 
@@ -745,9 +788,8 @@ bool World::spawn_from_world_data() {
                 // so forests have a natural mix of species
                 if (config::is_tree_type(et)) {
                     static const EnvironmentType tree_types[] = {
-                        EnvironmentType::TreeOak, EnvironmentType::TreePine,
-                        EnvironmentType::TreeWillow, EnvironmentType::TreeBirch,
-                        EnvironmentType::TreeMaple, EnvironmentType::TreeAspen,
+                        EnvironmentType::TreeOak,   EnvironmentType::TreePine,  EnvironmentType::TreeWillow,
+                        EnvironmentType::TreeBirch, EnvironmentType::TreeMaple, EnvironmentType::TreeAspen,
                     };
                     // Use position as seed for deterministic but varied assignment
                     uint32_t hash = static_cast<uint32_t>(px * 73.0f + pz * 137.0f);
@@ -786,8 +828,8 @@ bool World::spawn_from_world_data() {
                     collider.offset_y = collider.half_height + collider.radius;
                 } else {
                     collider.type = ecs::ColliderType::Box;
-                    config::get_environment_collision_size(et, scale,
-                        collider.half_extents_x, collider.half_extents_y, collider.half_extents_z);
+                    config::get_environment_collision_size(et, scale, collider.half_extents_x, collider.half_extents_y,
+                                                           collider.half_extents_z);
                     collider.offset_y = collider.half_extents_y;
                 }
                 registry_.emplace<ecs::Collider>(entity, collider);
@@ -860,7 +902,7 @@ bool World::spawn_from_world_data() {
                 registry_.emplace<ecs::NPCTag>(entity);
                 registry_.emplace<ecs::AIState>(entity);
                 registry_.emplace<ecs::Scale>(entity);
-                registry_.emplace<ecs::BuffState>(entity);  // Empty buff state for status effects
+                registry_.emplace<ecs::BuffState>(entity); // Empty buff state for status effects
 
                 float npc_target_size = config::get_character_target_size(EntityType::NPC);
                 ecs::Collider collider;
@@ -888,9 +930,8 @@ bool World::spawn_from_world_data() {
         }
     }
 
-    LOG_INFO("World") << "Loaded " << j.size() << " entities from editor save ("
-                      << buildings << " buildings, " << environment << " environment, "
-                      << town_npcs << " town NPCs, " << monsters << " monsters)";
+    LOG_INFO("World") << "Loaded " << j.size() << " entities from editor save (" << buildings << " buildings, "
+                      << environment << " environment, " << town_npcs << " town NPCs, " << monsters << " monsters)";
     return true;
 }
 

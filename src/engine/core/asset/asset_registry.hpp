@@ -24,15 +24,12 @@ namespace mmo::engine::core::asset {
  *
  * Handles are stable across reload (slot reused), invalidated on unload.
  */
-template <typename T>
-class AssetRegistry {
+template<typename T> class AssetRegistry {
 public:
     using Handle = engine::core::Handle<T>;
     using LoadFn = std::function<bool(const std::filesystem::path&, T&)>;
 
-    AssetRegistry() {
-        load_fn_ = default_load_fn();
-    }
+    AssetRegistry() { load_fn_ = default_load_fn(); }
 
     void set_load_fn(LoadFn fn) { load_fn_ = std::move(fn); }
 
@@ -41,13 +38,14 @@ public:
         entry->name = std::move(name);
         entry->path = std::move(path);
         if (!load_fn_(entry->path, entry->value)) {
-            ENGINE_LOG_ERROR("hot_reload", "AssetRegistry: failed to load '{}'",
-                             entry->path.string());
+            ENGINE_LOG_ERROR("hot_reload", "AssetRegistry: failed to load '{}'", entry->path.string());
             return Handle::invalid();
         }
         Handle h = next_handle();
         entry->handle = h;
-        if (watcher_) install_watch(*entry);
+        if (watcher_) {
+            install_watch(*entry);
+        }
         name_to_handle_[entry->name] = h;
         slots_[h.index] = std::move(entry);
         return h;
@@ -70,23 +68,27 @@ public:
 
     bool reload(Handle h) {
         auto* entry = entry_at(h);
-        if (!entry) return false;
+        if (!entry) {
+            return false;
+        }
         T fresh{};
         if (!load_fn_(entry->path, fresh)) {
-            ENGINE_LOG_WARN("hot_reload", "AssetRegistry: reload failed for '{}'",
-                            entry->path.string());
+            ENGINE_LOG_WARN("hot_reload", "AssetRegistry: reload failed for '{}'", entry->path.string());
             return false;
         }
         entry->value = std::move(fresh);
-        ENGINE_LOG_INFO("hot_reload", "AssetRegistry: reloaded '{}'",
-                        entry->path.string());
+        ENGINE_LOG_INFO("hot_reload", "AssetRegistry: reloaded '{}'", entry->path.string());
         return true;
     }
 
     void unload(Handle h) {
-        if (!h.is_valid() || h.index >= slots_.size()) return;
+        if (!h.is_valid() || h.index >= slots_.size()) {
+            return;
+        }
         auto& slot = slots_[h.index];
-        if (!slot || slot->handle.generation != h.generation) return;
+        if (!slot || slot->handle.generation != h.generation) {
+            return;
+        }
         if (slot->watch != FileWatcher::k_invalid_handle && watcher_) {
             watcher_->unwatch(slot->watch);
         }
@@ -116,9 +118,7 @@ private:
     };
 
     static LoadFn default_load_fn() {
-        return [](const std::filesystem::path& p, T& out) -> bool {
-            return out.reload_from(p);
-        };
+        return [](const std::filesystem::path& p, T& out) -> bool { return out.reload_from(p); };
     }
 
     Handle next_handle() {
@@ -127,26 +127,30 @@ private:
             free_indices_.pop_back();
             uint32_t gen = free_generations_.back();
             free_generations_.pop_back();
-            return Handle{ idx, gen };
+            return Handle{idx, gen};
         }
         uint32_t idx = static_cast<uint32_t>(slots_.size());
         slots_.emplace_back();
-        return Handle{ idx, 1 };
+        return Handle{idx, 1};
     }
 
     Entry* entry_at(Handle h) {
-        if (!h.is_valid() || h.index >= slots_.size()) return nullptr;
+        if (!h.is_valid() || h.index >= slots_.size()) {
+            return nullptr;
+        }
         auto& slot = slots_[h.index];
-        if (!slot) return nullptr;
-        if (slot->handle.generation != h.generation) return nullptr;
+        if (!slot) {
+            return nullptr;
+        }
+        if (slot->handle.generation != h.generation) {
+            return nullptr;
+        }
         return slot.get();
     }
 
     void install_watch(Entry& entry) {
         Handle h = entry.handle;
-        entry.watch = watcher_->watch_file(
-            entry.path,
-            [this, h](const std::filesystem::path&) { reload(h); });
+        entry.watch = watcher_->watch_file(entry.path, [this, h](const std::filesystem::path&) { reload(h); });
     }
 
     LoadFn load_fn_;

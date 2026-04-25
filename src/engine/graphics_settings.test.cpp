@@ -1,7 +1,7 @@
-#include <gtest/gtest.h>
 #include "engine/graphics_settings.hpp"
 #include <cstdio>
 #include <filesystem>
+#include <gtest/gtest.h>
 
 using namespace mmo::engine;
 
@@ -9,9 +9,7 @@ static const std::string TEST_FILE = "/tmp/mmo_test_settings.cfg";
 
 class GraphicsSettingsTest : public ::testing::Test {
 protected:
-    void TearDown() override {
-        std::remove(TEST_FILE.c_str());
-    }
+    void TearDown() override { std::remove(TEST_FILE.c_str()); }
 };
 
 TEST_F(GraphicsSettingsTest, DefaultValues) {
@@ -145,10 +143,10 @@ TEST_F(GraphicsSettingsTest, LoadFileWithMalformedValues) {
     }
     GraphicsSettings s;
     ASSERT_TRUE(s.load(TEST_FILE));
-    EXPECT_EQ(s.shadow_mode, 2);     // default, "abc" failed to parse
-    EXPECT_EQ(s.draw_distance, 3);   // default, "!@#" failed to parse
+    EXPECT_EQ(s.shadow_mode, 2);              // default, "abc" failed to parse
+    EXPECT_EQ(s.draw_distance, 3);            // default, "!@#" failed to parse
     EXPECT_FLOAT_EQ(s.bloom_strength, 0.20f); // default, "not_a_float" failed
-    EXPECT_EQ(s.ao_mode, 2);         // successfully parsed
+    EXPECT_EQ(s.ao_mode, 2);                  // successfully parsed
 }
 
 TEST_F(GraphicsSettingsTest, LoadFileWithComments) {

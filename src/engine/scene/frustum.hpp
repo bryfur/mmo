@@ -1,7 +1,7 @@
 #pragma once
 
-#include <glm/glm.hpp>
 #include <array>
+#include <glm/glm.hpp>
 
 namespace mmo::engine::scene {
 
@@ -17,9 +17,7 @@ struct Plane {
         }
     }
 
-    float distance_to_point(const glm::vec3& point) const {
-        return glm::dot(normal, point) + distance;
-    }
+    float distance_to_point(const glm::vec3& point) const { return glm::dot(normal, point) + distance; }
 };
 
 class Frustum {

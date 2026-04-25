@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include "server/rules/vendor_sell_rule.hpp"
+#include <gtest/gtest.h>
 
 using namespace mmo::server::rules;
 
@@ -8,8 +8,10 @@ static_assert(Rule<VendorSellRule>);
 namespace {
 VendorSellRule::Inputs baseline() {
     return VendorSellRule::Inputs{
-        .player_x = 10, .player_z = 10,
-        .npc_x = 0, .npc_z = 0,
+        .player_x = 10,
+        .player_z = 10,
+        .npc_x = 0,
+        .npc_z = 0,
         .slot_occupied = true,
         .item_exists = true,
         .slot_count = 5,
@@ -23,21 +25,26 @@ TEST(VendorSellRule, OkWhenValid) {
 }
 
 TEST(VendorSellRule, RejectedWhenOutOfRange) {
-    auto i = baseline(); i.npc_x = 9999;
+    auto i = baseline();
+    i.npc_x = 9999;
     EXPECT_EQ(VendorSellRule::check(i), VendorSellRule::Result::OutOfRange);
 }
 
 TEST(VendorSellRule, RejectedWhenSlotEmpty) {
-    auto i = baseline(); i.slot_occupied = false;
+    auto i = baseline();
+    i.slot_occupied = false;
     EXPECT_EQ(VendorSellRule::check(i), VendorSellRule::Result::EmptySlot);
 }
 
 TEST(VendorSellRule, RejectedWhenQuantityExceedsSlotCount) {
-    auto i = baseline(); i.slot_count = 1; i.quantity = 5;
+    auto i = baseline();
+    i.slot_count = 1;
+    i.quantity = 5;
     EXPECT_EQ(VendorSellRule::check(i), VendorSellRule::Result::InsufficientQuantity);
 }
 
 TEST(VendorSellRule, RejectedWhenQuantityZero) {
-    auto i = baseline(); i.quantity = 0;
+    auto i = baseline();
+    i.quantity = 0;
     EXPECT_EQ(VendorSellRule::check(i), VendorSellRule::Result::InsufficientQuantity);
 }

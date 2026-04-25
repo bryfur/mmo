@@ -76,7 +76,7 @@ TEST(MinimapProjection, ZeroWorldRadiusIsSafe) {
 }
 
 TEST(MinimapAreaRadius, ClampedAtBothEnds) {
-    EXPECT_FLOAT_EQ(minimap_area_pixel_radius(1.0f, 1000.0f, 90.0f), 4.0f); // tiny -> min
+    EXPECT_FLOAT_EQ(minimap_area_pixel_radius(1.0f, 1000.0f, 90.0f), 4.0f);     // tiny -> min
     EXPECT_FLOAT_EQ(minimap_area_pixel_radius(5000.0f, 1000.0f, 90.0f), 45.0f); // huge -> half pixel radius
     // Mid value: 100/1000 * 90 = 9
     EXPECT_FLOAT_EQ(minimap_area_pixel_radius(100.0f, 1000.0f, 90.0f), 9.0f);
@@ -94,7 +94,7 @@ TEST(BarRatio, ClampsToOneAndZero) {
 }
 
 TEST(HealthBarColor, ThresholdsAtThirtyAndSixtyPercent) {
-    EXPECT_EQ(health_bar_color(0.0f),  0xFF0000CCu); // red
+    EXPECT_EQ(health_bar_color(0.0f), 0xFF0000CCu);  // red
     EXPECT_EQ(health_bar_color(0.29f), 0xFF0000CCu); // red
     EXPECT_EQ(health_bar_color(0.30f), 0xFF00AAFFu); // orange (>=30)
     EXPECT_EQ(health_bar_color(0.59f), 0xFF00AAFFu); // orange
@@ -136,8 +136,7 @@ TEST(TruncateWithEllipsis, LongStringTruncatedWithMarker) {
     EXPECT_EQ(truncate_with_ellipsis("Long Skill Name", 7), "Long S~");
     EXPECT_EQ(truncate_with_ellipsis("Defeat 10 Spider Hatchlings", 28, '~'),
               "Defeat 10 Spider Hatchlings"); // 27 chars fits in 28
-    EXPECT_EQ(truncate_with_ellipsis("Defeat 100 Spider Hatchlings now", 28, '~'),
-              "Defeat 100 Spider Hatchling~");
+    EXPECT_EQ(truncate_with_ellipsis("Defeat 100 Spider Hatchlings now", 28, '~'), "Defeat 100 Spider Hatchling~");
 }
 
 TEST(TruncateWithEllipsis, ZeroMaxYieldsEmpty) {

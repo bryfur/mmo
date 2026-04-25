@@ -21,7 +21,7 @@ public:
         SelfInvite,
         TargetOffline,
         TargetAlreadyInAParty,
-        InviterNotLeader,     // has a party but isn't the leader
+        InviterNotLeader, // has a party but isn't the leader
         PartyFull,
     };
 
@@ -31,17 +31,27 @@ public:
         bool target_online = true;
         bool target_in_party = false;
         bool inviter_has_party = false;
-        bool inviter_is_leader = true;   // only meaningful when inviter_has_party
-        int  inviter_party_size = 0;     // only meaningful when inviter_has_party
+        bool inviter_is_leader = true; // only meaningful when inviter_has_party
+        int inviter_party_size = 0;    // only meaningful when inviter_has_party
     };
 
     [[nodiscard]] static constexpr Result check(const Inputs& in) noexcept {
-        if (in.inviter_id == in.target_id)     return Result::SelfInvite;
-        if (!in.target_online)                 return Result::TargetOffline;
-        if (in.target_in_party)                return Result::TargetAlreadyInAParty;
+        if (in.inviter_id == in.target_id) {
+            return Result::SelfInvite;
+        }
+        if (!in.target_online) {
+            return Result::TargetOffline;
+        }
+        if (in.target_in_party) {
+            return Result::TargetAlreadyInAParty;
+        }
         if (in.inviter_has_party) {
-            if (!in.inviter_is_leader)                      return Result::InviterNotLeader;
-            if (in.inviter_party_size >= PARTY_MAX_MEMBERS) return Result::PartyFull;
+            if (!in.inviter_is_leader) {
+                return Result::InviterNotLeader;
+            }
+            if (in.inviter_party_size >= PARTY_MAX_MEMBERS) {
+                return Result::PartyFull;
+            }
         }
         return Result::Ok;
     }

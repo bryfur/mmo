@@ -1,19 +1,19 @@
 #pragma once
 
-#include "engine/model_loader.hpp"  // ModelHandle
+#include "engine/model_loader.hpp" // ModelHandle
 #include "engine/render/lighting/light.hpp"
-#include <glm/glm.hpp>
+#include <array>
 #include <cstdint>
+#include <glm/glm.hpp>
 #include <string>
 #include <vector>
-#include <array>
 
 namespace mmo::engine {
-    struct EffectDefinition;
+struct EffectDefinition;
 }
 
 namespace mmo::engine::systems {
-    class EffectSystem;
+class EffectSystem;
 }
 
 namespace mmo::engine::scene {
@@ -23,7 +23,7 @@ namespace mmo::engine::scene {
  */
 struct ModelCommand {
     mmo::engine::ModelHandle model_handle = mmo::engine::INVALID_MODEL_HANDLE;
-    std::string model_name;  // kept for debug display; not used in hot path lookups
+    std::string model_name; // kept for debug display; not used in hot path lookups
     glm::mat4 transform;
     glm::vec4 tint = {1.0f, 1.0f, 1.0f, 1.0f};
     bool force_non_instanced = false;
@@ -37,7 +37,7 @@ struct ModelCommand {
  */
 struct SkinnedModelCommand {
     mmo::engine::ModelHandle model_handle = mmo::engine::INVALID_MODEL_HANDLE;
-    std::string model_name;  // kept for debug display; not used in hot path lookups
+    std::string model_name; // kept for debug display; not used in hot path lookups
     glm::mat4 transform;
     const std::array<glm::mat4, 128>* bone_matrices = nullptr;
     glm::vec4 tint = {1.0f, 1.0f, 1.0f, 1.0f};
@@ -73,7 +73,7 @@ struct ParticleEffectSpawnCommand {
 struct DebugLineCommand {
     glm::vec3 start;
     glm::vec3 end;
-    uint32_t color;  // RGBA packed
+    uint32_t color; // RGBA packed
 };
 
 /**
@@ -99,14 +99,13 @@ public:
      * Add a static 3D model to the scene (handle-based fast path, zero string alloc)
      */
     void add_model(mmo::engine::ModelHandle handle, const glm::mat4& transform,
-                   const glm::vec4& tint = {1.0f, 1.0f, 1.0f, 1.0f},
-                   bool force_non_instanced = false, bool no_fog = false);
+                   const glm::vec4& tint = {1.0f, 1.0f, 1.0f, 1.0f}, bool force_non_instanced = false,
+                   bool no_fog = false);
 
     /**
      * Add a static 3D model to the scene (string-based, backward compat)
      */
-    void add_model(std::string model_name, const glm::mat4& transform,
-                   const glm::vec4& tint = {1.0f, 1.0f, 1.0f, 1.0f},
+    void add_model(std::string model_name, const glm::mat4& transform, const glm::vec4& tint = {1.0f, 1.0f, 1.0f, 1.0f},
                    bool force_non_instanced = false, bool no_fog = false);
 
     /**
@@ -128,30 +127,23 @@ public:
     /**
      * Add a particle effect spawn command
      */
-    void add_particle_effect_spawn(const mmo::engine::EffectDefinition* definition,
-                                    const glm::vec3& position,
-                                    const glm::vec3& direction = {1, 0, 0},
-                                    float range = -1.0f);
+    void add_particle_effect_spawn(const mmo::engine::EffectDefinition* definition, const glm::vec3& position,
+                                   const glm::vec3& direction = {1, 0, 0}, float range = -1.0f);
 
     /**
      * Get all particle effect spawn commands for this frame
      */
-    const std::vector<ParticleEffectSpawnCommand>& particle_effect_spawns() const {
-        return particle_effect_spawns_;
-    }
+    const std::vector<ParticleEffectSpawnCommand>& particle_effect_spawns() const { return particle_effect_spawns_; }
 
     /**
      * Clear particle effect spawn commands (called by renderer after consuming)
      */
-    void clear_particle_effect_spawns() {
-        particle_effect_spawns_.clear();
-    }
+    void clear_particle_effect_spawns() { particle_effect_spawns_.clear(); }
 
     /**
      * Add a 3D billboard (projected to screen space during rendering)
      */
-    void add_billboard_3d(float world_x, float world_y, float world_z,
-                          float width, float fill_ratio,
+    void add_billboard_3d(float world_x, float world_y, float world_z, float width, float fill_ratio,
                           uint32_t fill_color, uint32_t bg_color, uint32_t frame_color);
 
     // ========== Debug Drawing ==========
@@ -190,8 +182,7 @@ public:
     bool should_draw_grass() const { return draw_grass_; }
 
     bool has_3d_content() const {
-        return draw_skybox_ || draw_ground_ || draw_grass_ ||
-               !model_commands_.empty() || !skinned_commands_.empty();
+        return draw_skybox_ || draw_ground_ || draw_grass_ || !model_commands_.empty() || !skinned_commands_.empty();
     }
 
     // ========== Command Access ==========

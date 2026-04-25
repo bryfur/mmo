@@ -9,9 +9,10 @@ class RenderGraph;
 
 class RenderPassContext {
 public:
-    RenderPassContext(RenderGraph& graph, SDL_GPUCommandBuffer* cb,
-                      SDL_GPURenderPass* render_pass) noexcept
-        : graph_(&graph), cb_(cb), render_pass_(render_pass) {}
+    RenderPassContext(RenderGraph& graph, SDL_GPUCommandBuffer* cb, SDL_GPURenderPass* render_pass) noexcept
+        : graph_(&graph),
+          cb_(cb),
+          render_pass_(render_pass) {}
 
     SDL_GPUCommandBuffer* command_buffer() const noexcept { return cb_; }
 
@@ -20,7 +21,7 @@ public:
     SDL_GPURenderPass* render_pass() const noexcept { return render_pass_; }
 
     SDL_GPUTexture* get_texture(ResourceHandle h) const noexcept;
-    SDL_GPUBuffer*  get_buffer(ResourceHandle h) const noexcept;
+    SDL_GPUBuffer* get_buffer(ResourceHandle h) const noexcept;
 
 private:
     RenderGraph* graph_;

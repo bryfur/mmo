@@ -17,16 +17,11 @@ public:
     explicit TaskHandle(std::shared_ptr<Task> t) : task_(std::move(t)) {}
 
     bool valid() const noexcept { return static_cast<bool>(task_); }
-    bool is_done() const noexcept {
-        return task_ && task_->done.load(std::memory_order_acquire);
-    }
+    bool is_done() const noexcept { return task_ && task_->done.load(std::memory_order_acquire); }
     bool has_error() const noexcept {
-        return task_ && task_->done.load(std::memory_order_acquire) &&
-               static_cast<bool>(task_->error);
+        return task_ && task_->done.load(std::memory_order_acquire) && static_cast<bool>(task_->error);
     }
-    std::exception_ptr error() const noexcept {
-        return task_ ? task_->error : nullptr;
-    }
+    std::exception_ptr error() const noexcept { return task_ ? task_->error : nullptr; }
 
     const std::shared_ptr<Task>& raw() const noexcept { return task_; }
 

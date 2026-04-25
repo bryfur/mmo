@@ -10,15 +10,11 @@ namespace mmo::server::persistence {
 
 /// Build a PlayerSnapshot from the entity's components. Caller supplies the
 /// player's display name (the persistence key).
-PlayerSnapshot snapshot_from_entity(const entt::registry& registry,
-                                    entt::entity entity,
-                                    const std::string& name);
+PlayerSnapshot snapshot_from_entity(const entt::registry& registry, entt::entity entity, const std::string& name);
 
 /// Apply a loaded snapshot onto an existing entity. Components that aren't
 /// present yet are emplaced; existing ones are overwritten. Position/health
 /// override the spawn defaults set by World::add_player.
-void apply_snapshot_to_entity(entt::registry& registry,
-                              entt::entity entity,
-                              const PlayerSnapshot& snap);
+void apply_snapshot_to_entity(entt::registry& registry, entt::entity entity, const PlayerSnapshot& snap);
 
 } // namespace mmo::server::persistence

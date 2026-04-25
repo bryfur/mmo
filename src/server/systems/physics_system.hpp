@@ -1,22 +1,22 @@
 #pragma once
 
-#include "server/ecs/game_components.hpp"
 #include "protocol/heightmap.hpp"
+#include "server/ecs/game_components.hpp"
+#include <cstdint>
 #include <entt/entt.hpp>
+#include <functional>
 #include <glm/vec3.hpp>
 #include <memory>
 #include <vector>
-#include <functional>
-#include <cstdint>
 
 namespace JPH {
-    class PhysicsSystem;
-    class TempAllocatorImpl;
-    class JobSystemThreadPool;
-    class BodyInterface;
-    class Body;
-    class BodyID;
-}
+class PhysicsSystem;
+class TempAllocatorImpl;
+class JobSystemThreadPool;
+class BodyInterface;
+class Body;
+class BodyID;
+} // namespace JPH
 
 namespace mmo::server::systems {
 
@@ -24,11 +24,11 @@ namespace ecs = mmo::server::ecs;
 
 // Collision layers for broadphase filtering
 namespace CollisionLayers {
-    constexpr uint8_t NON_MOVING = 0;
-    constexpr uint8_t MOVING = 1;
-    constexpr uint8_t TRIGGER = 2;
-    constexpr uint8_t NUM_LAYERS = 3;
-}
+constexpr uint8_t NON_MOVING = 0;
+constexpr uint8_t MOVING = 1;
+constexpr uint8_t TRIGGER = 2;
+constexpr uint8_t NUM_LAYERS = 3;
+} // namespace CollisionLayers
 
 using CollisionCallback = std::function<void(entt::entity, entt::entity, const ecs::CollisionEvent&)>;
 
@@ -56,9 +56,8 @@ public:
     PhysicsSystem(const PhysicsSystem&) = delete;
     PhysicsSystem& operator=(const PhysicsSystem&) = delete;
 
-    void initialize(uint32_t max_bodies = 10240,
-                   uint32_t max_body_pairs = 65536,
-                   uint32_t max_contact_constraints = 10240);
+    void initialize(uint32_t max_bodies = 10240, uint32_t max_body_pairs = 65536,
+                    uint32_t max_contact_constraints = 10240);
 
     void shutdown();
 
@@ -76,6 +75,12 @@ public:
     /// tick; scan is cheap because entries are skipped once tracked.
     void create_bodies(entt::registry& registry);
 
+    /// Per-entity variant of create_bodies. Use this when only a single
+    /// entity has just been spawned and rescanning the whole registry is
+    /// wasted work (e.g. add_player). No-op if the entity already has a
+    /// PhysicsBody or is missing any of the required components.
+    void create_body_for_entity(entt::registry& registry, entt::entity entity);
+
     void destroy_body(entt::registry& registry, entt::entity entity);
 
     /// Step physics with a FIXED dt (seconds). Callers are expected to
@@ -85,14 +90,12 @@ public:
 
     void sync_transforms(entt::registry& registry);
 
-    void apply_impulse(entt::registry& registry, entt::entity entity,
-                      float impulse_x, float impulse_y, float impulse_z);
+    void apply_impulse(entt::registry& registry, entt::entity entity, float impulse_x, float impulse_y,
+                       float impulse_z);
 
-    void set_velocity(entt::registry& registry, entt::entity entity,
-                     float vel_x, float vel_y, float vel_z);
+    void set_velocity(entt::registry& registry, entt::entity entity, float vel_x, float vel_y, float vel_z);
 
-    void move_kinematic(entt::registry& registry, entt::entity entity,
-                       float x, float y, float z, float dt);
+    void move_kinematic(entt::registry& registry, entt::entity entity, float x, float y, float z, float dt);
 
     bool are_colliding(entt::registry& registry, entt::entity a, entt::entity b);
 
@@ -102,18 +105,15 @@ public:
 
     /// Ray cast against terrain + rigid bodies. Characters are included via
     /// their CharacterVirtual inner bodies.
-    bool raycast(const glm::vec3& origin, const glm::vec3& direction,
-                 float max_distance, RaycastHit& out) const;
+    bool raycast(const glm::vec3& origin, const glm::vec3& direction, float max_distance, RaycastHit& out) const;
 
     /// Collect entities whose physics body overlaps a sphere.
-    bool overlap_sphere(const glm::vec3& center, float radius,
-                        std::vector<entt::entity>& out) const;
+    bool overlap_sphere(const glm::vec3& center, float radius, std::vector<entt::entity>& out) const;
 
     void get_gravity(float& x, float& y, float& z) const;
     void set_gravity(float x, float y, float z);
 
-    void update_body_shape(entt::registry& registry, entt::entity entity,
-                          float radius, float half_height);
+    void update_body_shape(entt::registry& registry, entt::entity entity, float radius, float half_height);
 
     void optimize_broadphase();
 

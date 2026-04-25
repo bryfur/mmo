@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include "engine/animation/animation_player.hpp"
+#include <gtest/gtest.h>
 
 #include <cmath>
 #include <glm/gtc/epsilon.hpp>
@@ -274,8 +274,7 @@ TEST_F(AnimationPlayerTest, BoneMatricesIdentityBeyondJointCount) {
 
     auto bones = player.bone_matrices();
     for (int i = 2; i < MAX_BONES; i++) {
-        EXPECT_EQ(bones[i], glm::mat4(1.0f))
-            << "bone_matrices[" << i << "] should be identity";
+        EXPECT_EQ(bones[i], glm::mat4(1.0f)) << "bone_matrices[" << i << "] should be identity";
     }
 }
 
@@ -285,10 +284,8 @@ TEST_F(AnimationPlayerTest, CrossfadeBlendsBoneMatrices) {
     player.update(skeleton, clips, 0.5f);
 
     glm::mat4 root_bone = player.bone_matrices()[0];
-    EXPECT_TRUE(approx(root_bone[3][0], 0.25f))
-        << "Expected blended x ~0.25, got " << root_bone[3][0];
-    EXPECT_TRUE(approx(root_bone[3][2], 0.25f))
-        << "Expected blended z ~0.25, got " << root_bone[3][2];
+    EXPECT_TRUE(approx(root_bone[3][0], 0.25f)) << "Expected blended x ~0.25, got " << root_bone[3][0];
+    EXPECT_TRUE(approx(root_bone[3][2], 0.25f)) << "Expected blended z ~0.25, got " << root_bone[3][2];
 }
 
 TEST_F(AnimationPlayerTest, EmptySkeletonProducesNoMatrices) {

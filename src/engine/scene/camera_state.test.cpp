@@ -1,7 +1,7 @@
-#include <gtest/gtest.h>
 #include "engine/scene/camera_state.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <gtest/gtest.h>
 
 using namespace mmo::engine::scene;
 
@@ -24,10 +24,7 @@ TEST(CameraState, DefaultConstructionZeroInitializes) {
 
 TEST(CameraState, ViewProjectionEqualsProjectionTimesView) {
     CameraState cam{};
-    cam.view = glm::lookAt(
-        glm::vec3(0.0f, 10.0f, 20.0f),
-        glm::vec3(0.0f, 0.0f, 0.0f),
-        glm::vec3(0.0f, 1.0f, 0.0f));
+    cam.view = glm::lookAt(glm::vec3(0.0f, 10.0f, 20.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     cam.projection = glm::perspective(glm::radians(60.0f), 16.0f / 9.0f, 0.1f, 1000.0f);
     cam.view_projection = cam.projection * cam.view;
 

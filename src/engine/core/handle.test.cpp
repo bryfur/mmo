@@ -18,18 +18,18 @@ TEST(Handle, InvalidIsNotValid) {
 }
 
 TEST(Handle, EqualityCompares) {
-    Handle<MeshTag> a{ 1, 2 };
-    Handle<MeshTag> b{ 1, 2 };
-    Handle<MeshTag> c{ 1, 3 };
+    Handle<MeshTag> a{1, 2};
+    Handle<MeshTag> b{1, 2};
+    Handle<MeshTag> c{1, 3};
     EXPECT_EQ(a, b);
     EXPECT_NE(a, c);
 }
 
 TEST(Handle, HashSpecializationCompiles) {
     std::unordered_set<Handle<MeshTag>> set;
-    set.insert(Handle<MeshTag>{ 1, 1 });
-    set.insert(Handle<MeshTag>{ 2, 1 });
-    set.insert(Handle<MeshTag>{ 1, 1 });
+    set.insert(Handle<MeshTag>{1, 1});
+    set.insert(Handle<MeshTag>{2, 1});
+    set.insert(Handle<MeshTag>{1, 1});
     EXPECT_EQ(set.size(), 2u);
 }
 
@@ -56,10 +56,10 @@ TEST(HandlePool, GenerationalReuseDetectsStale) {
     pool.release(h1);
 
     auto h2 = pool.acquire(20);
-    EXPECT_EQ(h2.index, idx1);                  // index recycled
-    EXPECT_NE(h2.generation, h1.generation);    // generation bumped
+    EXPECT_EQ(h2.index, idx1);               // index recycled
+    EXPECT_NE(h2.generation, h1.generation); // generation bumped
 
-    EXPECT_EQ(pool.get(h1), nullptr);           // stale handle returns null
+    EXPECT_EQ(pool.get(h1), nullptr); // stale handle returns null
     auto* live = pool.get(h2);
     ASSERT_NE(live, nullptr);
     EXPECT_EQ(*live, 20);
@@ -87,7 +87,7 @@ TEST(HandlePool, DoubleReleaseFails) {
 }
 
 TEST(HandlePool, TagsAreTypeSafe) {
-    Handle<MeshTag> mh{ 0, 1 };
-    Handle<TexTag>  th{ 0, 1 };
+    Handle<MeshTag> mh{0, 1};
+    Handle<TexTag> th{0, 1};
     static_assert(!std::is_same_v<decltype(mh), decltype(th)>);
 }

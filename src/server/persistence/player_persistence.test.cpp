@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
 #include "player_persistence.hpp"
 #include "../ecs/game_components.hpp"
+#include <gtest/gtest.h>
 
 #include <entt/entt.hpp>
 
@@ -58,16 +58,24 @@ TEST(PlayerPersistence, SnapshotCapturesPopulatedComponents) {
 
     {
         auto& tx = reg.get<ecs::Transform>(e);
-        tx.x = 1.0f; tx.y = 2.0f; tx.z = 3.0f; tx.rotation = 1.5f;
+        tx.x = 1.0f;
+        tx.y = 2.0f;
+        tx.z = 3.0f;
+        tx.rotation = 1.5f;
     }
     {
         auto& hp = reg.get<ecs::Health>(e);
-        hp.current = 75.0f; hp.max = 200.0f;
+        hp.current = 75.0f;
+        hp.max = 200.0f;
     }
     {
         auto& lvl = reg.get<ecs::PlayerLevel>(e);
-        lvl.level = 10; lvl.xp = 1234; lvl.gold = 999;
-        lvl.mana = 50.0f; lvl.max_mana = 80.0f; lvl.mana_regen = 1.5f;
+        lvl.level = 10;
+        lvl.xp = 1234;
+        lvl.gold = 999;
+        lvl.mana = 50.0f;
+        lvl.max_mana = 80.0f;
+        lvl.mana_regen = 1.5f;
     }
     {
         auto& inv = reg.get<ecs::Inventory>(e);
@@ -90,8 +98,11 @@ TEST(PlayerPersistence, SnapshotCapturesPopulatedComponents) {
         ecs::ActiveQuest aq;
         aq.quest_id = "q3";
         ecs::QuestObjectiveProgress obj;
-        obj.type = "kill"; obj.target = "goblin";
-        obj.current = 2; obj.required = 5; obj.complete = false;
+        obj.type = "kill";
+        obj.target = "goblin";
+        obj.current = 2;
+        obj.required = 5;
+        obj.complete = false;
         aq.objectives.push_back(obj);
         aq.all_complete = false;
         qs.active_quests.push_back(aq);
@@ -131,10 +142,15 @@ TEST(PlayerPersistence, SnapshotApplyRoundtripsAllFields) {
     snap.level = 7;
     snap.xp = 555;
     snap.gold = 50;
-    snap.pos_x = 100.0f; snap.pos_y = 25.0f; snap.pos_z = -50.0f;
+    snap.pos_x = 100.0f;
+    snap.pos_y = 25.0f;
+    snap.pos_z = -50.0f;
     snap.rotation = 0.75f;
-    snap.health = 60.0f; snap.max_health = 150.0f;
-    snap.mana = 30.0f; snap.max_mana = 90.0f; snap.mana_regen = 2.0f;
+    snap.health = 60.0f;
+    snap.max_health = 150.0f;
+    snap.mana = 30.0f;
+    snap.max_mana = 90.0f;
+    snap.mana_regen = 2.0f;
     snap.talent_points = 2;
     snap.equipped_weapon = "bow";
     snap.equipped_armor = "cloth";
@@ -205,14 +221,15 @@ TEST(PlayerPersistence, ApplyDeadSnapshotRevivesAtFullHealth) {
     auto e = make_player_entity(reg);
 
     PlayerSnapshot snap;
-    snap.name = "alice"; snap.player_class = 1;
+    snap.name = "alice";
+    snap.player_class = 1;
     snap.health = 0.0f;
     snap.max_health = 150.0f;
     snap.was_dead = true;
 
     apply_snapshot_to_entity(reg, e, snap);
     auto& hp = reg.get<ecs::Health>(e);
-    EXPECT_FLOAT_EQ(hp.current, 150.0f);  // full revive, not clamp-to-1
+    EXPECT_FLOAT_EQ(hp.current, 150.0f); // full revive, not clamp-to-1
 }
 
 TEST(PlayerPersistence, ApplyClampsHealthAtLeastOne) {
@@ -220,8 +237,9 @@ TEST(PlayerPersistence, ApplyClampsHealthAtLeastOne) {
     auto e = make_player_entity(reg);
 
     PlayerSnapshot snap;
-    snap.name = "alice"; snap.player_class = 1;
-    snap.health = 0.0f;       // dead-on-save: should NOT spawn dead
+    snap.name = "alice";
+    snap.player_class = 1;
+    snap.health = 0.0f; // dead-on-save: should NOT spawn dead
     snap.max_health = 100.0f;
     apply_snapshot_to_entity(reg, e, snap);
     EXPECT_GE(reg.get<ecs::Health>(e).current, 1.0f);
@@ -230,7 +248,7 @@ TEST(PlayerPersistence, ApplyClampsHealthAtLeastOne) {
     apply_snapshot_to_entity(reg, e, snap);
     EXPECT_GE(reg.get<ecs::Health>(e).current, 1.0f);
 
-    snap.health = 9999.0f;    // overflow: should clamp to max
+    snap.health = 9999.0f; // overflow: should clamp to max
     apply_snapshot_to_entity(reg, e, snap);
     EXPECT_FLOAT_EQ(reg.get<ecs::Health>(e).current, 100.0f);
 }
@@ -245,7 +263,8 @@ TEST(PlayerPersistence, ApplyOverwritesExistingInventory) {
     ASSERT_EQ(inv.used_slots, 2);
 
     PlayerSnapshot snap;
-    snap.name = "alice"; snap.player_class = 1;
+    snap.name = "alice";
+    snap.player_class = 1;
     snap.health = snap.max_health = 100.0f;
     snap.inventory = {{"new_item", 1}};
     apply_snapshot_to_entity(reg, e, snap);
@@ -261,7 +280,8 @@ TEST(PlayerPersistence, MalformedObjectivesJsonDoesNotThrow) {
     auto e = make_player_entity(reg);
 
     PlayerSnapshot snap;
-    snap.name = "alice"; snap.player_class = 1;
+    snap.name = "alice";
+    snap.player_class = 1;
     snap.health = snap.max_health = 100.0f;
     snap.active_quests = {{"broken", "this is { not valid JSON"}};
 
@@ -277,12 +297,10 @@ TEST(PlayerPersistence, AllCompleteFlagDerivedFromObjectives) {
     auto e = make_player_entity(reg);
 
     PlayerSnapshot snap;
-    snap.name = "alice"; snap.player_class = 1;
+    snap.name = "alice";
+    snap.player_class = 1;
     snap.health = snap.max_health = 100.0f;
-    snap.active_quests = {{
-        "done",
-        R"([{"type":"kill","target":"goblin","current":5,"required":5,"complete":true}])"
-    }};
+    snap.active_quests = {{"done", R"([{"type":"kill","target":"goblin","current":5,"required":5,"complete":true}])"}};
 
     apply_snapshot_to_entity(reg, e, snap);
     auto& qs = reg.get<ecs::QuestState>(e);

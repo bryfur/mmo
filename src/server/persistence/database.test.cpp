@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include "database.hpp"
+#include <gtest/gtest.h>
 
 #include <filesystem>
 #include <thread>
@@ -10,7 +10,9 @@ namespace {
 
 // Each test gets a fresh in-memory database. ":memory:" is per-connection in
 // SQLite, so tests don't share state.
-std::string mem_db() { return std::string(":memory:"); }
+std::string mem_db() {
+    return std::string(":memory:");
+}
 
 // Use a unique-per-test on-disk file when we need to cross connections.
 std::string tmp_db_path(std::string_view tag) {
@@ -18,8 +20,7 @@ std::string tmp_db_path(std::string_view tag) {
     auto dir = fs::temp_directory_path() / "mmo4_db_test";
     fs::create_directories(dir);
     auto path = dir / (std::string(tag) + "_" +
-                       std::to_string(std::hash<std::thread::id>{}(std::this_thread::get_id())) +
-                       ".db");
+                       std::to_string(std::hash<std::thread::id>{}(std::this_thread::get_id())) + ".db");
     fs::remove(path);
     return path.string();
 }
@@ -39,14 +40,17 @@ TEST(Database, MigrateCreatesAllTables) {
     Database db(mem_db());
     db.migrate();
 
-    Statement q(db,
-        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;");
+    Statement q(db, "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;");
     std::vector<std::string> tables;
     while (q.step()) tables.push_back(q.column_text(0));
 
     // Note: sqlite_sequence/etc may appear; check by inclusion not exact size.
     auto has = [&](std::string_view name) {
-        for (auto& t : tables) if (t == name) return true;
+        for (auto& t : tables) {
+            if (t == name) {
+                return true;
+            }
+        }
         return false;
     };
     EXPECT_TRUE(has("schema_version"));
@@ -61,7 +65,7 @@ TEST(Database, MigrateCreatesAllTables) {
 TEST(Database, MigrateIsIdempotent) {
     Database db(mem_db());
     db.migrate();
-    db.migrate();  // must not throw or duplicate rows
+    db.migrate(); // must not throw or duplicate rows
 
     Statement q(db, "SELECT COUNT(*) FROM schema_version;");
     ASSERT_TRUE(q.step());
@@ -95,11 +99,11 @@ TEST(Statement, BindAndReadRoundtrip) {
 
     {
         Statement ins(db, "INSERT INTO t VALUES (?,?,?,?);");
-        ins.bind_int   (1, 42);
+        ins.bind_int(1, 42);
         ins.bind_double(2, 3.14);
-        ins.bind_text  (3, "hello world");
-        ins.bind_int64 (4, 9'000'000'000LL);  // > INT_MAX
-        EXPECT_FALSE(ins.step());  // INSERT yields SQLITE_DONE, not a row
+        ins.bind_text(3, "hello world");
+        ins.bind_int64(4, 9'000'000'000LL); // > INT_MAX
+        EXPECT_FALSE(ins.step());           // INSERT yields SQLITE_DONE, not a row
     }
 
     Statement sel(db, "SELECT i, d, s, b FROM t;");
@@ -141,7 +145,7 @@ TEST(Statement, TextWithEmbeddedNullsIsPreserved) {
 
     Statement sel(db, "SELECT s FROM t;");
     ASSERT_TRUE(sel.step());
-    EXPECT_EQ(sel.column_text(0), with_null);  // bytes preserved
+    EXPECT_EQ(sel.column_text(0), with_null); // bytes preserved
 }
 
 TEST(Statement, MalformedSqlThrows) {
@@ -187,7 +191,7 @@ TEST(Database, OpenSurvivesStaleWalAndShmFiles) {
     }
     // Cleanup.
     namespace fs = std::filesystem;
-    for (auto suffix : {"", "-wal", "-shm", "-journal"}) {
+    for (const auto* suffix : {"", "-wal", "-shm", "-journal"}) {
         std::error_code ec;
         fs::remove(path + suffix, ec);
     }
@@ -238,7 +242,7 @@ TEST(Database, MigrateAddsWasDeadColumnFromV1Baseline) {
 
         Statement c(db, "SELECT was_dead FROM players WHERE name='legacy';");
         ASSERT_TRUE(c.step());
-        EXPECT_EQ(c.column_int(0), 0);  // existing rows default to 0 (alive)
+        EXPECT_EQ(c.column_int(0), 0); // existing rows default to 0 (alive)
     }
     std::filesystem::remove(path);
 }

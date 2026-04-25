@@ -20,7 +20,7 @@
 
 namespace mmo::protocol {
 
-template <typename T>
+template<typename T>
 concept NetMessage = requires(T t, const T ct, BufferWriter& w, BufferReader& r) {
     requires std::derived_from<T, Serializable<T>>;
     { ct.serialized_size() } -> std::convertible_to<std::size_t>;

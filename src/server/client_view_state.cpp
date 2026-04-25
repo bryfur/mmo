@@ -2,9 +2,7 @@
 
 namespace mmo::server {
 
-ClientViewState::ClientViewState(uint32_t client_id)
-    : client_id_(client_id) {
-}
+ClientViewState::ClientViewState(uint32_t client_id) : client_id_(client_id) {}
 
 bool ClientViewState::knows_entity(uint32_t entity_id) const {
     return known_entities_.find(entity_id) != known_entities_.end();
@@ -47,7 +45,7 @@ void ClientViewState::update_last_state(uint32_t entity_id, const mmo::protocol:
 bool ClientViewState::can_send_update(uint32_t entity_id, float min_interval_sec) const {
     auto it = last_sent_states_.find(entity_id);
     if (it == last_sent_states_.end()) {
-        return true;  // Never sent, can send
+        return true; // Never sent, can send
     }
 
     auto now = std::chrono::steady_clock::now();

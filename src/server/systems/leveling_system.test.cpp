@@ -1,7 +1,7 @@
-#include <gtest/gtest.h>
 #include "server/systems/leveling_system.hpp"
 #include "server/ecs/game_components.hpp"
 #include <entt/entt.hpp>
+#include <gtest/gtest.h>
 
 using namespace mmo::server;
 using namespace mmo::server::systems;
@@ -41,7 +41,7 @@ TEST(LevelingSystem, ClassNameForIndex) {
     EXPECT_STREQ(class_name_for_index(1), "mage");
     EXPECT_STREQ(class_name_for_index(2), "paladin");
     EXPECT_STREQ(class_name_for_index(3), "archer");
-    EXPECT_STREQ(class_name_for_index(99), "warrior");  // fallback
+    EXPECT_STREQ(class_name_for_index(99), "warrior"); // fallback
 }
 
 // ============================================================================
@@ -65,7 +65,7 @@ TEST(LevelingSystem, ManaRegenClampsAtMax) {
     auto& pl = r.get<ecs::PlayerLevel>(p);
     pl.mana = 99.0f;
 
-    update_mana_regen(r, 10.0f);  // would overshoot
+    update_mana_regen(r, 10.0f); // would overshoot
     EXPECT_FLOAT_EQ(pl.mana, pl.max_mana);
 }
 
@@ -84,5 +84,5 @@ TEST(LevelingSystem, ConsumableCooldownsTickAlongWithMana) {
     EXPECT_NEAR(cd.remaining("small_health_potion"), 3.5f, 1e-3f);
 
     update_mana_regen(r, 5.0f);
-    EXPECT_FLOAT_EQ(cd.remaining("small_health_potion"), 0.0f);  // expired -> 0
+    EXPECT_FLOAT_EQ(cd.remaining("small_health_potion"), 0.0f); // expired -> 0
 }

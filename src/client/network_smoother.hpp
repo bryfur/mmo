@@ -4,17 +4,17 @@
 
 namespace mmo::client {
 
-namespace ecs { struct Transform; struct Interpolation; }
+namespace ecs {
+struct Transform;
+struct Interpolation;
+} // namespace ecs
 
 // Pure interpolation step. Advances `interp.alpha` by dt/interpolation_time and
 // writes the smoothstep-eased blend into `out_x/y/z`. When alpha clamps to 1
 // the previous-position fields snap to the target so subsequent calls with the
 // same target are no-ops. Extracted from update() so it can be unit tested
 // without spinning up an entt::registry.
-void smooth_step(ecs::Transform& transform,
-                 ecs::Interpolation& interp,
-                 float dt,
-                 float interpolation_time);
+void smooth_step(ecs::Transform& transform, ecs::Interpolation& interp, float dt, float interpolation_time);
 
 class NetworkSmoother {
 public:

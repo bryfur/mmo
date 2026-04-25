@@ -7,20 +7,21 @@ namespace mmo::client::systems {
 std::optional<uint32_t> minimap_color_for(protocol::EntityType type) {
     using protocol::EntityType;
     switch (type) {
-        case EntityType::TownNPC:  return 0xFF00CC00u; // green
-        case EntityType::NPC:      return 0xFF0000FFu; // red
-        case EntityType::Player:   return 0xFFFFFF00u; // cyan
-        case EntityType::Building: return 0xFF888888u; // gray
-        default:                   return std::nullopt;
+        case EntityType::TownNPC:
+            return 0xFF00CC00u; // green
+        case EntityType::NPC:
+            return 0xFF0000FFu; // red
+        case EntityType::Player:
+            return 0xFFFFFF00u; // cyan
+        case EntityType::Building:
+            return 0xFF888888u; // gray
+        default:
+            return std::nullopt;
     }
 }
 
-void update_minimap(entt::registry& registry,
-                    HUDState& hud,
-                    PanelState& panel,
-                    entt::entity local_player_entity,
-                    uint32_t local_player_network_id,
-                    float view_radius_world) {
+void update_minimap(entt::registry& registry, HUDState& hud, PanelState& panel, entt::entity local_player_entity,
+                    uint32_t local_player_network_id, float view_radius_world) {
     hud.minimap.icons.clear();
     hud.minimap.objective_areas.clear();
 
@@ -36,20 +37,25 @@ void update_minimap(entt::registry& registry,
 
     const float radius_sq = view_radius_world * view_radius_world;
 
-    auto view = registry.view<const ecs::Transform, const ecs::EntityInfo,
-                              const ecs::NetworkId>();
+    auto view = registry.view<const ecs::Transform, const ecs::EntityInfo, const ecs::NetworkId>();
     for (auto entity : view) {
         const auto& nid = view.get<const ecs::NetworkId>(entity);
-        if (nid.id == local_player_network_id) continue;
+        if (nid.id == local_player_network_id) {
+            continue;
+        }
 
         const auto& tf = view.get<const ecs::Transform>(entity);
         const float dx = tf.x - local_tf.x;
         const float dz = tf.z - local_tf.z;
-        if (dx * dx + dz * dz > radius_sq) continue;
+        if (dx * dx + dz * dz > radius_sq) {
+            continue;
+        }
 
         const auto& info = view.get<const ecs::EntityInfo>(entity);
         const auto color = minimap_color_for(info.type);
-        if (!color) continue;
+        if (!color) {
+            continue;
+        }
 
         HUDState::MinimapState::MapIcon icon;
         icon.world_x = tf.x;

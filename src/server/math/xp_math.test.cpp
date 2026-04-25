@@ -1,5 +1,5 @@
-#include <gtest/gtest.h>
 #include "server/math/xp_math.hpp"
+#include <gtest/gtest.h>
 
 using namespace mmo::server::math;
 

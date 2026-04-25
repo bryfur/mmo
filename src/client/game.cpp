@@ -1,11 +1,6 @@
 #include "game.hpp"
 #include "client/ecs/components.hpp"
 #include "client/game_state.hpp"
-#include "client/menu_system.hpp"
-#include "client/skill_data.hpp"
-#include "client/systems/animation_system.hpp"
-#include "client/systems/minimap_system.hpp"
-#include "client/systems/npc_interaction.hpp"
 #include "client/hud/debug_hud.hpp"
 #include "client/hud/floating_text.hpp"
 #include "client/hud/npc_dialogue.hpp"
@@ -13,17 +8,22 @@
 #include "client/hud/quest_markers.hpp"
 #include "client/hud/screens.hpp"
 #include "client/hud/world_projection.hpp"
+#include "client/menu_system.hpp"
+#include "client/skill_data.hpp"
+#include "client/systems/animation_system.hpp"
+#include "client/systems/minimap_system.hpp"
+#include "client/systems/npc_interaction.hpp"
+#include "client/ui_colors.hpp"
+#include "engine/animation/animation_state_machine.hpp"
+#include "engine/animation/ik_solver.hpp"
+#include "engine/heightmap.hpp"
+#include "engine/model_loader.hpp"
+#include "engine/model_utils.hpp"
+#include "engine/procedural/rock_generator.hpp"
+#include "engine/procedural/tree_generator.hpp"
 #include "engine/scene/camera_state.hpp"
 #include "engine/scene/ui_scene.hpp"
 #include "engine/systems/camera_controller.hpp"
-#include "engine/model_loader.hpp"
-#include "engine/procedural/tree_generator.hpp"
-#include "engine/procedural/rock_generator.hpp"
-#include "engine/model_utils.hpp"
-#include "engine/animation/animation_state_machine.hpp"
-#include "engine/animation/ik_solver.hpp"
-#include "client/ui_colors.hpp"
-#include "engine/heightmap.hpp"
 #include "entt/entity/fwd.hpp"
 #include "glm/ext/matrix_float4x4.hpp"
 #include "glm/ext/matrix_transform.hpp"
@@ -31,21 +31,21 @@
 #include "glm/ext/vector_float4.hpp"
 #include "protocol/gameplay_msgs.hpp"
 #include "protocol/heightmap.hpp"
-#include <SDL3/SDL_keyboard.h>
-#include <SDL3/SDL_scancode.h>
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <iostream>
 #include <memory>
-#include <string>
 #include <random>
-#include <cstring>
-#include <cmath>
-#include <vector>
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_keyboard.h>
+#include <SDL3/SDL_scancode.h>
+#include <string>
 #include <sys/stat.h>
+#include <vector>
 
 namespace mmo::client {
 
@@ -68,7 +68,7 @@ static std::string find_data_path(const std::string& relative) {
             return candidate;
         }
     }
-    return relative;  // fallback: return as-is
+    return relative; // fallback: return as-is
 }
 
 static std::string generate_random_name() {
@@ -88,47 +88,41 @@ Game::Game() {
     player_name_ = generate_random_name();
 
     // Initialize camera configurations
-    exploration_camera_config_ = {
-        .distance = 280.0f,
-        .height_offset = 90.0f,
-        .shoulder_offset = 40.0f,
-        .fov = 55.0f,
-        .position_lag = 0.001f,
-        .rotation_lag = 0.001f,
-        .look_ahead_dist = 60.0f,
-        .pitch_min = -70.0f,
-        .pitch_max = 70.0f,
-        .auto_return_speed = 1.5f,
-        .auto_center_enabled = true
-    };
+    exploration_camera_config_ = {.distance = 280.0f,
+                                  .height_offset = 90.0f,
+                                  .shoulder_offset = 40.0f,
+                                  .fov = 55.0f,
+                                  .position_lag = 0.001f,
+                                  .rotation_lag = 0.001f,
+                                  .look_ahead_dist = 60.0f,
+                                  .pitch_min = -70.0f,
+                                  .pitch_max = 70.0f,
+                                  .auto_return_speed = 1.5f,
+                                  .auto_center_enabled = true};
 
-    sprint_camera_config_ = {
-        .distance = 320.0f,
-        .height_offset = 70.0f,
-        .shoulder_offset = 30.0f,
-        .fov = 62.0f,
-        .position_lag = 0.001f,
-        .rotation_lag = 0.001f,
-        .look_ahead_dist = 100.0f,
-        .pitch_min = -70.0f,
-        .pitch_max = 70.0f,
-        .auto_return_speed = 3.0f,
-        .auto_center_enabled = true
-    };
+    sprint_camera_config_ = {.distance = 320.0f,
+                             .height_offset = 70.0f,
+                             .shoulder_offset = 30.0f,
+                             .fov = 62.0f,
+                             .position_lag = 0.001f,
+                             .rotation_lag = 0.001f,
+                             .look_ahead_dist = 100.0f,
+                             .pitch_min = -70.0f,
+                             .pitch_max = 70.0f,
+                             .auto_return_speed = 3.0f,
+                             .auto_center_enabled = true};
 
-    combat_camera_config_ = {
-        .distance = 220.0f,
-        .height_offset = 75.0f,
-        .shoulder_offset = 50.0f,
-        .fov = 52.0f,
-        .position_lag = 0.001f,
-        .rotation_lag = 0.001f,
-        .look_ahead_dist = 40.0f,
-        .pitch_min = -70.0f,
-        .pitch_max = 70.0f,
-        .auto_return_speed = 2.5f,
-        .auto_center_enabled = false
-    };
+    combat_camera_config_ = {.distance = 220.0f,
+                             .height_offset = 75.0f,
+                             .shoulder_offset = 50.0f,
+                             .fov = 52.0f,
+                             .position_lag = 0.001f,
+                             .rotation_lag = 0.001f,
+                             .look_ahead_dist = 40.0f,
+                             .pitch_min = -70.0f,
+                             .pitch_max = 70.0f,
+                             .auto_return_speed = 2.5f,
+                             .auto_center_enabled = false};
 }
 
 Game::~Game() {
@@ -164,16 +158,11 @@ bool Game::on_init() {
 
     // Create network message handler for gameplay messages
     msg_handler_ = std::make_unique<NetworkMessageHandler>(
-        NetworkMessageHandler::Context{
-            hud_state_, panel_state_, npc_interaction_,
-            npcs_with_quests_, npcs_with_turnins_,
-            local_player_id_, player_dead_
-        });
+        NetworkMessageHandler::Context{hud_state_, panel_state_, npc_interaction_, npcs_with_quests_,
+                                       npcs_with_turnins_, local_player_id_, player_dead_});
 
     network_.set_message_callback(
-        [this](MessageType type, const std::vector<uint8_t>& payload) {
-            handle_network_message(type, payload);
-        });
+        [this](MessageType type, const std::vector<uint8_t>& payload) { handle_network_message(type, payload); });
 
     game_state_ = GameState::Connecting;
     connecting_timer_ = 0.0f;
@@ -194,7 +183,7 @@ bool Game::on_init() {
     to_remove_buffer_.reserve(100);
 
     if (!network_.connect(host_, port_, player_name_)) {
-        std::cerr << "Failed to connect to server" << std::endl;
+        std::cerr << "Failed to connect to server" << '\n';
         return false;
     }
 
@@ -202,7 +191,10 @@ bool Game::on_init() {
 }
 
 void Game::shutdown() {
-    on_shutdown();
+    // Qualified call: shutdown() is reachable from ~Game(), and a virtual
+    // dispatch during destruction would silently bypass subclass overrides.
+    // Force a non-virtual call to make that intent explicit.
+    Game::on_shutdown();
     shutdown_engine();
 }
 
@@ -212,7 +204,7 @@ void Game::on_shutdown() {
 }
 
 void Game::on_update(float dt) {
-    last_dt_ = dt;  // Store for use in render functions
+    last_dt_ = dt; // Store for use in render functions
 
     if (input_bindings_) {
         input_bindings_->update();
@@ -300,9 +292,11 @@ void Game::update_class_select(float dt) {
     }
 
     int num_classes = static_cast<int>(available_classes_.size());
-    if (num_classes == 0) return;
+    if (num_classes == 0) {
+        return;
+    }
 
-    auto& input_state = input().get_input();
+    const auto& input_state = input().get_input();
     bool attacking = input_bindings_ && input_bindings_->attacking();
     bool any_key = input_state.move_left || input_state.move_right || attacking;
 
@@ -325,7 +319,7 @@ void Game::update_connecting(float dt) {
     network_.poll_messages();
 
     if (connecting_timer_ > 10.0f) {
-        std::cerr << "Connection timeout" << std::endl;
+        std::cerr << "Connection timeout" << '\n';
         network_.disconnect();
         quit();
     }
@@ -336,17 +330,16 @@ void Game::update_spawning(float dt) {
     network_.poll_messages();
 
     if (connecting_timer_ > 10.0f) {
-        std::cerr << "Spawn timeout" << std::endl;
+        std::cerr << "Spawn timeout" << '\n';
         network_.disconnect();
         quit();
     }
 }
 
 
-
 void Game::update_playing(float dt) {
     if (!network_.is_connected()) {
-        std::cout << "Lost connection to server" << std::endl;
+        std::cout << "Lost connection to server" << '\n';
         quit();
         return;
     }
@@ -392,9 +385,9 @@ void Game::update_playing(float dt) {
     {
         const auto cam_state = get_camera_state();
         const float anim_cull_distance = menu_system_->graphics_settings().get_draw_distance();
-        systems::update_animations(registry_, dt, models(), animation_registry_,
-                                   [this](float x, float z) { return get_terrain_height(x, z); },
-                                   cam_state.position, anim_cull_distance);
+        systems::update_animations(
+            registry_, dt, models(), animation_registry_, [this](float x, float z) { return get_terrain_height(x, z); },
+            cam_state.position, anim_cull_distance);
     }
 
     sync_local_player_to_camera_and_hud();
@@ -412,10 +405,8 @@ void Game::update_playing(float dt) {
 
     // Refresh minimap from world state (player position, nearby icons).
     auto local_it = network_to_entity_.find(local_player_id_);
-    const entt::entity local_player_entity =
-        (local_it != network_to_entity_.end()) ? local_it->second : entt::null;
-    systems::update_minimap(registry_, hud_state_, panel_state_,
-                            local_player_entity, local_player_id_, 2000.0f);
+    const entt::entity local_player_entity = (local_it != network_to_entity_.end()) ? local_it->second : entt::null;
+    systems::update_minimap(registry_, hud_state_, panel_state_, local_player_entity, local_player_id_, 2000.0f);
 }
 
 
@@ -457,9 +448,7 @@ void Game::update_camera_smooth(float dt) {
 
     // Set terrain height callback once (lazy init) instead of every frame
     if (!camera_height_func_set_) {
-        camera().set_terrain_height_func([this](float x, float z) {
-            return get_terrain_height(x, z);
-        });
+        camera().set_terrain_height_func([this](float x, float z) { return get_terrain_height(x, z); });
         camera_height_func_set_ = true;
     }
 
@@ -487,7 +476,6 @@ void Game::apply_controls_settings() {
 // ============================================================================
 // Scene Building Helpers
 // ============================================================================
-
 
 
 // ============================================================================

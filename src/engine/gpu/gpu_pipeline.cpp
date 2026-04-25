@@ -1,11 +1,11 @@
 #include "gpu_pipeline.hpp"
+#include "engine/gpu/gpu_device.hpp"
+#include "engine/gpu/gpu_types.hpp"
 #include "SDL3/SDL_error.h"
 #include "SDL3/SDL_gpu.h"
 #include "SDL3/SDL_stdinc.h"
-#include "engine/gpu/gpu_device.hpp"
-#include "engine/gpu/gpu_types.hpp"
-#include <SDL3/SDL_log.h>
 #include <memory>
+#include <SDL3/SDL_log.h>
 
 namespace mmo::engine::gpu {
 
@@ -14,19 +14,19 @@ namespace mmo::engine::gpu {
 // =============================================================================
 
 PipelineConfig& PipelineConfig::with_vertex3d() {
-    vertex_buffers = { get_vertex3d_buffer_desc() };
+    vertex_buffers = {get_vertex3d_buffer_desc()};
     vertex_attributes = get_vertex3d_attributes();
     return *this;
 }
 
 PipelineConfig& PipelineConfig::with_skinned_vertex() {
-    vertex_buffers = { get_skinned_vertex_buffer_desc() };
+    vertex_buffers = {get_skinned_vertex_buffer_desc()};
     vertex_attributes = get_skinned_vertex_attributes();
     return *this;
 }
 
 PipelineConfig& PipelineConfig::with_vertex2d() {
-    vertex_buffers = { get_vertex2d_buffer_desc() };
+    vertex_buffers = {get_vertex2d_buffer_desc()};
     vertex_attributes = get_vertex2d_attributes();
     return *this;
 }
@@ -87,9 +87,7 @@ GPUPipeline::~GPUPipeline() {
     }
 }
 
-GPUPipeline::GPUPipeline(GPUPipeline&& other) noexcept
-    : device_(other.device_)
-    , pipeline_(other.pipeline_) {
+GPUPipeline::GPUPipeline(GPUPipeline&& other) noexcept : device_(other.device_), pipeline_(other.pipeline_) {
     other.device_ = nullptr;
     other.pipeline_ = nullptr;
 }
@@ -151,7 +149,7 @@ std::unique_ptr<GPUPipeline> GPUPipeline::create(GPUDevice& device, const Pipeli
     // Multisample state
     SDL_GPUMultisampleState multisample = {};
     multisample.sample_count = config.sample_count;
-    multisample.sample_mask = 0;  // Must be 0 for SDL3 GPU API
+    multisample.sample_mask = 0; // Must be 0 for SDL3 GPU API
     pipeline_info.multisample_state = multisample;
 
     // Depth/stencil state

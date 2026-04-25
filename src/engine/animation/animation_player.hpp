@@ -14,9 +14,7 @@ public:
     AnimationPlayer(AnimationPlayer&&) noexcept = default;
     AnimationPlayer& operator=(AnimationPlayer&&) noexcept = default;
 
-    void update(const Skeleton& skeleton,
-                const std::vector<AnimationClip>& clips,
-                float dt);
+    void update(const Skeleton& skeleton, const std::vector<AnimationClip>& clips, float dt);
 
     void crossfade_to(int clip_index, float duration = 0.2f);
 
@@ -62,8 +60,7 @@ public:
     }
 
 private:
-    void compute_bone_matrices(const Skeleton& skeleton,
-                               const std::vector<AnimationClip>& clips);
+    void compute_bone_matrices(const Skeleton& skeleton, const std::vector<AnimationClip>& clips);
 
     int current_clip_ = 0;
     float time_ = 0.0f;

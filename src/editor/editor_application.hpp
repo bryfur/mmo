@@ -1,20 +1,20 @@
 #pragma once
 
-#include "engine/application.hpp"
-#include "engine/scene/render_scene.hpp"
-#include "engine/scene/ui_scene.hpp"
-#include "engine/scene/camera_state.hpp"
-#include "engine/heightmap.hpp"
-#include "server/game_config.hpp"
 #include "client/ecs/components.hpp"
 #include "editor_camera.hpp"
 #include "editor_raycaster.hpp"
 #include "editor_tools.hpp"
+#include "engine/application.hpp"
+#include "engine/heightmap.hpp"
+#include "engine/scene/camera_state.hpp"
+#include "engine/scene/render_scene.hpp"
+#include "engine/scene/ui_scene.hpp"
+#include "server/game_config.hpp"
+#include <cstdint>
 #include <entt/entt.hpp>
+#include <memory>
 #include <string>
 #include <vector>
-#include <memory>
-#include <cstdint>
 
 namespace mmo::editor {
 
@@ -45,10 +45,10 @@ public:
     entt::entity selected_entity() const;
 
     // Re-expose protected Application methods for tool access
-    using Application::models;
     using Application::get_terrain_height;
-    using Application::screen_width;
+    using Application::models;
     using Application::screen_height;
+    using Application::screen_width;
 
 protected:
     bool on_init() override;
@@ -103,7 +103,7 @@ private:
 
     // Splatmap (RGBA texture for terrain material painting)
     std::vector<uint8_t> splatmap_data_;  // RGBA pixels
-    uint32_t splatmap_resolution_ = 4096;  // 4096x4096 splatmap
+    uint32_t splatmap_resolution_ = 4096; // 4096x4096 splatmap
     bool splatmap_dirty_ = false;
 
     // Camera
@@ -137,9 +137,9 @@ private:
     // Generation center + visualization
     float gen_center_x_ = 0.0f;
     float gen_center_z_ = 0.0f;
-    bool gen_center_set_ = false;   // has user placed a center?
-    bool gen_placing_ = false;      // currently in "click to place" mode
-    std::vector<entt::entity> last_generated_;  // entities from last generation pass
+    bool gen_center_set_ = false;              // has user placed a center?
+    bool gen_placing_ = false;                 // currently in "click to place" mode
+    std::vector<entt::entity> last_generated_; // entities from last generation pass
 
     // Generation parameters
     struct TownGenParams {
@@ -153,7 +153,7 @@ private:
 
     struct EnvironmentGenParams {
         float radius = 3000.0f;
-        float min_distance = 200.0f;   // from center (inner exclusion)
+        float min_distance = 200.0f; // from center (inner exclusion)
         int rock_count = 150;
         float rock_min_scale = 15.0f;
         float rock_max_scale = 60.0f;
@@ -170,7 +170,7 @@ private:
         int count = 50;
         float safe_zone_radius = 700.0f;
         float max_radius = 3500.0f;
-        int seed = 0;   // 0 = random
+        int seed = 0; // 0 = random
     } monster_gen_;
 
     // Hot-reload

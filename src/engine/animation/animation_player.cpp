@@ -20,7 +20,9 @@ void AnimationPlayer::reset() {
 }
 
 void AnimationPlayer::crossfade_to(int clip_index, float duration) {
-    if (clip_index == current_clip_) return;
+    if (clip_index == current_clip_) {
+        return;
+    }
     prev_clip_ = current_clip_;
     prev_time_ = time_;
     blend_factor_ = 0.0f;
@@ -33,11 +35,11 @@ void AnimationPlayer::crossfade_to(int clip_index, float duration) {
     current_cursors_.clear();
 }
 
-void AnimationPlayer::update(const Skeleton& skeleton,
-                             const std::vector<AnimationClip>& clips,
-                             float dt) {
+void AnimationPlayer::update(const Skeleton& skeleton, const std::vector<AnimationClip>& clips, float dt) {
     ENGINE_PROFILE_ZONE("AnimPlayer::update");
-    if (clips.empty() || !playing_) return;
+    if (clips.empty() || !playing_) {
+        return;
+    }
 
     if (current_clip_ < 0 || current_clip_ >= static_cast<int>(clips.size())) {
         current_clip_ = 0;
@@ -46,7 +48,11 @@ void AnimationPlayer::update(const Skeleton& skeleton,
     const auto& clip = clips[current_clip_];
 
     time_ += dt * speed_;
-    if (time_ >= clip.duration) {
+    if (clip.duration <= 0.0f) {
+        // Zero-duration clip (single keyframe pose); fmod would be UB.
+        time_ = 0.0f;
+        playing_ = false;
+    } else if (time_ >= clip.duration) {
         if (loop_) {
             time_ = std::fmod(time_, clip.duration);
         } else {
@@ -56,7 +62,11 @@ void AnimationPlayer::update(const Skeleton& skeleton,
     }
 
     if (blend_factor_ < 1.0f) {
-        blend_factor_ += dt / blend_duration_;
+        if (blend_duration_ > 0.0f) {
+            blend_factor_ += dt / blend_duration_;
+        } else {
+            blend_factor_ = 1.0f;
+        }
         if (blend_factor_ >= 1.0f) {
             blend_factor_ = 1.0f;
             prev_clip_ = -1;
@@ -65,7 +75,7 @@ void AnimationPlayer::update(const Skeleton& skeleton,
         if (prev_clip_ >= 0 && prev_clip_ < static_cast<int>(clips.size())) {
             const auto& prev = clips[prev_clip_];
             prev_time_ += dt * speed_;
-            if (prev_time_ > prev.duration) {
+            if (prev.duration > 0.0f && prev_time_ > prev.duration) {
                 prev_time_ = std::fmod(prev_time_, prev.duration);
             }
         }
@@ -76,37 +86,42 @@ void AnimationPlayer::update(const Skeleton& skeleton,
 
 // Sample a clip's channel for a single joint. Cursors are owned by the player
 // so the clip itself stays const-shareable across instances.
-static void sample_clip_joint(const AnimationClip* clip,
-                              const std::vector<const AnimationChannel*>& channels,
-                              std::vector<ChannelCursors>& cursors,
-                              int joint_idx, float time,
-                              const Joint& joint,
-                              glm::vec3& out_translation,
-                              glm::quat& out_rotation,
-                              glm::vec3& out_scale) {
+static void sample_clip_joint(const AnimationClip* clip, const std::vector<const AnimationChannel*>& channels,
+                              std::vector<ChannelCursors>& cursors, int joint_idx, float time, const Joint& joint,
+                              glm::vec3& out_translation, glm::quat& out_rotation, glm::vec3& out_scale) {
     out_translation = joint.local_translation;
     out_rotation = joint.local_rotation;
     out_scale = joint.local_scale;
 
-    if (!clip) return;
-    if (joint_idx < 0 || joint_idx >= static_cast<int>(channels.size())) return;
+    if (!clip) {
+        return;
+    }
+    if (joint_idx < 0 || joint_idx >= static_cast<int>(channels.size())) {
+        return;
+    }
     const auto* ch = channels[joint_idx];
-    if (!ch) return;
+    if (!ch) {
+        return;
+    }
 
     auto& cur = cursors[joint_idx];
 
-    if (!ch->position_times.empty())
+    if (!ch->position_times.empty()) {
         out_translation = interpolate_keyframes(ch->position_times, ch->positions, time, cur.pos);
-    if (!ch->rotation_times.empty())
+    }
+    if (!ch->rotation_times.empty()) {
         out_rotation = interpolate_keyframes(ch->rotation_times, ch->rotations, time, cur.rot);
-    if (!ch->scale_times.empty())
+    }
+    if (!ch->scale_times.empty()) {
         out_scale = interpolate_keyframes(ch->scale_times, ch->scales, time, cur.scale);
+    }
 }
 
-void AnimationPlayer::compute_bone_matrices(const Skeleton& skeleton,
-                                            const std::vector<AnimationClip>& clips) {
+void AnimationPlayer::compute_bone_matrices(const Skeleton& skeleton, const std::vector<AnimationClip>& clips) {
     size_t num_joints = skeleton.joints.size();
-    if (num_joints == 0) return;
+    if (num_joints == 0) {
+        return;
+    }
 
     const AnimationClip* clip = nullptr;
     if (current_clip_ >= 0 && current_clip_ < static_cast<int>(clips.size())) {
@@ -114,8 +129,9 @@ void AnimationPlayer::compute_bone_matrices(const Skeleton& skeleton,
         if (current_clip_ != cached_clip_index_) {
             channel_lookup_.assign(num_joints, nullptr);
             for (const auto& ch : clip->channels) {
-                if (ch.bone_index >= 0 && ch.bone_index < static_cast<int>(num_joints))
+                if (ch.bone_index >= 0 && ch.bone_index < static_cast<int>(num_joints)) {
                     channel_lookup_[ch.bone_index] = &ch;
+                }
             }
             cached_clip_index_ = current_clip_;
             current_cursors_.assign(num_joints, ChannelCursors{});
@@ -129,15 +145,15 @@ void AnimationPlayer::compute_bone_matrices(const Skeleton& skeleton,
     }
 
     const AnimationClip* prev_clip_ptr = nullptr;
-    bool blending = (blend_factor_ < 1.0f && prev_clip_ >= 0 &&
-                     prev_clip_ < static_cast<int>(clips.size()));
+    bool blending = (blend_factor_ < 1.0f && prev_clip_ >= 0 && prev_clip_ < static_cast<int>(clips.size()));
     if (blending) {
         prev_clip_ptr = &clips[prev_clip_];
         if (prev_clip_ != cached_prev_clip_index_) {
             prev_channel_lookup_.assign(num_joints, nullptr);
             for (const auto& ch : prev_clip_ptr->channels) {
-                if (ch.bone_index >= 0 && ch.bone_index < static_cast<int>(num_joints))
+                if (ch.bone_index >= 0 && ch.bone_index < static_cast<int>(num_joints)) {
                     prev_channel_lookup_[ch.bone_index] = &ch;
+                }
             }
             cached_prev_clip_index_ = prev_clip_;
             prev_cursors_.assign(num_joints, ChannelCursors{});
@@ -154,17 +170,14 @@ void AnimationPlayer::compute_bone_matrices(const Skeleton& skeleton,
         glm::vec3 translation;
         glm::quat rotation;
         glm::vec3 scale;
-        sample_clip_joint(clip, channel_lookup_, current_cursors_,
-                          idx, time_, joint,
-                          translation, rotation, scale);
+        sample_clip_joint(clip, channel_lookup_, current_cursors_, idx, time_, joint, translation, rotation, scale);
 
         if (blending) {
             glm::vec3 prev_t;
             glm::quat prev_r;
             glm::vec3 prev_s;
-            sample_clip_joint(prev_clip_ptr, prev_channel_lookup_, prev_cursors_,
-                              idx, prev_time_, joint,
-                              prev_t, prev_r, prev_s);
+            sample_clip_joint(prev_clip_ptr, prev_channel_lookup_, prev_cursors_, idx, prev_time_, joint, prev_t,
+                              prev_r, prev_s);
 
             float t = blend_factor_;
             translation = glm::mix(prev_t, translation, t);

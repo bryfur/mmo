@@ -6,10 +6,10 @@
 // declarations live in client/hud/widgets.hpp.
 
 #include "client/ui_colors.hpp"
+#include <algorithm>
 #include <cstdint>
 #include <string>
 #include <vector>
-#include <algorithm>
 
 namespace mmo::client {
 
@@ -20,50 +20,50 @@ using namespace engine::ui_colors;
 // ============================================================================
 
 namespace hud_colors {
-    // XP bar
-    constexpr uint32_t XP_FILL       = 0xFF00DDFF;  // gold/yellow (ABGR)
-    constexpr uint32_t XP_BG         = 0xFF1A1A00;
-    constexpr uint32_t XP_FRAME      = 0xFF000000;
-    constexpr uint32_t XP_TEXT       = 0xFF44EEFF;
+// XP bar
+constexpr uint32_t XP_FILL = 0xFF00DDFF; // gold/yellow (ABGR)
+constexpr uint32_t XP_BG = 0xFF1A1A00;
+constexpr uint32_t XP_FRAME = 0xFF000000;
+constexpr uint32_t XP_TEXT = 0xFF44EEFF;
 
-    // Mana bar
-    constexpr uint32_t MANA_FILL     = 0xFFFF4400;  // blue (ABGR)
-    constexpr uint32_t MANA_BG       = 0xFF660000;
-    constexpr uint32_t MANA_FRAME    = 0xFF000000;
+// Mana bar
+constexpr uint32_t MANA_FILL = 0xFFFF4400; // blue (ABGR)
+constexpr uint32_t MANA_BG = 0xFF660000;
+constexpr uint32_t MANA_FRAME = 0xFF000000;
 
-    // Gold
-    constexpr uint32_t GOLD_COIN     = 0xFF00CCFF;  // yellow/gold (ABGR)
-    constexpr uint32_t GOLD_TEXT     = 0xFF00EEFF;
+// Gold
+constexpr uint32_t GOLD_COIN = 0xFF00CCFF; // yellow/gold (ABGR)
+constexpr uint32_t GOLD_TEXT = 0xFF00EEFF;
 
-    // Skill bar
-    constexpr uint32_t SKILL_BG      = 0xCC1A1A1A;
-    constexpr uint32_t SKILL_BORDER  = 0xFF555555;
-    constexpr uint32_t SKILL_READY   = 0xFF444444;
-    constexpr uint32_t COOLDOWN_OVERLAY = 0xAA000000;
-    constexpr uint32_t KEY_NUMBER    = 0xFFCCCCCC;
-    constexpr uint32_t SKILL_NAME    = 0xFF999999;
+// Skill bar
+constexpr uint32_t SKILL_BG = 0xCC1A1A1A;
+constexpr uint32_t SKILL_BORDER = 0xFF555555;
+constexpr uint32_t SKILL_READY = 0xFF444444;
+constexpr uint32_t COOLDOWN_OVERLAY = 0xAA000000;
+constexpr uint32_t KEY_NUMBER = 0xFFCCCCCC;
+constexpr uint32_t SKILL_NAME = 0xFF999999;
 
-    // Quest tracker
-    constexpr uint32_t QUEST_PANEL   = 0xCC1A1A1A;
-    constexpr uint32_t QUEST_TITLE   = 0xFF55CCFF;
-    constexpr uint32_t QUEST_OBJ     = 0xFFCCCCCC;
-    constexpr uint32_t QUEST_DONE    = 0xFF00CC00;
-    constexpr uint32_t QUEST_HEADER  = 0xFF88AACC;
+// Quest tracker
+constexpr uint32_t QUEST_PANEL = 0xCC1A1A1A;
+constexpr uint32_t QUEST_TITLE = 0xFF55CCFF;
+constexpr uint32_t QUEST_OBJ = 0xFFCCCCCC;
+constexpr uint32_t QUEST_DONE = 0xFF00CC00;
+constexpr uint32_t QUEST_HEADER = 0xFF88AACC;
 
-    // Zone name
-    constexpr uint32_t ZONE_TEXT     = 0xFFEEDDCC;
-    constexpr uint32_t ZONE_SHADOW   = 0x80000000;
+// Zone name
+constexpr uint32_t ZONE_TEXT = 0xFFEEDDCC;
+constexpr uint32_t ZONE_SHADOW = 0x80000000;
 
-    // Level up
-    constexpr uint32_t LEVEL_UP_TEXT = 0xFF00DDFF;
-    constexpr uint32_t LEVEL_UP_SUB  = 0xFFCCEEFF;
+// Level up
+constexpr uint32_t LEVEL_UP_TEXT = 0xFF00DDFF;
+constexpr uint32_t LEVEL_UP_SUB = 0xFFCCEEFF;
 
-    // Loot rarity
-    constexpr uint32_t LOOT_COMMON   = 0xFFCCCCCC;
-    constexpr uint32_t LOOT_UNCOMMON = 0xFF00CC00;
-    constexpr uint32_t LOOT_RARE     = 0xFFFF8800;
-    constexpr uint32_t LOOT_EPIC     = 0xFFFF44FF;
-}
+// Loot rarity
+constexpr uint32_t LOOT_COMMON = 0xFFCCCCCC;
+constexpr uint32_t LOOT_UNCOMMON = 0xFF00CC00;
+constexpr uint32_t LOOT_RARE = 0xFFFF8800;
+constexpr uint32_t LOOT_EPIC = 0xFFFF44FF;
+} // namespace hud_colors
 
 // ============================================================================
 // Data structures (client branch - compact types for network messages)
@@ -251,7 +251,10 @@ struct PartyState {
     static constexpr float INVITE_POPUP_DURATION = 45.0f;
 
     bool has_party() const { return !members.empty(); }
-    void clear() { leader_id = 0; members.clear(); }
+    void clear() {
+        leader_id = 0;
+        members.clear();
+    }
 };
 
 struct VendorState {
@@ -261,27 +264,32 @@ struct VendorState {
     float buy_mult = 4.0f;
     float sell_mult = 0.25f;
     std::vector<VendorStockSlot> stock;
-    int cursor = 0;               // Index into stock for buying
-    int sell_cursor = -1;         // Inventory slot index for selling (-1 = none)
-    bool buying = true;           // true = buy mode, false = sell mode
+    int cursor = 0;       // Index into stock for buying
+    int sell_cursor = -1; // Inventory slot index for selling (-1 = none)
+    bool buying = true;   // true = buy mode, false = sell mode
 
-    void close() { visible = false; stock.clear(); cursor = 0; sell_cursor = -1; }
+    void close() {
+        visible = false;
+        stock.clear();
+        cursor = 0;
+        sell_cursor = -1;
+    }
 };
 
 // Bit flags mirrored from NetEntityState::EffectBit for HUD rendering.
 // Kept here so HUDState carries the same compact representation as the
 // network protocol without needing to include protocol headers.
 namespace status_bits {
-    constexpr uint16_t STUN         = 1 << 0;
-    constexpr uint16_t SLOW         = 1 << 1;
-    constexpr uint16_t ROOT         = 1 << 2;
-    constexpr uint16_t BURN         = 1 << 3;
-    constexpr uint16_t SHIELD       = 1 << 4;
-    constexpr uint16_t DAMAGE_BOOST = 1 << 5;
-    constexpr uint16_t SPEED_BOOST  = 1 << 6;
-    constexpr uint16_t INVULN       = 1 << 7;
-    constexpr uint16_t DEF_BOOST    = 1 << 8;
-}
+constexpr uint16_t STUN = 1 << 0;
+constexpr uint16_t SLOW = 1 << 1;
+constexpr uint16_t ROOT = 1 << 2;
+constexpr uint16_t BURN = 1 << 3;
+constexpr uint16_t SHIELD = 1 << 4;
+constexpr uint16_t DAMAGE_BOOST = 1 << 5;
+constexpr uint16_t SPEED_BOOST = 1 << 6;
+constexpr uint16_t INVULN = 1 << 7;
+constexpr uint16_t DEF_BOOST = 1 << 8;
+} // namespace status_bits
 
 struct HUDState {
     // Player stats
@@ -325,7 +333,7 @@ struct HUDState {
             float world_x = 0;
             float world_z = 0;
             uint32_t color = 0xFFFFFFFF;
-            bool is_objective = false;  // show as diamond shape
+            bool is_objective = false; // show as diamond shape
         };
         std::vector<MapIcon> icons;
 
@@ -339,7 +347,7 @@ struct HUDState {
     MinimapState minimap;
 
     // Zone
-    std::string current_zone = "";
+    std::string current_zone;
     float zone_display_timer = 0.0f;
 
     // Notifications (server branch)
@@ -365,18 +373,21 @@ struct HUDState {
     uint16_t effects_mask = 0;
 
     void update(float dt) {
-        if (zone_display_timer > 0) zone_display_timer -= dt;
-        if (level_up_timer > 0) level_up_timer -= dt;
+        if (zone_display_timer > 0) {
+            zone_display_timer -= dt;
+        }
+        if (level_up_timer > 0) {
+            level_up_timer -= dt;
+        }
         for (auto& slot : skill_slots) {
             if (slot.cooldown > 0.0f) {
                 slot.cooldown -= dt;
-                if (slot.cooldown < 0.0f) slot.cooldown = 0.0f;
+                slot.cooldown = std::max(slot.cooldown, 0.0f);
             }
         }
         for (auto& entry : loot_feed) entry.timer -= dt;
         loot_feed.erase(
-            std::remove_if(loot_feed.begin(), loot_feed.end(),
-                [](const LootFeedEntry& e) { return e.timer <= 0; }),
+            std::remove_if(loot_feed.begin(), loot_feed.end(), [](const LootFeedEntry& e) { return e.timer <= 0; }),
             loot_feed.end());
 
         // Expire pending party-invite popup so it can't linger if the
@@ -392,7 +403,9 @@ struct HUDState {
 
     void add_loot(const std::string& text, uint32_t color = 0xFFFFFFFF) {
         loot_feed.push_back({text, color, 4.0f});
-        if (loot_feed.size() > 5) loot_feed.erase(loot_feed.begin());
+        if (loot_feed.size() > 5) {
+            loot_feed.erase(loot_feed.begin());
+        }
     }
 
     void show_level_up(int new_level) {

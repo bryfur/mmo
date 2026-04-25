@@ -1,4 +1,5 @@
 #include "input_handler.hpp"
+#include "engine/core/logger.hpp"
 #include "SDL3/SDL_events.h"
 #include "SDL3/SDL_gamepad.h"
 #include "SDL3/SDL_init.h"
@@ -8,11 +9,10 @@
 #include "SDL3/SDL_mouse.h"
 #include "SDL3/SDL_scancode.h"
 #include "SDL3/SDL_stdinc.h"
-#include "engine/core/logger.hpp"
-#include <cmath>
 #include <algorithm>
-#include <cstring>
+#include <cmath>
 #include <cstdint>
+#include <cstring>
 
 namespace mmo::engine {
 
@@ -55,13 +55,17 @@ const char* InputHandler::get_controller_name() const {
 }
 
 void InputHandler::set_text_input_enabled(bool enabled) {
-    if (text_input_enabled_ == enabled) return;
+    if (text_input_enabled_ == enabled) {
+        return;
+    }
     text_input_enabled_ = enabled;
     if (enabled) {
         SDL_StartTextInput(SDL_GetKeyboardFocus());
     } else {
         SDL_Window* win = SDL_GetKeyboardFocus();
-        if (win) SDL_StopTextInput(win);
+        if (win) {
+            SDL_StopTextInput(win);
+        }
         text_input_buffer_.clear();
     }
     text_backspace_pressed_ = false;
@@ -73,20 +77,39 @@ void InputHandler::process_event(const SDL_Event& event) {
     // Text input mode consumes key + text events first.
     if (text_input_enabled_) {
         if (event.type == SDL_EVENT_TEXT_INPUT) {
-            if (event.text.text) text_input_buffer_ += event.text.text;
+            if (event.text.text) {
+                text_input_buffer_ += event.text.text;
+            }
             return;
         }
         if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat) {
             switch (event.key.key) {
-                case SDLK_BACKSPACE: text_backspace_pressed_ = true; return;
-                case SDLK_RETURN:    text_enter_pressed_ = true;     return;
-                case SDLK_ESCAPE:    text_escape_pressed_ = true;    return;
-                default: break;
+                case SDLK_BACKSPACE:
+                    text_backspace_pressed_ = true;
+                    return;
+                case SDLK_RETURN:
+                    text_enter_pressed_ = true;
+                    return;
+                case SDLK_ESCAPE:
+                    text_escape_pressed_ = true;
+                    return;
+                default:
+                    break;
             }
         }
         // Swallow other key events so gameplay doesn't receive them.
         if (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP) {
             return;
+        }
+    }
+
+    // Track per-frame key-press edges from real KEY_DOWN events (excluding
+    // auto-repeat). Done before menu-key handling so all consumers can read
+    // the same source of truth via was_key_just_pressed().
+    if (event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat) {
+        SDL_Scancode sc = event.key.scancode;
+        if (sc >= 0 && sc < SDL_SCANCODE_COUNT) {
+            key_just_pressed_[sc] = true;
         }
     }
 
@@ -105,19 +128,32 @@ void InputHandler::process_event(const SDL_Event& event) {
                 menu_toggle_pressed_ = true;
                 break;
             case SDL_GAMEPAD_BUTTON_DPAD_UP:
-                if (!game_input_enabled_) menu_up_pressed_ = true;
+                if (!game_input_enabled_) {
+                    menu_up_pressed_ = true;
+                }
                 break;
             case SDL_GAMEPAD_BUTTON_DPAD_DOWN:
-                if (!game_input_enabled_) menu_down_pressed_ = true;
+                if (!game_input_enabled_) {
+                    menu_down_pressed_ = true;
+                }
                 break;
             case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
-                if (!game_input_enabled_) menu_left_pressed_ = true;
+                if (!game_input_enabled_) {
+                    menu_left_pressed_ = true;
+                }
                 break;
             case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
-                if (!game_input_enabled_) menu_right_pressed_ = true;
+                if (!game_input_enabled_) {
+                    menu_right_pressed_ = true;
+                }
                 break;
             case SDL_GAMEPAD_BUTTON_SOUTH: // A button
-                if (!game_input_enabled_) menu_select_pressed_ = true;
+                if (!game_input_enabled_) {
+                    menu_select_pressed_ = true;
+                }
+                break;
+            default:
+                // Other gamepad buttons are not bound to menu actions.
                 break;
         }
     }
@@ -130,23 +166,36 @@ void InputHandler::process_event(const SDL_Event& event) {
                 break;
             case SDLK_UP:
             case SDLK_W:
-                if (!game_input_enabled_) menu_up_pressed_ = true;
+                if (!game_input_enabled_) {
+                    menu_up_pressed_ = true;
+                }
                 break;
             case SDLK_DOWN:
             case SDLK_S:
-                if (!game_input_enabled_) menu_down_pressed_ = true;
+                if (!game_input_enabled_) {
+                    menu_down_pressed_ = true;
+                }
                 break;
             case SDLK_LEFT:
             case SDLK_A:
-                if (!game_input_enabled_) menu_left_pressed_ = true;
+                if (!game_input_enabled_) {
+                    menu_left_pressed_ = true;
+                }
                 break;
             case SDLK_RIGHT:
             case SDLK_D:
-                if (!game_input_enabled_) menu_right_pressed_ = true;
+                if (!game_input_enabled_) {
+                    menu_right_pressed_ = true;
+                }
                 break;
             case SDLK_RETURN:
             case SDLK_SPACE:
-                if (!game_input_enabled_) menu_select_pressed_ = true;
+                if (!game_input_enabled_) {
+                    menu_select_pressed_ = true;
+                }
+                break;
+            default:
+                // Other keys are not bound to menu actions.
                 break;
         }
     }
@@ -216,9 +265,14 @@ void InputHandler::process_event(const SDL_Event& event) {
 }
 
 bool InputHandler::was_key_just_pressed(SDL_Scancode scancode) const {
-    if (scancode < 0 || scancode >= SDL_SCANCODE_COUNT) return false;
-    const bool* keys = SDL_GetKeyboardState(nullptr);
-    return keys[scancode] && !key_state_buffer_[scancode];
+    if (scancode < 0 || scancode >= SDL_SCANCODE_COUNT) {
+        return false;
+    }
+    return key_just_pressed_[scancode];
+}
+
+void InputHandler::clear_key_edges() {
+    std::memset(key_just_pressed_, 0, sizeof(key_just_pressed_));
 }
 
 void InputHandler::post_process_events() {
@@ -230,8 +284,10 @@ void InputHandler::post_process_events() {
         update_input_from_controller();
     }
 
-    // Only update game input if enabled
-    if (game_input_enabled_) {
+    // Only update game input if enabled. While chat is capturing text, treat
+    // game input as suspended so W/A/S/D in the chat box don't drive movement.
+    const bool gameplay_active = game_input_enabled_ && !text_input_enabled_;
+    if (gameplay_active) {
         update_input_from_keyboard();
         update_camera_from_mouse();
 
@@ -258,18 +314,13 @@ void InputHandler::post_process_events() {
     }
 
     // Check if input changed
-    input_changed_ = (current_input_.move_up != last_input_.move_up ||
-                      current_input_.move_down != last_input_.move_down ||
-                      current_input_.move_left != last_input_.move_left ||
-                      current_input_.move_right != last_input_.move_right ||
-                      std::abs(current_input_.move_dir_x - last_input_.move_dir_x) > 0.01f ||
-                      std::abs(current_input_.move_dir_y - last_input_.move_dir_y) > 0.01f ||
-                      std::abs(current_input_.attack_dir_x - last_input_.attack_dir_x) > 0.01f ||
-                      std::abs(current_input_.attack_dir_y - last_input_.attack_dir_y) > 0.01f);
-
-    // Snapshot keyboard state for was_key_just_pressed() edge detection
-    const bool* keys = SDL_GetKeyboardState(nullptr);
-    std::memcpy(key_state_buffer_, keys, SDL_SCANCODE_COUNT * sizeof(bool));
+    input_changed_ =
+        (current_input_.move_up != last_input_.move_up || current_input_.move_down != last_input_.move_down ||
+         current_input_.move_left != last_input_.move_left || current_input_.move_right != last_input_.move_right ||
+         std::abs(current_input_.move_dir_x - last_input_.move_dir_x) > 0.01f ||
+         std::abs(current_input_.move_dir_y - last_input_.move_dir_y) > 0.01f ||
+         std::abs(current_input_.attack_dir_x - last_input_.attack_dir_x) > 0.01f ||
+         std::abs(current_input_.attack_dir_y - last_input_.attack_dir_y) > 0.01f);
 }
 
 bool InputHandler::process_events() {
@@ -281,6 +332,7 @@ bool InputHandler::process_events() {
     menu_left_pressed_ = false;
     menu_right_pressed_ = false;
     menu_select_pressed_ = false;
+    clear_key_edges();
 
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
@@ -332,8 +384,7 @@ void InputHandler::update_camera_from_mouse() {
     float move_z = 0.0f;
 
     // Check if controller has analog movement input
-    bool has_controller_analog = (std::abs(controller_move_x_) > 0.01f ||
-                                   std::abs(controller_move_y_) > 0.01f);
+    bool has_controller_analog = (std::abs(controller_move_x_) > 0.01f || std::abs(controller_move_y_) > 0.01f);
 
     if (has_controller_analog) {
         // Use smooth analog controller input
@@ -380,7 +431,9 @@ void InputHandler::update_camera_from_mouse() {
 }
 
 void InputHandler::update_input_from_controller() {
-    if (!gamepad_) return;
+    if (!gamepad_) {
+        return;
+    }
 
     // Read left stick for movement (raw axis values are -32768 to 32767)
     float raw_lx = SDL_GetGamepadAxis(gamepad_, SDL_GAMEPAD_AXIS_LEFTX) / 32767.0f;
@@ -433,7 +486,9 @@ void InputHandler::update_input_from_controller() {
 
 void InputHandler::handle_controller_added(SDL_JoystickID id) {
     // Only connect one controller at a time
-    if (gamepad_) return;
+    if (gamepad_) {
+        return;
+    }
 
     if (SDL_IsGamepad(id)) {
         gamepad_ = SDL_OpenGamepad(id);

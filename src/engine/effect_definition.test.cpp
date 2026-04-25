@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
 #include "engine/effect_definition.hpp"
 #include <cmath>
+#include <gtest/gtest.h>
 
 using namespace mmo::engine;
 

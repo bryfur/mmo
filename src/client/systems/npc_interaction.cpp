@@ -17,14 +17,23 @@ using namespace mmo::protocol;
 // Auto-turn-in: when the player walks up to a turn-in NPC, send
 // QuestTurnIn for every tracked quest whose objectives are all complete.
 void try_turn_in_quests(NPCInteractionFrame& f) {
-    if (!f.npcs_with_turnins.count(f.npc_interaction.npc_id)) return;
+    if (!f.npcs_with_turnins.contains(f.npc_interaction.npc_id)) {
+        return;
+    }
     for (const auto& quest : f.hud.tracked_quests) {
-        if (quest.quest_id.empty() || quest.objectives.empty()) continue;
+        if (quest.quest_id.empty() || quest.objectives.empty()) {
+            continue;
+        }
         bool all_complete = true;
         for (const auto& obj : quest.objectives) {
-            if (!obj.complete) { all_complete = false; break; }
+            if (!obj.complete) {
+                all_complete = false;
+                break;
+            }
         }
-        if (!all_complete) continue;
+        if (!all_complete) {
+            continue;
+        }
 
         QuestTurnInMsg msg;
         std::strncpy(msg.quest_id, quest.quest_id.c_str(), sizeof(msg.quest_id) - 1);
@@ -36,8 +45,12 @@ void try_turn_in_quests(NPCInteractionFrame& f) {
 // objective markers for the world map and minimap, and tell the server.
 void accept_selected_quest(NPCInteractionFrame& f) {
     auto& npc = f.npc_interaction;
-    if (npc.available_quests.empty()) return;
-    if (npc.selected_quest >= static_cast<int>(npc.available_quests.size())) return;
+    if (npc.available_quests.empty()) {
+        return;
+    }
+    if (npc.selected_quest >= static_cast<int>(npc.available_quests.size())) {
+        return;
+    }
 
     const auto& quest = npc.available_quests[npc.selected_quest];
 
@@ -54,7 +67,9 @@ void accept_selected_quest(NPCInteractionFrame& f) {
     f.hud.tracked_quests.push_back(std::move(tracker));
 
     for (const auto& obj : quest.objectives) {
-        if (obj.radius <= 0.0f) continue;
+        if (obj.radius <= 0.0f) {
+            continue;
+        }
         MapQuestMarker marker;
         marker.quest_name = quest.quest_name;
         marker.world_x = obj.loc_x;
@@ -77,12 +92,18 @@ void accept_selected_quest(NPCInteractionFrame& f) {
 // TownNPC, open the dialog, and trigger turn-ins / NPCInteract round-trip.
 void try_open_nearest_npc(NPCInteractionFrame& f) {
     auto local_it = f.network_to_entity.find(f.local_player_id);
-    if (local_it == f.network_to_entity.end()) return;
-    if (!f.registry.valid(local_it->second)) return;
+    if (local_it == f.network_to_entity.end()) {
+        return;
+    }
+    if (!f.registry.valid(local_it->second)) {
+        return;
+    }
 
     const auto& tf = f.registry.get<ecs::Transform>(local_it->second);
     auto best = find_closest_npc(f.registry, tf.x, tf.z, 200.0f);
-    if (!best) return;
+    if (!best) {
+        return;
+    }
 
     auto& npc = f.npc_interaction;
     npc.npc_id = best->network_id;
@@ -91,7 +112,7 @@ void try_open_nearest_npc(NPCInteractionFrame& f) {
     npc.selected_quest = 0;
     npc.showing_quest_detail = false;
     npc.showing_dialogue = true;
-    f.hud.dialogue.visible = false;  // suppress legacy popup
+    f.hud.dialogue.visible = false; // suppress legacy popup
 
     try_turn_in_quests(f);
 
@@ -161,17 +182,17 @@ void update_npc_interaction(NPCInteractionFrame& f) {
     }
 }
 
-std::optional<ClosestNPC> find_closest_npc(const entt::registry& registry,
-                                           float player_x, float player_z,
+std::optional<ClosestNPC> find_closest_npc(const entt::registry& registry, float player_x, float player_z,
                                            float max_distance) {
     std::optional<ClosestNPC> best;
     float best_dist = max_distance;
 
-    auto view = registry.view<const ecs::NetworkId, const ecs::Transform,
-                              const ecs::EntityInfo, const ecs::Name>();
+    auto view = registry.view<const ecs::NetworkId, const ecs::Transform, const ecs::EntityInfo, const ecs::Name>();
     for (auto entity : view) {
         const auto& info = view.get<const ecs::EntityInfo>(entity);
-        if (info.type != mmo::protocol::EntityType::TownNPC) continue;
+        if (info.type != mmo::protocol::EntityType::TownNPC) {
+            continue;
+        }
 
         const auto& tf = view.get<const ecs::Transform>(entity);
         const float dx = tf.x - player_x;

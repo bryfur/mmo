@@ -16,7 +16,7 @@ namespace fs = std::filesystem;
 namespace {
 // File mtime is considered settled once it has been quiet for at least this long.
 // Avoids reacting to half-written files mid-save.
-constexpr int64_t k_settle_window_ns = 100 * 1'000'000;
+constexpr int64_t k_settle_window_ns = int64_t{100} * 1'000'000;
 } // namespace
 
 FileWatcher::~FileWatcher() {
@@ -66,7 +66,9 @@ void FileWatcher::shutdown() {
 }
 
 FileWatcher::WatchHandle FileWatcher::watch_file(fs::path path, WatchCallback on_change) {
-    if (!initialized_.load(std::memory_order_acquire) || !on_change) return k_invalid_handle;
+    if (!initialized_.load(std::memory_order_acquire) || !on_change) {
+        return k_invalid_handle;
+    }
 
     Watch w;
     w.kind = WatchKind::File;
@@ -80,10 +82,11 @@ FileWatcher::WatchHandle FileWatcher::watch_file(fs::path path, WatchCallback on
     return handle;
 }
 
-FileWatcher::WatchHandle FileWatcher::watch_directory(fs::path dir,
-                                                     std::string extension_filter,
-                                                     WatchCallback on_change) {
-    if (!initialized_.load(std::memory_order_acquire) || !on_change) return k_invalid_handle;
+FileWatcher::WatchHandle FileWatcher::watch_directory(fs::path dir, std::string extension_filter,
+                                                      WatchCallback on_change) {
+    if (!initialized_.load(std::memory_order_acquire) || !on_change) {
+        return k_invalid_handle;
+    }
 
     Watch w;
     w.kind = WatchKind::Directory;
@@ -99,10 +102,11 @@ FileWatcher::WatchHandle FileWatcher::watch_directory(fs::path dir,
 }
 
 void FileWatcher::unwatch(WatchHandle h) {
-    if (h == k_invalid_handle) return;
+    if (h == k_invalid_handle) {
+        return;
+    }
     std::lock_guard<std::mutex> lk(watches_mutex_);
-    watches_.erase(std::remove_if(watches_.begin(), watches_.end(),
-                                  [h](const Watch& w) { return w.handle == h; }),
+    watches_.erase(std::remove_if(watches_.begin(), watches_.end(), [h](const Watch& w) { return w.handle == h; }),
                    watches_.end());
 }
 
@@ -110,7 +114,9 @@ void FileWatcher::poll_main_thread() {
     std::vector<PendingEvent> drained;
     {
         std::lock_guard<std::mutex> lk(queue_mutex_);
-        if (pending_.empty()) return;
+        if (pending_.empty()) {
+            return;
+        }
         drained.swap(pending_);
     }
 
@@ -131,7 +137,9 @@ void FileWatcher::poll_main_thread() {
     }
 
     for (auto& [cb, path] : to_fire) {
-        if (cb) cb(path);
+        if (cb) {
+            cb(path);
+        }
     }
 }
 
@@ -142,9 +150,7 @@ int64_t FileWatcher::to_nanos(fs::file_time_type t) noexcept {
 
 int64_t FileWatcher::now_nanos() noexcept {
     using namespace std::chrono;
-    return duration_cast<nanoseconds>(
-               fs::file_time_type::clock::now().time_since_epoch())
-        .count();
+    return duration_cast<nanoseconds>(fs::file_time_type::clock::now().time_since_epoch()).count();
 }
 
 void FileWatcher::scan_watch(Watch& w, std::vector<PendingEvent>& out, int64_t now_ns) {
@@ -152,10 +158,14 @@ void FileWatcher::scan_watch(Watch& w, std::vector<PendingEvent>& out, int64_t n
 
     auto record = [&](const fs::path& p) {
         auto mtime = fs::last_write_time(p, ec);
-        if (ec) return;
+        if (ec) {
+            return;
+        }
         int64_t mt_ns = to_nanos(mtime);
         // Skip files actively being written; pick them up on a later tick.
-        if (now_ns - mt_ns < k_settle_window_ns) return;
+        if (now_ns - mt_ns < k_settle_window_ns) {
+            return;
+        }
 
         std::string key = p.lexically_normal().string();
         auto it = w.mtimes.find(key);
@@ -163,11 +173,11 @@ void FileWatcher::scan_watch(Watch& w, std::vector<PendingEvent>& out, int64_t n
             w.mtimes.emplace(std::move(key), mt_ns);
             // First scan: prime cache without firing.
             if (!w.first_scan) {
-                out.push_back(PendingEvent{ w.handle, p });
+                out.push_back(PendingEvent{w.handle, p});
             }
         } else if (it->second != mt_ns) {
             it->second = mt_ns;
-            out.push_back(PendingEvent{ w.handle, p });
+            out.push_back(PendingEvent{w.handle, p});
         }
     };
 
@@ -179,14 +189,20 @@ void FileWatcher::scan_watch(Watch& w, std::vector<PendingEvent>& out, int64_t n
         if (!fs::exists(w.target, ec) || !fs::is_directory(w.target, ec)) {
             return;
         }
-        for (auto it = fs::recursive_directory_iterator(w.target, ec);
-             !ec && it != fs::recursive_directory_iterator{}; it.increment(ec)) {
-            if (ec) break;
+        for (auto it = fs::recursive_directory_iterator(w.target, ec); !ec && it != fs::recursive_directory_iterator{};
+             it.increment(ec)) {
+            if (ec) {
+                break;
+            }
             const auto& entry = *it;
-            if (!entry.is_regular_file(ec)) continue;
+            if (!entry.is_regular_file(ec)) {
+                continue;
+            }
             if (!w.ext_filter.empty()) {
                 auto ext = entry.path().extension().string();
-                if (ext != w.ext_filter) continue;
+                if (ext != w.ext_filter) {
+                    continue;
+                }
             }
             record(entry.path());
         }
@@ -207,14 +223,12 @@ void FileWatcher::worker_loop() {
         }
         if (!events.empty()) {
             std::lock_guard<std::mutex> lk(queue_mutex_);
-            pending_.insert(pending_.end(),
-                            std::make_move_iterator(events.begin()),
+            pending_.insert(pending_.end(), std::make_move_iterator(events.begin()),
                             std::make_move_iterator(events.end()));
         }
 
         std::unique_lock<std::mutex> lk(wake_mutex_);
-        wake_cv_.wait_for(lk, poll_interval_,
-                          [this] { return stop_.load(std::memory_order_acquire); });
+        wake_cv_.wait_for(lk, poll_interval_, [this] { return stop_.load(std::memory_order_acquire); });
     }
 }
 

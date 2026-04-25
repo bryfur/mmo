@@ -15,15 +15,16 @@ struct StubAsset {
     int value = 0;
     bool reload_from(const fs::path& p) {
         std::ifstream in(p);
-        if (!in) return false;
+        if (!in) {
+            return false;
+        }
         in >> value;
         return true;
     }
 };
 
 fs::path tmp_path(const std::string& name) {
-    auto p = fs::temp_directory_path() /
-             ("mmo_assetreg_" + std::to_string(::getpid()) + "_" + name);
+    auto p = fs::temp_directory_path() / ("mmo_assetreg_" + std::to_string(::getpid()) + "_" + name);
     return p;
 }
 

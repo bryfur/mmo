@@ -70,16 +70,22 @@ bool NetworkMessageHandler::try_handle(MessageType type, const std::vector<uint8
                     uint8_t count = r.read<uint8_t>();
 
                     uint32_t color = 0xFFAAAAAA;
-                    if (rarity == "uncommon") color = 0xFF00CC00;
-                    else if (rarity == "rare") color = 0xFF0088FF;
-                    else if (rarity == "epic") color = 0xFFCC00CC;
-                    else if (rarity == "legendary") color = 0xFF00AAFF;
+                    if (rarity == "uncommon") {
+                        color = 0xFF00CC00;
+                    } else if (rarity == "rare") {
+                        color = 0xFF0088FF;
+                    } else if (rarity == "epic") {
+                        color = 0xFFCC00CC;
+                    } else if (rarity == "legendary") {
+                        color = 0xFF00AAFF;
+                    }
 
                     char buf[64];
-                    if (count > 1)
+                    if (count > 1) {
                         snprintf(buf, sizeof(buf), "Received: %s x%d", name.c_str(), count);
-                    else
+                    } else {
                         snprintf(buf, sizeof(buf), "Received: %s", name.c_str());
+                    }
                     ctx_.hud_state.add_loot(buf, color);
                 }
             }
@@ -99,13 +105,10 @@ bool NetworkMessageHandler::try_handle(MessageType type, const std::vector<uint8
                 offer.gold_reward = msg.gold_reward;
 
                 for (uint8_t i = 0; i < msg.objective_count && i < QuestOfferMsg::MAX_OBJECTIVES; ++i) {
-                    offer.objectives.push_back({
-                        std::string(msg.objectives[i].description, strnlen(msg.objectives[i].description, 64)),
-                        msg.objectives[i].count,
-                        msg.objectives[i].location_x,
-                        msg.objectives[i].location_z,
-                        msg.objectives[i].radius
-                    });
+                    offer.objectives.push_back(
+                        {std::string(msg.objectives[i].description, strnlen(msg.objectives[i].description, 64)),
+                         msg.objectives[i].count, msg.objectives[i].location_x, msg.objectives[i].location_z,
+                         msg.objectives[i].radius});
                 }
 
                 ctx_.npc_interaction.available_quests.push_back(std::move(offer));
@@ -125,11 +128,11 @@ bool NetworkMessageHandler::try_handle(MessageType type, const std::vector<uint8
                 ctx_.npcs_with_quests.clear();
                 ctx_.npcs_with_turnins.clear();
                 size_t offset = 0;
-                uint16_t count;
+                uint16_t count = 0;
                 std::memcpy(&count, payload.data(), sizeof(uint16_t));
                 offset += sizeof(uint16_t);
                 for (uint16_t i = 0; i < count && offset + sizeof(uint32_t) <= payload.size(); ++i) {
-                    uint32_t encoded;
+                    uint32_t encoded = 0;
                     std::memcpy(&encoded, payload.data() + offset, sizeof(uint32_t));
                     offset += sizeof(uint32_t);
                     uint32_t npc_id = encoded & 0x7FFFFFFF;
@@ -198,7 +201,9 @@ bool NetworkMessageHandler::try_handle(MessageType type, const std::vector<uint8
 }
 
 void NetworkMessageHandler::on_combat_event(const std::vector<uint8_t>& payload) {
-    if (payload.size() < CombatEventMsg::serialized_size()) return;
+    if (payload.size() < CombatEventMsg::serialized_size()) {
+        return;
+    }
 
     CombatEventMsg msg;
     msg.deserialize(payload);
@@ -214,7 +219,9 @@ void NetworkMessageHandler::on_combat_event(const std::vector<uint8_t>& payload)
 }
 
 void NetworkMessageHandler::on_entity_death(const std::vector<uint8_t>& payload) {
-    if (payload.size() < EntityDeathMsg::serialized_size()) return;
+    if (payload.size() < EntityDeathMsg::serialized_size()) {
+        return;
+    }
 
     EntityDeathMsg msg;
     msg.deserialize(payload);
@@ -225,7 +232,9 @@ void NetworkMessageHandler::on_entity_death(const std::vector<uint8_t>& payload)
 }
 
 void NetworkMessageHandler::on_quest_progress(const std::vector<uint8_t>& payload) {
-    if (payload.size() < QuestProgressMsg::serialized_size()) return;
+    if (payload.size() < QuestProgressMsg::serialized_size()) {
+        return;
+    }
 
     QuestProgressMsg msg;
     msg.deserialize(payload);
@@ -244,7 +253,9 @@ void NetworkMessageHandler::on_quest_progress(const std::vector<uint8_t>& payloa
 }
 
 void NetworkMessageHandler::on_quest_complete(const std::vector<uint8_t>& payload) {
-    if (payload.size() < QuestCompleteMsg::serialized_size()) return;
+    if (payload.size() < QuestCompleteMsg::serialized_size()) {
+        return;
+    }
 
     QuestCompleteMsg msg;
     msg.deserialize(payload);
@@ -252,8 +263,7 @@ void NetworkMessageHandler::on_quest_complete(const std::vector<uint8_t>& payloa
     std::string qid(msg.quest_id, strnlen(msg.quest_id, sizeof(msg.quest_id)));
     auto& quests = ctx_.hud_state.tracked_quests;
     quests.erase(
-        std::remove_if(quests.begin(), quests.end(),
-            [&](const QuestTrackerEntry& q) { return q.quest_id == qid; }),
+        std::remove_if(quests.begin(), quests.end(), [&](const QuestTrackerEntry& q) { return q.quest_id == qid; }),
         quests.end());
 
     Notification notif;
@@ -264,7 +274,9 @@ void NetworkMessageHandler::on_quest_complete(const std::vector<uint8_t>& payloa
 }
 
 void NetworkMessageHandler::on_inventory_update(const std::vector<uint8_t>& payload) {
-    if (payload.size() < InventoryUpdateMsg::serialized_size()) return;
+    if (payload.size() < InventoryUpdateMsg::serialized_size()) {
+        return;
+    }
 
     InventoryUpdateMsg msg;
     msg.deserialize(payload);
@@ -278,7 +290,9 @@ void NetworkMessageHandler::on_inventory_update(const std::vector<uint8_t>& payl
 }
 
 void NetworkMessageHandler::on_skill_cooldown(const std::vector<uint8_t>& payload) {
-    if (payload.size() < SkillCooldownMsg::serialized_size()) return;
+    if (payload.size() < SkillCooldownMsg::serialized_size()) {
+        return;
+    }
 
     SkillCooldownMsg msg;
     msg.deserialize(payload);
@@ -293,7 +307,9 @@ void NetworkMessageHandler::on_skill_cooldown(const std::vector<uint8_t>& payloa
 }
 
 void NetworkMessageHandler::on_skill_unlock(const std::vector<uint8_t>& payload) {
-    if (payload.size() < SkillUnlockMsg::serialized_size()) return;
+    if (payload.size() < SkillUnlockMsg::serialized_size()) {
+        return;
+    }
 
     SkillUnlockMsg msg;
     msg.deserialize(payload);
@@ -304,7 +320,8 @@ void NetworkMessageHandler::on_skill_unlock(const std::vector<uint8_t>& payload)
     }
     for (int i = 0; i < msg.skill_count && i < 5; ++i) {
         std::string id(msg.skills[i].name, strnlen(msg.skills[i].name, sizeof(msg.skills[i].name)));
-        std::string display(msg.skills[i].display_name, strnlen(msg.skills[i].display_name, sizeof(msg.skills[i].display_name)));
+        std::string display(msg.skills[i].display_name,
+                            strnlen(msg.skills[i].display_name, sizeof(msg.skills[i].display_name)));
         ctx_.hud_state.skill_slots[i].skill_id = id;
         ctx_.hud_state.skill_slots[i].name = display.empty() ? id : display;
         ctx_.hud_state.skill_slots[i].available = true;
@@ -313,7 +330,9 @@ void NetworkMessageHandler::on_skill_unlock(const std::vector<uint8_t>& payload)
 }
 
 void NetworkMessageHandler::on_talent_sync(const std::vector<uint8_t>& payload) {
-    if (payload.size() < TalentSyncMsg::serialized_size()) return;
+    if (payload.size() < TalentSyncMsg::serialized_size()) {
+        return;
+    }
 
     TalentSyncMsg msg;
     msg.deserialize(payload);
@@ -331,8 +350,8 @@ void NetworkMessageHandler::on_talent_sync(const std::vector<uint8_t>& payload) 
 
 void NetworkMessageHandler::on_talent_tree(const std::vector<uint8_t>& payload) {
     if (payload.size() < TalentTreeMsg::serialized_size()) {
-        std::cout << "[TalentTree] Payload too small: " << payload.size()
-                  << " < " << TalentTreeMsg::serialized_size() << std::endl;
+        std::cout << "[TalentTree] Payload too small: " << payload.size() << " < " << TalentTreeMsg::serialized_size()
+                  << '\n';
         return;
     }
 
@@ -350,11 +369,13 @@ void NetworkMessageHandler::on_talent_tree(const std::vector<uint8_t>& payload) 
         t.branch_name = std::string(msg.talents[i].branch_name, strnlen(msg.talents[i].branch_name, 32));
         ctx_.panel_state.talent_tree.push_back(std::move(t));
     }
-    std::cout << "[TalentTree] Received " << ctx_.panel_state.talent_tree.size() << " talents" << std::endl;
+    std::cout << "[TalentTree] Received " << ctx_.panel_state.talent_tree.size() << " talents" << '\n';
 }
 
 void NetworkMessageHandler::on_npc_dialogue(const std::vector<uint8_t>& payload) {
-    if (payload.size() < NPCDialogueMsg::serialized_size()) return;
+    if (payload.size() < NPCDialogueMsg::serialized_size()) {
+        return;
+    }
 
     NPCDialogueMsg msg;
     msg.deserialize(payload);
@@ -373,7 +394,9 @@ void NetworkMessageHandler::on_npc_dialogue(const std::vector<uint8_t>& payload)
 }
 
 void NetworkMessageHandler::on_chat_broadcast(const std::vector<uint8_t>& payload) {
-    if (payload.size() < ChatBroadcastMsg::serialized_size()) return;
+    if (payload.size() < ChatBroadcastMsg::serialized_size()) {
+        return;
+    }
     ChatBroadcastMsg msg;
     msg.deserialize(payload);
     std::string sender(msg.sender_name, strnlen(msg.sender_name, sizeof(msg.sender_name)));
@@ -382,7 +405,9 @@ void NetworkMessageHandler::on_chat_broadcast(const std::vector<uint8_t>& payloa
 }
 
 void NetworkMessageHandler::on_party_invite_offer(const std::vector<uint8_t>& payload) {
-    if (payload.size() < PartyInviteOfferMsg::serialized_size()) return;
+    if (payload.size() < PartyInviteOfferMsg::serialized_size()) {
+        return;
+    }
     PartyInviteOfferMsg msg;
     msg.deserialize(payload);
     auto& p = ctx_.hud_state.party;
@@ -392,7 +417,9 @@ void NetworkMessageHandler::on_party_invite_offer(const std::vector<uint8_t>& pa
 }
 
 void NetworkMessageHandler::on_party_state(const std::vector<uint8_t>& payload) {
-    if (payload.size() < PartyStateMsg::serialized_size()) return;
+    if (payload.size() < PartyStateMsg::serialized_size()) {
+        return;
+    }
     PartyStateMsg msg;
     msg.deserialize(payload);
     auto& p = ctx_.hud_state.party;
@@ -414,7 +441,9 @@ void NetworkMessageHandler::on_party_state(const std::vector<uint8_t>& payload) 
 }
 
 void NetworkMessageHandler::on_craft_recipes(const std::vector<uint8_t>& payload) {
-    if (payload.size() < sizeof(uint16_t)) return;
+    if (payload.size() < sizeof(uint16_t)) {
+        return;
+    }
     BufferReader r(payload);
     uint16_t count = r.read<uint16_t>();
     ctx_.hud_state.crafting.recipes.clear();
@@ -424,7 +453,8 @@ void NetworkMessageHandler::on_craft_recipes(const std::vector<uint8_t>& payload
         CraftRecipe recipe;
         recipe.id = std::string(info.id, strnlen(info.id, sizeof(info.id)));
         recipe.name = std::string(info.name, strnlen(info.name, sizeof(info.name)));
-        recipe.output_item_id = std::string(info.output_item_id, strnlen(info.output_item_id, sizeof(info.output_item_id)));
+        recipe.output_item_id =
+            std::string(info.output_item_id, strnlen(info.output_item_id, sizeof(info.output_item_id)));
         recipe.output_count = info.output_count;
         recipe.gold_cost = info.gold_cost;
         recipe.required_level = info.required_level;
@@ -440,7 +470,9 @@ void NetworkMessageHandler::on_craft_recipes(const std::vector<uint8_t>& payload
 }
 
 void NetworkMessageHandler::on_craft_result(const std::vector<uint8_t>& payload) {
-    if (payload.size() < CraftResultMsg::serialized_size()) return;
+    if (payload.size() < CraftResultMsg::serialized_size()) {
+        return;
+    }
     CraftResultMsg msg;
     msg.deserialize(payload);
     auto& cs = ctx_.hud_state.crafting;
@@ -463,7 +495,9 @@ void NetworkMessageHandler::on_craft_result(const std::vector<uint8_t>& payload)
 }
 
 void NetworkMessageHandler::on_vendor_open(const std::vector<uint8_t>& payload) {
-    if (payload.size() < VendorOpenMsg::serialized_size()) return;
+    if (payload.size() < VendorOpenMsg::serialized_size()) {
+        return;
+    }
     VendorOpenMsg msg;
     msg.deserialize(payload);
 
@@ -483,8 +517,11 @@ void NetworkMessageHandler::on_vendor_open(const std::vector<uint8_t>& payload) 
     for (int i = 0; i < msg.stock_count && i < VendorOpenMsg::MAX_STOCK; ++i) {
         VendorStockSlot slot;
         slot.item_id = std::string(msg.stock[i].item_id, strnlen(msg.stock[i].item_id, sizeof(msg.stock[i].item_id)));
-        slot.item_name = std::string(msg.stock[i].item_name, strnlen(msg.stock[i].item_name, sizeof(msg.stock[i].item_name)));
-        if (slot.item_name.empty()) slot.item_name = slot.item_id;
+        slot.item_name =
+            std::string(msg.stock[i].item_name, strnlen(msg.stock[i].item_name, sizeof(msg.stock[i].item_name)));
+        if (slot.item_name.empty()) {
+            slot.item_name = slot.item_id;
+        }
         slot.rarity = std::string(msg.stock[i].rarity, strnlen(msg.stock[i].rarity, sizeof(msg.stock[i].rarity)));
         slot.price = msg.stock[i].price;
         slot.stock = msg.stock[i].stock;

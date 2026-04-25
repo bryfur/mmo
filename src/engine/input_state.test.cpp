@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
 #include "engine/input_state.hpp"
 #include <cmath>
+#include <gtest/gtest.h>
 
 using namespace mmo::engine;
 
@@ -35,7 +35,8 @@ TEST(InputState, DefaultAttackDirPointsForward) {
 // --- normalize_move_dir ---
 
 TEST(NormalizeMoveDir, ZeroVectorStaysZero) {
-    float x = 0.0f, y = 0.0f;
+    float x = 0.0f;
+    float y = 0.0f;
     float len = normalize_move_dir(x, y);
     EXPECT_FLOAT_EQ(x, 0.0f);
     EXPECT_FLOAT_EQ(y, 0.0f);
@@ -43,7 +44,8 @@ TEST(NormalizeMoveDir, ZeroVectorStaysZero) {
 }
 
 TEST(NormalizeMoveDir, UnitVectorUnchanged) {
-    float x = 1.0f, y = 0.0f;
+    float x = 1.0f;
+    float y = 0.0f;
     float len = normalize_move_dir(x, y);
     EXPECT_FLOAT_EQ(x, 1.0f);
     EXPECT_FLOAT_EQ(y, 0.0f);
@@ -52,7 +54,8 @@ TEST(NormalizeMoveDir, UnitVectorUnchanged) {
 
 TEST(NormalizeMoveDir, SubUnitPreserved) {
     // Analog stick at half tilt
-    float x = 0.3f, y = 0.4f;
+    float x = 0.3f;
+    float y = 0.4f;
     float original_len = std::sqrt(0.3f * 0.3f + 0.4f * 0.4f); // 0.5
     float len = normalize_move_dir(x, y);
     EXPECT_FLOAT_EQ(x, 0.3f);
@@ -62,7 +65,8 @@ TEST(NormalizeMoveDir, SubUnitPreserved) {
 
 TEST(NormalizeMoveDir, DiagonalKeyboardClamped) {
     // W+D pressed: forward + right = (1, 1), magnitude ~1.414
-    float x = 1.0f, y = 1.0f;
+    float x = 1.0f;
+    float y = 1.0f;
     float len = normalize_move_dir(x, y);
     EXPECT_FLOAT_EQ(len, 1.0f);
 
@@ -75,7 +79,8 @@ TEST(NormalizeMoveDir, DiagonalKeyboardClamped) {
 }
 
 TEST(NormalizeMoveDir, LargeVectorNormalizedToUnit) {
-    float x = 3.0f, y = 4.0f;
+    float x = 3.0f;
+    float y = 4.0f;
     normalize_move_dir(x, y);
     float result_len = std::sqrt(x * x + y * y);
     EXPECT_NEAR(result_len, 1.0f, 1e-6f);
@@ -85,7 +90,8 @@ TEST(NormalizeMoveDir, LargeVectorNormalizedToUnit) {
 }
 
 TEST(NormalizeMoveDir, NegativeComponentsHandled) {
-    float x = -1.0f, y = -1.0f;
+    float x = -1.0f;
+    float y = -1.0f;
     normalize_move_dir(x, y);
     float result_len = std::sqrt(x * x + y * y);
     EXPECT_NEAR(result_len, 1.0f, 1e-6f);
@@ -95,7 +101,8 @@ TEST(NormalizeMoveDir, NegativeComponentsHandled) {
 
 TEST(NormalizeMoveDir, ExactlyUnitMagnitudeNotModified) {
     // (0.6, 0.8) has magnitude exactly 1.0
-    float x = 0.6f, y = 0.8f;
+    float x = 0.6f;
+    float y = 0.8f;
     normalize_move_dir(x, y);
     EXPECT_FLOAT_EQ(x, 0.6f);
     EXPECT_FLOAT_EQ(y, 0.8f);

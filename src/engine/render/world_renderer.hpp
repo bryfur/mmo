@@ -1,15 +1,15 @@
 #pragma once
 
-#include "../model_loader.hpp"
-#include "../gpu/gpu_device.hpp"
 #include "../gpu/gpu_buffer.hpp"
+#include "../gpu/gpu_device.hpp"
 #include "../gpu/pipeline_registry.hpp"
-#include <SDL3/SDL_gpu.h>
-#include <glm/glm.hpp>
+#include "../model_loader.hpp"
 #include "../scene/frustum.hpp"
-#include <memory>
-#include <vector>
 #include <functional>
+#include <glm/glm.hpp>
+#include <memory>
+#include <SDL3/SDL_gpu.h>
+#include <vector>
 
 namespace mmo::engine::render {
 
@@ -31,78 +31,76 @@ class WorldRenderer {
 public:
     WorldRenderer();
     ~WorldRenderer();
-    
+
     // Non-copyable
     WorldRenderer(const WorldRenderer&) = delete;
     WorldRenderer& operator=(const WorldRenderer&) = delete;
-    
+
     /**
      * Initialize world rendering resources.
      * @param device GPU device for resource creation
      * @param pipeline_registry Pipeline registry for shader pipelines
      */
-    bool init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry,
-              float world_width, float world_height, ModelManager* model_manager);
-    
+    bool init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry, float world_width, float world_height,
+              ModelManager* model_manager);
+
     /**
      * Clean up resources.
      */
     void shutdown();
-    
+
     /**
      * Set terrain height callback for proper object placement.
      */
-    void set_terrain_height_func(std::function<float(float, float)> func) {
-        terrain_height_func_ = std::move(func);
-    }
-    
+    void set_terrain_height_func(std::function<float(float, float)> func) { terrain_height_func_ = std::move(func); }
+
     /**
      * Update time-based effects.
      */
     void update(float dt);
-    
+
     /**
      * Render skybox.
      * @param pass Active render pass
      * @param cmd Command buffer for uniform uploads
      */
-    void render_skybox(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                       const glm::mat4& view, const glm::mat4& projection);
+    void render_skybox(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const glm::mat4& view,
+                       const glm::mat4& projection);
 
     /**
      * Render debug grid.
      * @param pass Active render pass
      * @param cmd Command buffer for uniform uploads
      */
-    void render_grid(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                     const glm::mat4& view, const glm::mat4& projection);
-    
+    void render_grid(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, const glm::mat4& view,
+                     const glm::mat4& projection);
+
     // Accessors
     const glm::vec3& sun_direction() const { return sun_direction_; }
     const glm::vec3& light_dir() const { return light_dir_; }
-    
+
 private:
     void create_skybox_mesh();
     void create_grid_mesh();
-    
+
     float get_terrain_height(float x, float z) const;
-    
+
     float world_width_ = 0.0f;
     float world_height_ = 0.0f;
-    
+
     gpu::GPUDevice* device_ = nullptr;
     gpu::PipelineRegistry* pipeline_registry_ = nullptr;
     ModelManager* model_manager_ = nullptr;
     std::function<float(float, float)> terrain_height_func_;
-    
+
     // Skybox
     std::unique_ptr<gpu::GPUBuffer> skybox_vertex_buffer_;
     float skybox_time_ = 0.0f;
-    
+
     // Grid
     std::unique_ptr<gpu::GPUBuffer> grid_vertex_buffer_;
     uint32_t grid_vertex_count_ = 0;
-    
+
     // Lighting
     glm::vec3 sun_direction_ = glm::normalize(glm::vec3(0.5f, 0.8f, 0.3f));
     glm::vec3 light_dir_ = glm::normalize(glm::vec3(-0.5f, -0.8f, -0.3f));
@@ -111,7 +109,7 @@ private:
     glm::vec3 fog_color_ = glm::vec3(0.35f, 0.45f, 0.6f);
     float fog_start_ = 1600.0f;
     float fog_end_ = 12000.0f;
-    
+
     // Sampler for textures
     SDL_GPUSampler* sampler_ = nullptr;
 };

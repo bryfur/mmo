@@ -86,5 +86,8 @@ TEST(Arena, MoveTransfersOwnership) {
     a.allocate(64, 8);
     Arena b = std::move(a);
     EXPECT_GE(b.bytes_used(), 64u);
+    // Intentional use of moved-from `a` to verify the post-move contract:
+    // a moved-from Arena must still observe as empty (valid but empty state).
+    // NOLINTNEXTLINE(bugprone-use-after-move,clang-analyzer-cplusplus.Move)
     EXPECT_EQ(a.bytes_used(), 0u);
 }

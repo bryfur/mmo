@@ -1,23 +1,23 @@
 #include "ui_renderer.hpp"
-#include "SDL3/SDL_gpu.h"
-#include "SDL3/SDL_log.h"
-#include "SDL3/SDL_rect.h"
-#include "glm/ext/matrix_clip_space.hpp"
-#include "glm/ext/matrix_float4x4.hpp"
-#include "glm/ext/vector_float4.hpp"
-#include "text_renderer.hpp"
-#include "../gpu/gpu_device.hpp"
 #include "../gpu/gpu_buffer.hpp"
+#include "../gpu/gpu_device.hpp"
 #include "../gpu/gpu_pipeline.hpp"
 #include "../gpu/gpu_uniforms.hpp"
 #include "../gpu/pipeline_registry.hpp"
 #include "engine/core/logger.hpp"
+#include "glm/ext/matrix_clip_space.hpp"
+#include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/vector_float4.hpp"
+#include "SDL3/SDL_gpu.h"
+#include "SDL3/SDL_log.h"
+#include "SDL3/SDL_rect.h"
+#include "text_renderer.hpp"
+#include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <memory>
 #include <string>
 #include <vector>
-#include <cmath>
-#include <cstdio>
 
 namespace mmo::engine::render {
 
@@ -29,26 +29,22 @@ UIRenderer::~UIRenderer() {
     shutdown();
 }
 
-bool UIRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry, 
-                      int width, int height) {
+bool UIRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_registry, int width, int height) {
     device_ = &device;
     pipeline_registry_ = &pipeline_registry;
     width_ = width;
     height_ = height;
-    
+
     // Create dynamic vertex buffer for UI quads
     // Each vertex matches Vertex2D layout: x, y, u, v, r, g, b, a (8 floats)
-    vertex_buffer_ = gpu::GPUBuffer::create_dynamic(
-        device, 
-        gpu::GPUBuffer::Type::Vertex, 
-        MAX_VERTICES * sizeof(UIVertex)
-    );
-    
+    vertex_buffer_ =
+        gpu::GPUBuffer::create_dynamic(device, gpu::GPUBuffer::Type::Vertex, MAX_VERTICES * sizeof(UIVertex));
+
     if (!vertex_buffer_) {
         ENGINE_LOG_ERROR("ui", "Failed to create UI vertex buffer");
         return false;
     }
-    
+
     // Reserve space for vertex batch
     vertex_batch_.reserve(MAX_VERTICES);
 
@@ -78,7 +74,10 @@ bool UIRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_re
         if (tb) {
             uint8_t* data = static_cast<uint8_t*>(SDL_MapGPUTransferBuffer(device.handle(), tb, false));
             if (data) {
-                data[0] = 255; data[1] = 255; data[2] = 255; data[3] = 255;
+                data[0] = 255;
+                data[1] = 255;
+                data[2] = 255;
+                data[3] = 255;
                 SDL_UnmapGPUTransferBuffer(device.handle(), tb);
 
                 SDL_GPUCommandBuffer* cmd = SDL_AcquireGPUCommandBuffer(device.handle());
@@ -165,13 +164,12 @@ void UIRenderer::set_screen_size(int width, int height) {
     // Vulkan clip space: Y=+1 at top, Y=-1 at bottom (maps to framebuffer top/bottom).
     // To map screen Y=0 to clip Y=+1 (top), use glm::ortho with bottom=height, top=0.
     // This flips the Y axis so screen coords map correctly to Vulkan clip space.
-    projection_ = glm::ortho(0.0f, static_cast<float>(width),
-                              static_cast<float>(height), 0.0f, -1.0f, 1.0f);
+    projection_ = glm::ortho(0.0f, static_cast<float>(width), static_cast<float>(height), 0.0f, -1.0f, 1.0f);
 }
 
 void UIRenderer::begin(SDL_GPUCommandBuffer* cmd) {
     current_cmd_ = cmd;
-    current_pass_ = nullptr;  // No render pass during recording phase
+    current_pass_ = nullptr; // No render pass during recording phase
     vertex_batch_.clear();
     queued_text_draws_.clear();
 
@@ -205,8 +203,7 @@ void UIRenderer::execute(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swapchain, b
     // Phase 2: Upload all data (copy passes - BEFORE render pass)
     // Upload UI vertex data
     if (!vertex_batch_.empty() && vertex_buffer_) {
-        vertex_buffer_->update(cmd, vertex_batch_.data(),
-                               vertex_batch_.size() * sizeof(UIVertex));
+        vertex_buffer_->update(cmd, vertex_batch_.data(), vertex_batch_.size() * sizeof(UIVertex));
     }
 
     // Create any pending text textures (copy pass)
@@ -226,7 +223,7 @@ void UIRenderer::execute(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swapchain, b
     // Otherwise preserve existing 3D content
     color_target.load_op = clear_background ? SDL_GPU_LOADOP_CLEAR : SDL_GPU_LOADOP_LOAD;
     color_target.store_op = SDL_GPU_STOREOP_STORE;
-    color_target.clear_color = { 0.1f, 0.1f, 0.15f, 1.0f };  // Dark menu background
+    color_target.clear_color = {0.1f, 0.1f, 0.15f, 1.0f}; // Dark menu background
 
     SDL_GPURenderPass* render_pass = SDL_BeginGPURenderPass(cmd, &color_target, 1, nullptr);
     if (!render_pass) {
@@ -235,14 +232,10 @@ void UIRenderer::execute(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swapchain, b
     }
 
     // Set viewport and scissor to full screen
-    SDL_GPUViewport viewport = {
-        0.0f, 0.0f,
-        static_cast<float>(width_), static_cast<float>(height_),
-        0.0f, 1.0f
-    };
+    SDL_GPUViewport viewport = {0.0f, 0.0f, static_cast<float>(width_), static_cast<float>(height_), 0.0f, 1.0f};
     SDL_SetGPUViewport(render_pass, &viewport);
 
-    SDL_Rect scissor = { 0, 0, width_, height_ };
+    SDL_Rect scissor = {0, 0, width_, height_};
     SDL_SetGPUScissor(render_pass, &scissor);
 
     // Bind UI pipeline - MUST succeed before drawing
@@ -338,7 +331,7 @@ void UIRenderer::flush_batch() {
     // but the actual flush is now done in execute().
 }
 
-glm::vec4 UIRenderer::color_from_uint32(uint32_t color) const {
+glm::vec4 UIRenderer::color_from_uint32(uint32_t color) {
     // Color format is ARGB: 0xAARRGGBB
     float a = ((color >> 24) & 0xFF) / 255.0f;
     float r = ((color >> 16) & 0xFF) / 255.0f;
@@ -351,7 +344,7 @@ void UIRenderer::draw_quad(float x, float y, float w, float h, const glm::vec4& 
     // Check if we need to flush before adding more vertices
     if (vertex_batch_.size() + 6 > MAX_VERTICES) {
         flush_batch();
-        
+
         // Re-bind UI pipeline after flush
         if (pipeline_registry_) {
             auto* ui_pipeline = pipeline_registry_->get_ui_pipeline();
@@ -364,18 +357,18 @@ void UIRenderer::draw_quad(float x, float y, float w, float h, const glm::vec4& 
             SDL_PushGPUVertexUniformData(current_cmd_, 0, &projection_, sizeof(glm::mat4));
         }
     }
-    
+
     // Add 6 vertices for two triangles (quad)
     UIVertex v0 = {x, y, 0, 0, color.r, color.g, color.b, color.a};
     UIVertex v1 = {x + w, y, 0, 0, color.r, color.g, color.b, color.a};
     UIVertex v2 = {x + w, y + h, 0, 0, color.r, color.g, color.b, color.a};
     UIVertex v3 = {x, y + h, 0, 0, color.r, color.g, color.b, color.a};
-    
+
     // Triangle 1
     vertex_batch_.push_back(v0);
     vertex_batch_.push_back(v1);
     vertex_batch_.push_back(v2);
-    
+
     // Triangle 2
     vertex_batch_.push_back(v0);
     vertex_batch_.push_back(v2);
@@ -388,20 +381,20 @@ void UIRenderer::draw_filled_rect(float x, float y, float w, float h, uint32_t c
 
 void UIRenderer::draw_rect_outline(float x, float y, float w, float h, uint32_t color, float line_width) {
     glm::vec4 c = color_from_uint32(color);
-    draw_quad(x, y, w, line_width, c);  // Top
-    draw_quad(x, y + h - line_width, w, line_width, c);  // Bottom
-    draw_quad(x, y, line_width, h, c);  // Left
-    draw_quad(x + w - line_width, y, line_width, h, c);  // Right
+    draw_quad(x, y, w, line_width, c);                  // Top
+    draw_quad(x, y + h - line_width, w, line_width, c); // Bottom
+    draw_quad(x, y, line_width, h, c);                  // Left
+    draw_quad(x + w - line_width, y, line_width, h, c); // Right
 }
 
 void UIRenderer::draw_circle(float x, float y, float radius, uint32_t color, int segments) {
     glm::vec4 c = color_from_uint32(color);
-    
+
     // Check if we have room for all circle vertices
     size_t vertices_needed = static_cast<size_t>(segments) * 3;
     if (vertex_batch_.size() + vertices_needed > MAX_VERTICES) {
         flush_batch();
-        
+
         // Re-bind pipeline after flush
         if (pipeline_registry_ && current_pass_) {
             auto* ui_pipeline = pipeline_registry_->get_ui_pipeline();
@@ -413,24 +406,23 @@ void UIRenderer::draw_circle(float x, float y, float radius, uint32_t color, int
             SDL_PushGPUVertexUniformData(current_cmd_, 0, &projection_, sizeof(glm::mat4));
         }
     }
-    
+
     constexpr float PI = 3.14159265359f;
     for (int i = 0; i < segments; ++i) {
         float a1 = (i / static_cast<float>(segments)) * 2.0f * PI;
         float a2 = ((i + 1) / static_cast<float>(segments)) * 2.0f * PI;
-        
+
         UIVertex center = {x, y, 0, 0, c.r, c.g, c.b, c.a};
         UIVertex p1 = {x + std::cos(a1) * radius, y + std::sin(a1) * radius, 0, 0, c.r, c.g, c.b, c.a};
         UIVertex p2 = {x + std::cos(a2) * radius, y + std::sin(a2) * radius, 0, 0, c.r, c.g, c.b, c.a};
-        
+
         vertex_batch_.push_back(center);
         vertex_batch_.push_back(p1);
         vertex_batch_.push_back(p2);
     }
 }
 
-void UIRenderer::draw_circle_outline(float x, float y, float radius, uint32_t color, 
-                                      float line_width, int segments) {
+void UIRenderer::draw_circle_outline(float x, float y, float radius, uint32_t color, float line_width, int segments) {
     if (line_width <= 0.0f || radius <= 0.0f || segments <= 0) {
         return;
     }
@@ -475,16 +467,12 @@ void UIRenderer::draw_circle_outline(float x, float y, float radius, uint32_t co
         float sin_a2 = std::sin(a2);
 
         // Outer edge points
-        UIVertex outer1 = {x + cos_a1 * outer_radius, y + sin_a1 * outer_radius,
-                           0, 0, c.r, c.g, c.b, c.a};
-        UIVertex outer2 = {x + cos_a2 * outer_radius, y + sin_a2 * outer_radius,
-                           0, 0, c.r, c.g, c.b, c.a};
+        UIVertex outer1 = {x + cos_a1 * outer_radius, y + sin_a1 * outer_radius, 0, 0, c.r, c.g, c.b, c.a};
+        UIVertex outer2 = {x + cos_a2 * outer_radius, y + sin_a2 * outer_radius, 0, 0, c.r, c.g, c.b, c.a};
 
         // Inner edge points
-        UIVertex inner1 = {x + cos_a1 * inner_radius, y + sin_a1 * inner_radius,
-                           0, 0, c.r, c.g, c.b, c.a};
-        UIVertex inner2 = {x + cos_a2 * inner_radius, y + sin_a2 * inner_radius,
-                           0, 0, c.r, c.g, c.b, c.a};
+        UIVertex inner1 = {x + cos_a1 * inner_radius, y + sin_a1 * inner_radius, 0, 0, c.r, c.g, c.b, c.a};
+        UIVertex inner2 = {x + cos_a2 * inner_radius, y + sin_a2 * inner_radius, 0, 0, c.r, c.g, c.b, c.a};
 
         // First triangle (outer1, outer2, inner1)
         vertex_batch_.push_back(outer1);
@@ -500,20 +488,22 @@ void UIRenderer::draw_circle_outline(float x, float y, float radius, uint32_t co
 
 void UIRenderer::draw_line(float x1, float y1, float x2, float y2, uint32_t color, float line_width) {
     glm::vec4 c = color_from_uint32(color);
-    
+
     float dx = x2 - x1;
     float dy = y2 - y1;
     float len = std::sqrt(dx * dx + dy * dy);
-    if (len < 0.001f) return;
-    
+    if (len < 0.001f) {
+        return;
+    }
+
     // Calculate perpendicular offset for line width
     float nx = -dy / len * line_width / 2;
     float ny = dx / len * line_width / 2;
-    
+
     // Check if we need to flush
     if (vertex_batch_.size() + 6 > MAX_VERTICES) {
         flush_batch();
-        
+
         if (pipeline_registry_ && current_pass_) {
             auto* ui_pipeline = pipeline_registry_->get_ui_pipeline();
             if (ui_pipeline) {
@@ -524,18 +514,18 @@ void UIRenderer::draw_line(float x1, float y1, float x2, float y2, uint32_t colo
             SDL_PushGPUVertexUniformData(current_cmd_, 0, &projection_, sizeof(glm::mat4));
         }
     }
-    
+
     // Create line quad vertices
     UIVertex v0 = {x1 + nx, y1 + ny, 0, 0, c.r, c.g, c.b, c.a};
     UIVertex v1 = {x1 - nx, y1 - ny, 0, 0, c.r, c.g, c.b, c.a};
     UIVertex v2 = {x2 - nx, y2 - ny, 0, 0, c.r, c.g, c.b, c.a};
     UIVertex v3 = {x2 + nx, y2 + ny, 0, 0, c.r, c.g, c.b, c.a};
-    
+
     // Triangle 1
     vertex_batch_.push_back(v0);
     vertex_batch_.push_back(v1);
     vertex_batch_.push_back(v2);
-    
+
     // Triangle 2
     vertex_batch_.push_back(v0);
     vertex_batch_.push_back(v2);
@@ -555,8 +545,8 @@ void UIRenderer::draw_text(const std::string& text, float x, float y, uint32_t c
     }
 }
 
-void UIRenderer::draw_button(float x, float y, float w, float h, const std::string& label,
-                              uint32_t color, bool selected) {
+void UIRenderer::draw_button(float x, float y, float w, float h, const std::string& label, uint32_t color,
+                             bool selected) {
     draw_filled_rect(x, y, w, h, color);
     uint32_t border_color = selected ? 0xFFFFFFFF : 0xFF888888;
     draw_rect_outline(x, y, w, h, border_color, selected ? 3.0f : 2.0f);

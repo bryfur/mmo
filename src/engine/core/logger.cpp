@@ -1,20 +1,27 @@
 #include "engine/core/logger.hpp"
 
-#include <SDL3/SDL_log.h>
 #include <algorithm>
+#include <SDL3/SDL_log.h>
 #include <string>
 
 namespace mmo::engine::core {
 
 const char* to_string(LogLevel level) noexcept {
     switch (level) {
-        case LogLevel::Trace: return "TRACE";
-        case LogLevel::Debug: return "DEBUG";
-        case LogLevel::Info:  return "INFO";
-        case LogLevel::Warn:  return "WARN";
-        case LogLevel::Error: return "ERROR";
-        case LogLevel::Fatal: return "FATAL";
-        case LogLevel::Off:   return "OFF";
+        case LogLevel::Trace:
+            return "TRACE";
+        case LogLevel::Debug:
+            return "DEBUG";
+        case LogLevel::Info:
+            return "INFO";
+        case LogLevel::Warn:
+            return "WARN";
+        case LogLevel::Error:
+            return "ERROR";
+        case LogLevel::Fatal:
+            return "FATAL";
+        case LogLevel::Off:
+            return "OFF";
     }
     return "?";
 }
@@ -23,13 +30,20 @@ namespace {
 
 SDL_LogPriority to_sdl_priority(LogLevel level) noexcept {
     switch (level) {
-        case LogLevel::Trace: return SDL_LOG_PRIORITY_TRACE;
-        case LogLevel::Debug: return SDL_LOG_PRIORITY_DEBUG;
-        case LogLevel::Info:  return SDL_LOG_PRIORITY_INFO;
-        case LogLevel::Warn:  return SDL_LOG_PRIORITY_WARN;
-        case LogLevel::Error: return SDL_LOG_PRIORITY_ERROR;
-        case LogLevel::Fatal: return SDL_LOG_PRIORITY_CRITICAL;
-        default: return SDL_LOG_PRIORITY_INFO;
+        case LogLevel::Trace:
+            return SDL_LOG_PRIORITY_TRACE;
+        case LogLevel::Debug:
+            return SDL_LOG_PRIORITY_DEBUG;
+        case LogLevel::Info:
+            return SDL_LOG_PRIORITY_INFO;
+        case LogLevel::Warn:
+            return SDL_LOG_PRIORITY_WARN;
+        case LogLevel::Error:
+            return SDL_LOG_PRIORITY_ERROR;
+        case LogLevel::Fatal:
+            return SDL_LOG_PRIORITY_CRITICAL;
+        default:
+            return SDL_LOG_PRIORITY_INFO;
     }
 }
 
@@ -45,7 +59,7 @@ void StdoutSink::write(LogLevel level, const char* category, std::string_view ms
 }
 
 Logger::Logger() {
-    sinks_.push_back(Entry{ next_id_++, std::make_shared<StdoutSink>() });
+    sinks_.push_back(Entry{next_id_++, std::make_shared<StdoutSink>()});
 }
 
 Logger& Logger::instance() {
@@ -71,14 +85,13 @@ bool Logger::should_log(LogLevel level) const noexcept {
 Logger::SinkHandle Logger::add_sink(std::shared_ptr<LogSink> sink) {
     std::lock_guard<std::mutex> lock(mutex_);
     SinkHandle id = next_id_++;
-    sinks_.push_back(Entry{ id, std::move(sink) });
+    sinks_.push_back(Entry{id, std::move(sink)});
     return id;
 }
 
 void Logger::remove_sink(SinkHandle handle) {
     std::lock_guard<std::mutex> lock(mutex_);
-    sinks_.erase(std::remove_if(sinks_.begin(), sinks_.end(),
-                                [handle](const Entry& e) { return e.id == handle; }),
+    sinks_.erase(std::remove_if(sinks_.begin(), sinks_.end(), [handle](const Entry& e) { return e.id == handle; }),
                  sinks_.end());
 }
 

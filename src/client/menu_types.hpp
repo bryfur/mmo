@@ -1,24 +1,14 @@
 #pragma once
 
+#include <functional>
 #include <string>
 #include <vector>
-#include <functional>
 
 namespace mmo::client {
 
-enum class MenuPage {
-    Main,
-    Controls,
-    Graphics
-};
+enum class MenuPage { Main, Controls, Graphics };
 
-enum class MenuItemType {
-    Toggle,
-    Slider,
-    FloatSlider,
-    Button,
-    Submenu
-};
+enum class MenuItemType { Toggle, Slider, FloatSlider, Button, Submenu };
 
 struct MenuItem {
     std::string label;

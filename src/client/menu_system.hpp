@@ -1,10 +1,10 @@
 #pragma once
 
-#include "menu_types.hpp"
 #include "controls_settings.hpp"
 #include "engine/graphics_settings.hpp"
 #include "engine/input_handler.hpp"
 #include "engine/scene/ui_scene.hpp"
+#include "menu_types.hpp"
 #include <functional>
 #include <vector>
 
@@ -19,10 +19,22 @@ public:
 
     bool is_open() const { return menu_open_; }
 
+    // Open the menu programmatically (e.g. from a HUD button click). Mirrors
+    // the side effects of pressing ESC: suspends gameplay input.
+    void open() {
+        if (menu_open_) {
+            return;
+        }
+        menu_open_ = true;
+        input_.set_game_input_enabled(false);
+    }
+
     const engine::GraphicsSettings& graphics_settings() const { return graphics_settings_; }
     engine::GraphicsSettings& graphics_settings() { return graphics_settings_; }
 
-    struct ResolutionOption { int w, h; };
+    struct ResolutionOption {
+        int w, h;
+    };
     void set_available_resolutions(const std::vector<ResolutionOption>& resolutions) {
         available_resolutions_ = resolutions;
     }

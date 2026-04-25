@@ -12,7 +12,7 @@ class GPUShader;
 
 /**
  * @brief Configuration for creating a graphics pipeline
- * 
+ *
  * This structure contains all the state needed to create a complete graphics
  * pipeline. Use the helper methods to set up common configurations.
  */
@@ -47,7 +47,7 @@ struct PipelineConfig {
     // Color targets
     BlendMode blend_mode = BlendMode::None;
     SDL_GPUTextureFormat color_format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-    
+
     // Depth format (set to invalid to disable depth)
     bool has_depth_target = true;
     SDL_GPUTextureFormat depth_format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
@@ -56,13 +56,13 @@ struct PipelineConfig {
     SDL_GPUSampleCount sample_count = SDL_GPU_SAMPLECOUNT_1;
 
     // Helper methods for common setups
-    
+
     /// Set up for Vertex3D format
     PipelineConfig& with_vertex3d();
-    
+
     /// Set up for SkinnedVertex format
     PipelineConfig& with_skinned_vertex();
-    
+
     /// Set up for Vertex2D format (UI)
     PipelineConfig& with_vertex2d();
 
@@ -90,19 +90,19 @@ struct PipelineConfig {
 
 /**
  * @brief GPU Graphics Pipeline wrapper
- * 
+ *
  * This class wraps an SDL_GPUGraphicsPipeline and provides a clean interface
  * for binding during rendering.
- * 
+ *
  * Usage:
  *   PipelineConfig config;
  *   config.vertex_shader = vs;
  *   config.fragment_shader = fs;
  *   config.with_vertex3d().opaque();
  *   config.color_format = device.swapchain_format();
- *   
+ *
  *   auto pipeline = GPUPipeline::create(device, config);
- *   
+ *
  *   // In render loop:
  *   pipeline->bind(render_pass);
  */
@@ -118,7 +118,7 @@ public:
 
     /**
      * @brief Create a graphics pipeline from configuration
-     * 
+     *
      * @param device The GPU device
      * @param config Pipeline configuration
      * @return Unique pointer to the pipeline, or nullptr on failure
@@ -127,7 +127,7 @@ public:
 
     /**
      * @brief Bind this pipeline for use in a render pass
-     * 
+     *
      * @param render_pass The current render pass
      */
     void bind(SDL_GPURenderPass* render_pass);

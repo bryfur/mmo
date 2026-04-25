@@ -1,12 +1,14 @@
 #pragma once
 
 #include "engine/render_graph/render_graph_resource.hpp"
-#include <SDL3/SDL_gpu.h>
 #include <cstdint>
+#include <SDL3/SDL_gpu.h>
 #include <unordered_map>
 #include <vector>
 
-namespace mmo::engine::gpu { class GPUDevice; }
+namespace mmo::engine::gpu {
+class GPUDevice;
+}
 
 namespace mmo::engine::render_graph {
 
@@ -36,7 +38,10 @@ public:
     uint32_t reuses_this_frame() const noexcept { return reuses_; }
     uint32_t pool_size() const noexcept;
 
-    void begin_frame() noexcept { acquires_ = 0; reuses_ = 0; }
+    void begin_frame() noexcept {
+        acquires_ = 0;
+        reuses_ = 0;
+    }
 
     // Release all textures back into pool keyed by desc (called at end_frame()).
     void release_all();

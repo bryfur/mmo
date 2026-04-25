@@ -16,42 +16,42 @@ struct GraphicsSettings {
     bool show_debug_hud = false;
 
     // Culling settings
-    int draw_distance = 3;    // 0=500, 1=1000, 2=2000, 3=4000, 4=8000, 5=16000, 6=32000
+    int draw_distance = 3; // 0=500, 1=1000, 2=2000, 3=4000, 4=8000, 5=16000, 6=32000
     bool frustum_culling = true;
 
     // Quality settings
-    int anisotropic_filter = 4; // 0=off, 1=2x, 2=4x, 3=8x, 4=16x
-    int vsync_mode = 0;      // 0=immediate, 1=vsync, 2=mailbox
-    int shadow_mode = 2;     // 0=off, 1=hard, 2=PCSS
-    int shadow_cascades = 1; // 0=1, 1=2, 2=3, 3=4
-    int shadow_resolution = 2; // 0=512, 1=1024, 2=2048, 3=4096
-    int ao_mode = 1;         // 0=off, 1=SSAO, 2=GTAO
-    bool bloom_enabled = true;       // Bloom post-processing
-    float bloom_strength = 0.20f;    // Bloom intensity (0.0 - 1.0)
-    bool volumetric_fog = false;     // Atmospheric fog haze (expensive, off by default)
-    bool god_rays = false;           // Light shafts through shadows (requires volumetric_fog)
-    int window_mode = 0;     // 0=windowed, 1=borderless fullscreen, 2=exclusive fullscreen
-    int resolution_index = 0; // index into available native display modes
+    int anisotropic_filter = 4;   // 0=off, 1=2x, 2=4x, 3=8x, 4=16x
+    int vsync_mode = 0;           // 0=immediate, 1=vsync, 2=mailbox
+    int shadow_mode = 2;          // 0=off, 1=hard, 2=PCSS
+    int shadow_cascades = 1;      // 0=1, 1=2, 2=3, 3=4
+    int shadow_resolution = 2;    // 0=512, 1=1024, 2=2048, 3=4096
+    int ao_mode = 1;              // 0=off, 1=SSAO, 2=GTAO
+    bool bloom_enabled = true;    // Bloom post-processing
+    float bloom_strength = 0.20f; // Bloom intensity (0.0 - 1.0)
+    bool volumetric_fog = false;  // Atmospheric fog haze (expensive, off by default)
+    bool god_rays = false;        // Light shafts through shadows (requires volumetric_fog)
+    int window_mode = 0;          // 0=windowed, 1=borderless fullscreen, 2=exclusive fullscreen
+    int resolution_index = 0;     // index into available native display modes
 
     // Tone, exposure, color grading
-    float exposure = 1.0f;          // linear scene multiplier before tonemap; 1.0 = neutral
-    int   tonemap_mode = 0;         // 0=ACES Fitted, 1=ACES Narkowicz, 2=Reinhard, 3=None
-    float contrast = 1.0f;          // post-tonemap contrast; 1.0 = neutral, 1.2 = punchy
-    float saturation = 1.0f;        // post-tonemap saturation; 1.0 = neutral, 0.0 = grayscale
+    float exposure = 1.0f;   // linear scene multiplier before tonemap; 1.0 = neutral
+    int tonemap_mode = 0;    // 0=ACES Fitted, 1=ACES Narkowicz, 2=Reinhard, 3=None
+    float contrast = 1.0f;   // post-tonemap contrast; 1.0 = neutral, 1.2 = punchy
+    float saturation = 1.0f; // post-tonemap saturation; 1.0 = neutral, 0.0 = grayscale
 
     // Lighting feel
-    float ambient_strength = 0.5f;  // shadow-region lift; 0.0 = full black in shadow, 1.0 = fully lit
-    float sun_intensity = 1.0f;     // multiplier on directional sun light
+    float ambient_strength = 0.5f; // shadow-region lift; 0.0 = full black in shadow, 1.0 = fully lit
+    float sun_intensity = 1.0f;    // multiplier on directional sun light
 
     // Bloom
-    float bloom_threshold = 1.0f;   // HDR luminance above which bloom contributes
+    float bloom_threshold = 1.0f; // HDR luminance above which bloom contributes
 
     // AO
-    float ao_strength = 1.0f;       // AO darkening intensity (0..1+, 1 = stock)
-    float ao_radius = 1.0f;         // multiplier on AO sample radius
+    float ao_strength = 1.0f; // AO darkening intensity (0..1+, 1 = stock)
+    float ao_radius = 1.0f;   // multiplier on AO sample radius
 
     // Volumetric fog
-    float fog_density = 0.05f;      // density multiplier
+    float fog_density = 0.05f; // density multiplier
 
     float get_draw_distance() const {
         constexpr float distances[] = {500.0f, 1000.0f, 2000.0f, 4000.0f, 8000.0f, 16000.0f, 32000.0f};
@@ -60,7 +60,9 @@ struct GraphicsSettings {
 
     bool save(const std::string& path) const {
         std::ofstream out(path);
-        if (!out.is_open()) return false;
+        if (!out.is_open()) {
+            return false;
+        }
 
         out << "fog_enabled=" << fog_enabled << "\n";
         out << "grass_enabled=" << grass_enabled << "\n";
@@ -99,32 +101,46 @@ struct GraphicsSettings {
 
     bool load(const std::string& path) {
         std::ifstream in(path);
-        if (!in.is_open()) return false;
+        if (!in.is_open()) {
+            return false;
+        }
 
         std::unordered_map<std::string, std::string> kvs;
         std::string line;
         while (std::getline(in, line)) {
             // Skip empty lines and comments
-            if (line.empty() || line[0] == '#') continue;
+            if (line.empty() || line[0] == '#') {
+                continue;
+            }
             auto eq = line.find('=');
-            if (eq == std::string::npos) continue;
+            if (eq == std::string::npos) {
+                continue;
+            }
             kvs[line.substr(0, eq)] = line.substr(eq + 1);
         }
 
         auto read_bool = [&](const char* key, bool& val) {
             auto it = kvs.find(key);
-            if (it != kvs.end()) val = (it->second != "0");
+            if (it != kvs.end()) {
+                val = (it->second != "0");
+            }
         };
         auto read_int = [&](const char* key, int& val) {
             auto it = kvs.find(key);
             if (it != kvs.end()) {
-                try { val = std::stoi(it->second); } catch (...) { /* ignore malformed values */ }
+                try {
+                    val = std::stoi(it->second);
+                } catch (...) { // NOLINT(bugprone-empty-catch): keep defaults on malformed value
+                }
             }
         };
         auto read_float = [&](const char* key, float& val) {
             auto it = kvs.find(key);
             if (it != kvs.end()) {
-                try { val = std::stof(it->second); } catch (...) { /* ignore malformed values */ }
+                try {
+                    val = std::stof(it->second);
+                } catch (...) { // NOLINT(bugprone-empty-catch): keep defaults on malformed value
+                }
             }
         };
 

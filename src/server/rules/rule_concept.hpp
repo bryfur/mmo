@@ -28,8 +28,8 @@
 
 namespace mmo::server::rules {
 
-template <typename T>
-concept Rule = requires(const typename T::Inputs& in) {
+template<typename T>
+concept Rule = requires(const T::Inputs& in) {
     typename T::Inputs;
     typename T::Result;
     requires std::is_enum_v<typename T::Result>;

@@ -23,18 +23,24 @@ inline Level current_level = Level::Info;
 
 class Stream {
 public:
-    Stream(Level level, std::string_view category)
-        : level_(level), enabled_(level >= current_level) {
-        if (!enabled_) return;
-        const char* tag =
-            level == Level::Debug ? "[DEBUG]" :
-            level == Level::Info  ? "[INFO ]" :
-            level == Level::Warn  ? "[WARN ]" :
-                                    "[ERROR]";
+    Stream(Level level, std::string_view category) : level_(level), enabled_(level >= current_level) {
+        if (!enabled_) {
+            {
+                return;
+            }
+        }
+        const char* tag = level == Level::Debug  ? "[DEBUG]"
+                          : level == Level::Info ? "[INFO ]"
+                          : level == Level::Warn ? "[WARN ]"
+                                                 : "[ERROR]";
         buf_ << tag << " [" << category << "] ";
     }
     ~Stream() {
-        if (!enabled_) return;
+        if (!enabled_) {
+            {
+                return;
+            }
+        }
         buf_ << '\n';
         auto& sink = (level_ >= Level::Warn) ? std::cerr : std::cout;
         sink << buf_.str();
@@ -42,9 +48,12 @@ public:
     Stream(const Stream&) = delete;
     Stream& operator=(const Stream&) = delete;
 
-    template <typename T>
-    Stream& operator<<(T&& v) {
-        if (enabled_) buf_ << std::forward<T>(v);
+    template<typename T> Stream& operator<<(T&& v) {
+        if (enabled_) {
+            {
+                buf_ << std::forward<T>(v);
+            }
+        }
         return *this;
     }
 
@@ -57,6 +66,6 @@ private:
 } // namespace mmo::server::log
 
 #define LOG_DEBUG(cat) ::mmo::server::log::Stream(::mmo::server::log::Level::Debug, cat)
-#define LOG_INFO(cat)  ::mmo::server::log::Stream(::mmo::server::log::Level::Info,  cat)
-#define LOG_WARN(cat)  ::mmo::server::log::Stream(::mmo::server::log::Level::Warn,  cat)
+#define LOG_INFO(cat) ::mmo::server::log::Stream(::mmo::server::log::Level::Info, cat)
+#define LOG_WARN(cat) ::mmo::server::log::Stream(::mmo::server::log::Level::Warn, cat)
 #define LOG_ERROR(cat) ::mmo::server::log::Stream(::mmo::server::log::Level::Error, cat)

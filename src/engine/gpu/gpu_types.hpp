@@ -1,10 +1,10 @@
 #pragma once
 
-#include <SDL3/SDL_gpu.h>
+#include <cstdint>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <SDL3/SDL_gpu.h>
 #include <vector>
-#include <cstdint>
 
 namespace mmo::engine::gpu {
 
@@ -102,24 +102,32 @@ struct alignas(16) BoneUniforms {
 
 enum class TextureFormat {
     RGBA8,
-    RGBA8_SRGB,    // sRGB-encoded base-color: sampler linearizes automatically
+    RGBA8_SRGB, // sRGB-encoded base-color: sampler linearizes automatically
     BGRA8,
     R8,
-    R16,           // 16-bit unsigned normalized (for heightmaps)
-    D32F,          // Depth 32-bit float
-    D24S8,         // Depth 24 + Stencil 8
+    R16,   // 16-bit unsigned normalized (for heightmaps)
+    D32F,  // Depth 32-bit float
+    D24S8, // Depth 24 + Stencil 8
 };
 
 inline SDL_GPUTextureFormat to_sdl_format(TextureFormat format) {
     switch (format) {
-        case TextureFormat::RGBA8:      return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-        case TextureFormat::RGBA8_SRGB: return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB;
-        case TextureFormat::BGRA8:      return SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM;
-        case TextureFormat::R8:         return SDL_GPU_TEXTUREFORMAT_R8_UNORM;
-        case TextureFormat::R16:        return SDL_GPU_TEXTUREFORMAT_R16_UNORM;
-        case TextureFormat::D32F:       return SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
-        case TextureFormat::D24S8:      return SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT;
-        default:                        return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        case TextureFormat::RGBA8:
+            return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+        case TextureFormat::RGBA8_SRGB:
+            return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB;
+        case TextureFormat::BGRA8:
+            return SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM;
+        case TextureFormat::R8:
+            return SDL_GPU_TEXTUREFORMAT_R8_UNORM;
+        case TextureFormat::R16:
+            return SDL_GPU_TEXTUREFORMAT_R16_UNORM;
+        case TextureFormat::D32F:
+            return SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+        case TextureFormat::D24S8:
+            return SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT;
+        default:
+            return SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
     }
 }
 
@@ -128,20 +136,20 @@ inline SDL_GPUTextureFormat to_sdl_format(TextureFormat format) {
 // =============================================================================
 
 enum class BlendMode {
-    None,           // No blending (opaque)
-    Alpha,          // Standard alpha blending
-    Additive,       // Additive blending (for effects)
-    Multiply,       // Multiply blending
+    None,     // No blending (opaque)
+    Alpha,    // Standard alpha blending
+    Additive, // Additive blending (for effects)
+    Multiply, // Multiply blending
 };
 
 inline SDL_GPUColorTargetBlendState get_blend_state(BlendMode mode) {
     SDL_GPUColorTargetBlendState state = {};
-    
+
     switch (mode) {
         case BlendMode::None:
             state.enable_blend = false;
             break;
-            
+
         case BlendMode::Alpha:
             state.enable_blend = true;
             state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
@@ -151,7 +159,7 @@ inline SDL_GPUColorTargetBlendState get_blend_state(BlendMode mode) {
             state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE_MINUS_SRC_ALPHA;
             state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
             break;
-            
+
         case BlendMode::Additive:
             state.enable_blend = true;
             state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_SRC_ALPHA;
@@ -161,7 +169,7 @@ inline SDL_GPUColorTargetBlendState get_blend_state(BlendMode mode) {
             state.dst_alpha_blendfactor = SDL_GPU_BLENDFACTOR_ONE;
             state.alpha_blend_op = SDL_GPU_BLENDOP_ADD;
             break;
-            
+
         case BlendMode::Multiply:
             state.enable_blend = true;
             state.src_color_blendfactor = SDL_GPU_BLENDFACTOR_DST_COLOR;
@@ -177,9 +185,9 @@ inline SDL_GPUColorTargetBlendState get_blend_state(BlendMode mode) {
             state.enable_blend = false;
             break;
     }
-    
-    state.color_write_mask = SDL_GPU_COLORCOMPONENT_R | SDL_GPU_COLORCOMPONENT_G | 
-                              SDL_GPU_COLORCOMPONENT_B | SDL_GPU_COLORCOMPONENT_A;
+
+    state.color_write_mask =
+        SDL_GPU_COLORCOMPONENT_R | SDL_GPU_COLORCOMPONENT_G | SDL_GPU_COLORCOMPONENT_B | SDL_GPU_COLORCOMPONENT_A;
     return state;
 }
 
@@ -190,11 +198,11 @@ inline SDL_GPUColorTargetBlendState get_blend_state(BlendMode mode) {
 /// Get vertex attributes for Vertex3D
 inline std::vector<SDL_GPUVertexAttribute> get_vertex3d_attributes() {
     return {
-        { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(Vertex3D, position) },
-        { 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(Vertex3D, normal) },
-        { 2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Vertex3D, texcoord) },
-        { 3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(Vertex3D, color) },
-        { 4, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(Vertex3D, tangent) },
+        {0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(Vertex3D, position)},
+        {1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(Vertex3D, normal)},
+        {2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Vertex3D, texcoord)},
+        {3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(Vertex3D, color)},
+        {4, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(Vertex3D, tangent)},
     };
 }
 
@@ -211,13 +219,13 @@ inline SDL_GPUVertexBufferDescription get_vertex3d_buffer_desc() {
 /// Get vertex attributes for SkinnedVertex
 inline std::vector<SDL_GPUVertexAttribute> get_skinned_vertex_attributes() {
     return {
-        { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(SkinnedVertex, position) },
-        { 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(SkinnedVertex, normal) },
-        { 2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(SkinnedVertex, texcoord) },
-        { 3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SkinnedVertex, color) },
-        { 4, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SkinnedVertex, tangent) },
-        { 5, 0, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4, offsetof(SkinnedVertex, joints) },
-        { 6, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SkinnedVertex, weights) },
+        {0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(SkinnedVertex, position)},
+        {1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3, offsetof(SkinnedVertex, normal)},
+        {2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(SkinnedVertex, texcoord)},
+        {3, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SkinnedVertex, color)},
+        {4, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SkinnedVertex, tangent)},
+        {5, 0, SDL_GPU_VERTEXELEMENTFORMAT_UBYTE4, offsetof(SkinnedVertex, joints)},
+        {6, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(SkinnedVertex, weights)},
     };
 }
 
@@ -234,9 +242,9 @@ inline SDL_GPUVertexBufferDescription get_skinned_vertex_buffer_desc() {
 /// Get vertex attributes for Vertex2D
 inline std::vector<SDL_GPUVertexAttribute> get_vertex2d_attributes() {
     return {
-        { 0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Vertex2D, position) },
-        { 1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Vertex2D, texcoord) },
-        { 2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(Vertex2D, color) },
+        {0, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Vertex2D, position)},
+        {1, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2, offsetof(Vertex2D, texcoord)},
+        {2, 0, SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, offsetof(Vertex2D, color)},
     };
 }
 

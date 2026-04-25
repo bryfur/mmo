@@ -23,8 +23,7 @@ fs::path make_temp_dir(const std::string& prefix) {
     std::random_device rd;
     auto pid = static_cast<uint32_t>(getpid());
     auto id = counter.fetch_add(1) ^ rd();
-    auto p = fs::temp_directory_path() /
-             ("mmo_" + prefix + "_" + std::to_string(pid) + "_" + std::to_string(id));
+    auto p = fs::temp_directory_path() / ("mmo_" + prefix + "_" + std::to_string(pid) + "_" + std::to_string(id));
     fs::create_directories(p);
     return p;
 }
@@ -39,7 +38,9 @@ void write_file(const fs::path& p, const std::string& contents) {
 bool drain_until(FileWatcher& w, std::function<bool()> predicate, int budget = 80) {
     for (int i = 0; i < budget; ++i) {
         w.poll_main_thread();
-        if (predicate()) return true;
+        if (predicate()) {
+            return true;
+        }
         std::this_thread::sleep_for(50ms);
     }
     return false;
@@ -51,9 +52,7 @@ protected:
         // Use 50ms poll interval for snappy tests.
         ASSERT_TRUE(watcher.init(50ms));
     }
-    void TearDown() override {
-        watcher.shutdown();
-    }
+    void TearDown() override { watcher.shutdown(); }
     FileWatcher watcher;
 };
 
@@ -89,11 +88,12 @@ TEST_F(FileWatcherFixture, DirectoryWatchHonoursExtensionFilter) {
 
     std::atomic<int> txt_hits{0};
     std::atomic<int> any_hits{0};
-    auto h = watcher.watch_directory(dir, ".txt",
-        [&](const fs::path& p) {
-            any_hits.fetch_add(1);
-            if (p.extension() == ".txt") txt_hits.fetch_add(1);
-        });
+    auto h = watcher.watch_directory(dir, ".txt", [&](const fs::path& p) {
+        any_hits.fetch_add(1);
+        if (p.extension() == ".txt") {
+            txt_hits.fetch_add(1);
+        }
+    });
     ASSERT_NE(h, FileWatcher::k_invalid_handle);
 
     std::this_thread::sleep_for(150ms);
@@ -145,8 +145,7 @@ TEST_F(FileWatcherFixture, MultipleWatchersOnSameFileBothFire) {
     watcher.poll_main_thread();
 
     write_file(file, "v1");
-    EXPECT_TRUE(drain_until(watcher,
-                            [&] { return a.load() >= 1 && b.load() >= 1; }));
+    EXPECT_TRUE(drain_until(watcher, [&] { return a.load() >= 1 && b.load() >= 1; }));
 
     fs::remove_all(dir);
 }

@@ -1,7 +1,7 @@
-#include <gtest/gtest.h>
 #include "engine/scene/frustum.hpp"
-#include <glm/glm.hpp>
 #include <cmath>
+#include <glm/glm.hpp>
+#include <gtest/gtest.h>
 
 using namespace mmo::engine::scene;
 

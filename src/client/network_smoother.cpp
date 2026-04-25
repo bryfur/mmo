@@ -4,10 +4,7 @@
 
 namespace mmo::client {
 
-void smooth_step(ecs::Transform& transform,
-                 ecs::Interpolation& interp,
-                 float dt,
-                 float interpolation_time) {
+void smooth_step(ecs::Transform& transform, ecs::Interpolation& interp, float dt, float interpolation_time) {
     // Guard against zero/negative interpolation_time so a misconfiguration
     // can't divide-by-zero or run alpha backwards.
     if (interpolation_time <= 0.0f) {
@@ -50,11 +47,10 @@ void NetworkSmoother::update(entt::registry& registry, float dt) {
         // Static entities (trees, rocks, buildings) reach alpha == 1 on the first
         // snapshot and never receive another, so skipping them here avoids running
         // smoothstep math on hundreds of entities every frame.
-        if (interp.alpha >= 1.0f) continue;
-        smooth_step(view.get<ecs::Transform>(entity),
-                    interp,
-                    dt,
-                    interpolation_time_);
+        if (interp.alpha >= 1.0f) {
+            continue;
+        }
+        smooth_step(view.get<ecs::Transform>(entity), interp, dt, interpolation_time_);
     }
 }
 

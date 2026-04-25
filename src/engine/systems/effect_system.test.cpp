@@ -1,6 +1,6 @@
-#include <gtest/gtest.h>
 #include "engine/systems/effect_system.hpp"
 #include <cmath>
+#include <gtest/gtest.h>
 
 using namespace mmo::engine::systems;
 using namespace mmo::engine;
@@ -151,7 +151,7 @@ TEST(EffectInstance, IsNotCompleteWhenEmitterHasLiveParticles) {
     EffectInstance effect;
     EmitterInstance e1;
     e1.definition = &def;
-    e1.age = 5.0f; // past duration
+    e1.age = 5.0f;                      // past duration
     e1.particles.push_back(Particle{}); // but still has particles
 
     effect.emitters.push_back(e1);
@@ -168,7 +168,7 @@ protected:
     std::function<float(float, float)> flat_terrain = [](float, float) { return 0.0f; };
 
     // A basic burst emitter definition
-    EmitterDefinition make_burst_emitter(int count = 3, float lifetime = 1.0f) {
+    static EmitterDefinition make_burst_emitter(int count = 3, float lifetime = 1.0f) {
         EmitterDefinition def;
         def.spawn_mode = SpawnMode::BURST;
         def.spawn_count = count;
@@ -457,7 +457,7 @@ TEST_F(EffectSystemTest, ColorGradientInterpolatesOverLifetime) {
     emitter_def.velocity.speed = 0.0f;
     emitter_def.appearance.use_color_gradient = true;
     emitter_def.appearance.color_tint = {1, 0, 0, 1}; // red
-    emitter_def.appearance.color_end = {0, 0, 1, 1};   // blue
+    emitter_def.appearance.color_end = {0, 0, 1, 1};  // blue
     def.emitters.push_back(emitter_def);
 
     system.spawn_effect(&def, {0, 0, 0});

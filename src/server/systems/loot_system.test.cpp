@@ -1,8 +1,8 @@
-#include <gtest/gtest.h>
 #include "server/systems/loot_system.hpp"
 #include "server/ecs/game_components.hpp"
 #include <entt/entt.hpp>
 #include <filesystem>
+#include <gtest/gtest.h>
 #include <random>
 
 using namespace mmo::server;
@@ -14,9 +14,14 @@ std::string find_data_dir() {
     fs::path cur = fs::current_path();
     for (int i = 0; i < 6; ++i) {
         fs::path candidate = cur / "data";
-        if (fs::exists(candidate / "classes.json")) return candidate.string();
-        if (cur.has_parent_path()) cur = cur.parent_path();
-        else break;
+        if (fs::exists(candidate / "classes.json")) {
+            return candidate.string();
+        }
+        if (cur.has_parent_path()) {
+            cur = cur.parent_path();
+        } else {
+            break;
+        }
     }
     return "data";
 }
@@ -72,7 +77,7 @@ TEST(LootSystem, OverflowReportsLostItemsWhenInventoryFull) {
     EXPECT_EQ(inv.used_slots, ecs::Inventory::MAX_SLOTS);
 
     LootResult loot;
-    loot.items.emplace_back("runic_blade", 1);  // new item, no stacking
+    loot.items.emplace_back("runic_blade", 1); // new item, no stacking
 
     auto overflow = give_loot(registry, player, loot);
     ASSERT_EQ(overflow.size(), 1u);
@@ -93,7 +98,7 @@ TEST(LootSystem, OverflowStacksIntoExistingSlotWhenPossible) {
     inv.add_item("wild_herbs", 1, 99);
 
     LootResult loot;
-    loot.items.emplace_back("wild_herbs", 5);  // should stack on the existing slot
+    loot.items.emplace_back("wild_herbs", 5); // should stack on the existing slot
 
     auto overflow = give_loot(registry, player, loot);
     EXPECT_TRUE(overflow.empty());
@@ -107,10 +112,10 @@ TEST(LootSystem, OverflowStacksIntoExistingSlotWhenPossible) {
 TEST(LootSystem, InventoryAddAndRemoveWorkWithStacks) {
     ecs::Inventory inv;
     EXPECT_TRUE(inv.add_item("wild_herbs", 50, 99));
-    EXPECT_TRUE(inv.add_item("wild_herbs", 49, 99));  // stacks into same slot
+    EXPECT_TRUE(inv.add_item("wild_herbs", 49, 99)); // stacks into same slot
     EXPECT_EQ(inv.count_item("wild_herbs"), 99);
     EXPECT_EQ(inv.used_slots, 1);
-    EXPECT_TRUE(inv.add_item("wild_herbs", 50, 99));  // overflows into a new slot
+    EXPECT_TRUE(inv.add_item("wild_herbs", 50, 99)); // overflows into a new slot
     EXPECT_EQ(inv.used_slots, 2);
     EXPECT_EQ(inv.count_item("wild_herbs"), 149);
 
@@ -123,8 +128,7 @@ TEST(LootSystem, InventoryRejectsOverflowItemsInFullInventory) {
     for (int i = 0; i < ecs::Inventory::MAX_SLOTS; ++i) {
         inv.add_item("x_" + std::to_string(i), 1, 1);
     }
-    EXPECT_FALSE(inv.add_item("new_item", 1, 1))
-        << "add_item should fail when inventory is full and cannot stack.";
+    EXPECT_FALSE(inv.add_item("new_item", 1, 1)) << "add_item should fail when inventory is full and cannot stack.";
 }
 
 // ============================================================================
@@ -174,8 +178,12 @@ TEST(LootSystemSeeded, DifferentSeedsCanDiverge) {
     for (int i = 0; i < 20 && !diverged; ++i) {
         auto r1 = roll_loot(monster, cfg, rng1);
         auto r2 = roll_loot(monster, cfg, rng2);
-        if (r1.gold != r2.gold) diverged = true;
-        if (r1.items.size() != r2.items.size()) diverged = true;
+        if (r1.gold != r2.gold) {
+            diverged = true;
+        }
+        if (r1.items.size() != r2.items.size()) {
+            diverged = true;
+        }
     }
     // We don't REQUIRE divergence (some tables could be trivial), but
     // this test documents the API: independent seeds produce independent

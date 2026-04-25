@@ -8,8 +8,8 @@
 // "+1 per kill" in multiple places, and would_complete() for callers that
 // need to know before committing progress.
 
-#include "server/rules/rule_concept.hpp"
 #include "server/rules/objective.hpp"
+#include "server/rules/rule_concept.hpp"
 
 #include <cstdint>
 #include <string_view>
@@ -34,11 +34,16 @@ public:
     };
 
     [[nodiscard]] static constexpr Result check(const Inputs& in) noexcept {
-        if (in.state.complete) return Result::NotApplicable;
-        if (in.def.type != "kill" && in.def.type != "kill_in_area") return Result::NotApplicable;
-        if (!kill_target_matches(in.def.target, in.monster_type_id)) return Result::TargetMismatch;
-        if (in.def.type == "kill_in_area"
-            && !in_objective_area(in.def, in.kill_x, in.kill_z)) {
+        if (in.state.complete) {
+            return Result::NotApplicable;
+        }
+        if (in.def.type != "kill" && in.def.type != "kill_in_area") {
+            return Result::NotApplicable;
+        }
+        if (!kill_target_matches(in.def.target, in.monster_type_id)) {
+            return Result::TargetMismatch;
+        }
+        if (in.def.type == "kill_in_area" && !in_objective_area(in.def, in.kill_x, in.kill_z)) {
             return Result::OutsideArea;
         }
         return Result::Ok;
@@ -50,8 +55,7 @@ public:
 
     /// Would this event complete the objective if applied?
     [[nodiscard]] static constexpr bool would_complete(const Inputs& in) noexcept {
-        return check(in) == Result::Ok
-            && in.state.current + 1 >= in.def.required;
+        return check(in) == Result::Ok && in.state.current + 1 >= in.def.required;
     }
 };
 static_assert(Rule<KillObjective>);

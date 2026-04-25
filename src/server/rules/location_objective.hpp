@@ -4,8 +4,8 @@
 // visit/explore quest objective. Proximity-based; completes on first
 // successful check. See rule_concept.hpp for the Rule contract.
 
-#include "server/rules/rule_concept.hpp"
 #include "server/rules/objective.hpp"
+#include "server/rules/rule_concept.hpp"
 
 #include <cstdint>
 
@@ -14,8 +14,8 @@ namespace mmo::server::rules {
 class LocationObjective {
 public:
     enum class Result : std::uint8_t {
-        Ok,             // player is inside the objective circle this tick
-        NotApplicable,  // wrong type, or already complete
+        Ok,            // player is inside the objective circle this tick
+        NotApplicable, // wrong type, or already complete
         OutsideArea,
     };
 
@@ -27,9 +27,15 @@ public:
     };
 
     [[nodiscard]] static constexpr Result check(const Inputs& in) noexcept {
-        if (in.state.complete) return Result::NotApplicable;
-        if (in.def.type != "visit" && in.def.type != "explore") return Result::NotApplicable;
-        if (!in_objective_area(in.def, in.player_x, in.player_z)) return Result::OutsideArea;
+        if (in.state.complete) {
+            return Result::NotApplicable;
+        }
+        if (in.def.type != "visit" && in.def.type != "explore") {
+            return Result::NotApplicable;
+        }
+        if (!in_objective_area(in.def, in.player_x, in.player_z)) {
+            return Result::OutsideArea;
+        }
         return Result::Ok;
     }
 };

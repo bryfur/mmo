@@ -53,12 +53,18 @@ enum class EnvironmentType : uint8_t {
 /// Map NPC type index to string for quest/dialogue lookup.
 inline const char* npc_type_to_string(int npc_type) {
     switch (npc_type) {
-        case 1: return "merchant";
-        case 2: return "guard";
-        case 3: return "blacksmith";
-        case 4: return "innkeeper";
-        case 5: return "villager";
-        default: return "villager";
+        case 1:
+            return "merchant";
+        case 2:
+            return "guard";
+        case 3:
+            return "blacksmith";
+        case 4:
+            return "innkeeper";
+        case 5:
+            return "villager";
+        default:
+            return "villager";
     }
 }
 

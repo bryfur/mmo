@@ -7,9 +7,9 @@
 #include "server.hpp"
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <mutex>
-#include <string.h>
 #include <string>
 #include <utility>
 #include <vector>
@@ -18,10 +18,7 @@ namespace mmo::server {
 
 using namespace mmo::protocol;
 
-Session::Session(tcp::socket socket, Server& server)
-    : socket_(std::move(socket))
-    , server_(server) {
-}
+Session::Session(tcp::socket socket, Server& server) : socket_(std::move(socket)), server_(server) {}
 
 Session::~Session() {
     if (player_id_ != 0) {
@@ -49,52 +46,48 @@ void Session::close() {
 
 void Session::read_header() {
     auto self = shared_from_this();
-    asio::async_read(socket_,
-        asio::buffer(header_buffer_),
-        [this, self](asio::error_code ec, std::size_t /*length*/) {
-            if (!ec) {
-                current_header_.deserialize(header_buffer_);
-                constexpr uint32_t MAX_PAYLOAD_SIZE = 4 * 1024 * 1024; // 4 MB
-                if (current_header_.payload_size > MAX_PAYLOAD_SIZE) {
-                    std::cerr << "Session: payload too large (" << current_header_.payload_size << " bytes), disconnecting" << std::endl;
-                    close();
-                    return;
-                }
-                if (current_header_.payload_size > 0) {
-                    payload_buffer_.resize(current_header_.payload_size);
-                    read_payload();
-                } else {
-                    dispatch_packet();
-                    read_header();
-                }
-            } else {
-                std::cout << "Session read error: " << ec.message() << std::endl;
+    asio::async_read(socket_, asio::buffer(header_buffer_), [this, self](asio::error_code ec, std::size_t /*length*/) {
+        if (!ec) {
+            current_header_.deserialize(header_buffer_);
+            constexpr uint32_t MAX_PAYLOAD_SIZE = 4 * 1024 * 1024; // 4 MB
+            if (current_header_.payload_size > MAX_PAYLOAD_SIZE) {
+                std::cerr << "Session: payload too large (" << current_header_.payload_size << " bytes), disconnecting"
+                          << '\n';
                 close();
+                return;
             }
-        });
+            if (current_header_.payload_size > 0) {
+                payload_buffer_.resize(current_header_.payload_size);
+                read_payload();
+            } else {
+                dispatch_packet();
+                read_header();
+            }
+        } else {
+            std::cout << "Session read error: " << ec.message() << '\n';
+            close();
+        }
+    });
 }
 
 void Session::read_payload() {
     auto self = shared_from_this();
-    asio::async_read(socket_,
-        asio::buffer(payload_buffer_),
-        [this, self](asio::error_code ec, std::size_t /*length*/) {
-            if (!ec) {
-                dispatch_packet();
-                read_header();
-            } else {
-                std::cout << "Session payload read error: " << ec.message() << std::endl;
-                close();
-            }
-        });
+    asio::async_read(socket_, asio::buffer(payload_buffer_), [this, self](asio::error_code ec, std::size_t /*length*/) {
+        if (!ec) {
+            dispatch_packet();
+            read_header();
+        } else {
+            std::cout << "Session payload read error: " << ec.message() << '\n';
+            close();
+        }
+    });
 }
 
 void Session::dispatch_packet() {
     handle_packet(current_header_, payload_buffer_);
 }
 
-void Session::handle_packet(const PacketHeader& header,
-                            const std::vector<uint8_t>& payload_buffer) {
+void Session::handle_packet(const PacketHeader& header, const std::vector<uint8_t>& payload_buffer) {
     switch (header.type) {
         case MessageType::Connect: {
             ConnectMsg msg;
@@ -103,12 +96,14 @@ void Session::handle_packet(const PacketHeader& header,
             }
             if (msg.protocol_version != PROTOCOL_VERSION) {
                 std::cout << "Protocol version mismatch: client=" << msg.protocol_version
-                          << " server=" << PROTOCOL_VERSION << ", disconnecting" << std::endl;
+                          << " server=" << PROTOCOL_VERSION << ", disconnecting" << '\n';
                 close();
                 break;
             }
             std::string name(msg.name, strnlen(msg.name, sizeof(msg.name)));
-            if (name.empty()) name = "Player";
+            if (name.empty()) {
+                name = "Player";
+            }
             server_.on_client_connect(shared_from_this(), name);
             break;
         }
@@ -267,7 +262,9 @@ void Session::handle_packet(const PacketHeader& header,
         }
 
         case MessageType::PartyLeave: {
-            if (player_id_ != 0) server_.on_party_leave(player_id_);
+            if (player_id_ != 0) {
+                server_.on_party_leave(player_id_);
+            }
             break;
         }
 
@@ -291,7 +288,7 @@ void Session::handle_packet(const PacketHeader& header,
         }
 
         default:
-            std::cout << "Unknown message type: " << static_cast<int>(header.type) << std::endl;
+            std::cout << "Unknown message type: " << static_cast<int>(header.type) << '\n';
             break;
     }
 }
@@ -301,27 +298,25 @@ void Session::do_write() {
         writing_ = false;
         return;
     }
-    
+
     auto self = shared_from_this();
     auto& front = write_queue_.front();
-    asio::async_write(socket_,
-        asio::buffer(front),
-        [this, self](asio::error_code ec, std::size_t /*length*/) {
-            std::lock_guard<std::mutex> lock(write_mutex_);
-            if (!ec) {
-                write_queue_.pop_front();
-                if (!write_queue_.empty()) {
-                    do_write();
-                } else {
-                    writing_ = false;
-                }
+    asio::async_write(socket_, asio::buffer(front), [this, self](asio::error_code ec, std::size_t /*length*/) {
+        std::lock_guard<std::mutex> lock(write_mutex_);
+        if (!ec) {
+            write_queue_.pop_front();
+            if (!write_queue_.empty()) {
+                do_write();
             } else {
-                std::cout << "Session write error: " << ec.message() << std::endl;
-                write_queue_.clear();
                 writing_ = false;
-                close();
             }
-        });
+        } else {
+            std::cout << "Session write error: " << ec.message() << '\n';
+            write_queue_.clear();
+            writing_ = false;
+            close();
+        }
+    });
 }
 
 } // namespace mmo::server

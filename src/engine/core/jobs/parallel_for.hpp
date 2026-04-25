@@ -18,9 +18,10 @@ inline constexpr std::size_t PARALLEL_MIN_TOTAL = 256;
 
 // Fn signature: void(size_t chunk_begin, size_t chunk_end).
 // Chunk form is used (not per-index) so tight loops avoid per-element call overhead.
-template <typename Fn>
-void parallel_for(std::size_t begin, std::size_t end, Fn&& fn, std::size_t grain = 0) {
-    if (end <= begin) return;
+template<typename Fn> void parallel_for(std::size_t begin, std::size_t end, Fn&& fn, std::size_t grain = 0) {
+    if (end <= begin) {
+        return;
+    }
     const std::size_t total = end - begin;
 
     auto& js = JobSystem::instance();
@@ -50,9 +51,7 @@ void parallel_for(std::size_t begin, std::size_t end, Fn&& fn, std::size_t grain
     handles.reserve((total + grain - 1) / grain);
     for (std::size_t i = begin; i < end; i += grain) {
         const std::size_t chunk_end = std::min(end, i + grain);
-        handles.push_back(js.submit([i, chunk_end, fn]() {
-            fn(i, chunk_end);
-        }));
+        handles.push_back(js.submit([i, chunk_end, fn]() { fn(i, chunk_end); }));
     }
     for (auto& h : handles) {
         js.wait(h);

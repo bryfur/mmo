@@ -4,15 +4,16 @@
  * Transforms skinned vertices into light space for shadow map generation.
  */
 
-#define MAX_BONES 64
+#define MAX_BONES 128
 
 struct VSInput {
     [[vk::location(0)]] float3 position : POSITION;
     [[vk::location(1)]] float3 normal : NORMAL;
     [[vk::location(2)]] float2 texCoord : TEXCOORD0;
     [[vk::location(3)]] float4 color : COLOR0;
-    [[vk::location(4)]] uint4 joints : BLENDINDICES;  // uint4 matches UBYTE4 vertex format
-    [[vk::location(5)]] float4 weights : BLENDWEIGHT;
+    [[vk::location(4)]] float4 tangent : TANGENT;
+    [[vk::location(5)]] uint4 joints : BLENDINDICES;  // uint4 matches UBYTE4 vertex format
+    [[vk::location(6)]] float4 weights : BLENDWEIGHT;
 };
 
 struct VSOutput {

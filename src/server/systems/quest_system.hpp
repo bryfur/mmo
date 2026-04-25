@@ -27,10 +27,12 @@ bool can_accept_quest(entt::registry& registry, entt::entity player, const Quest
 /// Accept a quest for a player
 bool accept_quest(entt::registry& registry, entt::entity player, const std::string& quest_id, const GameConfig& config);
 
-/// Update kill objectives for a player when they kill a monster.
-/// Returns list of changes for network notification.
+/// Update kill objectives for a player when they kill a monster. The
+/// monster's world position (kill_x, kill_z) is used to match kill_in_area
+/// objectives. Returns list of changes for network notification.
 std::vector<QuestChange> on_monster_killed(entt::registry& registry, entt::entity player,
-                                            const std::string& monster_type_id, const GameConfig& config);
+                                            const std::string& monster_type_id, const GameConfig& config,
+                                            float kill_x = 0.0f, float kill_z = 0.0f);
 
 /// Update visit objectives for a player based on their position.
 /// Returns list of changes for network notification.

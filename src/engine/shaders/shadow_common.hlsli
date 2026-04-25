@@ -33,6 +33,7 @@ float3 getShadowCoord(float3 worldPos, int cascade) {
     return projCoords;
 }
 
+// returns raw [0,1] visibility, ambient applied by caller
 float calcShadow(float3 worldPos, float depth) {
     if (shadowEnabled < 0.5) return 1.0;
 
@@ -44,7 +45,8 @@ float calcShadow(float3 worldPos, float depth) {
         sc.z < 0.0 || sc.z > 1.0)
         return 1.0;
 
-    float bias = 0.005;
+    static const float cascadeBiasScale[4] = { 1.0, 2.0, 4.0, 8.0 };
+    float bias = 0.0015 * cascadeBiasScale[cascade];
 
     // Hard shadows with 4-tap PCF (mode 1)
     if (shadowEnabled < 1.5) {
@@ -57,7 +59,7 @@ float calcShadow(float3 worldPos, float depth) {
             shadow += (d < sc.z - bias) ? 0.0 : 1.0;
         }
         shadow /= 4.0;
-        return lerp(0.3, 1.0, shadow);
+        return shadow;
     }
 
     // PCSS (mode 2)
@@ -92,5 +94,5 @@ float calcShadow(float3 worldPos, float depth) {
     }
     shadow /= 16.0;
 
-    return lerp(0.3, 1.0, shadow);
+    return shadow;
 }

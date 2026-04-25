@@ -74,6 +74,7 @@ size_t GPUTexture::get_bytes_per_pixel(SDL_GPUTextureFormat format) {
         case SDL_GPU_TEXTUREFORMAT_R16_UNORM:
             return 2;
         case SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM:
+        case SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM_SRGB:
         case SDL_GPU_TEXTUREFORMAT_B8G8R8A8_UNORM:
         case SDL_GPU_TEXTUREFORMAT_D32_FLOAT:
         case SDL_GPU_TEXTUREFORMAT_D24_UNORM_S8_UINT:
@@ -81,6 +82,26 @@ size_t GPUTexture::get_bytes_per_pixel(SDL_GPUTextureFormat format) {
         default:
             return 4;
     }
+}
+
+bool GPUTexture::reload_from_file(const std::string& path, bool generate_mipmaps) {
+    if (!device_) return false;
+    auto fresh = load_from_file(*device_, path, generate_mipmaps);
+    if (!fresh) return false;
+
+    if (texture_) {
+        device_->release_texture(texture_);
+    }
+    texture_ = fresh->texture_;
+    width_ = fresh->width_;
+    height_ = fresh->height_;
+    format_ = fresh->format_;
+    mip_levels_ = fresh->mip_levels_;
+    layers_ = fresh->layers_;
+    // Prevent fresh's destructor from releasing the texture we just stole.
+    fresh->texture_ = nullptr;
+    fresh->device_ = nullptr;
+    return true;
 }
 
 std::unique_ptr<GPUTexture> GPUTexture::load_from_file(GPUDevice& device,

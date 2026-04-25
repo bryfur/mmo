@@ -1,6 +1,6 @@
-#include "gameplay_hud.hpp"
+#include "client/hud/widgets.hpp"
+#include "client/hud/hud_layout.hpp"
 #include <algorithm>
-#include <cmath>
 #include <cstdio>
 #include <cstring>
 
@@ -8,17 +8,9 @@ namespace mmo::client {
 
 using engine::scene::UIScene;
 using namespace engine::ui_colors;
-
-// ============================================================================
-// Helper: compute alpha-faded color
-// ============================================================================
-
-uint32_t fade_color(uint32_t color, float alpha) {
-    if (alpha >= 1.0f) return color;
-    if (alpha <= 0.0f) return color & 0x00FFFFFF;
-    uint32_t a = static_cast<uint32_t>(((color >> 24) & 0xFF) * alpha);
-    return (a << 24) | (color & 0x00FFFFFF);
-}
+using hud_layout::fade_color;
+using hud_layout::bar_ratio;
+using hud_layout::linear_fade;
 
 // ============================================================================
 // Health bar - bottom-left
@@ -38,15 +30,11 @@ void build_health_bar(UIScene& ui, const HUDState& hud, float /*screen_w*/, floa
     // Background
     ui.add_filled_rect(x, y, bar_width, bar_height, 0xFF1A0000);
 
-    // Fill
-    float hp_ratio = (hud.max_health > 0) ? hud.health / hud.max_health : 0.0f;
-    hp_ratio = std::min(hp_ratio, 1.0f);
+    // Fill (color shifts green -> orange -> red as health drops)
+    const float hp_ratio = bar_ratio(hud.health, hud.max_health);
     if (hp_ratio > 0.0f) {
-        // Color shifts from green to red as health decreases
-        uint32_t fill_color = 0xFF0000FF; // green in ABGR
-        if (hp_ratio < 0.3f) fill_color = 0xFF0000CC; // red
-        else if (hp_ratio < 0.6f) fill_color = 0xFF00AAFF; // yellow/orange
-        ui.add_filled_rect(x, y, bar_width * hp_ratio, bar_height, fill_color);
+        ui.add_filled_rect(x, y, bar_width * hp_ratio, bar_height,
+                           hud_layout::health_bar_color(hp_ratio));
     }
 
     // Text
@@ -74,10 +62,8 @@ void build_xp_bar(UIScene& ui, const HUDState& hud, float /*screen_w*/, float sc
     ui.add_filled_rect(x, y, bar_width, bar_height, hud_colors::XP_BG);
 
     // XP fill
-    float xp_ratio = (hud.xp_to_next_level > 0)
-        ? static_cast<float>(hud.xp) / static_cast<float>(hud.xp_to_next_level)
-        : 0.0f;
-    xp_ratio = std::min(xp_ratio, 1.0f);
+    const float xp_ratio = bar_ratio(static_cast<float>(hud.xp),
+                                     static_cast<float>(hud.xp_to_next_level));
     if (xp_ratio > 0.0f) {
         ui.add_filled_rect(x, y, bar_width * xp_ratio, bar_height, hud_colors::XP_FILL);
     }
@@ -122,8 +108,7 @@ void build_mana_bar(UIScene& ui, const HUDState& hud, float /*screen_w*/, float 
     ui.add_filled_rect(x, y, bar_width, bar_height, hud_colors::MANA_BG);
 
     // Fill
-    float mana_ratio = (hud.max_mana > 0) ? hud.mana / hud.max_mana : 0.0f;
-    mana_ratio = std::min(mana_ratio, 1.0f);
+    const float mana_ratio = bar_ratio(hud.mana, hud.max_mana);
     if (mana_ratio > 0.0f) {
         ui.add_filled_rect(x, y, bar_width * mana_ratio, bar_height, hud_colors::MANA_FILL);
     }
@@ -168,7 +153,7 @@ void build_gold_display(UIScene& ui, const HUDState& hud, float screen_w, float 
 // Skill bar - bottom center, 5 slots
 // ============================================================================
 
-void build_skill_bar(UIScene& ui, const HUDState& hud, float screen_w, float screen_h) {
+void build_skill_bar(UIScene& ui, const HUDState& hud, MouseUI& mui, float screen_w, float screen_h) {
     float slot_size = 50.0f;
     float slot_gap = 6.0f;
     int slot_count = 5;
@@ -217,11 +202,13 @@ void build_skill_bar(UIScene& ui, const HUDState& hud, float screen_w, float scr
 
         // Skill name below slot
         if (!slot.name.empty()) {
-            std::string display_name = slot.name;
-            if (display_name.length() > 7) {
-                display_name = display_name.substr(0, 6) + ".";
-            }
+            const std::string display_name = hud_layout::truncate_with_ellipsis(slot.name, 7, '.');
             ui.add_text(display_name, sx + 2, y + slot_size + 2, 0.5f, hud_colors::SKILL_NAME);
+        }
+
+        // Register hit region only when the slot is actually usable.
+        if (slot.available && slot.cooldown <= 0.0f) {
+            mui.push_region(skill_slot_id(i), WidgetId::None, sx, y, slot_size, slot_size);
         }
     }
 }
@@ -273,8 +260,7 @@ void build_quest_tracker(UIScene& ui, const HUDState& hud, float screen_w, float
         // Objectives
         for (const auto& obj : quest.objectives) {
             // Truncate description to fit panel width at scale 0.6 (~4.8px/char, 196px available)
-            std::string desc = obj.description;
-            if (desc.length() > 28) desc = desc.substr(0, 27) + "~";
+            const std::string desc = hud_layout::truncate_with_ellipsis(obj.description, 28);
             char obj_text[128];
             snprintf(obj_text, sizeof(obj_text), "  %s: %d/%d",
                      desc.c_str(), obj.current, obj.required);
@@ -295,11 +281,8 @@ void build_quest_tracker(UIScene& ui, const HUDState& hud, float screen_w, float
 void build_zone_name(UIScene& ui, const HUDState& hud, float screen_w, float /*screen_h*/) {
     if (hud.zone_display_timer <= 0.0f || hud.current_zone.empty()) return;
 
-    // Full opacity for first 2.5s, then fade out over 1.5s
-    float alpha = 1.0f;
-    if (hud.zone_display_timer < 1.5f) {
-        alpha = hud.zone_display_timer / 1.5f;
-    }
+    // Full opacity for first 2.5s, then fade out over the last 1.5s.
+    const float alpha = linear_fade(hud.zone_display_timer, 1.5f);
 
     // Estimate text width (roughly 15px per char at scale 1.5)
     float text_w = static_cast<float>(hud.current_zone.length()) * 15.0f;
@@ -329,11 +312,8 @@ void build_zone_name(UIScene& ui, const HUDState& hud, float screen_w, float /*s
 void build_level_up_notification(UIScene& ui, const HUDState& hud, float screen_w, float screen_h) {
     if (hud.level_up_timer <= 0.0f) return;
 
-    // Fade out over the last 1.5 seconds
-    float alpha = 1.0f;
-    if (hud.level_up_timer < 1.5f) {
-        alpha = hud.level_up_timer / 1.5f;
-    }
+    // Fade out over the last 1.5 seconds.
+    const float alpha = linear_fade(hud.level_up_timer, 1.5f);
 
     // Float upward as it fades
     float drift = (3.0f - hud.level_up_timer) * 15.0f;
@@ -379,11 +359,8 @@ void build_loot_feed(UIScene& ui, const HUDState& hud, float screen_w, float scr
         const auto& entry = hud.loot_feed[i];
         float y = base_y - static_cast<float>(count - 1 - i) * line_h;
 
-        // Fade out in last 1 second
-        float alpha = 1.0f;
-        if (entry.timer < 1.0f) {
-            alpha = entry.timer;
-        }
+        // Fade out over the last second of the entry's lifetime.
+        const float alpha = linear_fade(entry.timer, 1.0f);
 
         ui.add_text(entry.text, x, y, 0.7f, fade_color(entry.color, alpha));
     }
@@ -394,14 +371,21 @@ void build_loot_feed(UIScene& ui, const HUDState& hud, float screen_w, float scr
 // ============================================================================
 
 void build_minimap(UIScene& ui, const HUDState& hud, float screen_w, float /*screen_h*/) {
-    float map_size = 180.0f;
-    float padding = 10.0f;
-    float mx = screen_w - map_size - padding;
-    float my = padding;
-    float cx = mx + map_size / 2;
-    float cy = my + map_size / 2;
-    float map_radius = map_size / 2 - 5;
-    float world_radius = 2000.0f;  // world units visible on minimap
+    const float map_size = 180.0f;
+    const float padding = 10.0f;
+    const float mx = screen_w - map_size - padding;
+    const float my = padding;
+    const float cx = mx + map_size / 2;
+    const float cy = my + map_size / 2;
+    const float map_radius = map_size / 2 - 5;
+
+    hud_layout::MinimapView view;
+    view.center_x = cx;
+    view.center_y = cy;
+    view.map_radius = map_radius;
+    view.world_radius = 2000.0f;  // world units visible on minimap
+    view.player_world_x = hud.minimap.player_x;
+    view.player_world_z = hud.minimap.player_z;
 
     // Background
     ui.add_filled_rect(mx, my, map_size, map_size, 0xCC111122);
@@ -416,45 +400,31 @@ void build_minimap(UIScene& ui, const HUDState& hud, float screen_w, float /*scr
     ui.add_text("W", mx + 5, cy - 6, 0.7f, 0xFF8899BB);
     ui.add_text("E", mx + map_size - 14, cy - 6, 0.7f, 0xFF8899BB);
 
-    // Helper: world pos to minimap pos
-    auto world_to_map = [&](float wx, float wz, float& out_x, float& out_y) -> bool {
-        float dx = wx - hud.minimap.player_x;
-        float dz = wz - hud.minimap.player_z;
-        float map_dx = (dx / world_radius) * map_radius;
-        float map_dz = (dz / world_radius) * map_radius;
-        out_x = cx + map_dx;
-        out_y = cy + map_dz;
-        float dist_from_center = std::sqrt(map_dx * map_dx + map_dz * map_dz);
-        return dist_from_center < map_radius - 3;
-    };
-
     // Draw quest objective areas as translucent rectangles
     for (const auto& area : hud.minimap.objective_areas) {
-        float ax = 0.0f, ay = 0.0f;
-        if (world_to_map(area.world_x, area.world_z, ax, ay)) {
-            float area_r = (area.radius / world_radius) * map_radius;
-            area_r = std::max(4.0f, std::min(area_r, map_radius * 0.5f));
-            ui.add_filled_rect(ax - area_r, ay - area_r, area_r * 2, area_r * 2, 0x3300DDFF);
-            ui.add_rect_outline(ax - area_r, ay - area_r, area_r * 2, area_r * 2, 0x8800DDFF, 1.0f);
+        const auto p = hud_layout::world_to_minimap(view, area.world_x, area.world_z);
+        if (p.in_bounds) {
+            const float area_r = hud_layout::minimap_area_pixel_radius(
+                area.radius, view.world_radius, map_radius);
+            ui.add_filled_rect(p.x - area_r, p.y - area_r, area_r * 2, area_r * 2, 0x3300DDFF);
+            ui.add_rect_outline(p.x - area_r, p.y - area_r, area_r * 2, area_r * 2, 0x8800DDFF, 1.0f);
         }
     }
 
     // Draw map icons (NPCs, monsters, etc.)
     for (const auto& icon : hud.minimap.icons) {
-        float ix = 0.0f, iy = 0.0f;
-        if (world_to_map(icon.world_x, icon.world_z, ix, iy)) {
-            if (icon.is_objective) {
-                // Diamond shape for objectives (rotated square)
-                float s = 5.0f;
-                ui.add_line(ix, iy - s, ix + s, iy, icon.color, 2.0f);
-                ui.add_line(ix + s, iy, ix, iy + s, icon.color, 2.0f);
-                ui.add_line(ix, iy + s, ix - s, iy, icon.color, 2.0f);
-                ui.add_line(ix - s, iy, ix, iy - s, icon.color, 2.0f);
-            } else {
-                // Dot for entities
-                float dot = 3.0f;
-                ui.add_filled_rect(ix - dot, iy - dot, dot * 2, dot * 2, icon.color);
-            }
+        const auto p = hud_layout::world_to_minimap(view, icon.world_x, icon.world_z);
+        if (!p.in_bounds) continue;
+        if (icon.is_objective) {
+            // Diamond shape for objectives (rotated square)
+            const float s = 5.0f;
+            ui.add_line(p.x, p.y - s, p.x + s, p.y, icon.color, 2.0f);
+            ui.add_line(p.x + s, p.y, p.x, p.y + s, icon.color, 2.0f);
+            ui.add_line(p.x, p.y + s, p.x - s, p.y, icon.color, 2.0f);
+            ui.add_line(p.x - s, p.y, p.x, p.y - s, icon.color, 2.0f);
+        } else {
+            const float dot = 3.0f;
+            ui.add_filled_rect(p.x - dot, p.y - dot, dot * 2, dot * 2, icon.color);
         }
     }
 
@@ -470,229 +440,64 @@ void build_minimap(UIScene& ui, const HUDState& hud, float screen_w, float /*scr
 }
 
 // ============================================================================
-// Chat window - bottom-left, above the skill bar
+// Status effect icons - row of small tiles above the bottom-left HP bar
 // ============================================================================
 
-static uint32_t chat_channel_color(uint8_t channel) {
-    switch (channel) {
-        case 0: return 0xFFCCCCCC;  // Say - light gray
-        case 1: return 0xFF88FFFF;  // Zone - cyan
-        case 2: return 0xFF00CCFF;  // Global - yellow
-        case 3: return 0xFF0088FF;  // System - orange
-        case 4: return 0xFFFF88FF;  // Whisper - magenta
-        default: return 0xFFCCCCCC;
+void build_status_effect_row(UIScene& ui, const HUDState& hud, float /*screen_w*/, float screen_h) {
+    uint16_t m = hud.effects_mask;
+    if (m == 0) return;
+
+    // Icon tiles next to each other, just above the XP bar (which sits above
+    // the HP bar at the bottom-left).
+    float icon_size = 22.0f;
+    float icon_gap = 4.0f;
+    float x = 20.0f + 250.0f + 10.0f;  // right of the HP/XP stack
+    float y = screen_h - 70.0f - icon_size - 10.0f;
+
+    struct IconSpec { uint16_t bit; uint32_t color; const char* label; };
+    static const IconSpec specs[] = {
+        { status_bits::INVULN,       0xFF44FFFF, "INV" },  // cyan
+        { status_bits::SHIELD,       0xFF00DDFF, "SHD" },  // gold
+        { status_bits::DAMAGE_BOOST, 0xFF3388FF, "DMG" },  // orange
+        { status_bits::SPEED_BOOST,  0xFF00FF88, "SPD" },  // green
+        { status_bits::DEF_BOOST,    0xFFDDDD00, "DEF" },  // teal
+        { status_bits::STUN,         0xFF4444FF, "STN" },  // red
+        { status_bits::ROOT,         0xFF2266AA, "RT" },
+        { status_bits::SLOW,         0xFFCC66FF, "SLO" },  // purple
+        { status_bits::BURN,         0xFF0000FF, "BRN" },  // red
+    };
+
+    for (const auto& s : specs) {
+        if ((m & s.bit) == 0) continue;
+        ui.add_filled_rect(x, y, icon_size, icon_size, 0xAA000000);
+        ui.add_rect_outline(x, y, icon_size, icon_size, s.color, 2.0f);
+        ui.add_filled_rect(x + 3, y + 3, icon_size - 6, icon_size - 6, s.color & 0x80FFFFFF);
+        ui.add_text(s.label, x + 3, y + 5, 0.55f, 0xFFFFFFFF);
+        x += icon_size + icon_gap;
     }
-}
-
-static const char* chat_channel_prefix(uint8_t channel) {
-    switch (channel) {
-        case 0: return "[Say]";
-        case 1: return "[Zone]";
-        case 2: return "[Global]";
-        case 3: return "[System]";
-        case 4: return "[Whisper]";
-        default: return "";
-    }
-}
-
-void build_chat_window(UIScene& ui, const HUDState& hud, float /*screen_w*/, float screen_h) {
-    const auto& chat = hud.chat;
-    float padding = 20.0f;
-    float width = 460.0f;
-    float line_height = 14.0f;
-    int visible = ChatState::VISIBLE_LINES;
-    // Position: above skill bar (skill bar is ~80px tall at the bottom)
-    float height = visible * line_height + 10.0f + (chat.input_active ? 22.0f : 0.0f);
-    float x = padding;
-    float y = screen_h - 160.0f - height;
-
-    // Background
-    ui.add_filled_rect(x, y, width, height, 0xAA000000);
-    ui.add_rect_outline(x, y, width, height, 0xFF555555, 1.0f);
-
-    // Recent chat lines
-    int start = static_cast<int>(chat.lines.size()) - visible;
-    if (start < 0) start = 0;
-    float ty = y + 6.0f;
-    for (int i = start; i < static_cast<int>(chat.lines.size()); ++i) {
-        const auto& line = chat.lines[i];
-        uint32_t color = chat_channel_color(line.channel);
-        std::string prefix = chat_channel_prefix(line.channel);
-        std::string rendered;
-        if (line.channel == 3) {
-            rendered = prefix + std::string(" ") + line.text;
-        } else {
-            rendered = prefix + std::string(" ") + line.sender + ": " + line.text;
-        }
-        if (rendered.size() > 80) rendered = rendered.substr(0, 80) + "...";
-        ui.add_text(rendered, x + 6, ty, 0.75f, color);
-        ty += line_height;
-    }
-
-    // Input line
-    if (chat.input_active) {
-        float iy = y + height - 20.0f;
-        ui.add_filled_rect(x + 4, iy, width - 8, 18.0f, 0xDD222233);
-        ui.add_rect_outline(x + 4, iy, width - 8, 18.0f, 0xFF666677, 1.0f);
-        std::string prefix = chat_channel_prefix(chat.selected_channel);
-        std::string display = prefix + std::string(" > ") + chat.input_buffer + "_";
-        ui.add_text(display, x + 8, iy + 3, 0.8f, 0xFFFFFFFF);
-    } else {
-        ui.add_text("[Enter] to chat", x + 6, y + height - 14.0f, 0.65f, 0xFF888899);
-    }
-}
-
-// ============================================================================
-// Vendor window - center of screen
-// ============================================================================
-
-void build_vendor_window(UIScene& ui, const HUDState& hud, float screen_w, float screen_h) {
-    const auto& v = hud.vendor;
-    if (!v.visible) return;
-
-    float w = 460.0f;
-    float h = 360.0f;
-    float x = (screen_w - w) * 0.5f;
-    float y = (screen_h - h) * 0.5f;
-
-    // Panel background
-    ui.add_filled_rect(x, y, w, h, 0xEE1A1A22);
-    ui.add_rect_outline(x, y, w, h, 0xFF999999, 2.0f);
-
-    // Title bar
-    ui.add_filled_rect(x, y, w, 26.0f, 0xFF222244);
-    std::string title = v.vendor_name.empty() ? std::string("Vendor") : v.vendor_name;
-    ui.add_text(title, x + 12, y + 6, 1.0f, 0xFFFFEECC);
-    ui.add_text("[Esc] close  [Tab] buy/sell", x + w - 200, y + 6, 0.7f, 0xFFAAAAAA);
-
-    // Mode tab indicator
-    float tab_y = y + 34.0f;
-    ui.add_text(v.buying ? "BUY" : "SELL", x + 12, tab_y, 0.9f,
-                v.buying ? 0xFF00DDFF : 0xFF66FFFF);
-
-    // Gold
-    char gbuf[48];
-    snprintf(gbuf, sizeof(gbuf), "Gold: %d", 0); // Server sends gold separately; UI shows from HUDState.gold
-    (void)gbuf;
-    char gold_buf[48];
-    snprintf(gold_buf, sizeof(gold_buf), "Gold: %d", hud.gold);
-    ui.add_text(gold_buf, x + w - 120, tab_y, 0.85f, 0xFF00DDFF);
-
-    // List of items
-    float list_y = y + 58.0f;
-    float row_h = 22.0f;
-    int max_rows = 12;
-    int count = static_cast<int>(v.stock.size());
-    int cursor = std::max(0, std::min(v.cursor, count - 1));
-
-    for (int i = 0; i < count && i < max_rows; ++i) {
-        float row_y = list_y + i * row_h;
-        bool selected = (i == cursor);
-        uint32_t row_color = selected ? 0xFF334466 : 0xFF222233;
-        ui.add_filled_rect(x + 10, row_y, w - 20, row_h - 2, row_color);
-        const auto& slot = v.stock[i];
-        uint32_t name_color = 0xFFCCCCCC;
-        if (slot.rarity == "uncommon")       name_color = 0xFF00CC00;
-        else if (slot.rarity == "rare")      name_color = 0xFF0088FF;
-        else if (slot.rarity == "epic")      name_color = 0xFFCC00CC;
-        else if (slot.rarity == "legendary") name_color = 0xFF00AAFF;
-        char buf[128];
-        if (slot.stock < 0) {
-            snprintf(buf, sizeof(buf), "%s", slot.item_name.c_str());
-        } else {
-            snprintf(buf, sizeof(buf), "%s (stock: %d)", slot.item_name.c_str(), slot.stock);
-        }
-        ui.add_text(buf, x + 18, row_y + 4, 0.85f, name_color);
-        char price_buf[32];
-        snprintf(price_buf, sizeof(price_buf), "%d g", slot.price);
-        ui.add_text(price_buf, x + w - 70, row_y + 4, 0.85f, 0xFF00DDFF);
-    }
-
-    ui.add_text("[Up/Down] select  [Enter] purchase", x + 12, y + h - 22, 0.7f, 0xFFAAAAAA);
-}
-
-// ============================================================================
-// Party frames - upper-left, one compact bar per member
-// ============================================================================
-
-void build_party_frames(UIScene& ui, const HUDState& hud, float /*screen_w*/, float /*screen_h*/) {
-    const auto& party = hud.party;
-    if (!party.has_party()) return;
-
-    float x = 20.0f;
-    float y = 80.0f;
-    float w = 200.0f;
-    float frame_h = 44.0f;
-    float gap = 6.0f;
-
-    for (const auto& m : party.members) {
-        ui.add_filled_rect(x, y, w, frame_h, 0xCC1A1A22);
-        ui.add_rect_outline(x, y, w, frame_h, 0xFF555566, 1.0f);
-
-        bool is_leader = (m.player_id == party.leader_id);
-        uint32_t title_color = is_leader ? 0xFF00DDFF : 0xFFCCCCCC;
-        char nbuf[48];
-        snprintf(nbuf, sizeof(nbuf), "%s%s  Lv %d",
-                 is_leader ? "* " : "  ",
-                 m.name.c_str(), m.level);
-        ui.add_text(nbuf, x + 6, y + 4, 0.75f, title_color);
-
-        // HP bar
-        float hp_ratio = (m.max_health > 0) ? m.health / m.max_health : 0.0f;
-        hp_ratio = std::max(0.0f, std::min(hp_ratio, 1.0f));
-        ui.add_filled_rect(x + 6, y + 22, w - 12, 7, 0xFF1A0000);
-        uint32_t hp_color = 0xFF00CC00;
-        if (hp_ratio < 0.3f) hp_color = 0xFF0000CC;
-        else if (hp_ratio < 0.6f) hp_color = 0xFF00AAFF;
-        ui.add_filled_rect(x + 6, y + 22, (w - 12) * hp_ratio, 7, hp_color);
-
-        // Mana bar
-        float mp_ratio = (m.max_mana > 0) ? m.mana / m.max_mana : 0.0f;
-        mp_ratio = std::max(0.0f, std::min(mp_ratio, 1.0f));
-        ui.add_filled_rect(x + 6, y + 32, w - 12, 5, 0xFF000033);
-        ui.add_filled_rect(x + 6, y + 32, (w - 12) * mp_ratio, 5, 0xFFFF3300);
-
-        y += frame_h + gap;
-    }
-}
-
-void build_party_invite_popup(UIScene& ui, const HUDState& hud, float screen_w, float screen_h) {
-    const auto& party = hud.party;
-    if (party.pending_inviter_id == 0) return;
-
-    float w = 360.0f;
-    float h = 110.0f;
-    float x = (screen_w - w) * 0.5f;
-    float y = (screen_h - h) * 0.5f - 100.0f;
-
-    ui.add_filled_rect(x, y, w, h, 0xEE111122);
-    ui.add_rect_outline(x, y, w, h, 0xFF00DDFF, 2.0f);
-
-    ui.add_text("Party Invite", x + 12, y + 8, 0.95f, 0xFF00DDFF);
-    std::string msg = party.pending_inviter_name + " invited you to join their party.";
-    if (msg.size() > 48) msg = msg.substr(0, 48) + "...";
-    ui.add_text(msg, x + 12, y + 34, 0.78f, 0xFFEEEEEE);
-    ui.add_text("[Y] Accept    [N] Decline", x + 12, y + h - 24, 0.8f, 0xFFCCCCCC);
 }
 
 // ============================================================================
 // Master HUD builder - renders all elements
+// chat / vendor / party widgets live in their own translation units
+// (hud/chat_window.cpp, hud/vendor_window.cpp, hud/party_widgets.cpp).
 // ============================================================================
 
-void build_gameplay_hud(UIScene& ui, const HUDState& hud, float screen_w, float screen_h) {
+void build_gameplay_hud(UIScene& ui, const HUDState& hud, MouseUI& mui, float screen_w, float screen_h) {
     // Health bar is rendered in game.cpp's build_gameplay_ui (from entity data)
     build_xp_bar(ui, hud, screen_w, screen_h);
     build_mana_bar(ui, hud, screen_w, screen_h);
     build_minimap(ui, hud, screen_w, screen_h);
     build_gold_display(ui, hud, screen_w, screen_h);
-    build_skill_bar(ui, hud, screen_w, screen_h);
+    build_skill_bar(ui, hud, mui, screen_w, screen_h);
     build_quest_tracker(ui, hud, screen_w, screen_h);
     build_zone_name(ui, hud, screen_w, screen_h);
     build_level_up_notification(ui, hud, screen_w, screen_h);
     build_loot_feed(ui, hud, screen_w, screen_h);
-    build_chat_window(ui, hud, screen_w, screen_h);
-    build_vendor_window(ui, hud, screen_w, screen_h);
-    build_party_frames(ui, hud, screen_w, screen_h);
+    build_party_frames(ui, hud, mui, screen_w, screen_h);
+    build_status_effect_row(ui, hud, screen_w, screen_h);
+    build_chat_window(ui, hud, mui, screen_w, screen_h);
+    build_vendor_window(ui, hud, mui, screen_w, screen_h);
     build_party_invite_popup(ui, hud, screen_w, screen_h);
 }
 

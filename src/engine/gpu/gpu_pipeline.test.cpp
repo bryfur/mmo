@@ -46,8 +46,8 @@ TEST(PipelineConfigVertex, WithVertex3DSetsCorrectLayout) {
     EXPECT_EQ(config.vertex_buffers[0].slot, 0u);
     EXPECT_EQ(config.vertex_buffers[0].input_rate, SDL_GPU_VERTEXINPUTRATE_VERTEX);
 
-    // 4 attributes: position, normal, texcoord, color
-    EXPECT_EQ(config.vertex_attributes.size(), 4u);
+    // 5 attributes: position, normal, texcoord, color, tangent
+    EXPECT_EQ(config.vertex_attributes.size(), 5u);
 }
 
 TEST(PipelineConfigVertex, WithSkinnedVertexSetsCorrectLayout) {
@@ -57,8 +57,8 @@ TEST(PipelineConfigVertex, WithSkinnedVertexSetsCorrectLayout) {
     ASSERT_EQ(config.vertex_buffers.size(), 1u);
     EXPECT_EQ(config.vertex_buffers[0].pitch, sizeof(SkinnedVertex));
 
-    // 6 attributes: position, normal, texcoord, color, joints, weights
-    EXPECT_EQ(config.vertex_attributes.size(), 6u);
+    // 7 attributes: position, normal, texcoord, color, tangent, joints, weights
+    EXPECT_EQ(config.vertex_attributes.size(), 7u);
 }
 
 TEST(PipelineConfigVertex, WithVertex2DSetsCorrectLayout) {
@@ -174,7 +174,7 @@ TEST(PipelineConfigChaining, MethodsCombineCorrectly) {
           .with_depth_bias(2.0f, 1.0f);
 
     // All settings should be applied
-    EXPECT_EQ(config.vertex_attributes.size(), 4u);
+    EXPECT_EQ(config.vertex_attributes.size(), 5u);
     EXPECT_EQ(config.blend_mode, BlendMode::Alpha);
     EXPECT_FALSE(config.depth_write_enable);
     EXPECT_EQ(config.cull_mode, SDL_GPU_CULLMODE_NONE);
@@ -187,6 +187,6 @@ TEST(PipelineConfigChaining, LaterCallsOverrideEarlier) {
     config.with_vertex3d().with_skinned_vertex();
 
     // skinned_vertex should have overwritten vertex3d
-    EXPECT_EQ(config.vertex_attributes.size(), 6u);
+    EXPECT_EQ(config.vertex_attributes.size(), 7u);
     EXPECT_EQ(config.vertex_buffers[0].pitch, sizeof(SkinnedVertex));
 }

@@ -1,5 +1,7 @@
 #include "pipeline_registry.hpp"
 #include "SDL3/SDL_gpu.h"
+#include "engine/core/asset/file_watcher.hpp"
+#include "engine/core/logger.hpp"
 #include "engine/gpu/gpu_device.hpp"
 #include "engine/gpu/gpu_pipeline.hpp"
 #include "engine/gpu/gpu_shader.hpp"
@@ -119,10 +121,6 @@ GPUPipeline* PipelineRegistry::get_pipeline(PipelineType type) {
         case PipelineType::ShadowTerrain:
             pipeline = create_shadow_terrain_pipeline();
             break;
-            break;
-            break;
-            break;
-            break;
         case PipelineType::SSAO:
             pipeline = create_ssao_pipeline();
             break;
@@ -194,6 +192,34 @@ void PipelineRegistry::set_swapchain_format(SDL_GPUTextureFormat format) {
     }
 }
 
+void PipelineRegistry::enable_hot_reload(core::asset::FileWatcher& watcher) {
+    if (!device_) {
+        ENGINE_LOG_WARN("hot_reload",
+                        "PipelineRegistry::enable_hot_reload called before init");
+        return;
+    }
+    if (watcher_ != nullptr) return;
+    watcher_ = &watcher;
+    shader_watch_handle_ = watcher_->watch_directory(
+        shader_path_, ".spv",
+        [this](const std::filesystem::path& p) {
+            ENGINE_LOG_INFO("hot_reload", "Shader changed: {} -- rebuilding pipelines",
+                            p.filename().string());
+            reload_all_pipelines();
+        });
+    ENGINE_LOG_INFO("hot_reload", "PipelineRegistry hot-reload enabled at {}",
+                    shader_path_);
+}
+
+void PipelineRegistry::reload_all_pipelines() {
+    if (!device_) return;
+    invalidate_all();
+    if (!preload_all_pipelines()) {
+        ENGINE_LOG_WARN("hot_reload",
+                        "PipelineRegistry: one or more pipelines failed to rebuild");
+    }
+}
+
 // =============================================================================
 // Pipeline Creation Methods
 // =============================================================================
@@ -203,8 +229,9 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_model_pipeline() {
     vs_resources.num_uniform_buffers = 1;
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 2;  // lighting + shadow data
-    fs_resources.num_samplers = 5;  // baseColor + 4 shadow cascade maps
+    fs_resources.num_uniform_buffers = 3;       // lighting + shadow data + cluster params
+    fs_resources.num_samplers = 6;              // baseColor + 4 shadow cascade maps + normal map
+    fs_resources.num_storage_buffers = 3;       // light data + cluster offsets + light indices
 
     auto* vs = shader_manager_->get(shader_path_ + "model.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
@@ -217,7 +244,7 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_model_pipeline() {
     config.vertex_shader = vs->handle();
     config.fragment_shader = fs->handle();
     config.with_vertex3d().opaque();
-    config.color_format = swapchain_format_;
+    config.color_format = scene_color_format_;
     config.depth_format = depth_format_;
 
     return GPUPipeline::create(*device_, config);
@@ -229,8 +256,9 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_instanced_model_pipeline()
     vs_resources.num_storage_buffers = 1;  // instance data
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 2;  // lighting + shadow data
-    fs_resources.num_samplers = 5;  // baseColor + 4 shadow cascade maps
+    fs_resources.num_uniform_buffers = 3;       // lighting + shadow data + cluster params
+    fs_resources.num_samplers = 6;              // baseColor + 4 shadow cascade maps + normal map
+    fs_resources.num_storage_buffers = 3;       // light data + cluster offsets + light indices
 
     auto* vs = shader_manager_->get(shader_path_ + "model_instanced.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
@@ -243,7 +271,7 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_instanced_model_pipeline()
     config.vertex_shader = vs->handle();
     config.fragment_shader = fs->handle();
     config.with_vertex3d().opaque();
-    config.color_format = swapchain_format_;
+    config.color_format = scene_color_format_;
     config.depth_format = depth_format_;
 
     return GPUPipeline::create(*device_, config);
@@ -280,8 +308,9 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_skinned_model_pipeline() {
     vs_resources.num_uniform_buffers = 2; // Camera + Bones
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 2;  // lighting + shadow data
-    fs_resources.num_samplers = 5;  // baseColor + 4 shadow cascade maps
+    fs_resources.num_uniform_buffers = 3;       // lighting + shadow data + cluster params
+    fs_resources.num_samplers = 6;              // baseColor + 4 shadow cascade maps + normal map
+    fs_resources.num_storage_buffers = 3;       // light data + cluster offsets + light indices
 
     auto* vs = shader_manager_->get(shader_path_ + "skinned_model.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
@@ -294,7 +323,7 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_skinned_model_pipeline() {
     config.vertex_shader = vs->handle();
     config.fragment_shader = fs->handle();
     config.with_skinned_vertex().opaque();
-    config.color_format = swapchain_format_;
+    config.color_format = scene_color_format_;
     config.depth_format = depth_format_;
 
     return GPUPipeline::create(*device_, config);
@@ -305,8 +334,9 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_terrain_pipeline() {
     vs_resources.num_uniform_buffers = 1;
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 2;  // lighting + shadow data
-    fs_resources.num_samplers = 6;  // material array + splatmap + 4 shadow cascade maps
+    fs_resources.num_uniform_buffers = 3;       // lighting + shadow data + cluster params
+    fs_resources.num_samplers = 6;              // material array + splatmap + 4 shadow cascade maps
+    fs_resources.num_storage_buffers = 3;       // light data + cluster offsets + light indices
 
     auto* vs = shader_manager_->get(shader_path_ + "terrain.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
@@ -335,7 +365,7 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_terrain_pipeline() {
     };
 
     config.opaque();
-    config.color_format = swapchain_format_;
+    config.color_format = scene_color_format_;
     config.depth_format = depth_format_;
 
     return GPUPipeline::create(*device_, config);
@@ -373,7 +403,7 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_skybox_pipeline() {
     config.opaque().no_cull();
     config.depth_write_enable = false;
     config.depth_compare_op = SDL_GPU_COMPAREOP_LESS_OR_EQUAL;
-    config.color_format = swapchain_format_;
+    config.color_format = scene_color_format_;
     config.depth_format = depth_format_;
 
     return GPUPipeline::create(*device_, config);
@@ -410,7 +440,7 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_grid_pipeline() {
     };
 
     config.alpha_blended().no_cull();
-    config.color_format = swapchain_format_;
+    config.color_format = scene_color_format_;
     config.depth_format = depth_format_;
     config.primitive_type = SDL_GPU_PRIMITIVETYPE_LINELIST;
 
@@ -526,7 +556,7 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_effect_pipeline() {
     config.fragment_shader = fs->handle();
     config.with_vertex3d().additive().no_cull();
     config.depth_write_enable = false;
-    config.color_format = swapchain_format_;
+    config.color_format = scene_color_format_;
     config.depth_format = depth_format_;
 
     return GPUPipeline::create(*device_, config);
@@ -535,11 +565,13 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_effect_pipeline() {
 std::unique_ptr<GPUPipeline> PipelineRegistry::create_grass_pipeline() {
     ShaderResources vs_resources;
     vs_resources.num_uniform_buffers = 1;
-    vs_resources.num_samplers = 1;  // heightmap texture
+    vs_resources.num_samplers = 1;          // heightmap texture
+    vs_resources.num_storage_buffers = 1;   // visible-chunk origins (chunked LOD)
 
     ShaderResources fs_resources;
-    fs_resources.num_uniform_buffers = 2;  // lighting + shadow data
-    fs_resources.num_samplers = 4;  // 4 shadow cascade maps
+    fs_resources.num_uniform_buffers = 3;       // lighting + shadow data + cluster params
+    fs_resources.num_samplers = 4;              // 4 shadow cascade maps
+    fs_resources.num_storage_buffers = 3;       // light data + cluster offsets + light indices
 
     auto* vs = shader_manager_->get(shader_path_ + "grass.vert.spv",
                                      ShaderStage::Vertex, "VSMain", vs_resources);
@@ -552,7 +584,7 @@ std::unique_ptr<GPUPipeline> PipelineRegistry::create_grass_pipeline() {
     config.vertex_shader = vs->handle();
     config.fragment_shader = fs->handle();
     config.with_vertex3d().opaque().no_cull();
-    config.color_format = swapchain_format_;
+    config.color_format = scene_color_format_;
     config.depth_format = depth_format_;
 
     return GPUPipeline::create(*device_, config);

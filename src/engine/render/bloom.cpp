@@ -96,7 +96,7 @@ SDL_GPUTexture* Bloom::bloom_texture() const {
 }
 
 void Bloom::render(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& registry,
-                   SDL_GPUTexture* scene_color) {
+                   SDL_GPUTexture* scene_color, float threshold) {
     if (!is_ready() || !cmd || !scene_color) return;
 
     auto* downsample_pipeline = registry.get_bloom_downsample_pipeline();
@@ -114,7 +114,7 @@ void Bloom::render(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& registry,
 
         gpu::BloomDownsampleUniforms uniforms = {};
         uniforms.srcTexelSize = glm::vec2(1.0f / src_w, 1.0f / src_h);
-        uniforms.threshold = 0.8f;
+        uniforms.threshold = threshold;
         uniforms.isFirstPass = (i == 0) ? 1.0f : 0.0f;
 
         SDL_GPUColorTargetInfo color_target = {};

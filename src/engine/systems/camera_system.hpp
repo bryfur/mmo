@@ -44,11 +44,14 @@ public:
     void set_config(const CameraModeConfig& config) override;
     const CameraModeConfig& get_config() const override { return current_config_; }
     
-    // Combat system integration
-    void set_combat_target(const glm::vec3* target) override;  // nullptr to clear
-    void set_in_combat(bool in_combat) override;
-    void notify_attack() override;  // Player attacked
-    void notify_hit(const glm::vec3& hit_direction, float damage) override;  // Player got hit
+    // Soft-focus target (e.g. for action-cam soft-lock). Engine biases yaw
+    // toward focus_target_ when focus_strength_ > 0.
+    void set_focus_target(const glm::vec3* target) override { focus_target_ = target; }
+    void set_focus_strength(float strength_0_1) override { focus_strength_ = strength_0_1; }
+
+    // Additive FOV bias (degrees). Caller manages over-time variation;
+    // camera smooths the result toward target_fov + fov_bias_.
+    void set_fov_bias(float fov_delta) override { fov_bias_ = fov_delta; }
 
     // Camera shake
     void add_shake(ShakeType type, float intensity, float duration = 0.3f) override;
@@ -166,6 +169,11 @@ private:
     float fov_velocity_ = 0.0f;
     float sprint_fov_bonus_ = 8.0f;
     float combat_fov_reduction_ = -3.0f;
+    float fov_bias_ = 0.0f;
+
+    // Soft-focus bias (action-cam soft-lock)
+    const glm::vec3* focus_target_ = nullptr;
+    float focus_strength_ = 0.0f;
     
     // Camera shake
     std::deque<CameraShake> active_shakes_;

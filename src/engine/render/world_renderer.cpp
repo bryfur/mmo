@@ -7,6 +7,7 @@
 #include "SDL3/SDL_gpu.h"
 #include "engine/gpu/gpu_buffer.hpp"
 #include "engine/gpu/gpu_device.hpp"
+#include "engine/core/logger.hpp"
 #include "engine/gpu/pipeline_registry.hpp"
 #include "engine/model_loader.hpp"
 #include "glm/ext/matrix_float3x3.hpp"
@@ -18,7 +19,6 @@
 #include "glm/trigonometric.hpp"
 #include <cmath>
 #include <cstdint>
-#include <iostream>
 #include <vector>
 
 namespace mmo::engine::render {
@@ -51,7 +51,7 @@ bool WorldRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline
     sampler_info.enable_anisotropy = true;
     sampler_ = SDL_CreateGPUSampler(device_->handle(), &sampler_info);
     if (!sampler_) {
-        std::cerr << "Failed to create sampler: " << SDL_GetError() << std::endl;
+        ENGINE_LOG_ERROR("render", "Failed to create sampler: {}", SDL_GetError());
         return false;
     }
     
@@ -100,7 +100,7 @@ void WorldRenderer::create_skybox_mesh() {
         *device_, gpu::GPUBuffer::Type::Vertex, vertices, sizeof(vertices));
     
     if (!skybox_vertex_buffer_) {
-        std::cerr << "Failed to create skybox vertex buffer" << std::endl;
+        ENGINE_LOG_ERROR("render", "Failed to create skybox vertex buffer");
     }
 }
 
@@ -148,7 +148,7 @@ void WorldRenderer::create_grid_mesh() {
         grid_data.data(), grid_data.size() * sizeof(float));
     
     if (!grid_vertex_buffer_) {
-        std::cerr << "Failed to create grid vertex buffer" << std::endl;
+        ENGINE_LOG_ERROR("render", "Failed to create grid vertex buffer");
     }
 }
 

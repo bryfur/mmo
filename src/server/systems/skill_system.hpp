@@ -24,6 +24,12 @@ SkillUseResult use_skill(entt::registry& registry, entt::entity player, const st
 /// Update skill cooldowns for all players
 void update_skill_cooldowns(entt::registry& registry, float dt);
 
+/// Tick active channeled skills (whirlwind, arcane_rain, consecrate, ...).
+/// Re-applies the skill's per-tick damage / effects to targets in range on
+/// each tick and returns the hits produced this frame.
+std::vector<CombatHit> update_channeled_skills(entt::registry& registry, float dt,
+                                                const GameConfig& config);
+
 /// Get unlocked skills for a player based on their class and level
 std::vector<const SkillConfig*> get_unlocked_skills(entt::registry& registry, entt::entity player,
                                                      const GameConfig& config);

@@ -38,6 +38,8 @@ bool NetworkClient::connect(const std::string& host, uint16_t port, const std::s
         auto endpoints = resolver.resolve(host, std::to_string(port));
 
         asio::connect(socket_, endpoints);
+        asio::error_code opt_ec;
+        socket_.set_option(asio::ip::tcp::no_delay(true), opt_ec);
         connected_ = true;
 
         // Start IO thread
@@ -86,26 +88,27 @@ void NetworkClient::send_class_select(uint8_t class_index) {
 }
 
 void NetworkClient::disconnect() {
-    if (!connected_) return;
-    
-    connected_ = false;
+    const bool was_connected = connected_.exchange(false);
 
-    // Post disconnect to IO thread to avoid data race with async operations
-    asio::post(io_context_, [this]() {
-        auto data = build_packet(MessageType::Disconnect, {});
-        asio::error_code ec;
-        asio::write(socket_, asio::buffer(data), ec);
-        socket_.close(ec);
-    });
+    if (was_connected) {
+        asio::post(io_context_, [this]() {
+            auto data = build_packet(MessageType::Disconnect, {});
+            asio::error_code ec;
+            (void)asio::write(socket_, asio::buffer(data), ec);
+            socket_.close(ec);
+        });
+    }
 
     work_.reset();
     io_context_.stop();
-    
+
     if (io_thread_.joinable()) {
         io_thread_.join();
     }
-    
-    std::cout << "Disconnected from server" << std::endl;
+
+    if (was_connected) {
+        std::cout << "Disconnected from server\n";
+    }
 }
 
 void NetworkClient::send_input(const PlayerInput& input) {

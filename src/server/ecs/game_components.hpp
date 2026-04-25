@@ -71,6 +71,33 @@ struct Name {
 // Static entities don't move
 struct StaticTag {};
 
+// ============================================================================
+// State tags. Empty-struct markers so systems can query exactly the entities
+// in a given state and drop per-entity branching. Use registry.emplace<T>(e)
+// to enter the state and registry.remove<T>(e) to leave it.
+//
+// These are introduced as primitives now; existing systems still poll component
+// data directly. New systems should prefer tag-driven views to avoid scanning
+// every entity for a state predicate. See followup tasks for migration.
+// ============================================================================
+
+/// Health <= 0 and pending cleanup (loot drop, respawn, etc.).
+struct Dead {};
+
+/// In active combat: aggro pulled or attacked within recent timeout.
+struct InCombat {};
+
+/// Currently casting / channeling a skill (paired with ChannelingSkill).
+struct Casting {};
+
+/// Has nonzero velocity this tick. Set by movement; queried by AOI/animation
+/// systems that only care about moving entities.
+struct Moving {};
+
+/// Crowd-control immobilized (stunned/frozen/rooted). Cheaper than scanning
+/// BuffState every tick.
+struct Immobilized {};
+
 // Attack direction for effects
 struct AttackDirection {
     float x = 0.0f;
@@ -226,31 +253,77 @@ struct Inventory {
         return count <= 0;
     }
 
+    // Removes `count` of `id`, consuming across multiple stacks if needed.
+    // Returns false if the inventory doesn't contain enough.
     bool remove_item(const std::string& id, int count = 1) {
-        for (int i = 0; i < used_slots; ++i) {
-            if (slots[i].item_id == id && slots[i].count >= count) {
-                slots[i].count -= count;
+        if (count_item(id) < count) return false;
+        for (int i = 0; i < used_slots && count > 0;) {
+            if (slots[i].item_id == id) {
+                int take = (slots[i].count <= count) ? slots[i].count : count;
+                slots[i].count -= take;
+                count -= take;
                 if (slots[i].count <= 0) {
-                    // Compact
+                    // Compact: shift subsequent slots left.
                     for (int j = i; j < used_slots - 1; ++j)
                         slots[j] = slots[j + 1];
                     slots[used_slots - 1] = {};
                     --used_slots;
+                    continue;  // don't advance i; new occupant is at this index
                 }
-                return true;
             }
+            ++i;
         }
-        return false;
+        return true;
     }
 
+    // Total count of an item across ALL stacks in the inventory.
     int count_item(const std::string& id) const {
+        int total = 0;
         for (int i = 0; i < used_slots; ++i)
-            if (slots[i].item_id == id) return slots[i].count;
-        return 0;
+            if (slots[i].item_id == id) total += slots[i].count;
+        return total;
     }
 };
 
 // Equipped items (one per slot)
+// Active channeled skill being ticked on the caster. Re-runs the skill's
+// damage pass every `tick_interval` seconds until `time_remaining` expires.
+struct ChannelingSkill {
+    std::string skill_id;
+    float time_remaining = 0.0f;
+    float tick_timer = 0.0f;       // counts down; fires when <= 0
+    float tick_interval = 0.5f;
+    float dir_x = 1.0f;
+    float dir_z = 0.0f;
+};
+
+// Tracks per-item consumable cooldowns. Prevents potion spam.
+struct ConsumableCooldowns {
+    // Remaining cooldown seconds keyed by item_id.
+    // We use a small fixed array to avoid a std::unordered_map allocation
+    // on every frame. Up to 8 simultaneously-cooling-down items.
+    struct Entry { std::string item_id; float remaining = 0.0f; };
+    static constexpr int MAX = 8;
+    Entry entries[MAX];
+
+    void tick(float dt) {
+        for (auto& e : entries) if (e.remaining > 0.0f) e.remaining -= dt;
+    }
+    float remaining(const std::string& id) const {
+        for (const auto& e : entries) if (e.item_id == id && e.remaining > 0.0f) return e.remaining;
+        return 0.0f;
+    }
+    void set(const std::string& id, float cooldown) {
+        for (auto& e : entries) {
+            if (e.item_id == id) { e.remaining = cooldown; return; }
+        }
+        // Otherwise, take the first empty/expired slot.
+        for (auto& e : entries) {
+            if (e.remaining <= 0.0f) { e.item_id = id; e.remaining = cooldown; return; }
+        }
+    }
+};
+
 struct Equipment {
     std::string weapon_id;
     std::string armor_id;
@@ -260,6 +333,10 @@ struct Equipment {
     float health_bonus = 0.0f;
     float speed_bonus = 0.0f;
     float defense = 0.0f;
+
+    // Bookkeeping: health_bonus currently baked into Health.max. Tracked so
+    // recalc_equipment can compute the delta when gear changes.
+    float applied_health_bonus = 0.0f;
 };
 
 // ============================================================================
@@ -328,11 +405,14 @@ struct SkillState {
         cooldowns.push_back({id, time});
     }
 
-    void update(float dt) {
+    /// Decrement all cooldown timers. Satisfies TickableState.
+    void tick(float dt) {
         for (auto& cd : cooldowns)
             if (cd.remaining > 0.0f) cd.remaining -= dt;
     }
 };
+// Contract assertion lives in component_contracts.hpp (header-include
+// cycle prevented).
 
 // ============================================================================
 // Talent Components

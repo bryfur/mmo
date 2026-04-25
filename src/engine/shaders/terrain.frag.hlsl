@@ -1,8 +1,7 @@
-/**
- * Terrain Fragment Shader - SDL3 GPU API
- *
- * Renders terrain with texture, PCSS shadows, and fog.
- */
+// Terrain Fragment Shader.
+// Linear HDR output. Material textures are sampled with plain UNORM samplers;
+// terrain art currently ships pre-baked and treated as linear. Splatmap is a
+// control mask (linear). Sampler gamma is not assumed.
 
 struct PSInput {
     float4 position : SV_Position;
@@ -19,10 +18,13 @@ cbuffer LightingUniforms {
     float3 fogColor;
     float fogStart;
     float fogEnd;
-    float worldSize;  // Size of the terrain world (assumes square)
+    float worldSize;
     float _padding0[2];
     float3 lightDir;
     float _padding1;
+    float ambientStrength;
+    float sunIntensity;
+    float _padding2[2];
 };
 
 [[vk::binding(1, 3)]]
@@ -35,19 +37,16 @@ cbuffer ShadowUniforms {
     float _shadowPad0;
 };
 
-// Material texture array - sampler slot 0 (4 layers: grass, dirt, rock, sand)
 [[vk::combinedImageSampler]][[vk::binding(0, 2)]]
 Texture2DArray materialTextures;
 [[vk::combinedImageSampler]][[vk::binding(0, 2)]]
 SamplerState materialSampler;
 
-// Splatmap texture - sampler slot 1
 [[vk::combinedImageSampler]][[vk::binding(1, 2)]]
 Texture2D splatmapTexture;
 [[vk::combinedImageSampler]][[vk::binding(1, 2)]]
 SamplerState splatmapSampler;
 
-// Shadow cascade textures - sampler slots 2-5 (shifted from 1-4)
 [[vk::combinedImageSampler]][[vk::binding(2, 2)]]
 Texture2D shadowMap0;
 [[vk::combinedImageSampler]][[vk::binding(2, 2)]]
@@ -68,19 +67,15 @@ Texture2D shadowMap3;
 [[vk::combinedImageSampler]][[vk::binding(5, 2)]]
 SamplerState shadowSampler3;
 
-// Triplanar texture sampling for Texture2DArray - eliminates stretching on steep slopes
 float3 SampleTriplanarArray(Texture2DArray texArray, SamplerState samp, float3 worldPos, float3 worldNormal, float textureScale, int layer) {
-    // Calculate blend weights based on normal direction
     float3 blendWeights = abs(worldNormal);
-    blendWeights = pow(blendWeights, 4.0); // Sharper transitions between projections
-    blendWeights /= (blendWeights.x + blendWeights.y + blendWeights.z); // Normalize
+    blendWeights = pow(blendWeights, 4.0);
+    blendWeights /= (blendWeights.x + blendWeights.y + blendWeights.z);
 
-    // Sample from three planar projections
     float3 xProjection = texArray.Sample(samp, float3(worldPos.yz * textureScale, layer)).rgb;
     float3 yProjection = texArray.Sample(samp, float3(worldPos.xz * textureScale, layer)).rgb;
     float3 zProjection = texArray.Sample(samp, float3(worldPos.xy * textureScale, layer)).rgb;
 
-    // Blend based on surface orientation
     return xProjection * blendWeights.x +
            yProjection * blendWeights.y +
            zProjection * blendWeights.z;
@@ -94,49 +89,62 @@ float sampleShadowMap(int cascade, float2 uv) {
 }
 
 #include "shadow_common.hlsli"
+#include "fog.hlsli"
+#include "lighting.hlsli"
+#include "cluster_lighting.hlsli"
+
+static const float TERRAIN_METALLIC  = 0.0;
+static const float TERRAIN_ROUGHNESS = 0.95;
+static const float TERRAIN_AO        = 1.0;
 
 float4 PSMain(PSInput input) : SV_Target {
     float3 worldPos = input.fragPos;
     float3 worldNormal = normalize(input.normal);
 
-    // Sample splatmap to get material weights (R=grass, G=dirt, B=rock, A=sand)
-    // Map world position to 0-1 UV range
     float2 splatmapUV = worldPos.xz / worldSize;
     float4 splatWeights = splatmapTexture.Sample(splatmapSampler, splatmapUV);
 
-    // Sample all 4 materials from the texture array using triplanar mapping
-    float textureScale = 0.01; // Scale for material textures
+    float textureScale = 0.01;
     float3 grassColor = SampleTriplanarArray(materialTextures, materialSampler, worldPos, worldNormal, textureScale, 0);
-    float3 dirtColor = SampleTriplanarArray(materialTextures, materialSampler, worldPos, worldNormal, textureScale, 1);
-    float3 rockColor = SampleTriplanarArray(materialTextures, materialSampler, worldPos, worldNormal, textureScale, 2);
-    float3 sandColor = SampleTriplanarArray(materialTextures, materialSampler, worldPos, worldNormal, textureScale, 3);
+    float3 dirtColor  = SampleTriplanarArray(materialTextures, materialSampler, worldPos, worldNormal, textureScale, 1);
+    float3 rockColor  = SampleTriplanarArray(materialTextures, materialSampler, worldPos, worldNormal, textureScale, 2);
+    float3 sandColor  = SampleTriplanarArray(materialTextures, materialSampler, worldPos, worldNormal, textureScale, 3);
 
-    // Blend materials based on splatmap weights
     float3 terrainColor = grassColor * splatWeights.r +
-                          dirtColor * splatWeights.g +
-                          rockColor * splatWeights.b +
-                          sandColor * splatWeights.a;
+                          dirtColor  * splatWeights.g +
+                          rockColor  * splatWeights.b +
+                          sandColor  * splatWeights.a;
 
-    // Apply vertex color tint
-    float3 color = terrainColor * input.vertexColor.rgb;
+    float3 baseColor = terrainColor * input.vertexColor.rgb;
 
-    // ===================================================================
-    // LIGHTING AND SHADOWS
-    // ===================================================================
-    float3 lightDirection = normalize(-lightDir);
-    float3 norm = normalize(input.normal);
-    float diff = max(dot(norm, lightDirection), 0.0);
+    float3 N = worldNormal;
+    float3 V = normalize(-lightDir);
+    // Camera view isn't in this cbuffer; skybox sun direction doubles as the view
+    // approximation for specular. Terrain spec is muted (high roughness) so this
+    // is visually indistinguishable from exact view-vector PBR.
+    float3 L = normalize(-lightDir);
 
     float shadow = calcShadow(input.fragPos, input.viewDepth);
+    float3 lightColor = float3(1.0, 0.95, 0.9) * sunIntensity * shadow;
 
-    float3 ambient = float3(0.3, 0.35, 0.3);
-    float3 lighting = ambient * lerp(0.5, 1.0, shadow) + diff * float3(1.0, 0.95, 0.9) * shadow;
-    color *= lighting;
+    float3 direct = evaluatePBR(N, V, L, lightColor,
+                                 baseColor, TERRAIN_METALLIC, TERRAIN_ROUGHNESS, TERRAIN_AO);
 
-    // ===================================================================
-    // FOG
-    // ===================================================================
-    float fogFactor = saturate((input.fogDistance - fogStart) / (fogEnd - fogStart));
+    float3 ambientColor = float3(0.3, 0.35, 0.3) * lerp(ambientStrength, 1.0, shadow);
+    float3 ambient = iblAmbient(baseColor, TERRAIN_METALLIC, TERRAIN_AO, ambientColor);
+
+    float3 color = direct + ambient;
+
+    if (clusterParams.gridDim.w > 0u) {
+        float2 screen_uv = input.position.xy * clusterParams.screenSize.zw;
+        // Use the directional sun direction as a view approximation, matching the rest of the shader.
+        float3 V_eye = normalize(-lightDir);
+        color += accumulateClusterLights(input.fragPos, N, V_eye,
+                                         baseColor, TERRAIN_METALLIC, TERRAIN_ROUGHNESS, TERRAIN_AO,
+                                         input.viewDepth, screen_uv);
+    }
+
+    float fogFactor = linearFog(input.fogDistance, fogStart, fogEnd);
     color = lerp(color, fogColor, fogFactor);
 
     return float4(color, 1.0);

@@ -17,9 +17,16 @@ bool ShadowMap::init(gpu::GPUDevice& device, int resolution) {
     device_ = &device;
     resolution_ = resolution;
 
+    // Per-cascade resolution tier: far cascades don't need full resolution.
+    // Cascade 0 (tight near) gets full res for crisp contact shadows.
+    // Cascade 3 (distant) at 1/4 res — visually indistinguishable, 16x less fill.
+    // Aggregate: ~3x less shadow fragment work per frame vs all-full-res.
     for (int i = 0; i < CSM_MAX_CASCADES; ++i) {
+        int res_divisor = 1 << std::min(i, 2);  // 1, 2, 4, 4
+        int cascade_res = std::max(256, resolution_ / res_divisor);
+        cascade_resolutions_[i] = cascade_res;
         cascade_textures_[i] = gpu::GPUTexture::create_depth(
-            device, resolution_, resolution_);
+            device, cascade_res, cascade_res);
         if (!cascade_textures_[i]) {
             SDL_Log("ShadowMap::init: Failed to create cascade depth texture %d", i);
             return false;
@@ -68,17 +75,22 @@ bool ShadowMap::reinit(int resolution) {
 
     resolution_ = resolution;
 
-    // Recreate textures at new resolution
+    // Recreate textures at per-cascade tiered resolution
     for (int i = 0; i < CSM_MAX_CASCADES; ++i) {
+        int res_divisor = 1 << std::min(i, 2);
+        int cascade_res = std::max(256, resolution_ / res_divisor);
+        cascade_resolutions_[i] = cascade_res;
         cascade_textures_[i] = gpu::GPUTexture::create_depth(
-            *device_, resolution_, resolution_);
+            *device_, cascade_res, cascade_res);
         if (!cascade_textures_[i]) {
             SDL_Log("ShadowMap::reinit: Failed to create cascade depth texture %d", i);
             return false;
         }
     }
 
-    SDL_Log("ShadowMap: Reinitialized at %dx%d", resolution_, resolution_);
+    SDL_Log("ShadowMap: Reinitialized base=%d (cascade resolutions: %d, %d, %d, %d)",
+            resolution_, cascade_resolutions_[0], cascade_resolutions_[1],
+            cascade_resolutions_[2], cascade_resolutions_[3]);
     return true;
 }
 
@@ -98,7 +110,8 @@ void ShadowMap::compute_cascade_splits(float near_plane, float far_plane) {
 
 glm::mat4 ShadowMap::compute_cascade_matrix(const glm::mat4& camera_view, const glm::mat4& camera_proj,
                                               const glm::vec3& light_dir,
-                                              float near_split, float far_split) {
+                                              float near_split, float far_split,
+                                              int cascade_index) {
     glm::mat4 slice_proj = camera_proj;
 
     float n = near_split;
@@ -143,8 +156,9 @@ glm::mat4 ShadowMap::compute_cascade_matrix(const glm::mat4& camera_view, const 
     min_ls.z -= 500.0f;
     max_ls.z += 500.0f;
 
-    float texel_size_x = (max_ls.x - min_ls.x) / static_cast<float>(resolution_);
-    float texel_size_y = (max_ls.y - min_ls.y) / static_cast<float>(resolution_);
+    const float this_res = static_cast<float>(cascade_resolutions_[cascade_index]);
+    float texel_size_x = (max_ls.x - min_ls.x) / this_res;
+    float texel_size_y = (max_ls.y - min_ls.y) / this_res;
     if (texel_size_x > 0.0f) {
         min_ls.x = std::floor(min_ls.x / texel_size_x) * texel_size_x;
         max_ls.x = std::floor(max_ls.x / texel_size_x) * texel_size_x;
@@ -167,7 +181,7 @@ void ShadowMap::update(const glm::mat4& camera_view, const glm::mat4& camera_pro
     float prev_split = near_plane;
     for (int i = 0; i < active_cascades_; ++i) {
         cascades_[i].light_view_projection = compute_cascade_matrix(
-            camera_view, camera_proj, light_dir, prev_split, cascades_[i].split_depth);
+            camera_view, camera_proj, light_dir, prev_split, cascades_[i].split_depth, i);
         prev_split = cascades_[i].split_depth;
     }
 }
@@ -194,11 +208,12 @@ SDL_GPURenderPass* ShadowMap::begin_shadow_pass(SDL_GPUCommandBuffer* cmd, int c
         return nullptr;
     }
 
+    const int this_res = cascade_resolutions_[cascade_index];
     SDL_GPUViewport viewport = {};
     viewport.x = 0;
     viewport.y = 0;
-    viewport.w = static_cast<float>(resolution_);
-    viewport.h = static_cast<float>(resolution_);
+    viewport.w = static_cast<float>(this_res);
+    viewport.h = static_cast<float>(this_res);
     viewport.min_depth = 0.0f;
     viewport.max_depth = 1.0f;
     SDL_SetGPUViewport(current_shadow_pass_, &viewport);
@@ -206,8 +221,8 @@ SDL_GPURenderPass* ShadowMap::begin_shadow_pass(SDL_GPUCommandBuffer* cmd, int c
     SDL_Rect scissor = {};
     scissor.x = 0;
     scissor.y = 0;
-    scissor.w = resolution_;
-    scissor.h = resolution_;
+    scissor.w = this_res;
+    scissor.h = this_res;
     SDL_SetGPUScissor(current_shadow_pass_, &scissor);
 
     return current_shadow_pass_;

@@ -36,8 +36,12 @@ struct alignas(16) ModelLightingUniforms {
     float fogEnd;
     int hasTexture;
     int fogEnabled;
-    float _padding3 = 0.0f;
+    int hasNormalMap = 0;
     glm::vec3 cameraPos;
+    float normalScale = 1.0f;
+    float ambientStrength = 0.5f;
+    float sunIntensity = 1.0f;
+    float _padding3 = 0.0f;
     float _padding4 = 0.0f;
 };
 
@@ -99,8 +103,12 @@ struct alignas(16) InstancedLightingUniforms {
     float fogEnd;
     int hasTexture;
     int fogEnabled;
-    float _padding3 = 0.0f;
+    int hasNormalMap = 0;
     glm::vec3 cameraPos;
+    float normalScale = 1.0f;
+    float ambientStrength = 0.5f;
+    float sunIntensity = 1.0f;
+    float _padding3 = 0.0f;
     float _padding4 = 0.0f;
 };
 
@@ -170,6 +178,8 @@ struct alignas(16) GTAOUniforms {
     float bias = 0.01f;
     int numDirections = 6;
     int numSteps = 3;
+    float radiusScale = 1.0f;
+    float _padding[3] = {0.0f, 0.0f, 0.0f};
 };
 
 /**
@@ -190,6 +200,10 @@ struct alignas(16) CompositeUniforms {
     float bloomStrength = 0.35f;
     float volumetricFogEnabled = 0.0f;
     float _padding = 0.0f;
+    float exposure = 1.0f;
+    int tonemapMode = 0;
+    float contrast = 1.0f;
+    float saturation = 1.0f;
 };
 
 /**
@@ -226,8 +240,22 @@ struct alignas(16) VolumetricFogUniforms {
     float fogFalloff = 0.01f;
     float nearPlane = 0.1f;
     float farPlane = 5000.0f;
-    float shadowMapResolution = 2048.0f;
     float godRaysEnabled = 1.0f;
+    float densityMultiplier = 1.0f;
+};
+
+/**
+ * Clustered lighting fragment uniforms (set 3, b2).
+ * Mirrors render::lighting::ClusterParams. Held here so it can be referenced
+ * without dragging the lighting module into headers that only need GPU layouts.
+ */
+struct alignas(16) ClusterParamsUniforms {
+    glm::mat4 view;
+    glm::mat4 invProjection;
+    glm::vec4 screenSize;       // (width, height, 1/width, 1/height)
+    glm::vec4 zPlanes;          // (near, far, log(far/near), 1/log(far/near))
+    glm::uvec4 gridDim;         // (X, Y, Z, totalLightCount)
+    glm::uvec4 maxPerCluster;   // (max_lights_per_cluster, _, _, _)
 };
 
 } // namespace mmo::engine::gpu

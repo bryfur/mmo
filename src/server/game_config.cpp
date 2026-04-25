@@ -94,6 +94,7 @@ bool GameConfig::load_network(const std::string& path) {
         network_.building_view_distance = j.value("building_view_distance", 3000.0f);
         network_.environment_view_distance = j.value("environment_view_distance", 2000.0f);
         network_.spatial_grid_cell_size = j.value("spatial_grid_cell_size", 500.0f);
+        network_.delta_rate_hz = j.value("delta_rate_hz", 20.0f);
         return true;
     } catch (const json::exception& e) {
         std::cerr << "[GameConfig] Error parsing " << path << ": " << e.what() << std::endl;
@@ -498,6 +499,35 @@ bool GameConfig::load_skills(const std::string& path) {
             sk.damage_bonus = s.value("damage_bonus", 0.0f);
             sk.attack_speed_bonus = s.value("attack_speed_bonus", 0.0f);
             sk.self_shield_percent = s.value("shield_percent_of_mana", 0.0f);
+
+            // Projectile / spread / movement
+            sk.spread_angle = s.value("spread_angle", 0.0f);
+            sk.piercing = s.value("piercing", false);
+            sk.armor_ignore_percent = s.value("armor_ignore_percent", 0.0f);
+            sk.teleport_behind = s.value("teleport_behind", false);
+            sk.crit_bonus = s.value("crit_bonus", 0.0f);
+            sk.crit_bonus_duration = s.value("crit_bonus_duration", 0.0f);
+
+            // Channeled / ticking
+            sk.channeled = s.value("channeled", false);
+            sk.tick_rate = s.value("tick_rate", 0.0f);
+            sk.heal_percent_per_tick = s.value("heal_percent_per_tick", 0.0f);
+            sk.affects_allies = s.value("affects_allies", false);
+            sk.cast_delay = s.value("cast_delay", 0.0f);
+            sk.disables_attack = s.value("disables_attack", false);
+            sk.invulnerable_during = s.value("invulnerable_during", false);
+            sk.interrupts = s.value("interrupts", false);
+            sk.slow_immunity = s.value("slow_immunity", false);
+            sk.taunt_duration = s.value("taunt_duration", 0.0f);
+            sk.cooldown_reduction = s.value("cooldown_reduction", 0.0f);
+            sk.cast_speed_bonus = s.value("cast_speed_bonus", 0.0f);
+
+            // Traps
+            sk.trap_lifetime = s.value("trap_lifetime", 0.0f);
+            sk.trap_radius = s.value("trap_radius", 0.0f);
+
+            // Execute on low-HP targets
+            sk.target_health_threshold = s.value("target_health_threshold", 0.0f);
 
             skills_.push_back(std::move(sk));
         }

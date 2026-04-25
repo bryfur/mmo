@@ -11,6 +11,7 @@ struct VSInput {
     [[vk::location(1)]] float3 normal : NORMAL;
     [[vk::location(2)]] float2 texCoord : TEXCOORD0;
     [[vk::location(3)]] float4 color : COLOR0;
+    [[vk::location(4)]] float4 tangent : TANGENT;
 };
 
 // Vertex output / Fragment input
@@ -22,6 +23,7 @@ struct VSOutput {
     float4 vertexColor : TEXCOORD3;
     float fogDistance : TEXCOORD4;
     float viewDepth : TEXCOORD5;
+    float4 tangent : TEXCOORD6;  // xyz = world-space tangent, w = bitangent sign
 };
 
 // Uniform buffer - SDL3 GPU SPIR-V requires vertex uniforms in set 1
@@ -47,6 +49,10 @@ VSOutput VSMain(VSInput input) {
     // normalMatrix should be inverse-transpose of model, computed on CPU
     float3x3 normalMat3x3 = (float3x3)normalMatrix;
     output.normal = normalize(mul(normalMat3x3, input.normal));
+
+    // Tangent uses the model matrix directly (rigid-body transform preserves direction).
+    float3 tangentWS = normalize(mul((float3x3)model, input.tangent.xyz));
+    output.tangent = float4(tangentWS, input.tangent.w);
 
     output.texCoord = input.texCoord;
     output.vertexColor = input.color;

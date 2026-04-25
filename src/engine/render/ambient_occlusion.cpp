@@ -16,8 +16,10 @@ bool AmbientOcclusion::init(gpu::GPUDevice& device, int width, int height) {
     device_ = &device;
     width_ = width;
     height_ = height;
-    ao_width_ = std::max(1, width);
-    ao_height_ = std::max(1, height);
+    // Run AO at half resolution: 4x less fragment work for GTAO compute + blur.
+    // Upsample happens for free in the composite pass via bilinear sampling.
+    ao_width_ = std::max(1, width / 2);
+    ao_height_ = std::max(1, height / 2);
 
     create_textures(width, height);
     create_samplers();
@@ -27,7 +29,7 @@ bool AmbientOcclusion::init(gpu::GPUDevice& device, int width, int height) {
         return false;
     }
 
-    SDL_Log("AmbientOcclusion: Initialized %dx%d (AO: %dx%d)", width, height, ao_width_, ao_height_);
+    SDL_Log("AmbientOcclusion: Initialized %dx%d (AO half-res: %dx%d)", width, height, ao_width_, ao_height_);
     return true;
 }
 
@@ -57,18 +59,19 @@ void AmbientOcclusion::resize(int width, int height) {
 
     width_ = width;
     height_ = height;
-    ao_width_ = std::max(1, width);
-    ao_height_ = std::max(1, height);
+    ao_width_ = std::max(1, width / 2);
+    ao_height_ = std::max(1, height / 2);
 
     create_textures(width, height);
-    SDL_Log("AmbientOcclusion: Resized to %dx%d (AO: %dx%d)", width, height, ao_width_, ao_height_);
+    SDL_Log("AmbientOcclusion: Resized to %dx%d (AO half-res: %dx%d)", width, height, ao_width_, ao_height_);
 }
 
 void AmbientOcclusion::create_textures(int width, int height) {
-    // Full-resolution offscreen color target
+    // HDR (linear) offscreen scene target. Lighting/bloom/fog operate in linear HDR,
+    // tonemapping happens only in the composite pass to the LDR swapchain.
     offscreen_color_ = gpu::GPUTexture::create_2d(
         *device_, width, height,
-        SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM,
+        SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT,
         SDL_GPU_TEXTUREUSAGE_COLOR_TARGET | SDL_GPU_TEXTUREUSAGE_SAMPLER);
 
     // Full-resolution depth
@@ -118,7 +121,8 @@ SDL_GPURenderPass* AmbientOcclusion::begin_offscreen_pass(SDL_GPUCommandBuffer* 
     color_target.texture = offscreen_color_->handle();
     color_target.load_op = SDL_GPU_LOADOP_CLEAR;
     color_target.store_op = SDL_GPU_STOREOP_STORE;
-    color_target.clear_color = {0.35f, 0.45f, 0.6f, 1.0f};
+    // Linear HDR clear (sRGB (0.35, 0.45, 0.6) -> linear via gamma 2.2 approx)
+    color_target.clear_color = {0.097f, 0.170f, 0.318f, 1.0f};
 
     SDL_GPUDepthStencilTargetInfo depth_target = {};
     depth_target.texture = offscreen_depth_->handle();
@@ -140,7 +144,8 @@ void AmbientOcclusion::end_offscreen_pass() {
 }
 
 void AmbientOcclusion::render_ssao_pass(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& pipelines,
-                             const glm::mat4& projection, const glm::mat4& inv_projection) {
+                             const glm::mat4& projection, const glm::mat4& inv_projection,
+                             float radius_scale) {
     auto* pipeline = pipelines.get_ssao_pipeline();
     if (!pipeline) return;
 
@@ -149,6 +154,7 @@ void AmbientOcclusion::render_ssao_pass(SDL_GPUCommandBuffer* cmd, gpu::Pipeline
     uniforms.invProjection = inv_projection;
     uniforms.screenSize = glm::vec2(static_cast<float>(ao_width_), static_cast<float>(ao_height_));
     uniforms.invScreenSize = glm::vec2(1.0f / ao_width_, 1.0f / ao_height_);
+    uniforms.radiusScale = radius_scale;
 
     SDL_GPUColorTargetInfo color_target = {};
     color_target.texture = ao_texture_->handle();
@@ -171,7 +177,8 @@ void AmbientOcclusion::render_ssao_pass(SDL_GPUCommandBuffer* cmd, gpu::Pipeline
 }
 
 void AmbientOcclusion::render_gtao_pass(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& pipelines,
-                             const glm::mat4& projection, const glm::mat4& inv_projection) {
+                             const glm::mat4& projection, const glm::mat4& inv_projection,
+                             float radius_scale) {
     auto* pipeline = pipelines.get_gtao_pipeline();
     if (!pipeline) return;
 
@@ -180,6 +187,7 @@ void AmbientOcclusion::render_gtao_pass(SDL_GPUCommandBuffer* cmd, gpu::Pipeline
     uniforms.invProjection = inv_projection;
     uniforms.screenSize = glm::vec2(static_cast<float>(ao_width_), static_cast<float>(ao_height_));
     uniforms.invScreenSize = glm::vec2(1.0f / ao_width_, 1.0f / ao_height_);
+    uniforms.radiusScale = radius_scale;
 
     SDL_GPUColorTargetInfo color_target = {};
     color_target.texture = ao_texture_->handle();
@@ -267,14 +275,19 @@ void AmbientOcclusion::render_blur_pass(SDL_GPUCommandBuffer* cmd, gpu::Pipeline
 void AmbientOcclusion::render_composite_pass(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& pipelines,
                                   SDL_GPUTexture* swapchain_target,
                                   SDL_GPUTexture* bloom_texture,
-                                  float bloom_strength,
-                                  SDL_GPUTexture* fog_texture) {
+                                  SDL_GPUTexture* fog_texture,
+                                  const CompositeParams& params) {
     auto* pipeline = pipelines.get_composite_pipeline();
     if (!pipeline || !swapchain_target) return;
 
     gpu::CompositeUniforms uniforms = {};
-    uniforms.bloomStrength = bloom_texture ? bloom_strength : 0.0f;
+    uniforms.aoStrength = params.ao_strength;
+    uniforms.bloomStrength = bloom_texture ? params.bloom_strength : 0.0f;
     uniforms.volumetricFogEnabled = fog_texture ? 1.0f : 0.0f;
+    uniforms.exposure = params.exposure;
+    uniforms.tonemapMode = params.tonemap_mode;
+    uniforms.contrast = params.contrast;
+    uniforms.saturation = params.saturation;
 
     SDL_GPUColorTargetInfo color_target = {};
     color_target.texture = swapchain_target;

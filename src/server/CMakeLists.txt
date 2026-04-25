@@ -30,9 +30,13 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(json)
 
 file(GLOB_RECURSE SERVER_SOURCES CONFIGURE_DEPENDS "*.cpp")
+file(GLOB_RECURSE SERVER_TEST_SOURCES CONFIGURE_DEPENDS "*.test.cpp")
 
-# Separate main.cpp from library sources
+# Separate main.cpp + test sources from the library sources
 list(REMOVE_ITEM SERVER_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/main.cpp")
+foreach(test_src ${SERVER_TEST_SOURCES})
+    list(REMOVE_ITEM SERVER_SOURCES ${test_src})
+endforeach()
 
 # Create server library (for use by editor and other tools)
 add_library(mmo_server_lib ${SERVER_SOURCES})
@@ -41,6 +45,7 @@ target_link_libraries(mmo_server_lib PUBLIC
     mmo_protocol
     Jolt
     nlohmann_json::nlohmann_json
+    sqlite3
     pthread
 )
 
@@ -60,3 +65,18 @@ target_link_libraries(mmo_server PRIVATE
 target_include_directories(mmo_server PRIVATE
     ${asio_SOURCE_DIR}/asio/include
 )
+
+# Server unit tests
+if(MMO_BUILD_TESTS AND SERVER_TEST_SOURCES)
+    add_executable(mmo_server_tests ${SERVER_TEST_SOURCES})
+    target_link_libraries(mmo_server_tests PRIVATE
+        mmo_server_lib
+        GTest::gtest_main
+    )
+    target_include_directories(mmo_server_tests PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
+        ${asio_SOURCE_DIR}/asio/include
+    )
+    include(GoogleTest)
+    gtest_discover_tests(mmo_server_tests)
+endif()

@@ -1,4 +1,4 @@
-#include "gameplay_panels.hpp"
+#include "client/hud/panels.hpp"
 #include <cstdio>
 #include <cstring>
 

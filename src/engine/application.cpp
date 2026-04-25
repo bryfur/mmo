@@ -3,11 +3,15 @@
 #include "SDL3/SDL_filesystem.h"
 #include "SDL3/SDL_init.h"
 #include "SDL3/SDL_timer.h"
+#include "engine/core/asset/file_watcher.hpp"
+#include "engine/core/jobs/job_system.hpp"
+#include "engine/core/logger.hpp"
+#include "engine/core/profiler.hpp"
+#include "engine/gpu/pipeline_registry.hpp"
 #include "engine/render/render_context.hpp"
 #include "engine/scene/scene_renderer.hpp"
 #include "engine/systems/camera_system.hpp"
 #include <cstdint>
-#include <iostream>
 #include <memory>
 #include <string>
 
@@ -23,8 +27,13 @@ Application::~Application() = default;
 
 bool Application::init_engine() {
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
-        std::cerr << "Failed to initialize SDL: " << SDL_GetError() << std::endl;
+        ENGINE_LOG_FATAL("app", "Failed to initialize SDL: {}", SDL_GetError());
         return false;
+    }
+
+    if (const char* env = std::getenv("MMO_HOT_RELOAD"); env && env[0] == '1') {
+        core::asset::FileWatcher::instance().init();
+        ENGINE_LOG_INFO("app", "Hot-reload enabled (MMO_HOT_RELOAD=1)");
     }
     return true;
 }
@@ -50,8 +59,13 @@ void Application::run() {
             fps_timer_ = current_time;
         }
 
+        if (core::asset::FileWatcher::instance().is_initialized()) {
+            core::asset::FileWatcher::instance().poll_main_thread();
+        }
+
         // Process input - poll events, let subclass see them first
         {
+            ENGINE_PROFILE_ZONE("App::poll_events");
             input_.reset_camera_deltas();
             input_.clear_menu_inputs();
             SDL_Event event;
@@ -69,12 +83,22 @@ void Application::run() {
             input_.post_process_events();
         }
 
-        on_update(dt);
-        on_render();
+        {
+            ENGINE_PROFILE_ZONE("App::update");
+            on_update(dt);
+        }
+        {
+            ENGINE_PROFILE_ZONE("App::render");
+            on_render();
+        }
+
+        ENGINE_PROFILE_FRAME();
     }
 }
 
 void Application::shutdown_engine() {
+    core::asset::FileWatcher::instance().shutdown();
+    core::jobs::JobSystem::instance().shutdown();
     SDL_Quit();
 }
 
@@ -88,6 +112,11 @@ bool Application::init_renderer(int width, int height, const std::string& title,
 
     scene_renderer_ = std::make_unique<SceneRenderer>();
     if (!scene_renderer_->init(*context_, world_width, world_height)) return false;
+
+    if (auto* pr = scene_renderer_->pipeline_registry()) {
+        pr->enable_hot_reload(core::asset::FileWatcher::instance());
+    }
+    scene_renderer_->models().enable_hot_reload(core::asset::FileWatcher::instance());
 
     camera_ = std::make_unique<CameraSystem>();
 
@@ -106,7 +135,7 @@ void Application::shutdown_renderer() {
     auto path = settings_file_path();
     if (!path.empty()) {
         if (!graphics_settings_.save(path)) {
-            std::cerr << "Failed to save settings to " << path << '\n';
+            ENGINE_LOG_ERROR("settings", "Failed to save settings to {}", path);
         }
     }
 

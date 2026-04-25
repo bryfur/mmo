@@ -1,21 +1,10 @@
 #include "asio/io_context.hpp"
+#include "asio/signal_set.hpp"
 #include "server/server.hpp"
 #include "server/game_config.hpp"
 #include <cstdint>
-#include <exception>
-#include <functional>
 #include <iostream>
-#include <csignal>
 #include <string>
-
-std::function<void()> shutdown_handler;
-
-void signal_handler(int signal) {
-    std::cout << "\nReceived signal " << signal << ", shutting down..." << std::endl;
-    if (shutdown_handler) {
-        shutdown_handler();
-    }
-}
 
 int main(int argc, char* argv[]) {
     // Load game configuration from JSON files
@@ -38,30 +27,28 @@ int main(int argc, char* argv[]) {
         port = static_cast<uint16_t>(std::stoi(argv[1]));
     }
 
-    try {
-        asio::io_context io_context;
+    asio::io_context io_context;
 
-        mmo::server::Server server(io_context, port, config);
+    mmo::server::Server server(io_context, port, config);
 
-        shutdown_handler = [&]() {
-            server.stop();
-            io_context.stop();
-        };
+    // Graceful shutdown via asio: signal handler runs on the io_context
+    // thread, so server.stop() (which flushes persistence) executes
+    // before io_context.run() returns. Replaces std::signal-based
+    // approach which was not safe to call game/DB code from.
+    asio::signal_set signals(io_context, SIGINT, SIGTERM);
+    signals.async_wait([&](const asio::error_code& ec, int sig) {
+        if (ec) return;
+        std::cout << "\nReceived signal " << sig << ", shutting down..." << std::endl;
+        server.stop();
+        io_context.stop();
+    });
 
-        std::signal(SIGINT, signal_handler);
-        std::signal(SIGTERM, signal_handler);
+    server.start();
 
-        server.start();
+    std::cout << "MMO Server running on port " << port << std::endl;
+    std::cout << "Press Ctrl+C to stop" << std::endl;
 
-        std::cout << "MMO Server running on port " << port << std::endl;
-        std::cout << "Press Ctrl+C to stop" << std::endl;
-
-        io_context.run();
-
-    } catch (const std::exception& e) {
-        std::cerr << "Server error: " << e.what() << std::endl;
-        return 1;
-    }
+    io_context.run();
 
     return 0;
 }

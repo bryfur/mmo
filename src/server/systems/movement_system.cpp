@@ -1,4 +1,5 @@
 #include "movement_system.hpp"
+#include "server/math/movement_speed.hpp"
 #include "entt/entity/fwd.hpp"
 #include "server/ecs/game_components.hpp"
 #include "server/game_config.hpp"
@@ -6,6 +7,8 @@
 #include <cmath>
 
 namespace mmo::server::systems {
+
+using mmo::server::math::MovementSpeed;
 
 void update_movement(entt::registry& registry, float dt, const GameConfig& config) {
     // Update player movement based on input
@@ -22,34 +25,27 @@ void update_movement(entt::registry& registry, float dt, const GameConfig& confi
         const auto& input = input_state.input;
         const auto& info = player_view.get<ecs::EntityInfo>(entity);
 
-        // Check for movement-impairing effects
-        if (registry.all_of<ecs::BuffState>(entity)) {
-            const auto& buffs = registry.get<ecs::BuffState>(entity);
-            if (buffs.is_rooted()) {
-                velocity.x = 0.0f;
-                velocity.z = 0.0f;
-                // Skip transform update below for non-physics entities too
-                if (!registry.all_of<ecs::PhysicsBody>(entity)) {
-                    // No movement allowed
-                }
-                continue;
-            }
+        // Build a snapshot for the pure helper (see movement_speed.hpp).
+        MovementSpeed::Inputs s;
+        s.class_base_speed = config.get_class(info.player_class).speed;
+        if (auto* eq = registry.try_get<ecs::Equipment>(entity))
+            s.equipment_bonus = eq->speed_bonus;
+        if (auto* tp = registry.try_get<ecs::TalentPassiveState>(entity))
+            s.talent_speed_mult = tp->speed_mult;
+        if (auto* bs = registry.try_get<ecs::BuffState>(entity)) {
+            s.buff_speed_mult = bs->get_speed_multiplier();
+            s.is_rooted = bs->is_rooted();
+            s.is_stunned = bs->is_stunned();
+        }
+        s.is_sprinting = input.sprinting;
+
+        if (s.is_rooted || s.is_stunned) {
+            velocity.x = 0.0f;
+            velocity.z = 0.0f;
+            continue;
         }
 
-        float speed = config.get_class(info.player_class).speed;
-        if (input.sprinting) {
-            speed *= 1.6f;
-        }
-
-        // Apply talent speed multiplier (Fleet Footed, etc.)
-        if (registry.all_of<ecs::TalentPassiveState>(entity)) {
-            speed *= registry.get<ecs::TalentPassiveState>(entity).speed_mult;
-        }
-
-        // Apply buff speed multiplier (slow/speed boost)
-        if (registry.all_of<ecs::BuffState>(entity)) {
-            speed *= registry.get<ecs::BuffState>(entity).get_speed_multiplier();
-        }
+        float speed = MovementSpeed::compute(s);
 
         // Use continuous movement direction for smooth camera-relative movement
         // move_dir is already normalized by the client
@@ -61,9 +57,11 @@ void update_movement(entt::registry& registry, float dt, const GameConfig& confi
             // move_dir_x maps to X axis, move_dir_y maps to Z axis (ground plane)
             velocity.x = input.move_dir_x * speed;
             velocity.z = input.move_dir_y * speed;
+            if (!registry.all_of<ecs::Moving>(entity)) registry.emplace<ecs::Moving>(entity);
         } else {
             velocity.x = 0.0f;
             velocity.z = 0.0f;
+            if (registry.all_of<ecs::Moving>(entity)) registry.remove<ecs::Moving>(entity);
         }
 
         // Track stationary state for stationary-based talent effects

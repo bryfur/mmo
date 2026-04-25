@@ -6,6 +6,9 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
+
+namespace mmo::engine::core::asset { class FileWatcher; }
 
 
 namespace mmo::engine::gpu {
@@ -199,7 +202,7 @@ public:
 
     /**
      * @brief Set the swapchain color format
-     * 
+     *
      * Must be called before pipelines are created. If called after pipelines
      * exist, they will be invalidated.
      */
@@ -209,6 +212,32 @@ public:
      * @brief Get the current swapchain format
      */
     SDL_GPUTextureFormat get_swapchain_format() const { return swapchain_format_; }
+
+    /**
+     * @brief Get the HDR scene color format (used for offscreen scene target).
+     * Pipelines that render the 3D scene (Model, Terrain, Grass, Skybox, ...)
+     * are created with this format; the composite pass then tonemaps to swapchain.
+     */
+    SDL_GPUTextureFormat get_scene_color_format() const { return scene_color_format_; }
+
+    /**
+     * @brief Enable shader hot-reload by watching the SPIRV directory.
+     *
+     * On any .spv change, all cached pipelines are invalidated and pre-loaded
+     * again. Coarse but correct; live pipelines from the previous frame are
+     * released by SDL once the in-flight commands finish.
+     */
+    void enable_hot_reload(core::asset::FileWatcher& watcher);
+
+    /**
+     * @brief Force a hot-reload pass right now (mainly for tests/diagnostics).
+     */
+    void reload_all_pipelines();
+
+    /**
+     * @brief Path on disk where SPIRV shaders are loaded from.
+     */
+    const std::string& shader_path() const { return shader_path_; }
 
 private:
     // Pipeline creation methods
@@ -237,6 +266,8 @@ private:
 
     GPUDevice* device_ = nullptr;
     SDL_GPUTextureFormat swapchain_format_ = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    // HDR scene target format: lighting/bloom/fog compute in linear HDR, composite tonemaps.
+    SDL_GPUTextureFormat scene_color_format_ = SDL_GPU_TEXTUREFORMAT_R16G16B16A16_FLOAT;
     SDL_GPUTextureFormat depth_format_ = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
 
     // Pipeline cache
@@ -247,6 +278,10 @@ private:
 
     // Base path for compiled SPIRV shader files (relative to working directory)
     std::string shader_path_ = "shaders/";
+
+    // Hot-reload watcher (non-owning). uint32_t handle from FileWatcher.
+    core::asset::FileWatcher* watcher_ = nullptr;
+    uint32_t shader_watch_handle_ = 0;
 };
 
 } // namespace mmo::engine::gpu

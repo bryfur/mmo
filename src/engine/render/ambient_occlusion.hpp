@@ -36,15 +36,27 @@ public:
 
     // Post-processing passes
     void render_ssao_pass(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& pipelines,
-                          const glm::mat4& projection, const glm::mat4& inv_projection);
+                          const glm::mat4& projection, const glm::mat4& inv_projection,
+                          float radius_scale = 1.0f);
     void render_gtao_pass(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& pipelines,
-                          const glm::mat4& projection, const glm::mat4& inv_projection);
+                          const glm::mat4& projection, const glm::mat4& inv_projection,
+                          float radius_scale = 1.0f);
     void render_blur_pass(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& pipelines);
+
+    struct CompositeParams {
+        float bloom_strength = 0.35f;
+        float ao_strength = 1.0f;
+        float exposure = 1.0f;
+        int tonemap_mode = 0;
+        float contrast = 1.0f;
+        float saturation = 1.0f;
+    };
+
     void render_composite_pass(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& pipelines,
                                SDL_GPUTexture* swapchain_target,
-                               SDL_GPUTexture* bloom_texture = nullptr,
-                               float bloom_strength = 0.35f,
-                               SDL_GPUTexture* fog_texture = nullptr);
+                               SDL_GPUTexture* bloom_texture,
+                               SDL_GPUTexture* fog_texture,
+                               const CompositeParams& params);
 
     bool is_ready() const;
 

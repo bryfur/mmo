@@ -4,5 +4,6 @@
   "town_npc_view_distance": 1000.0,
   "building_view_distance": 3000.0,
   "environment_view_distance": 4000.0,
-  "spatial_grid_cell_size": 500.0
+  "spatial_grid_cell_size": 500.0,
+  "delta_rate_hz": 60.0
 }

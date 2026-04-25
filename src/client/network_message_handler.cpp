@@ -388,6 +388,7 @@ void NetworkMessageHandler::on_party_invite_offer(const std::vector<uint8_t>& pa
     auto& p = ctx_.hud_state.party;
     p.pending_inviter_id = msg.inviter_id;
     p.pending_inviter_name = std::string(msg.inviter_name, strnlen(msg.inviter_name, sizeof(msg.inviter_name)));
+    p.pending_invite_timer = PartyState::INVITE_POPUP_DURATION;
 }
 
 void NetworkMessageHandler::on_party_state(const std::vector<uint8_t>& payload) {
@@ -466,6 +467,12 @@ void NetworkMessageHandler::on_vendor_open(const std::vector<uint8_t>& payload) 
     VendorOpenMsg msg;
     msg.deserialize(payload);
 
+    // Empty stock + zero npc = close signal (player walked away).
+    if (msg.stock_count == 0 && msg.npc_id == 0) {
+        ctx_.hud_state.vendor.close();
+        return;
+    }
+
     auto& v = ctx_.hud_state.vendor;
     v.visible = true;
     v.npc_id = msg.npc_id;
@@ -476,7 +483,9 @@ void NetworkMessageHandler::on_vendor_open(const std::vector<uint8_t>& payload) 
     for (int i = 0; i < msg.stock_count && i < VendorOpenMsg::MAX_STOCK; ++i) {
         VendorStockSlot slot;
         slot.item_id = std::string(msg.stock[i].item_id, strnlen(msg.stock[i].item_id, sizeof(msg.stock[i].item_id)));
-        slot.item_name = slot.item_id;
+        slot.item_name = std::string(msg.stock[i].item_name, strnlen(msg.stock[i].item_name, sizeof(msg.stock[i].item_name)));
+        if (slot.item_name.empty()) slot.item_name = slot.item_id;
+        slot.rarity = std::string(msg.stock[i].rarity, strnlen(msg.stock[i].rarity, sizeof(msg.stock[i].rarity)));
         slot.price = msg.stock[i].price;
         slot.stock = msg.stock[i].stock;
         v.stock.push_back(std::move(slot));

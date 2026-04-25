@@ -10,11 +10,14 @@
 #include "engine/systems/camera_controller.hpp"
 #include "client/effect_loader.hpp"
 #include "client/animation_loader.hpp"
+#include "client/input_bindings.hpp"
+#include "client/combat_camera.hpp"
 #include "game_state.hpp"
 #include "menu_system.hpp"
-#include "gameplay_hud.hpp"
-#include "gameplay_panels.hpp"
+#include "client/hud/hud_state.hpp"
+#include "client/hud/panel_state.hpp"
 #include "network_message_handler.hpp"
+#include "mouse_ui.hpp"
 #include <glm/glm.hpp>
 #include <entt/entt.hpp>
 #include <string>
@@ -79,14 +82,18 @@ private:
     void update_notifications(float dt);
     void update_chat_input();
     void update_vendor_input();
+    void process_mouse_ui();
 
-    // Panel UI rendering
-    void build_notifications_ui(engine::scene::UIScene& ui);
-    void build_damage_numbers_ui(engine::scene::UIScene& ui);
-    void build_dialogue_ui(engine::scene::UIScene& ui);
-    void build_inventory_panel_ui(engine::scene::UIScene& ui);
-    void build_talent_panel_ui(engine::scene::UIScene& ui);
-    void build_quest_log_panel_ui(engine::scene::UIScene& ui);
+    // Per-frame in-game step helpers, defined in game_input.cpp /
+    // game_player_sync.cpp, called from update_playing().
+    void send_player_input(float dt);
+    void process_global_hotkeys();
+    void process_party_invite_input();
+    void process_skill_keys();
+    void tick_combat_cooldowns(float dt);
+    void sync_local_player_to_camera_and_hud();
+    void update_camera_for_player();
+    void update_npc_interaction_frame();
 
     entt::entity find_or_create_entity(uint32_t network_id);
     void update_entity_from_state(entt::entity entity, const mmo::protocol::NetEntityState& state);
@@ -129,6 +136,8 @@ private:
     std::unordered_map<uint32_t, bool> prev_attacking_;
 
     std::unique_ptr<MenuSystem> menu_system_;
+    std::unique_ptr<InputBindings> input_bindings_;
+    std::unique_ptr<CombatCamera> combat_camera_;
     int prev_class_selected_ = -1;
     float class_select_highlight_progress_ = 1.0f;
 
@@ -165,6 +174,11 @@ private:
     // Gameplay UI state
     HUDState hud_state_;
     PanelState panel_state_;
+    MouseUI mouse_ui_;
+
+    // Populated each frame from the local player's StatusEffects component
+    // so the HUD can render active buff/debuff icons.
+    uint16_t local_effects_mask_ = 0;
 
     // NPC Quest interaction state (defined in network_message_handler.hpp)
     NPCInteractionState npc_interaction_;
@@ -207,6 +221,9 @@ private:
 
     // Party
     KeyEdge key_party_y_, key_party_n_;
+
+    // Suppress Enter key propagation for one frame (e.g. after chat sent).
+    bool suppress_enter_this_frame_ = false;
 };
 
 } // namespace mmo::client

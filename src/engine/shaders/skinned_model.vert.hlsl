@@ -5,7 +5,7 @@
  * Applies bone matrices for skinned mesh deformation.
  */
 
-#define MAX_BONES 64
+#define MAX_BONES 128
 
 // Vertex input - locations match get_skinned_vertex_attributes() in gpu_types.hpp
 struct VSInput {
@@ -13,8 +13,9 @@ struct VSInput {
     [[vk::location(1)]] float3 normal : NORMAL;
     [[vk::location(2)]] float2 texCoord : TEXCOORD0;
     [[vk::location(3)]] float4 color : COLOR0;
-    [[vk::location(4)]] uint4 joints : BLENDINDICES;  // uint4 matches UBYTE4 vertex format
-    [[vk::location(5)]] float4 weights : BLENDWEIGHT;
+    [[vk::location(4)]] float4 tangent : TANGENT;
+    [[vk::location(5)]] uint4 joints : BLENDINDICES;  // uint4 matches UBYTE4 vertex format
+    [[vk::location(6)]] float4 weights : BLENDWEIGHT;
 };
 
 // Vertex output / Fragment input
@@ -26,6 +27,7 @@ struct VSOutput {
     float4 vertexColor : TEXCOORD3;
     float fogDistance : TEXCOORD4;
     float viewDepth : TEXCOORD5;
+    float4 tangent : TEXCOORD6;  // xyz = world-space tangent, w = bitangent sign
 };
 
 // Uniform buffer - SDL3 GPU SPIR-V requires vertex uniforms in set 1
@@ -59,6 +61,9 @@ VSOutput VSMain(VSInput input) {
 
     float4 localPos = mul(skinMatrix, float4(input.position, 1.0));
     float4 localNormal = mul(skinMatrix, float4(input.normal, 0.0));
+    // Skinning a tangent uses the same linear-blended bone matrix as the normal;
+    // bitangent sign (input.tangent.w) is preserved from the source asset.
+    float4 localTangent = mul(skinMatrix, float4(input.tangent.xyz, 0.0));
 
     float4 worldPos = mul(model, localPos);
     output.fragPos = worldPos.xyz;
@@ -66,6 +71,9 @@ VSOutput VSMain(VSInput input) {
     // Transform normal to world space using pre-computed normal matrix
     float3x3 normalMat3x3 = (float3x3)normalMatrix;
     output.normal = normalize(mul(normalMat3x3, localNormal.xyz));
+
+    float3 tangentWS = normalize(mul((float3x3)model, localTangent.xyz));
+    output.tangent = float4(tangentWS, input.tangent.w);
 
     output.texCoord = input.texCoord;
     output.vertexColor = input.color;

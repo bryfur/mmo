@@ -1,12 +1,12 @@
 #include "ik_solver.hpp"
 
 #include <cmath>
+#include <vector>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/quaternion.hpp>
 
 namespace mmo::engine::animation {
 
-// Helper: rotation quaternion that takes direction 'from' to direction 'to'
 static glm::quat rotation_between(const glm::vec3& from, const glm::vec3& to) {
     float d = glm::dot(from, to);
     if (d > 0.9999f) return glm::quat(1, 0, 0, 0);
@@ -21,14 +21,13 @@ static glm::quat rotation_between(const glm::vec3& from, const glm::vec3& to) {
 }
 
 void solve_two_bone_ik(
-    std::array<glm::mat4, MAX_BONES>& bone_matrices,
-    std::array<glm::mat4, MAX_BONES>& world_transforms,
+    std::span<glm::mat4> bone_matrices,
+    std::span<glm::mat4> world_transforms,
     const Skeleton& skeleton,
     int upper_idx, int lower_idx, int end_idx,
     const glm::vec3& target,
     const glm::vec3& pole_hint)
 {
-    // Extract current joint positions from world transforms
     glm::vec3 pos_a = glm::vec3(world_transforms[upper_idx][3]);
     glm::vec3 pos_b = glm::vec3(world_transforms[lower_idx][3]);
     glm::vec3 pos_c = glm::vec3(world_transforms[end_idx][3]);
@@ -37,7 +36,6 @@ void solve_two_bone_ik(
     float len_bc = glm::length(pos_c - pos_b);
     if (len_ab < 0.001f || len_bc < 0.001f) return;
 
-    // Clamp target to reachable range
     glm::vec3 t = target;
     float len_at = glm::length(t - pos_a);
     float max_reach = len_ab + len_bc - 0.01f;
@@ -51,31 +49,25 @@ void solve_two_bone_ik(
         len_at = min_reach;
     }
 
-    // Law of cosines: angle at upper joint
     float cos_a = (len_ab * len_ab + len_at * len_at - len_bc * len_bc) / (2.0f * len_ab * len_at);
     cos_a = glm::clamp(cos_a, -1.0f, 1.0f);
     float angle_a = std::acos(cos_a);
 
-    // Direction from upper joint toward target
     glm::vec3 dir_at = glm::normalize(t - pos_a);
 
-    // Determine bend direction from pole hint (project out the chain axis)
     glm::vec3 to_pole = pole_hint - pos_a;
     to_pole = to_pole - dir_at * glm::dot(to_pole, dir_at);
     if (glm::length(to_pole) < 0.001f) {
-        // Fallback: use current knee direction
         to_pole = pos_b - pos_a;
         to_pole = to_pole - dir_at * glm::dot(to_pole, dir_at);
     }
-    if (glm::length(to_pole) < 0.001f) return; // degenerate, skip
+    if (glm::length(to_pole) < 0.001f) return;
     glm::vec3 bend_dir = glm::normalize(to_pole);
 
-    // New knee position
     glm::vec3 new_b = pos_a + dir_at * (std::cos(angle_a) * len_ab)
                              + bend_dir * (std::sin(angle_a) * len_ab);
     glm::vec3 new_c = t;
 
-    // Rotate upper bone: old A->B direction to new A->new_B direction
     glm::vec3 old_dir_ab = glm::normalize(pos_b - pos_a);
     glm::vec3 new_dir_ab = glm::normalize(new_b - pos_a);
     glm::quat delta_upper = rotation_between(old_dir_ab, new_dir_ab);
@@ -85,7 +77,6 @@ void solve_two_bone_ik(
     world_transforms[upper_idx] = glm::mat4(rot_upper * old_rot_a);
     world_transforms[upper_idx][3] = glm::vec4(pos_a, 1.0f);
 
-    // Rotate lower bone: old B->C direction to new_B->new_C direction
     glm::vec3 old_dir_bc = glm::normalize(pos_c - pos_b);
     glm::vec3 new_dir_bc = glm::normalize(new_c - new_b);
     glm::quat delta_lower = rotation_between(old_dir_bc, new_dir_bc);
@@ -95,16 +86,14 @@ void solve_two_bone_ik(
     world_transforms[lower_idx] = glm::mat4(rot_lower * old_rot_b);
     world_transforms[lower_idx][3] = glm::vec4(new_b, 1.0f);
 
-    // Move end effector to target
     world_transforms[end_idx][3] = glm::vec4(new_c, 1.0f);
 
-    // Recompute bone matrices for modified bones
     bone_matrices[upper_idx] = world_transforms[upper_idx] * skeleton.joints[upper_idx].inverse_bind_matrix;
     bone_matrices[lower_idx] = world_transforms[lower_idx] * skeleton.joints[lower_idx].inverse_bind_matrix;
     bone_matrices[end_idx] = world_transforms[end_idx] * skeleton.joints[end_idx].inverse_bind_matrix;
 
-    // Propagate to children of the end effector (toes)
-    size_t joint_count = std::min(skeleton.joints.size(), static_cast<size_t>(MAX_BONES));
+    size_t joint_count = std::min(skeleton.joints.size(),
+                                   std::min(bone_matrices.size(), world_transforms.size()));
     for (size_t i = 0; i < joint_count; i++) {
         if (skeleton.joints[i].parent_index == end_idx) {
             glm::vec3 child_offset = glm::vec3(world_transforms[i][3]) - pos_c;
@@ -116,11 +105,11 @@ void solve_two_bone_ik(
 }
 
 void apply_foot_ik(
-    std::array<glm::mat4, MAX_BONES>& bone_matrices,
-    std::array<glm::mat4, MAX_BONES>& world_transforms,
+    std::span<glm::mat4> bone_matrices,
+    std::span<glm::mat4> world_transforms,
     const Skeleton& skeleton,
     const FootIKData& ik,
-    const glm::mat4& model_to_world,
+    const glm::mat4& /*model_to_world*/,
     float scale,
     float left_terrain_offset,
     float right_terrain_offset)
@@ -138,17 +127,13 @@ void apply_foot_ik(
     left_offset = glm::clamp(left_offset, -IK_MAX_CORRECTION, IK_MAX_CORRECTION);
     right_offset = glm::clamp(right_offset, -IK_MAX_CORRECTION, IK_MAX_CORRECTION);
 
-    // Drop pelvis by the larger downward correction.
-    // Hips is the skeleton root, so ALL bones must translate together.
     float pelvis_drop = std::min(left_offset, right_offset);
     if (pelvis_drop < 0.0f) {
         float drop_model = pelvis_drop / scale;
-        size_t count = std::min(skeleton.joints.size(), static_cast<size_t>(MAX_BONES));
+        size_t count = std::min(skeleton.joints.size(),
+                                 std::min(bone_matrices.size(), world_transforms.size()));
         for (size_t i = 0; i < count; i++) {
             world_transforms[i][3].y += drop_model;
-            // Only the translation row of bone_matrices changes when adding a Y offset to world_transforms
-            // bone_matrices[i] = world_transforms[i] * inv_bind
-            // The Y offset affects column 3 of the product: bone_matrices[i][3] += drop_model * inv_bind[1]
             const glm::mat4& inv_bind = skeleton.joints[i].inverse_bind_matrix;
             bone_matrices[i][3][0] += drop_model * inv_bind[1][0];
             bone_matrices[i][3][1] += drop_model * inv_bind[1][1];
@@ -159,7 +144,6 @@ void apply_foot_ik(
         right_offset -= pelvis_drop;
     }
 
-    // Solve each leg
     auto solve_leg = [&](int upper, int lower, int foot, float offset) {
         if (std::abs(offset) < IK_THRESHOLD) return;
         glm::vec3 foot_pos = glm::vec3(world_transforms[foot][3]);
@@ -180,8 +164,8 @@ void apply_foot_ik(
 }
 
 void apply_body_lean(
-    std::array<glm::mat4, MAX_BONES>& bone_matrices,
-    std::array<glm::mat4, MAX_BONES>& world_transforms,
+    std::span<glm::mat4> bone_matrices,
+    std::span<glm::mat4> world_transforms,
     const Skeleton& skeleton,
     int spine_index,
     float forward_lean,
@@ -198,15 +182,14 @@ void apply_body_lean(
                            * lean_rot
                            * glm::translate(glm::mat4(1.0f), -pivot);
 
-    // Precompute spine descendants in one pass (O(n)) instead of walking
-    // parent chains per bone (O(n * depth))
-    size_t joint_count = std::min(skeleton.joints.size(), static_cast<size_t>(MAX_BONES));
-    bool is_spine_descendant[MAX_BONES] = {};
-    is_spine_descendant[spine_index] = true;
+    size_t joint_count = std::min(skeleton.joints.size(),
+                                   std::min(bone_matrices.size(), world_transforms.size()));
+    std::vector<uint8_t> is_spine_descendant(joint_count, 0);
+    is_spine_descendant[spine_index] = 1;
     for (size_t i = 0; i < joint_count; i++) {
         int parent = skeleton.joints[i].parent_index;
         if (parent >= 0 && parent < static_cast<int>(joint_count) && is_spine_descendant[parent]) {
-            is_spine_descendant[i] = true;
+            is_spine_descendant[i] = 1;
         }
     }
 

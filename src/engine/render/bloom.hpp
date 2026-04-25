@@ -43,7 +43,7 @@ public:
      * @param scene_color The offscreen scene color texture to extract bloom from
      */
     void render(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& registry,
-                SDL_GPUTexture* scene_color);
+                SDL_GPUTexture* scene_color, float threshold = 1.0f);
 
     /**
      * Get the final bloom result texture for the composite pass.
@@ -57,8 +57,10 @@ private:
 
     gpu::GPUDevice* device_ = nullptr;
 
-    // Downsample/upsample mip chain: half, quarter, eighth, sixteenth
-    static constexpr int MIP_COUNT = 5;
+    // Downsample/upsample mip chain. 4 mips produces visually equivalent bloom
+    // for typical scene resolutions while saving 1 downsample + 1 upsample pass
+    // compared to 5 mips (~2 fullscreen-ish passes).
+    static constexpr int MIP_COUNT = 4;
     std::unique_ptr<gpu::GPUTexture> mip_textures_[MIP_COUNT];
 
     SDL_GPUSampler* linear_sampler_ = nullptr;

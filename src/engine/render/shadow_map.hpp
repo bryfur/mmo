@@ -76,7 +76,8 @@ private:
     void compute_cascade_splits(float near_plane, float far_plane);
     glm::mat4 compute_cascade_matrix(const glm::mat4& camera_view, const glm::mat4& camera_proj,
                                      const glm::vec3& light_dir,
-                                     float near_split, float far_split);
+                                     float near_split, float far_split,
+                                     int cascade_index);
 
     gpu::GPUDevice* device_ = nullptr;
     std::array<std::unique_ptr<gpu::GPUTexture>, CSM_MAX_CASCADES> cascade_textures_;
@@ -84,7 +85,9 @@ private:
     SDL_GPURenderPass* current_shadow_pass_ = nullptr;
 
     int active_cascades_ = CSM_MAX_CASCADES;
-    int resolution_ = 2048;
+    int resolution_ = 2048;  // cascade 0 (highest quality) resolution
+    // Per-cascade resolution: tighter near cascades get higher res, far cascades lower.
+    std::array<int, CSM_MAX_CASCADES> cascade_resolutions_ = {2048, 1024, 512, 512};
     std::array<CascadeData, CSM_MAX_CASCADES> cascades_ = {};
 };
 

@@ -93,7 +93,8 @@ void VolumetricFog::render(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& reg
                            const scene::CameraState& camera,
                            const glm::vec3& light_dir,
                            bool god_rays_enabled,
-                           bool fog_enabled) {
+                           bool fog_enabled,
+                           float density_multiplier) {
     if (!is_ready() || !cmd || !depth_texture) return;
 
     auto* pipeline = registry.get_pipeline(gpu::PipelineType::VolumetricFog);
@@ -101,7 +102,11 @@ void VolumetricFog::render(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& reg
 
     // Build uniforms
     gpu::VolumetricFogUniforms uniforms = {};
-    uniforms.invViewProjection = glm::inverse(camera.view_projection);
+    if (camera.view_projection != cached_view_projection_) {
+        cached_view_projection_ = camera.view_projection;
+        cached_inv_view_projection_ = glm::inverse(camera.view_projection);
+    }
+    uniforms.invViewProjection = cached_inv_view_projection_;
     // Use cascade 0 (highest resolution) for god rays
     if (shadow_map.is_ready()) {
         uniforms.shadowLightViewProjection = shadow_map.cascades()[0].light_view_projection;
@@ -116,8 +121,8 @@ void VolumetricFog::render(SDL_GPUCommandBuffer* cmd, gpu::PipelineRegistry& reg
     uniforms.fogFalloff = 0.005f;
     uniforms.nearPlane = 0.1f;
     uniforms.farPlane = 5000.0f;
-    uniforms.shadowMapResolution = static_cast<float>(shadow_map.resolution());
     uniforms.godRaysEnabled = god_rays_enabled ? 1.0f : 0.0f;
+    uniforms.densityMultiplier = density_multiplier;
     if (!fog_enabled) {
         uniforms.fogDensity = 0.0f;
     }

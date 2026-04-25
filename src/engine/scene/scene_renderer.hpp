@@ -7,9 +7,13 @@
 #include "engine/graphics_settings.hpp"
 #include "engine/render_stats.hpp"
 #include "engine/gpu/gpu_buffer.hpp"
+#include "engine/gpu/gpu_debug.hpp"
 #include "engine/gpu/gpu_texture.hpp"
 #include "engine/gpu/gpu_uniforms.hpp"
+#include "engine/render/lighting/light_cluster.hpp"
 #include <glm/glm.hpp>
+#include <array>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
@@ -102,6 +106,7 @@ public:
     render::TerrainRenderer& terrain();
     ModelManager& models();
     render::GrassRenderer* grass();
+    gpu::PipelineRegistry* pipeline_registry() { return pipeline_registry_.get(); }
     float get_terrain_height(float x, float z);
 
     // Post-UI callback: called after UI rendering, before end_frame.
@@ -129,7 +134,7 @@ private:
     void upload_instance_buffers();
     void render_instanced_models(const CameraState& camera);
     void render_instanced_shadow_models(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                         const glm::mat4& light_view_projection);
+                                         const glm::mat4& light_view_projection, int cascade);
     void render_ui_commands(const UIScene& ui_scene, const CameraState& camera);
     void draw_billboard_3d(const Billboard3DCommand& cmd, const CameraState& camera);
     void render_debug_lines(const RenderScene& scene, const CameraState& camera);
@@ -137,6 +142,11 @@ private:
     // Shadow rendering
     void render_shadow_passes(const RenderScene& scene, const CameraState& camera);
     void bind_shadow_data(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, int sampler_slot);
+
+    // Bind clustered-lighting storage buffers + ClusterParams uniform on the
+    // current main pass. Slot 2 is reserved for ClusterParams across all main-pass
+    // fragment shaders (model/instanced/terrain/grass).
+    void bind_cluster_lights(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, int uniform_slot);
 
     // Depth pre-pass (renders depth-only before main pass to eliminate overdraw)
 
@@ -165,19 +175,26 @@ private:
     std::unique_ptr<render::AmbientOcclusion> ao_;
     std::unique_ptr<render::Bloom> bloom_;
     std::unique_ptr<render::VolumetricFog> volumetric_fog_;
+    render::lighting::ClusterGrid cluster_grid_;
+    bool cluster_grid_ready_ = false;
 
     // ========== GPU Resources ==========
     std::unique_ptr<gpu::GPUBuffer> billboard_vertex_buffer_;
     std::unique_ptr<gpu::GPUBuffer> debug_line_vertex_buffer_;
     size_t debug_line_buffer_capacity_ = 0;  // max line count the buffer can hold
+    std::vector<float> debug_line_scratch_;  // reused per frame to avoid alloc
     std::unique_ptr<gpu::GPUTexture> depth_texture_;
     SDL_GPUSampler* default_sampler_ = nullptr;
     std::unique_ptr<gpu::GPUTexture> dummy_white_texture_;  // 1x1 white for binding slots that need a texture
+    std::unique_ptr<gpu::GPUTexture> default_normal_texture_;  // 1x1 (128,128,255) flat tangent-space normal
 
     // ========== Instanced Rendering ==========
     // Per-model batched instance data, rebuilt each frame (keyed by ModelHandle for O(1) lookup)
     std::unordered_map<ModelHandle, std::vector<gpu::InstanceData>> instance_batches_;
-    std::unordered_map<ModelHandle, std::vector<gpu::ShadowInstanceData>> shadow_instance_batches_;
+    // Per-cascade shadow batches: each cascade has its own light-frustum-culled set of casters.
+    // Only casters inside that cascade's light frustum are added, which dramatically
+    // reduces shadow draw work for tight near cascades.
+    std::array<std::unordered_map<ModelHandle, std::vector<gpu::ShadowInstanceData>>, 4> shadow_instance_batches_;
     std::vector<const ModelCommand*> non_instanced_commands_;  // individual draw fallback
     std::vector<const SkinnedModelCommand*> shadow_skinned_commands_;  // pre-collected for shadow passes
     std::unique_ptr<gpu::GPUBuffer> instance_storage_buffer_;
@@ -185,7 +202,14 @@ private:
     std::unique_ptr<gpu::GPUBuffer> shadow_instance_storage_buffer_;
     size_t shadow_instance_storage_capacity_ = 0;
 
-    // Reusable packing buffers to avoid per-frame allocations
+    // Per-cascade base_instance / count into shadow_instance_storage_buffer_
+    // after packing all cascades contiguously in upload_instance_buffers().
+    std::array<uint32_t, 4> shadow_cascade_base_instance_{};
+
+    // Per-cascade light frustums extracted from cascade.light_view_projection.
+    std::array<Frustum, 4> shadow_cascade_frustums_{};
+
+    // Per-frame packing scratch (cleared each frame, capacity preserved).
     std::vector<gpu::InstanceData> packed_instances_;
     std::vector<gpu::ShadowInstanceData> packed_shadow_instances_;
 
@@ -199,21 +223,21 @@ private:
     GraphicsSettings* graphics_ = nullptr;
     GraphicsSettings default_graphics_;
 
-    // ========== Per-Frame Caches ==========
-    // Model pointer cache: O(1) by handle, avoids repeated lookups across render passes
-    std::unordered_map<ModelHandle, Model*> frame_model_cache_;
-    // Legacy string-based cache for commands that only have model_name
-    std::unordered_map<std::string, Model*> frame_model_name_cache_;
-
     // Cached frame state (computed once in render_frame, reused everywhere)
     gpu::ShadowDataUniforms frame_shadow_uniforms_{};
     bool frame_fog_active_ = false;
     float frame_draw_dist_sq_ = 0.0f;
     bool frame_do_frustum_cull_ = false;
 
+    // Cached camera matrix inverses — recomputed only when the source matrix changes.
+    // glm::inverse on a 4x4 is ~80 flops; running it every frame for AO/fog is waste.
+    glm::mat4 cached_projection_{0.0f};
+    glm::mat4 cached_inv_projection_{1.0f};
+
     // ========== Debug Stats ==========
     bool collect_stats_ = false;
     engine::RenderStats render_stats_;
+    gpu::GPUTimestampPool gpu_timer_pool_;
 
     // ========== Post-UI Callback ==========
     PostUICallback post_ui_callback_;

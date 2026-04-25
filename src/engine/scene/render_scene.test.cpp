@@ -53,7 +53,7 @@ TEST(RenderScene, AddModelHandleVersion) {
 
 TEST(RenderScene, SkinnedModelStoresBonePointer) {
     RenderScene scene;
-    std::array<glm::mat4, 64> bones;
+    std::array<glm::mat4, 128> bones;
     bones.fill(glm::mat4(1.0f));
     bones[0] = glm::mat4(2.0f);
 
@@ -145,7 +145,7 @@ TEST(RenderScene, AddManyModelsWorks) {
 
 TEST(RenderScene, MixedModelAndSkinnedModelCommands) {
     RenderScene scene;
-    std::array<glm::mat4, 64> bones;
+    std::array<glm::mat4, 128> bones;
     bones.fill(glm::mat4(1.0f));
 
     scene.add_model("static_model", glm::mat4(1.0f));

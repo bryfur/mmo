@@ -58,7 +58,8 @@ public:
                 const scene::CameraState& camera,
                 const glm::vec3& light_dir,
                 bool god_rays_enabled = true,
-                bool fog_enabled = true);
+                bool fog_enabled = true,
+                float density_multiplier = 1.0f);
 
     /**
      * Get the fog result texture for the composite pass.
@@ -77,6 +78,10 @@ private:
     int height_ = 0;
     int fog_width_ = 0;
     int fog_height_ = 0;
+
+    // Cache view_projection inverse: skips ~80 flops on frames where the camera is idle.
+    glm::mat4 cached_view_projection_{0.0f};
+    glm::mat4 cached_inv_view_projection_{1.0f};
 };
 
 } // namespace mmo::engine::render

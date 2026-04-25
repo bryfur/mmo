@@ -42,12 +42,30 @@ struct NetEntityState : Serializable<NetEntityState> {
     float cone_angle = 0.0f;         // Attack cone angle for hit detection and visualization
     bool shows_reticle = false;      // Whether to show targeting reticle
 
-    // Expected wire size: 4+1+4*1 + 13*4 + 4+32 + 1+4 + 32+4+16+16+4+1 = 174 bytes
+    // Bitmask of active status effects, so client can render buff icons and
+    // tints without needing full per-effect state. See EffectBit below.
+    uint16_t effects_mask = 0;
+
+    // Client-visible status effect bits. Matches ECS StatusEffect types.
+    enum EffectBit : uint16_t {
+        EffectStun        = 1 << 0,  // Stun or Freeze (target can't act)
+        EffectSlow        = 1 << 1,
+        EffectRoot        = 1 << 2,
+        EffectBurn        = 1 << 3,  // Burn or Poison DoT
+        EffectShield      = 1 << 4,
+        EffectDamageBoost = 1 << 5,
+        EffectSpeedBoost  = 1 << 6,
+        EffectInvuln      = 1 << 7,
+        EffectDefBoost    = 1 << 8,
+    };
+
+    // Expected wire size: 4+1+4*1 + 13*4 + 4+32 + 1+4 + 32+4+16+16+4+1 + 2 = 176 bytes
     static constexpr size_t serialized_size() {
         return sizeof(uint32_t) + sizeof(EntityType) + sizeof(uint8_t) * 4 +
                sizeof(float) * 13 + sizeof(uint32_t) + 32 + sizeof(uint8_t) +
                sizeof(float) +  // attack_cooldown
-               32 + sizeof(float) + 16 + 16 + sizeof(float) + sizeof(uint8_t);
+               32 + sizeof(float) + 16 + 16 + sizeof(float) + sizeof(uint8_t) +
+               sizeof(uint16_t);
     }
 
     void serialize_impl(BufferWriter& w) const {
@@ -74,6 +92,7 @@ struct NetEntityState : Serializable<NetEntityState> {
         w.write_bytes(animation, 16);
         w.write(cone_angle);
         w.write<uint8_t>(shows_reticle ? 1 : 0);
+        w.write(effects_mask);
     }
 
     void deserialize_impl(BufferReader& r) {
@@ -100,6 +119,7 @@ struct NetEntityState : Serializable<NetEntityState> {
         r.read_bytes(animation, 16);
         cone_angle = r.read<float>();
         shows_reticle = r.read<uint8_t>() != 0;
+        effects_mask = r.read<uint16_t>();
     }
 };
 

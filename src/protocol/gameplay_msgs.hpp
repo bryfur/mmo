@@ -712,19 +712,27 @@ struct ChatBroadcastMsg : Serializable<ChatBroadcastMsg> {
 
 struct VendorStockEntry : Serializable<VendorStockEntry> {
     char item_id[32] = {};
+    char item_name[32] = {};
+    char rarity[16] = {};
     int32_t price = 0;      // In gold
     int32_t stock = -1;     // -1 = infinite
 
-    static constexpr size_t serialized_size() { return 32 + sizeof(int32_t) * 2; }
+    static constexpr size_t serialized_size() {
+        return 32 + 32 + 16 + sizeof(int32_t) * 2;
+    }
 
     void serialize_impl(BufferWriter& w) const {
         w.write_bytes(item_id, 32);
+        w.write_bytes(item_name, 32);
+        w.write_bytes(rarity, 16);
         w.write(price);
         w.write(stock);
     }
 
     void deserialize_impl(BufferReader& r) {
         r.read_bytes(item_id, 32);
+        r.read_bytes(item_name, 32);
+        r.read_bytes(rarity, 16);
         price = r.read<int32_t>();
         stock = r.read<int32_t>();
     }

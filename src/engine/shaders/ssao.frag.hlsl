@@ -21,6 +21,8 @@ cbuffer GTAOUniforms : register(b0, space3) {
     float bias;
     int numDirections;
     int numSteps;
+    float radiusScale;
+    float _padding[3];
 };
 
 [[vk::combinedImageSampler]][[vk::binding(0, 2)]]
@@ -75,6 +77,7 @@ float PSMain(PSInput input) : SV_Target {
 
     int totalSamples = numDirections * numSteps;
     float occlusion = 0.0;
+    float effectiveRadius = radius * radiusScale;
 
     for (int i = 0; i < totalSamples; ++i) {
         float3 sampleDir = randomSample(input.position.xy, i);
@@ -85,7 +88,7 @@ float PSMain(PSInput input) : SV_Target {
         }
 
         // Scale by radius and offset from view position
-        float3 samplePos = viewPos + sampleDir * radius;
+        float3 samplePos = viewPos + sampleDir * effectiveRadius;
 
         // Project sample to screen space
         float4 clipPos = mul(projection, float4(samplePos, 1.0));
@@ -101,7 +104,7 @@ float PSMain(PSInput input) : SV_Target {
         float3 actualPos = viewPosFromDepth(sampleUV, sampleDepth);
 
         // Check if the actual surface is closer than our sample (occluding)
-        float rangeCheck = smoothstep(0.0, 1.0, radius / max(abs(viewPos.z - actualPos.z), 0.001));
+        float rangeCheck = smoothstep(0.0, 1.0, effectiveRadius / max(abs(viewPos.z - actualPos.z), 0.001));
         occlusion += (actualPos.z >= samplePos.z + bias ? 1.0 : 0.0) * rangeCheck;
     }
 

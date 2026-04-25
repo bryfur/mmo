@@ -148,13 +148,22 @@ public:
 
     /**
      * @brief Upload pixel data to the texture
-     * 
+     *
      * @param cmd Command buffer for the copy operation
      * @param pixels Pointer to pixel data
      * @param width Width of the data (must match texture width)
      * @param height Height of the data (must match texture height)
      */
     void upload(SDL_GPUCommandBuffer* cmd, const void* pixels, int width, int height);
+
+    /**
+     * @brief Replace this texture's contents from a file on disk (hot-reload).
+     *
+     * On success the underlying SDL_GPUTexture is recreated and the old one
+     * released through the device. Returns false if the file cannot be loaded
+     * (existing GPU texture is left untouched).
+     */
+    bool reload_from_file(const std::string& path, bool generate_mipmaps = true);
 
     /**
      * @brief Get the raw SDL GPU texture handle

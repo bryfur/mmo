@@ -21,25 +21,41 @@
 struct SDL_GPUDevice;
 struct SDL_GPUCommandBuffer;
 
+namespace mmo::engine::core::asset { class FileWatcher; }
+
 namespace mmo::engine {
 
 // Integer handle for O(1) model lookup (replaces string-based lookups in hot paths)
 using ModelHandle = uint32_t;
 static constexpr ModelHandle INVALID_MODEL_HANDLE = 0;
 
-// Re-export animation types into mmo::engine for backward compatibility
-using animation::MAX_BONES;
-using animation::MAX_BONE_INFLUENCES;
-using animation::AnimationKeyframe;
-using animation::AnimationChannel;
-using animation::AnimationClip;
-using animation::Joint;
-using animation::Skeleton;
-using animation::FootIKData;
-
 // Use canonical vertex types from gpu module
 using gpu::Vertex3D;
 using gpu::SkinnedVertex;
+
+// PBR material parameters mirroring glTF pbrMetallicRoughness.
+// Textures are uploaded on demand; scalar factors act as fallbacks.
+struct PBRMaterial {
+    glm::vec4 base_color_factor{1.0f, 1.0f, 1.0f, 1.0f};
+    float metallic_factor = 0.0f;
+    float roughness_factor = 0.85f;
+    float normal_scale = 1.0f;
+    float occlusion_strength = 1.0f;
+    // CPU-side raw pixels for deferred GPU upload. Integration into fragment
+    // shaders is planned; currently only base_color is sampled.
+    std::vector<uint8_t> metallic_roughness_pixels;
+    int metallic_roughness_width = 0;
+    int metallic_roughness_height = 0;
+    std::vector<uint8_t> normal_pixels;
+    int normal_width = 0;
+    int normal_height = 0;
+    std::vector<uint8_t> occlusion_pixels;
+    int occlusion_width = 0;
+    int occlusion_height = 0;
+    std::unique_ptr<gpu::GPUTexture> metallic_roughness_texture;
+    std::unique_ptr<gpu::GPUTexture> normal_texture;
+    std::unique_ptr<gpu::GPUTexture> occlusion_texture;
+};
 
 struct Mesh {
     std::vector<Vertex3D> vertices;
@@ -50,11 +66,25 @@ struct Mesh {
     std::unique_ptr<gpu::GPUBuffer> vertex_buffer;
     std::unique_ptr<gpu::GPUBuffer> index_buffer;
     std::unique_ptr<gpu::GPUTexture> texture;
+    PBRMaterial material;
     bool uploaded = false;
 
     bool has_texture = false;
     uint32_t base_color = 0xFFFFFFFF;
     bool is_skinned = false;  // True if using skinned vertices
+
+    // Perf flags.
+    //
+    // cast_shadows=false : shadow passes skip this mesh (e.g. transparent leaves
+    //   that would cause expensive alpha-test overdraw in shadow depth rasterization).
+    // shadow_only=true   : main pass skips this mesh; only shadow passes render it.
+    //   Used for canopy shadow proxies — a low-poly ellipsoid that approximates the
+    //   leaf silhouette for shadows, replacing thousands of individual leaf quads.
+    // near_only=true     : hint that this mesh should only render near the camera
+    //   (high-frequency detail). Not yet enforced.
+    bool cast_shadows = true;
+    bool shadow_only = false;
+    bool near_only = false;
 
     // Texture data for deferred upload (before GPU upload)
     std::vector<uint8_t> texture_pixels;
@@ -84,10 +114,10 @@ struct Model {
     bool loaded = false;
 
     // Skeletal animation data
-    Skeleton skeleton;
-    std::vector<AnimationClip> animations;
+    animation::Skeleton skeleton;
+    std::vector<animation::AnimationClip> animations;
     bool has_skeleton = false;
-    FootIKData foot_ik;
+    animation::FootIKData foot_ik;
 
     // Pre-computed bounding sphere for fast frustum culling (avoids per-entity recomputation)
     glm::vec3 bounding_center = {0, 0, 0};
@@ -148,13 +178,24 @@ public:
     /// Uploads to GPU if device is set. Returns handle.
     ModelHandle register_model(const std::string& name, std::unique_ptr<Model> model);
 
+    /// Re-parse the source file and swap GPU buffers in place; the existing
+    /// ModelHandle keeps pointing at the same slot. Returns false if the file
+    /// failed to load (the existing model is left untouched).
+    bool reload_model(ModelHandle handle);
+
+    /// Enable hot-reload: re-load any model whose source file (.glb/.gltf) is
+    /// modified on disk.
+    void enable_hot_reload(core::asset::FileWatcher& watcher);
+
     void unload_all();
 
 private:
     gpu::GPUDevice* device_ = nullptr;
     // Slot 0 is reserved (INVALID_MODEL_HANDLE), models start at index 1
     std::vector<std::unique_ptr<Model>> models_;
+    std::vector<std::string> model_paths_;  // parallel to models_; "" for procedural
     std::unordered_map<std::string, ModelHandle> name_to_handle_;
+    core::asset::FileWatcher* watcher_ = nullptr;
 };
 
 } // namespace mmo::engine

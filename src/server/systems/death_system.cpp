@@ -20,8 +20,6 @@ void handle_monster_deaths(
     std::mt19937& rng,
     std::function<float(float, float)> get_terrain_height)
 {
-    using GameplayEvent = World::GameplayEvent;
-
     auto dead_npcs = registry.view<ecs::NPCTag, ecs::Health, ecs::MonsterTypeId>();
     for (auto entity : dead_npcs) {
         auto& health = dead_npcs.get<ecs::Health>(entity);
@@ -140,92 +138,81 @@ void handle_monster_deaths(
             }
 
             auto loot = roll_loot(monster_info.type_id, config);
-            give_loot(registry, killer, loot);
+            auto overflow = give_loot(registry, killer, loot);
+            // Items that didn't fit in inventory should NOT appear in the
+            // LootDrop notification below. Decrement or drop those entries.
+            for (auto& [oid, ocount] : overflow) {
+                for (auto it = loot.items.begin(); it != loot.items.end();) {
+                    if (it->first == oid) {
+                        it->second -= ocount;
+                        if (it->second <= 0) it = loot.items.erase(it);
+                        else ++it;
+                        break;
+                    } else ++it;
+                }
+            }
 
-            // Process quest kill objectives and generate events
-            auto quest_kill_changes = on_monster_killed(registry, killer, monster_info.type_id, config);
+            // Process quest kill objectives and generate events. Pass the
+            // dead monster's position so kill_in_area quests can match.
+            float kx = 0.0f, kz = 0.0f;
+            if (auto* mtx = registry.try_get<ecs::Transform>(entity)) { kx = mtx->x; kz = mtx->z; }
+            auto quest_kill_changes = on_monster_killed(registry, killer, monster_info.type_id, config, kx, kz);
             auto& killer_net_id = registry.get<ecs::NetworkId>(killer);
 
             for (auto& change : quest_kill_changes) {
                 if (change.quest_complete) {
-                    GameplayEvent evt;
-                    evt.type = GameplayEvent::Type::QuestComplete;
-                    evt.player_id = killer_net_id.id;
-                    evt.quest_id = change.quest_id;
-                    evt.quest_name = change.quest_name;
-                    pending_events.push_back(evt);
+                    pending_events.emplace_back(events::QuestComplete{
+                        killer_net_id.id, change.quest_id, change.quest_name});
                 } else {
-                    GameplayEvent evt;
-                    evt.type = GameplayEvent::Type::QuestProgress;
-                    evt.player_id = killer_net_id.id;
-                    evt.quest_id = change.quest_id;
-                    evt.objective_index = change.objective_index;
-                    evt.obj_current = change.current;
-                    evt.obj_required = change.required;
-                    evt.obj_complete = change.objective_complete;
-                    pending_events.push_back(evt);
+                    pending_events.emplace_back(events::QuestProgress{
+                        killer_net_id.id, change.quest_id, change.objective_index,
+                        change.current, change.required, change.objective_complete});
                 }
             }
 
             // Generate gameplay events for the client
             auto& killer_level = registry.get<ecs::PlayerLevel>(killer);
+            const auto& xp_curve = config.leveling().xp_curve;
+            auto xp_to_next_for = [&](int lvl) {
+                return (lvl < static_cast<int>(xp_curve.size())) ? xp_curve[lvl] : 99999;
+            };
 
-            // XP gain event
-            {
-                GameplayEvent evt;
-                evt.type = GameplayEvent::Type::XPGain;
-                evt.player_id = killer_net_id.id;
-                evt.xp_gained = killer_level.xp - xp_before;
-                evt.total_xp = killer_level.xp;
-                // Calculate XP to next level
-                const auto& xp_curve = config.leveling().xp_curve;
-                int level_idx = killer_level.level;
-                evt.xp_to_next = (level_idx < static_cast<int>(xp_curve.size())) ? xp_curve[level_idx] : 99999;
-                evt.new_level = killer_level.level;
-                pending_events.push_back(evt);
-            }
+            pending_events.emplace_back(events::XPGain{
+                killer_net_id.id,
+                killer_level.xp - xp_before,
+                killer_level.xp,
+                xp_to_next_for(killer_level.level),
+                killer_level.level});
 
-            // Level up event (if level changed)
             if (killer_level.level > level_before) {
                 auto& killer_health = registry.get<ecs::Health>(killer);
                 auto& killer_combat = registry.get<ecs::Combat>(killer);
-
-                GameplayEvent evt;
-                evt.type = GameplayEvent::Type::LevelUp;
-                evt.player_id = killer_net_id.id;
-                evt.new_level = killer_level.level;
-                evt.new_max_health = killer_health.max;
-                evt.new_damage = killer_combat.damage;
-                evt.total_xp = killer_level.xp;
-                const auto& xp_curve = config.leveling().xp_curve;
-                int level_idx = killer_level.level;
-                evt.xp_to_next = (level_idx < static_cast<int>(xp_curve.size())) ? xp_curve[level_idx] : 99999;
-                pending_events.push_back(evt);
+                pending_events.emplace_back(events::LevelUp{
+                    killer_net_id.id,
+                    killer_level.level,
+                    killer_health.max,
+                    killer_combat.damage,
+                    killer_level.xp,
+                    xp_to_next_for(killer_level.level)});
             }
 
-            // Loot event
             if (loot.gold > 0 || !loot.items.empty()) {
-                GameplayEvent evt;
-                evt.type = GameplayEvent::Type::LootDrop;
-                evt.player_id = killer_net_id.id;
-                evt.loot_gold = loot.gold;
-                evt.total_gold = killer_level.gold;
+                events::LootDrop drop;
+                drop.player_id = killer_net_id.id;
+                drop.loot_gold = loot.gold;
+                drop.total_gold = killer_level.gold;
+                drop.items.reserve(loot.items.size());
                 for (auto& [item_id, count] : loot.items) {
                     const auto* item_cfg = config.find_item(item_id);
-                    std::string name = item_cfg ? item_cfg->name : item_id;
-                    std::string rarity = item_cfg ? item_cfg->rarity : "common";
-                    evt.loot_items.push_back({name, rarity, count});
+                    drop.items.push_back({
+                        item_cfg ? item_cfg->name : item_id,
+                        item_cfg ? item_cfg->rarity : std::string{"common"},
+                        count});
                 }
-                pending_events.push_back(evt);
+                pending_events.emplace_back(std::move(drop));
             }
 
-            // Inventory update after loot
-            {
-                GameplayEvent evt;
-                evt.type = GameplayEvent::Type::InventoryUpdate;
-                evt.player_id = killer_net_id.id;
-                pending_events.push_back(evt);
-            }
+            pending_events.emplace_back(events::InventoryUpdate{killer_net_id.id});
         }
 
         // Respawn monster in its zone
@@ -239,6 +226,9 @@ void handle_monster_deaths(
             const auto& collider = registry.get<ecs::Collider>(entity);
             physics.update_body_shape(registry, entity, collider.radius, collider.half_height);
         }
+
+        // Respawned: drop the Dead tag.
+        if (registry.all_of<ecs::Dead>(entity)) registry.remove<ecs::Dead>(entity);
     }
 }
 
@@ -290,6 +280,9 @@ void handle_player_deaths(
         if (auto* body = registry.try_get<ecs::PhysicsBody>(entity)) {
             body->needs_teleport = true;
         }
+
+        // Revived in town: drop the Dead tag.
+        if (registry.all_of<ecs::Dead>(entity)) registry.remove<ecs::Dead>(entity);
     }
 }
 

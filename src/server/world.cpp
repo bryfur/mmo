@@ -20,14 +20,13 @@
 #include "systems/talent_passive_system.hpp"
 #include "systems/death_system.hpp"
 #include "entity_config.hpp"
+#include "log.hpp"
 #include <nlohmann/json.hpp>
 #include <cstdint>
 #include <cstring>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
-#include <iostream>
-#include <mutex>
 #include <random>
 #include <string>
 #include <utility>
@@ -53,24 +52,20 @@ World::World(const GameConfig& config)
     // Load heightmap from editor save
     load_heightmap();
 
-    // Initialize physics with gravity for 3D game
     physics_.initialize();
-    // Gravity set to 0: all entities are ground-locked via terrain height snapping,
-    // so gravity wastes CPU and prevents body sleep.
-    physics_.set_gravity(0.0f, 0.0f, 0.0f);
+    physics_.set_gravity(0.0f, -1500.0f, 0.0f);
 
-    // Set terrain height callback for ground snapping
-    physics_.set_terrain_height_callback([this](float x, float z) {
-        return get_terrain_height(x, z);
-    });
+    // Bake the heightmap into a Jolt HeightFieldShape so terrain participates
+    // in collision queries (raycasts, CharacterVirtual ground detection).
+    physics_.build_terrain(heightmap_);
 
     // Setup collision callbacks
     setup_collision_callbacks();
 
     // Load entities from editor save
     if (!spawn_from_world_data()) {
-        std::cout << "[World] No editor world data found (data/editor_save/world_entities.json). "
-                  << "Use the editor to generate and save a world.\n";
+        LOG_WARN("World") << "No editor world data found (data/editor_save/world_entities.json). "
+                          << "Use the editor to generate and save a world.";
     }
     
     // Spawn zone-based monsters across the world
@@ -108,9 +103,9 @@ World::World(const GameConfig& config)
             if (collider.type == ecs::ColliderType::Capsule) dynamic_capsules++;
         }
     }
-    std::cout << "[Physics] Bodies created - static boxes: " << static_boxes 
-              << ", static capsules: " << static_capsules 
-              << ", dynamic capsules: " << dynamic_capsules << std::endl;
+    LOG_INFO("Physics") << "Bodies created - static boxes: " << static_boxes
+                        << ", static capsules: " << static_capsules
+                        << ", dynamic capsules: " << dynamic_capsules;
     
     // Optimize broadphase now that all static bodies are added
     // This is critical for efficient collision detection with static objects
@@ -141,7 +136,6 @@ void World::setup_collision_callbacks() {
 }
 
 uint32_t World::add_player(const std::string& name, PlayerClass player_class) {
-    std::lock_guard<std::mutex> lock(mutex_);
     
     auto entity = registry_.create();
     uint32_t net_id = next_network_id();
@@ -229,7 +223,6 @@ uint32_t World::add_player(const std::string& name, PlayerClass player_class) {
 }
 
 void World::remove_player(uint32_t player_id) {
-    std::lock_guard<std::mutex> lock(mutex_);
 
     auto entity = find_entity_by_network_id(player_id);
     if (entity != entt::null) {
@@ -246,83 +239,84 @@ void World::remove_player(uint32_t player_id) {
 }
 
 void World::update_player_input(uint32_t player_id, const PlayerInput& input) {
-    std::lock_guard<std::mutex> lock(mutex_);
-    
+
     auto entity = find_entity_by_network_id(player_id);
-    if (entity != entt::null && registry_.all_of<ecs::InputState>(entity)) {
-        auto& state = registry_.get<ecs::InputState>(entity);
-        // Latch attacking flag so it persists until the combat system consumes it.
-        // Without this, a subsequent input packet with attacking=false can overwrite
-        // a pending attack before the server tick processes it.
-        bool was_attacking = state.input.attacking;
-        state.input = input;
-        if (was_attacking && !input.attacking) {
-            state.input.attacking = true;
+    if (entity == entt::null || !registry_.all_of<ecs::InputState>(entity)) return;
+
+    // Sanitize: clamp move_dir magnitude to <=1, normalize attack_dir to unit length.
+    // Untrusted client input — never propagate raw values into the simulation.
+    PlayerInput clean = input;
+    auto sanitize_dir = [](float& x, float& y, bool unit) {
+        if (!std::isfinite(x) || !std::isfinite(y)) { x = 0.0f; y = unit ? 1.0f : 0.0f; return; }
+        float len_sq = x * x + y * y;
+        if (unit) {
+            if (len_sq < 1e-6f) { x = 0.0f; y = 1.0f; return; }
+            float inv = 1.0f / std::sqrt(len_sq);
+            x *= inv; y *= inv;
+        } else if (len_sq > 1.0f) {
+            float inv = 1.0f / std::sqrt(len_sq);
+            x *= inv; y *= inv;
         }
-        
-        // Always update attack direction so player faces where mouse is pointing
-        if (!registry_.all_of<ecs::AttackDirection>(entity)) {
-            registry_.emplace<ecs::AttackDirection>(entity);
-        }
-        auto& attack_dir = registry_.get<ecs::AttackDirection>(entity);
-        attack_dir.x = input.attack_dir_x;
-        attack_dir.y = input.attack_dir_y;
+    };
+    sanitize_dir(clean.move_dir_x, clean.move_dir_y, false);
+    sanitize_dir(clean.attack_dir_x, clean.attack_dir_y, true);
+
+    auto& state = registry_.get<ecs::InputState>(entity);
+    // Latch attacking flag so it persists until the combat system consumes it.
+    bool was_attacking = state.input.attacking;
+    state.input = clean;
+    if (was_attacking && !clean.attacking) {
+        state.input.attacking = true;
     }
+
+    if (!registry_.all_of<ecs::AttackDirection>(entity)) {
+        registry_.emplace<ecs::AttackDirection>(entity);
+    }
+    auto& attack_dir = registry_.get<ecs::AttackDirection>(entity);
+    attack_dir.x = clean.attack_dir_x;
+    attack_dir.y = clean.attack_dir_y;
 }
 
 void World::update(float dt) {
-    std::lock_guard<std::mutex> lock(mutex_);
 
     // Update game systems
     systems::update_movement(registry_, dt, *config_);
     systems::update_ai(registry_, dt, *config_, town_center_);
     auto combat_hits = systems::update_combat(registry_, dt, *config_);
 
-    // Generate CombatEvent and EntityDeath events from combat hits
+    // Generate CombatEvent / EntityDeath events from combat hits.
+    // Emit ONCE per hit (player_id=0 = "broadcast"); the server filters by
+    // AOI when actually sending to clients. Avoids O(hits * players) fan-out.
+    auto emit_combat_pair = [this](uint32_t attacker_net_id,
+                                    uint32_t target_net_id,
+                                    float damage, bool died) {
+        pending_events_.emplace_back(events::CombatHitEvent{attacker_net_id, target_net_id, damage});
+        if (died) {
+            pending_events_.emplace_back(events::EntityDeathEvent{target_net_id, attacker_net_id});
+        }
+    };
+    auto net_id_or_zero = [this](entt::entity e) -> uint32_t {
+        auto* n = registry_.try_get<ecs::NetworkId>(e);
+        return n ? n->id : 0;
+    };
+
     for (const auto& hit : combat_hits) {
-        uint32_t attacker_net_id = 0;
-        uint32_t target_net_id = 0;
-        if (auto* net = registry_.try_get<ecs::NetworkId>(hit.attacker))
-            attacker_net_id = net->id;
-        if (auto* net = registry_.try_get<ecs::NetworkId>(hit.target))
-            target_net_id = net->id;
-
-        // Send CombatEvent to all nearby players (broadcast via player_id=0,
-        // which send_progression_updates will broadcast)
-        // For now, send to all players that are involved or nearby
-        {
-            // Send to all connected players - they'll filter by visibility client-side
-            auto players_view = registry_.view<ecs::PlayerTag, ecs::NetworkId>();
-            for (auto player : players_view) {
-                auto& pnet = players_view.get<ecs::NetworkId>(player);
-                GameplayEvent evt;
-                evt.type = GameplayEvent::Type::CombatEvent;
-                evt.player_id = pnet.id;
-                evt.attacker_id = attacker_net_id;
-                evt.target_id = target_net_id;
-                evt.damage_amount = hit.damage;
-                pending_events_.push_back(evt);
-            }
-        }
-
-        // Entity death event
-        if (hit.target_died) {
-            auto players_view = registry_.view<ecs::PlayerTag, ecs::NetworkId>();
-            for (auto player : players_view) {
-                auto& pnet = players_view.get<ecs::NetworkId>(player);
-                GameplayEvent evt;
-                evt.type = GameplayEvent::Type::EntityDeath;
-                evt.player_id = pnet.id;
-                evt.dead_entity_id = target_net_id;
-                evt.killer_entity_id = attacker_net_id;
-                pending_events_.push_back(evt);
-            }
-        }
+        emit_combat_pair(net_id_or_zero(hit.attacker), net_id_or_zero(hit.target),
+                         hit.damage, hit.target_died);
     }
 
     // Update progression systems
     systems::update_mana_regen(registry_, dt);
     systems::update_skill_cooldowns(registry_, dt);
+
+    // Tick active channeled skills (whirlwind, arcane_rain, consecrate, ...).
+    {
+        auto channel_hits = systems::update_channeled_skills(registry_, dt, *config_);
+        for (const auto& hit : channel_hits) {
+            emit_combat_pair(net_id_or_zero(hit.attacker), net_id_or_zero(hit.target),
+                             hit.damage, hit.target_died);
+        }
+    }
 
     // Update quests and generate progress/complete events
     auto quest_changes = systems::update_quests(registry_, dt, *config_);
@@ -331,22 +325,12 @@ void World::update(float dt) {
         if (!net_id) continue;
 
         if (change.quest_complete) {
-            GameplayEvent evt;
-            evt.type = GameplayEvent::Type::QuestComplete;
-            evt.player_id = net_id->id;
-            evt.quest_id = change.quest_id;
-            evt.quest_name = change.quest_name;
-            pending_events_.push_back(evt);
+            pending_events_.emplace_back(events::QuestComplete{
+                net_id->id, change.quest_id, change.quest_name});
         } else {
-            GameplayEvent evt;
-            evt.type = GameplayEvent::Type::QuestProgress;
-            evt.player_id = net_id->id;
-            evt.quest_id = change.quest_id;
-            evt.objective_index = change.objective_index;
-            evt.obj_current = change.current;
-            evt.obj_required = change.required;
-            evt.obj_complete = change.objective_complete;
-            pending_events_.push_back(evt);
+            pending_events_.emplace_back(events::QuestProgress{
+                net_id->id, change.quest_id, change.objective_index,
+                change.current, change.required, change.objective_complete});
         }
     }
 
@@ -366,9 +350,6 @@ void World::update(float dt) {
 
     // Update talent passive effects (regen, auras, fury, cooldown timers, etc.)
     systems::update_talent_passives(registry_, dt, *config_);
-
-    // Update physics (handles collision detection and response)
-    physics_.update(registry_, dt);
 
     // Update spatial grid - only for entities that can move (have Velocity)
     // Static entities (buildings, environment) are added once at spawn and never change cell
@@ -392,18 +373,17 @@ void World::update(float dt) {
             auto& last = player_zones_[net_id.id];
             if (zone_name != last) {
                 last = zone_name;
-                GameplayEvent evt;
-                evt.type = GameplayEvent::Type::ZoneChange;
-                evt.player_id = net_id.id;
-                evt.zone_name = zone_name;
-                pending_events_.push_back(evt);
+                pending_events_.emplace_back(events::ZoneChange{net_id.id, zone_name});
             }
         }
     }
 }
 
-// Internal helper: build NetEntityState from an entity (caller must hold mutex_)
-NetEntityState World::build_entity_state(entt::entity entity) const {
+void World::update_physics_step(float fixed_dt) {
+    physics_.update(registry_, fixed_dt);
+}
+
+NetEntityState World::build_entity_state(entt::entity entity, bool include_render_static) const {
     const auto& net_id = registry_.get<ecs::NetworkId>(entity);
     const auto& transform = registry_.get<ecs::Transform>(entity);
     const auto& velocity = registry_.get<ecs::Velocity>(entity);
@@ -448,80 +428,83 @@ NetEntityState World::build_entity_state(entt::entity entity) const {
         state.max_mana = player_level->max_mana;
     }
 
+    // Aggregate active status effects into a compact bitmask so the client
+    // can render buff icons / tints. See NetEntityState::EffectBit.
+    if (const auto* buffs = registry_.try_get<ecs::BuffState>(entity)) {
+        uint16_t m = 0;
+        for (const auto& e : buffs->effects) {
+            if (e.duration <= 0.0f) continue;
+            using T = ecs::StatusEffect::Type;
+            switch (e.type) {
+                case T::Stun:
+                case T::Freeze:       m |= NetEntityState::EffectStun; break;
+                case T::Slow:         m |= NetEntityState::EffectSlow; break;
+                case T::Root:         m |= NetEntityState::EffectRoot; break;
+                case T::Burn:
+                case T::Poison:       m |= NetEntityState::EffectBurn; break;
+                case T::Shield:       m |= NetEntityState::EffectShield; break;
+                case T::DamageBoost:  m |= NetEntityState::EffectDamageBoost; break;
+                case T::SpeedBoost:   m |= NetEntityState::EffectSpeedBoost; break;
+                case T::Invulnerable: m |= NetEntityState::EffectInvuln; break;
+                case T::DefenseBoost: m |= NetEntityState::EffectDefBoost; break;
+                default: break;
+            }
+        }
+        state.effects_mask = m;
+    }
+
     std::strncpy(state.name, name.value.c_str(), 31);
     state.name[31] = '\0';
 
-    // Populate rendering data
-    populate_render_data(state, info, combat);
+    // Static render fields are only needed by EntityEnter; per-tick deltas
+    // never transmit them, so skip the lookup on the hot path.
+    if (include_render_static) {
+        populate_render_data(state, info, combat);
+    }
 
     return state;
 }
 
 NetEntityState World::get_entity_state(uint32_t network_id) const {
-    std::lock_guard<std::mutex> lock(mutex_);
-
     auto entity = find_entity_by_network_id(network_id);
-    if (entity == entt::null) {
-        return NetEntityState{};  // Return empty state if not found
-    }
+    if (entity == entt::null) return NetEntityState{};
+    return build_entity_state(entity, /*include_render_static=*/false);
+}
 
-    return build_entity_state(entity);
+NetEntityState World::get_entity_state_full(uint32_t network_id) const {
+    auto entity = find_entity_by_network_id(network_id);
+    if (entity == entt::null) return NetEntityState{};
+    return build_entity_state(entity, /*include_render_static=*/true);
 }
 
 std::vector<NetEntityState> World::get_all_entities() const {
-    std::lock_guard<std::mutex> lock(mutex_);
-
     std::vector<NetEntityState> result;
 
     auto view = registry_.view<ecs::NetworkId, ecs::Transform, ecs::Velocity,
                                ecs::Health, ecs::Combat, ecs::EntityInfo, ecs::Name>();
 
     for (auto entity : view) {
-        result.push_back(build_entity_state(entity));
+        result.push_back(build_entity_state(entity, /*include_render_static=*/true));
     }
 
     return result;
 }
 
 std::vector<World::GameplayEvent> World::take_events() {
-    std::lock_guard<std::mutex> lock(mutex_);
     return std::move(pending_events_);
 }
 
 void World::add_combat_hits(const std::vector<systems::CombatHit>& hits) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    auto net_id_or_zero = [this](entt::entity e) -> uint32_t {
+        auto* n = registry_.try_get<ecs::NetworkId>(e);
+        return n ? n->id : 0;
+    };
     for (const auto& hit : hits) {
-        uint32_t attacker_net_id = 0;
-        uint32_t target_net_id = 0;
-        if (auto* net = registry_.try_get<ecs::NetworkId>(hit.attacker))
-            attacker_net_id = net->id;
-        if (auto* net = registry_.try_get<ecs::NetworkId>(hit.target))
-            target_net_id = net->id;
-
-        // CombatEvent to all players
-        auto players_view = registry_.view<ecs::PlayerTag, ecs::NetworkId>();
-        for (auto player : players_view) {
-            auto& pnet = players_view.get<ecs::NetworkId>(player);
-            GameplayEvent evt;
-            evt.type = GameplayEvent::Type::CombatEvent;
-            evt.player_id = pnet.id;
-            evt.attacker_id = attacker_net_id;
-            evt.target_id = target_net_id;
-            evt.damage_amount = hit.damage;
-            pending_events_.push_back(evt);
-        }
-
+        uint32_t a = net_id_or_zero(hit.attacker);
+        uint32_t t = net_id_or_zero(hit.target);
+        pending_events_.emplace_back(events::CombatHitEvent{a, t, hit.damage});
         if (hit.target_died) {
-            auto players_view2 = registry_.view<ecs::PlayerTag, ecs::NetworkId>();
-            for (auto player : players_view2) {
-                auto& pnet = players_view2.get<ecs::NetworkId>(player);
-                GameplayEvent evt;
-                evt.type = GameplayEvent::Type::EntityDeath;
-                evt.player_id = pnet.id;
-                evt.dead_entity_id = target_net_id;
-                evt.killer_entity_id = attacker_net_id;
-                pending_events_.push_back(evt);
-            }
+            pending_events_.emplace_back(events::EntityDeathEvent{t, a});
         }
     }
 }
@@ -535,12 +518,10 @@ entt::entity World::find_entity_by_network_id(uint32_t id) const {
 }
 
 size_t World::player_count() const {
-    std::lock_guard<std::mutex> lock(mutex_);
     return registry_.view<ecs::PlayerTag>().size();
 }
 
 size_t World::npc_count() const {
-    std::lock_guard<std::mutex> lock(mutex_);
     return registry_.view<ecs::NPCTag>().size();
 }
 
@@ -602,8 +583,8 @@ void World::load_heightmap() {
     const std::string path = "data/editor_save/heightmap.bin";
     std::ifstream f(path, std::ios::binary);
     if (!f.is_open()) {
-        std::cerr << "[World] No heightmap found at " << path
-                  << ". Use the editor to generate and save a world.\n";
+        LOG_WARN("World") << "No heightmap found at " << path
+                          << ". Use the editor to generate and save a world.";
         // Initialize a flat heightmap so the server doesn't crash
         heightmap_init(heightmap_, 0, 0, protocol::heightmap_config::CHUNK_RESOLUTION);
         return;
@@ -623,7 +604,7 @@ void World::load_heightmap() {
     f.read(reinterpret_cast<char*>(&max_h), sizeof(float));
 
     if (!f || resolution == 0 || resolution > 4096) {
-        std::cerr << "[World] Invalid editor heightmap at " << path << "\n";
+        LOG_ERROR("World") << "Invalid editor heightmap at " << path;
         heightmap_init(heightmap_, 0, 0, protocol::heightmap_config::CHUNK_RESOLUTION);
         return;
     }
@@ -633,7 +614,7 @@ void World::load_heightmap() {
     f.read(reinterpret_cast<char*>(data.data()), data_size * sizeof(uint16_t));
 
     if (!f) {
-        std::cerr << "[World] Truncated editor heightmap at " << path << "\n";
+        LOG_ERROR("World") << "Truncated editor heightmap at " << path;
         heightmap_init(heightmap_, 0, 0, protocol::heightmap_config::CHUNK_RESOLUTION);
         return;
     }
@@ -654,8 +635,8 @@ void World::load_heightmap() {
                 normalized = std::fmax(0.0f, std::fmin(1.0f, normalized));
                 data[i] = static_cast<uint16_t>(normalized * 65535.0f);
             }
-            std::cout << "[World] Re-encoded heightmap from range [" << min_h << ", " << max_h
-                      << "] to protocol range [" << proto_min << ", " << proto_max << "]\n";
+            LOG_INFO("World") << "Re-encoded heightmap from range [" << min_h << ", " << max_h
+                              << "] to protocol range [" << proto_min << ", " << proto_max << "]";
         }
     }
 
@@ -668,8 +649,8 @@ void World::load_heightmap() {
     heightmap_.world_size = world_size;
     heightmap_.height_data = std::move(data);
 
-    std::cout << "[World] Loaded editor heightmap: " << resolution << "x" << resolution
-              << " (" << heightmap_.serialized_size() / 1024 << " KB)\n";
+    LOG_INFO("World") << "Loaded editor heightmap: " << resolution << "x" << resolution
+                      << " (" << heightmap_.serialized_size() / 1024 << " KB)";
 }
 
 bool World::spawn_from_world_data() {
@@ -683,7 +664,7 @@ bool World::spawn_from_world_data() {
     try {
         f >> j;
     } catch (const std::exception& e) {
-        std::cerr << "[World] Failed to parse " << path << ": " << e.what() << "\n";
+        LOG_ERROR("World") << "Failed to parse " << path << ": " << e.what();
         return false;
     }
 
@@ -907,9 +888,9 @@ bool World::spawn_from_world_data() {
         }
     }
 
-    std::cout << "[World] Loaded " << j.size() << " entities from editor save ("
-              << buildings << " buildings, " << environment << " environment, "
-              << town_npcs << " town NPCs, " << monsters << " monsters)\n";
+    LOG_INFO("World") << "Loaded " << j.size() << " entities from editor save ("
+                      << buildings << " buildings, " << environment << " environment, "
+                      << town_npcs << " town NPCs, " << monsters << " monsters)";
     return true;
 }
 

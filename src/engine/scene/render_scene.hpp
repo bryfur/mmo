@@ -1,6 +1,7 @@
 #pragma once
 
 #include "engine/model_loader.hpp"  // ModelHandle
+#include "engine/render/lighting/light.hpp"
 #include <glm/glm.hpp>
 #include <cstdint>
 #include <string>
@@ -38,7 +39,7 @@ struct SkinnedModelCommand {
     mmo::engine::ModelHandle model_handle = mmo::engine::INVALID_MODEL_HANDLE;
     std::string model_name;  // kept for debug display; not used in hot path lookups
     glm::mat4 transform;
-    const std::array<glm::mat4, 64>* bone_matrices = nullptr;
+    const std::array<glm::mat4, 128>* bone_matrices = nullptr;
     glm::vec4 tint = {1.0f, 1.0f, 1.0f, 1.0f};
 };
 
@@ -113,7 +114,7 @@ public:
      * bone_matrices must remain valid until the frame is rendered.
      */
     void add_skinned_model(mmo::engine::ModelHandle handle, const glm::mat4& transform,
-                           const std::array<glm::mat4, 64>& bone_matrices,
+                           const std::array<glm::mat4, 128>& bone_matrices,
                            const glm::vec4& tint = {1.0f, 1.0f, 1.0f, 1.0f});
 
     /**
@@ -121,7 +122,7 @@ public:
      * bone_matrices must remain valid until the frame is rendered.
      */
     void add_skinned_model(std::string model_name, const glm::mat4& transform,
-                           const std::array<glm::mat4, 64>& bone_matrices,
+                           const std::array<glm::mat4, 128>& bone_matrices,
                            const glm::vec4& tint = {1.0f, 1.0f, 1.0f, 1.0f});
 
     /**
@@ -199,12 +200,22 @@ public:
     const std::vector<SkinnedModelCommand>& skinned_commands() const { return skinned_commands_; }
     const std::vector<Billboard3DCommand>& billboards() const { return billboards_; }
 
+    // ========== Dynamic Lights ==========
+
+    void add_point_light(const mmo::engine::render::lighting::PointLight& l);
+    void add_spot_light(const mmo::engine::render::lighting::SpotLight& l);
+    const std::vector<mmo::engine::render::lighting::PointLight>& point_lights() const { return point_lights_; }
+    const std::vector<mmo::engine::render::lighting::SpotLight>& spot_lights() const { return spot_lights_; }
+    void clear_lights();
+
 private:
     std::vector<ModelCommand> model_commands_;
     std::vector<SkinnedModelCommand> skinned_commands_;
     std::vector<Billboard3DCommand> billboards_;
     std::vector<ParticleEffectSpawnCommand> particle_effect_spawns_;
     std::vector<DebugLineCommand> debug_lines_;
+    std::vector<mmo::engine::render::lighting::PointLight> point_lights_;
+    std::vector<mmo::engine::render::lighting::SpotLight> spot_lights_;
 
     bool draw_skybox_ = false;
     bool draw_rocks_ = false;

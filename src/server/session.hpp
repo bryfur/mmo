@@ -2,6 +2,7 @@
 
 #include "protocol/protocol.hpp"
 #include <asio.hpp>
+#include <atomic>
 #include <chrono>
 #include <memory>
 #include <functional>
@@ -30,21 +31,34 @@ public:
 
     bool is_open() const { return socket_.is_open(); }
 
-    // Keepalive tracking
-    void mark_pong() { last_pong_time_ = std::chrono::steady_clock::now(); }
-    std::chrono::steady_clock::time_point last_pong_time() const { return last_pong_time_; }
+    // Keepalive tracking. last_pong_time_ is read by the game-loop strand
+    // and written from the IO thread that processes incoming Pongs, so
+    // store the underlying rep_t atomically rather than guarding with a
+    // mutex.
+    void mark_pong() {
+        last_pong_rep_.store(std::chrono::steady_clock::now().time_since_epoch().count(),
+                             std::memory_order_relaxed);
+    }
+    std::chrono::steady_clock::time_point last_pong_time() const {
+        return std::chrono::steady_clock::time_point(
+            std::chrono::steady_clock::duration(
+                last_pong_rep_.load(std::memory_order_relaxed)));
+    }
     
 private:
     void read_header();
     void read_payload();
-    void handle_packet();
+    void dispatch_packet();
+    void handle_packet(const mmo::protocol::PacketHeader& header,
+                       const std::vector<uint8_t>& payload);
     void do_write();
     
     tcp::socket socket_;
     Server& server_;
     uint32_t player_id_ = 0;
     std::string player_name_;
-    std::chrono::steady_clock::time_point last_pong_time_{std::chrono::steady_clock::now()};
+    std::atomic<std::chrono::steady_clock::rep> last_pong_rep_{
+        std::chrono::steady_clock::now().time_since_epoch().count()};
     
     // Read buffer
     std::array<uint8_t, mmo::protocol::PacketHeader::serialized_size()> header_buffer_;

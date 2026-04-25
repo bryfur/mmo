@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include "engine/model_utils.hpp"
 #include "engine/model_loader.hpp"
+#include "engine/gpu/gpu_types.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <cmath>
@@ -263,4 +264,106 @@ TEST(BuildModelTransform, CombinedTransform) {
     EXPECT_NEAR(edge.x, 100.0f, 1e-4f);
     EXPECT_NEAR(edge.y, 0.0f, 1e-4f);
     EXPECT_NEAR(edge.z, -1.5f, 1e-4f);
+}
+
+// ============================================================================
+// Tangent computation tests
+// ============================================================================
+
+// XY-plane triangle with axis-aligned UVs: tangent must align with +X,
+// bitangent with +Y, sign +1, and the result must be orthogonal to N=+Z.
+TEST(ComputeTangentsFromUVs, AxisAlignedTriangleProducesXTangent) {
+    std::vector<gpu::Vertex3D> verts(3);
+    verts[0].position = {0, 0, 0};
+    verts[1].position = {1, 0, 0};
+    verts[2].position = {0, 1, 0};
+    verts[0].normal = verts[1].normal = verts[2].normal = {0, 0, 1};
+    verts[0].texcoord = {0, 0};
+    verts[1].texcoord = {1, 0};
+    verts[2].texcoord = {0, 1};
+
+    std::vector<uint32_t> indices = {0, 1, 2};
+    compute_tangents_from_uvs(verts, indices);
+
+    for (const auto& v : verts) {
+        EXPECT_NEAR(v.tangent.x, 1.0f, 1e-5f);
+        EXPECT_NEAR(v.tangent.y, 0.0f, 1e-5f);
+        EXPECT_NEAR(v.tangent.z, 0.0f, 1e-5f);
+        EXPECT_NEAR(v.tangent.w, 1.0f, 1e-5f);
+    }
+}
+
+// Same triangle but UV.x and the geometry x are swapped: the tangent should
+// rotate 90 degrees in the plane to follow the U axis (now along +Y).
+TEST(ComputeTangentsFromUVs, SwappedUVsProduceYTangent) {
+    std::vector<gpu::Vertex3D> verts(3);
+    verts[0].position = {0, 0, 0};
+    verts[1].position = {1, 0, 0};
+    verts[2].position = {0, 1, 0};
+    verts[0].normal = verts[1].normal = verts[2].normal = {0, 0, 1};
+    // U increases along world +Y, V along world +X.
+    verts[0].texcoord = {0, 0};
+    verts[1].texcoord = {0, 1};
+    verts[2].texcoord = {1, 0};
+
+    std::vector<uint32_t> indices = {0, 1, 2};
+    compute_tangents_from_uvs(verts, indices);
+
+    for (const auto& v : verts) {
+        EXPECT_NEAR(v.tangent.x, 0.0f, 1e-5f);
+        EXPECT_NEAR(v.tangent.y, 1.0f, 1e-5f);
+        EXPECT_NEAR(v.tangent.z, 0.0f, 1e-5f);
+    }
+}
+
+// Mirrored UVs flip the bitangent direction relative to N x T, which the
+// glTF convention encodes in tangent.w == -1.
+TEST(ComputeTangentsFromUVs, MirroredUVsProduceNegativeBitangentSign) {
+    std::vector<gpu::Vertex3D> verts(3);
+    verts[0].position = {0, 0, 0};
+    verts[1].position = {1, 0, 0};
+    verts[2].position = {0, 1, 0};
+    verts[0].normal = verts[1].normal = verts[2].normal = {0, 0, 1};
+    // V is flipped (decreases instead of increases).
+    verts[0].texcoord = {0, 1};
+    verts[1].texcoord = {1, 1};
+    verts[2].texcoord = {0, 0};
+
+    std::vector<uint32_t> indices = {0, 1, 2};
+    compute_tangents_from_uvs(verts, indices);
+
+    for (const auto& v : verts) {
+        EXPECT_NEAR(v.tangent.w, -1.0f, 1e-5f);
+    }
+}
+
+// Tangent must end up orthogonal to the geometry normal after the
+// Gram-Schmidt step, even when the input normal is not in the plane.
+TEST(ComputeTangentsFromUVs, TangentOrthogonalToTiltedNormal) {
+    std::vector<gpu::Vertex3D> verts(3);
+    verts[0].position = {0, 0, 0};
+    verts[1].position = {1, 0, 0};
+    verts[2].position = {0, 1, 0};
+    glm::vec3 tilted = glm::normalize(glm::vec3(0.2f, 0.1f, 1.0f));
+    verts[0].normal = verts[1].normal = verts[2].normal = tilted;
+    verts[0].texcoord = {0, 0};
+    verts[1].texcoord = {1, 0};
+    verts[2].texcoord = {0, 1};
+
+    std::vector<uint32_t> indices = {0, 1, 2};
+    compute_tangents_from_uvs(verts, indices);
+
+    for (const auto& v : verts) {
+        glm::vec3 t(v.tangent.x, v.tangent.y, v.tangent.z);
+        EXPECT_NEAR(glm::length(t), 1.0f, 1e-4f);
+        EXPECT_NEAR(glm::dot(t, tilted), 0.0f, 1e-4f);
+    }
+}
+
+// Empty input must not crash and must leave vertices untouched.
+TEST(ComputeTangentsFromUVs, EmptyInputIsNoop) {
+    std::vector<gpu::Vertex3D> verts;
+    std::vector<uint32_t> indices;
+    compute_tangents_from_uvs(verts, indices);
+    EXPECT_TRUE(verts.empty());
 }

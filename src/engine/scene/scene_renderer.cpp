@@ -1,7 +1,11 @@
 #include "scene_renderer.hpp"
 #include "frustum.hpp"
+#include "engine/core/assert.hpp"
+#include "engine/core/jobs/job_system.hpp"
+#include "engine/core/profiler.hpp"
 #include "SDL3/SDL_gpu.h"
 #include "engine/gpu/gpu_buffer.hpp"
+#include "engine/gpu/gpu_debug.hpp"
 #include "engine/gpu/gpu_pipeline.hpp"
 #include "engine/gpu/gpu_texture.hpp"
 #include "engine/gpu/pipeline_registry.hpp"
@@ -30,6 +34,7 @@
 #include "engine/graphics_settings.hpp"
 #include "engine/scene/camera_state.hpp"
 #include "engine/scene/render_scene.hpp"
+#include "engine/scene/transform_math.hpp"
 #include "engine/scene/ui_scene.hpp"
 #include "glm/common.hpp"
 #include "glm/ext/matrix_float4x4.hpp"
@@ -41,45 +46,17 @@ namespace mmo::engine::scene {
 
 namespace gpu = mmo::engine::gpu;
 namespace render = mmo::engine::render;
-using namespace mmo::engine::render;
 
-// O(1) handle-based model lookup with per-frame cache
-static inline Model* get_model_cached(
-    std::unordered_map<ModelHandle, Model*>& cache,
-    ModelManager& mgr,
-    ModelHandle handle)
-{
-    if (handle == INVALID_MODEL_HANDLE) return nullptr;
-    auto it = cache.find(handle);
-    if (it != cache.end()) return it->second;
-    Model* m = mgr.get_model(handle);
-    cache[handle] = m;
-    return m;
-}
-
-static inline Model* get_model_cached_by_name(
-    std::unordered_map<std::string, Model*>& name_cache,
-    ModelManager& mgr,
-    const std::string& name)
-{
-    if (name.empty()) return nullptr;
-    auto it = name_cache.find(name);
-    if (it != name_cache.end()) return it->second;
-    Model* m = mgr.get_model(name);
-    name_cache[name] = m;
-    return m;
-}
-
+// ModelManager::get_model(handle) is already O(1) via vector index — direct
+// lookup beats a hashmap cache, so we don't memoize.
 static inline Model* resolve_model(
-    std::unordered_map<ModelHandle, Model*>& handle_cache,
-    std::unordered_map<std::string, Model*>& name_cache,
     ModelManager& mgr,
     ModelHandle handle,
     const std::string& name)
 {
-    if (handle != INVALID_MODEL_HANDLE)
-        return get_model_cached(handle_cache, mgr, handle);
-    return get_model_cached_by_name(name_cache, mgr, name);
+    if (handle != INVALID_MODEL_HANDLE) return mgr.get_model(handle);
+    if (name.empty()) return nullptr;
+    return mgr.get_model(name);
 }
 
 static inline ModelHandle resolve_handle(
@@ -118,7 +95,7 @@ ModelManager& SceneRenderer::models() { return *model_manager_; }
 render::GrassRenderer* SceneRenderer::grass() { return grass_renderer_.get(); }
 float SceneRenderer::get_terrain_height(float x, float z) { return terrain_->get_height(x, z); }
 
-bool SceneRenderer::init(RenderContext& context, float world_width, float world_height) {
+bool SceneRenderer::init(render::RenderContext& context, float world_width, float world_height) {
     context_ = &context;
 
     if (!pipeline_registry_->init(context_->device())) {
@@ -197,6 +174,14 @@ bool SceneRenderer::init(RenderContext& context, float world_width, float world_
         std::cerr << "Warning: Failed to initialize Volumetric Fog (fog disabled)" << std::endl;
     }
 
+    gpu_timer_pool_.init(context_->device(), 64);
+
+    cluster_grid_ready_ = cluster_grid_.init(context_->device(),
+                                             render::lighting::MAX_LIGHTS);
+    if (!cluster_grid_ready_) {
+        std::cerr << "Warning: Failed to initialize ClusterGrid (dynamic lighting disabled)" << std::endl;
+    }
+
     return true;
 }
 
@@ -217,6 +202,7 @@ void SceneRenderer::shutdown() {
         default_sampler_ = nullptr;
     }
 
+    gpu_timer_pool_.shutdown();
     volumetric_fog_->shutdown();
     bloom_->shutdown();
     ao_->shutdown();
@@ -257,6 +243,15 @@ void SceneRenderer::init_pipelines() {
         uint32_t white_pixel = 0xFFFFFFFF;
         dummy_white_texture_ = gpu::GPUTexture::create_2d(
             context_->device(), 1, 1, gpu::TextureFormat::RGBA8, &white_pixel);
+    }
+
+    // 1x1 flat tangent-space normal: (0,0,1) packed as UNORM (128,128,255).
+    // Bound on the normal-map slot when the material has no normal map, so the
+    // shader's branch-free path produces N == N_geo.
+    {
+        uint8_t flat_normal[4] = { 128, 128, 255, 255 };
+        default_normal_texture_ = gpu::GPUTexture::create_2d(
+            context_->device(), 1, 1, gpu::TextureFormat::RGBA8, flat_normal);
     }
 }
 
@@ -304,6 +299,15 @@ void SceneRenderer::set_graphics_settings(const GraphicsSettings& settings) {
 
     default_graphics_ = settings;
     graphics_ = &default_graphics_;
+
+    // Forward lighting tunables to renderers that own their own uniform builders.
+    if (terrain_) {
+        terrain_->set_lighting_tunables(settings.ambient_strength, settings.sun_intensity);
+    }
+    if (grass_renderer_) {
+        grass_renderer_->ambient_strength = settings.ambient_strength;
+        grass_renderer_->sun_intensity = settings.sun_intensity;
+    }
 }
 
 void SceneRenderer::set_vsync_mode(int mode) {
@@ -472,7 +476,11 @@ void SceneRenderer::end_ui() {
 
 void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_scene,
                                   const CameraState& camera, float dt) {
-    if (collect_stats_) render_stats_ = {};
+    ENGINE_PROFILE_ZONE("SceneRenderer::render_frame");
+    if (collect_stats_) {
+        render_stats_ = {};
+        render_stats_.jobs_pending = core::jobs::JobSystem::instance().pending_count();
+    }
     const GraphicsSettings& gfx = graphics_ ? *graphics_ : default_graphics_;
 
     // Cache frame-level state once (avoids repeated ternary/function calls)
@@ -487,25 +495,98 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
     effect_system_->update(dt, get_terrain_height);
 
     begin_frame();
+    gpu_timer_pool_.begin_frame();
 
     bool has_content = scene.has_3d_content();
-    bool use_ao = gfx.ao_mode > 0 && ao_->is_ready();
+    // Always render 3D through the HDR offscreen target so scene lighting stays
+    // in linear HDR; the composite pass tonemaps + gamma-corrects to the swapchain.
+    // ao_mode == 0 simply skips the AO pass (aoStrength=0 in composite).
+    bool use_ao = ao_->is_ready();
 
     if (has_content) {
-        // Build instance batches (cull + group) and upload storage buffers
-        // before any render passes begin.
-        // Extract frustum once here; reused in render_3d_scene for skinned models.
+        // Extract main camera frustum once (reused in render_3d_scene for skinned models).
         frame_frustum_.extract_from_matrix(camera.view_projection);
-        build_instance_batches(scene, camera, frame_frustum_);
-        upload_instance_buffers();
 
-        if (shadow_map_->is_ready() && gfx.shadow_mode > 0) {
+        if (camera.projection != cached_projection_) {
+            cached_projection_ = camera.projection;
+            cached_inv_projection_ = glm::inverse(camera.projection);
+        }
+
+        // Update cascade matrices FIRST so we can extract per-cascade light frustums
+        // and use them to cull shadow casters per cascade in build_instance_batches.
+        const bool shadows_on = shadow_map_->is_ready() && gfx.shadow_mode > 0;
+        if (shadows_on) {
+            shadow_map_->update(camera.view, camera.projection, light_dir_, 5.0f, 2000.0f);
+            const int active = shadow_map_->active_cascades();
+            for (int c = 0; c < active; ++c) {
+                shadow_cascade_frustums_[c].extract_from_matrix(
+                    shadow_map_->cascades()[c].light_view_projection);
+            }
+        }
+
+        // Build instance batches (cull for main + per-cascade shadows) and upload.
+        if (SDL_GPUCommandBuffer* bb_cmd = context_->current_command_buffer()) {
+            ENGINE_GPU_SCOPE(bb_cmd, "InstanceBatchBuild");
+            ENGINE_GPU_TIMER(gpu_timer_pool_, bb_cmd, "InstanceBatchBuild");
+            build_instance_batches(scene, camera, frame_frustum_);
+            upload_instance_buffers();
+        } else {
+            build_instance_batches(scene, camera, frame_frustum_);
+            upload_instance_buffers();
+        }
+
+        // Upload grass chunk storage buffer BEFORE any render pass begins
+        // (copy pass cannot be nested in a render pass).
+        if (scene.should_draw_grass() && gfx.grass_enabled && grass_renderer_) {
+            grass_renderer_->grass_view_distance = std::min(gfx.get_draw_distance(), 600.0f);
+            grass_renderer_->update(dt, skybox_time_);
+            SDL_GPUCommandBuffer* pre_cmd = context_->current_command_buffer();
+            if (pre_cmd) {
+                ENGINE_GPU_SCOPE(pre_cmd, "GrassChunkUpload");
+                grass_renderer_->upload_chunks(pre_cmd, camera.position, &frame_frustum_);
+            }
+        }
+
+        if (shadows_on) {
             render_shadow_passes(scene, camera);
         }
 
-        // Cache shadow uniforms AFTER render_shadow_passes updates cascade matrices
+        // Cache shadow uniforms (cascade matrices are stable after update()).
         if (shadow_map_->is_ready()) {
             frame_shadow_uniforms_ = shadow_map_->get_shadow_uniforms(gfx.shadow_mode);
+        }
+
+        // Build cluster light grid + upload SSBOs before main pass begins
+        // (copy passes cannot be nested in render passes). Skip the CPU build
+        // + GPU upload when the scene has zero dynamic lights — the per-frag
+        // cluster path early-outs via gridDim.w==0. We still need to bind the
+        // SSBOs to terrain/grass pipelines below so those binding slots are
+        // valid; the buffers retain their last-uploaded state (initially zero).
+        const bool any_dyn_lights = !scene.point_lights().empty() ||
+                                    !scene.spot_lights().empty();
+        if (cluster_grid_ready_) {
+            if (any_dyn_lights) {
+                uint32_t cw = static_cast<uint32_t>(std::max(context_->width(), 1));
+                uint32_t ch = static_cast<uint32_t>(std::max(context_->height(), 1));
+                cluster_grid_.begin_frame(camera, cw, ch, 0.1f, gfx.get_draw_distance());
+                for (const auto& l : scene.point_lights()) cluster_grid_.add_point_light(l);
+                for (const auto& l : scene.spot_lights())  cluster_grid_.add_spot_light(l);
+                cluster_grid_.build();
+                if (SDL_GPUCommandBuffer* lc = context_->current_command_buffer()) {
+                    ENGINE_GPU_SCOPE(lc, "ClusterLightUpload");
+                    cluster_grid_.upload(lc);
+                }
+            }
+            terrain_->set_cluster_lighting(cluster_grid_.light_data_buffer(),
+                                          cluster_grid_.cluster_offsets_buffer(),
+                                          cluster_grid_.light_indices_buffer(),
+                                          &cluster_grid_.params(), sizeof(cluster_grid_.params()));
+            if (grass_renderer_) {
+                grass_renderer_->set_cluster_lighting(cluster_grid_.light_data_buffer(),
+                                                     cluster_grid_.cluster_offsets_buffer(),
+                                                     cluster_grid_.light_indices_buffer(),
+                                                     &cluster_grid_.params(), sizeof(cluster_grid_.params()));
+            }
         }
 
         SDL_GPUCommandBuffer* cmd = context_->current_command_buffer();
@@ -524,30 +605,47 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
                 volumetric_fog_->resize(static_cast<int>(sw_width), static_cast<int>(sw_height));
             }
 
-            // Render scene to offscreen RT
-            main_render_pass_ = ao_->begin_offscreen_pass(cmd);
-            had_main_pass_this_frame_ = (main_render_pass_ != nullptr);
+            {
+                ENGINE_GPU_SCOPE(cmd, "AOOffscreen");
+                ENGINE_GPU_TIMER(gpu_timer_pool_, cmd, "AOOffscreen");
+                main_render_pass_ = ao_->begin_offscreen_pass(cmd);
+                had_main_pass_this_frame_ = (main_render_pass_ != nullptr);
 
-            if (main_render_pass_ && cmd) {
-                render_3d_scene(scene, camera, dt);
-                ao_->end_offscreen_pass();
-                main_render_pass_ = nullptr;
+                if (main_render_pass_ && cmd) {
+                    render_3d_scene(scene, camera, dt);
+                    ao_->end_offscreen_pass();
+                    main_render_pass_ = nullptr;
+                }
             }
 
             // AO computation + blur + bloom + composite to swapchain
             if (current_swapchain_) {
-                glm::mat4 inv_proj = glm::inverse(camera.projection);
-                if (gfx.ao_mode == 1) {
-                    ao_->render_ssao_pass(cmd, *pipeline_registry_, camera.projection, inv_proj);
-                } else {
-                    ao_->render_gtao_pass(cmd, *pipeline_registry_, camera.projection, inv_proj);
+                glm::mat4 inv_proj = cached_inv_projection_;
+                if (gfx.ao_mode > 0 && cmd) {
+                    const char* ao_name = (gfx.ao_mode == 1) ? "SSAO" : "GTAO";
+                    ENGINE_GPU_SCOPE(cmd, ao_name);
+                    ENGINE_GPU_TIMER(gpu_timer_pool_, cmd, ao_name);
+                    if (gfx.ao_mode == 1) {
+                        ao_->render_ssao_pass(cmd, *pipeline_registry_, camera.projection, inv_proj, gfx.ao_radius);
+                    } else {
+                        ao_->render_gtao_pass(cmd, *pipeline_registry_, camera.projection, inv_proj, gfx.ao_radius);
+                    }
+                    {
+                        ENGINE_GPU_SCOPE(cmd, "BlurAO");
+                        ENGINE_GPU_TIMER(gpu_timer_pool_, cmd, "BlurAO");
+                        ao_->render_blur_pass(cmd, *pipeline_registry_);
+                    }
                 }
-                ao_->render_blur_pass(cmd, *pipeline_registry_);
 
                 // Bloom: downsample + upsample chain on offscreen color
                 SDL_GPUTexture* bloom_tex = nullptr;
                 if (gfx.bloom_enabled && bloom_->is_ready()) {
-                    bloom_->render(cmd, *pipeline_registry_, ao_->offscreen_color()->handle());
+                    SDL_GPUTexture* scene_in = ao_->offscreen_color() ? ao_->offscreen_color()->handle() : nullptr;
+                    if (cmd && scene_in) {
+                        ENGINE_GPU_SCOPE(cmd, "Bloom");
+                        ENGINE_GPU_TIMER(gpu_timer_pool_, cmd, "Bloom");
+                        bloom_->render(cmd, *pipeline_registry_, scene_in, gfx.bloom_threshold);
+                    }
                     bloom_tex = bloom_->bloom_texture();
                 }
 
@@ -555,20 +653,38 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
                 SDL_GPUTexture* fog_tex = nullptr;
                 if ((gfx.volumetric_fog || gfx.god_rays) && volumetric_fog_->is_ready() && shadow_map_->is_ready() &&
                     ao_->offscreen_depth()) {
+                    ENGINE_GPU_SCOPE(cmd, "VolumetricFog");
+                    ENGINE_GPU_TIMER(gpu_timer_pool_, cmd, "VolumetricFog");
+                    // Default fog_density is 0.05; treat as a multiplier on the renderer's base density.
+                    float fog_density_mul = gfx.fog_density / 0.05f;
                     volumetric_fog_->render(cmd, *pipeline_registry_,
                                            ao_->offscreen_depth()->handle(),
                                            *shadow_map_, camera, light_dir_,
-                                           gfx.god_rays, gfx.volumetric_fog);
+                                           gfx.god_rays, gfx.volumetric_fog,
+                                           fog_density_mul);
                     fog_tex = volumetric_fog_->fog_texture();
                 }
 
-                ao_->render_composite_pass(cmd, *pipeline_registry_, current_swapchain_,
-                                          bloom_tex, gfx.bloom_enabled ? gfx.bloom_strength : 0.0f,
-                                          fog_tex);
+                if (cmd) {
+                    render::AmbientOcclusion::CompositeParams composite_params;
+                    composite_params.bloom_strength = gfx.bloom_enabled ? gfx.bloom_strength : 0.0f;
+                    composite_params.ao_strength = gfx.ao_mode > 0 ? gfx.ao_strength : 0.0f;
+                    composite_params.exposure = gfx.exposure;
+                    composite_params.tonemap_mode = gfx.tonemap_mode;
+                    composite_params.contrast = gfx.contrast;
+                    composite_params.saturation = gfx.saturation;
+
+                    ENGINE_GPU_SCOPE(cmd, "Composite");
+                    ENGINE_GPU_TIMER(gpu_timer_pool_, cmd, "Composite");
+                    ao_->render_composite_pass(cmd, *pipeline_registry_, current_swapchain_,
+                                               bloom_tex, fog_tex, composite_params);
+                }
             }
         } else {
             // === NORMAL PATH: render directly to swapchain ===
 
+            ENGINE_GPU_SCOPE(cmd, "MainScene");
+            ENGINE_GPU_TIMER(gpu_timer_pool_, cmd, "MainScene");
             begin_main_pass();
 
             if (main_render_pass_ && context_->current_command_buffer()) {
@@ -579,18 +695,31 @@ void SceneRenderer::render_frame(const RenderScene& scene, const UIScene& ui_sce
         }
     }
 
-    begin_ui();
-    render_ui_commands(ui_scene, camera);
-    for (const auto& billboard : scene.billboards()) {
-        draw_billboard_3d(billboard, camera);
+    if (SDL_GPUCommandBuffer* ui_cmd = context_->current_command_buffer()) {
+        ENGINE_GPU_SCOPE(ui_cmd, "UI");
+        ENGINE_GPU_TIMER(gpu_timer_pool_, ui_cmd, "UI");
+        begin_ui();
+        render_ui_commands(ui_scene, camera);
+        for (const auto& billboard : scene.billboards()) {
+            draw_billboard_3d(billboard, camera);
+        }
+        end_ui();
     }
-    end_ui();
 
-    // Post-UI callback (e.g. ImGui render pass)
     if (post_ui_callback_) {
-        post_ui_callback_(context_->current_command_buffer(), current_swapchain_);
+        if (SDL_GPUCommandBuffer* post_cmd = context_->current_command_buffer()) {
+            ENGINE_GPU_SCOPE(post_cmd, "PostUICallback");
+            ENGINE_GPU_TIMER(gpu_timer_pool_, post_cmd, "PostUICallback");
+            post_ui_callback_(post_cmd, current_swapchain_);
+        }
     }
 
+    if (SDL_GPUCommandBuffer* end_cmd = context_->current_command_buffer()) {
+        gpu_timer_pool_.end_frame(end_cmd);
+    }
+    if (collect_stats_) {
+        gpu_timer_pool_.read_results(render_stats_.pass_times_ms);
+    }
     end_frame();
 }
 
@@ -624,13 +753,13 @@ void SceneRenderer::render_3d_scene(const RenderScene& scene, const CameraState&
         terrain_->render(main_render_pass_, cmd, camera.view, camera.projection,
                        camera.position, light_dir_,
                        shadow_binding_count > 0 ? shadow_bindings : nullptr,
-                       shadow_binding_count);
+                       shadow_binding_count,
+                       &frame_frustum_);
     }
 
     if (scene.should_draw_grass() && gfx.grass_enabled && grass_renderer_) {
-        grass_renderer_->grass_view_distance = gfx.get_draw_distance();
+        // view_distance + chunk upload already performed before render pass began.
         SDL_PushGPUFragmentUniformData(cmd, 1, &frame_shadow_uniforms_, sizeof(frame_shadow_uniforms_));
-        grass_renderer_->update(dt, skybox_time_);
         grass_renderer_->render(main_render_pass_, cmd, camera.view, camera.projection,
                                 camera.position, light_dir_,
                                 shadow_binding_count > 0 ? shadow_bindings : nullptr,
@@ -651,6 +780,7 @@ void SceneRenderer::render_3d_scene(const RenderScene& scene, const CameraState&
         if (model_pipeline && main_render_pass_) {
             model_pipeline->bind(main_render_pass_);
             bind_shadow_data(main_render_pass_, context_->current_command_buffer(), 1);
+            bind_cluster_lights(main_render_pass_, context_->current_command_buffer(), 2);
             for (const auto* cmd : non_instanced_commands_) {
                 render_model_command_inner(*cmd, camera);
             }
@@ -676,14 +806,10 @@ void SceneRenderer::render_3d_scene(const RenderScene& scene, const CameraState&
             }
 
             if (do_frustum_cull) {
-                Model* model = resolve_model(frame_model_cache_, frame_model_name_cache_, *model_manager_, data.model_handle, data.model_name);
+                Model* model = resolve_model(*model_manager_, data.model_handle, data.model_name);
                 if (model) {
                     glm::vec3 world_center = glm::vec3(t * glm::vec4(model->bounding_center, 1.0f));
-                    float max_scale = std::max({
-                        glm::length(glm::vec3(t[0])),
-                        glm::length(glm::vec3(t[1])),
-                        glm::length(glm::vec3(t[2]))
-                    });
+                    float max_scale = max_scale_factor(t);
                     if (!frustum.intersects_sphere(world_center, model->bounding_half_diag * max_scale)) {
                         if (collect_stats_) render_stats_.entities_frustum_culled++;
                         continue;
@@ -699,6 +825,7 @@ void SceneRenderer::render_3d_scene(const RenderScene& scene, const CameraState&
                 if (!skinned_pipeline) break;
                 skinned_pipeline->bind(main_render_pass_);
                 bind_shadow_data(main_render_pass_, context_->current_command_buffer(), 1);
+                bind_cluster_lights(main_render_pass_, context_->current_command_buffer(), 2);
                 skinned_pipeline_bound = true;
             }
 
@@ -744,11 +871,12 @@ void SceneRenderer::render_model_command(const ModelCommand& cmd, const CameraSt
     if (!pipeline) return;
     pipeline->bind(main_render_pass_);
     bind_shadow_data(main_render_pass_, context_->current_command_buffer(), 1);
+    bind_cluster_lights(main_render_pass_, context_->current_command_buffer(), 2);
     render_model_command_inner(cmd, camera);
 }
 
 void SceneRenderer::render_model_command_inner(const ModelCommand& cmd, const CameraState& camera) {
-    Model* model = resolve_model(frame_model_cache_, frame_model_name_cache_, *model_manager_, cmd.model_handle, cmd.model_name);
+    Model* model = resolve_model(*model_manager_, cmd.model_handle, cmd.model_name);
     if (!model || !main_render_pass_) return;
 
     SDL_GPUCommandBuffer* gpu_cmd = context_->current_command_buffer();
@@ -761,11 +889,12 @@ void SceneRenderer::render_model_command_inner(const ModelCommand& cmd, const Ca
     transform_uniforms.view = camera.view;
     transform_uniforms.projection = camera.projection;
     transform_uniforms.cameraPos = camera.position;
-    transform_uniforms.normalMatrix = glm::transpose(glm::inverse(model_mat));
+    transform_uniforms.normalMatrix = compute_normal_matrix(model_mat);
     transform_uniforms.useSkinning = 0;
 
     bool fog_active = !cmd.no_fog && frame_fog_active_;
 
+    const GraphicsSettings& gfx_local = graphics_ ? *graphics_ : default_graphics_;
     gpu::ModelLightingUniforms lighting_uniforms = {};
     lighting_uniforms.lightDir = light_dir_;
     lighting_uniforms.lightColor = lighting::LIGHT_COLOR;
@@ -776,23 +905,37 @@ void SceneRenderer::render_model_command_inner(const ModelCommand& cmd, const Ca
     lighting_uniforms.fogEnd = fog_active ? fog::END : fog::DISTANT_END;
     lighting_uniforms.fogEnabled = fog_active ? 1 : 0;
     lighting_uniforms.cameraPos = camera.position;
+    lighting_uniforms.ambientStrength = gfx_local.ambient_strength;
+    lighting_uniforms.sunIntensity = gfx_local.sun_intensity;
 
     SDL_PushGPUVertexUniformData(gpu_cmd, 0, &transform_uniforms, sizeof(transform_uniforms));
 
     for (auto& mesh : model->meshes) {
-        if (!mesh.uploaded) {
-            ModelLoader::upload_to_gpu(context_->device(), *model);
-        }
+        if (mesh.shadow_only) continue;  // canopy proxy etc. — shadow-pass only
+        ENGINE_ASSERT(mesh.uploaded, "Mesh not uploaded before non-instanced render");
+        if (!mesh.uploaded) continue;
 
         if (!mesh.vertex_buffer || !mesh.index_buffer) continue;
         if (mesh.index_count() == 0) continue;
 
         lighting_uniforms.hasTexture = (mesh.has_texture && mesh.texture) ? 1 : 0;
+        bool has_nm = mesh.material.normal_texture != nullptr;
+        lighting_uniforms.hasNormalMap = has_nm ? 1 : 0;
+        lighting_uniforms.normalScale = mesh.material.normal_scale;
         SDL_PushGPUFragmentUniformData(gpu_cmd, 0, &lighting_uniforms, sizeof(lighting_uniforms));
 
         if (mesh.has_texture && mesh.texture && default_sampler_) {
             SDL_GPUTextureSamplerBinding tex_binding = { mesh.texture->handle(), default_sampler_ };
             SDL_BindGPUFragmentSamplers(main_render_pass_, 0, &tex_binding, 1);
+        }
+
+        if (default_sampler_) {
+            SDL_GPUTexture* nm_tex = has_nm ? mesh.material.normal_texture->handle()
+                                            : (default_normal_texture_ ? default_normal_texture_->handle() : nullptr);
+            if (nm_tex) {
+                SDL_GPUTextureSamplerBinding nm_binding = { nm_tex, default_sampler_ };
+                SDL_BindGPUFragmentSamplers(main_render_pass_, 5, &nm_binding, 1);
+            }
         }
 
         mesh.bind_buffers(main_render_pass_);
@@ -811,12 +954,14 @@ void SceneRenderer::build_instance_batches(const RenderScene& scene, const Camer
     // Clear vectors but preserve map keys + vector capacity to avoid re-hashing
     // and re-allocating every frame.
     for (auto& [handle, vec] : instance_batches_) vec.clear();
-    for (auto& [handle, vec] : shadow_instance_batches_) vec.clear();
+    for (int c = 0; c < 4; ++c) {
+        for (auto& [handle, vec] : shadow_instance_batches_[c]) vec.clear();
+    }
     non_instanced_commands_.clear();
 
-    // Model pointer cache is persistent - models are never unloaded during gameplay
+    // Shadow state: which cascades are active, and their light frustums.
+    const int active_cascades = shadow_map_->is_ready() ? shadow_map_->active_cascades() : 0;
 
-    // Use pre-cached frame state
     bool do_frustum_cull = frame_do_frustum_cull_;
     float draw_dist_sq = frame_draw_dist_sq_;
 
@@ -824,7 +969,6 @@ void SceneRenderer::build_instance_batches(const RenderScene& scene, const Camer
         const glm::mat4& t = cmd.transform;
         glm::vec3 world_pos(t[3][0], t[3][1], t[3][2]);
 
-        // Distance culling
         float dx = world_pos.x - camera.position.x;
         float dz = world_pos.z - camera.position.z;
         if (dx * dx + dz * dz > draw_dist_sq) {
@@ -832,44 +976,67 @@ void SceneRenderer::build_instance_batches(const RenderScene& scene, const Camer
             continue;
         }
 
-        // Resolve handle for this command (O(1) if handle set, hash lookup fallback)
-        ModelHandle h = resolve_handle(*model_manager_, cmd.model_handle, cmd.model_name);
+        ModelHandle handle = resolve_handle(*model_manager_, cmd.model_handle, cmd.model_name);
 
-        // Frustum culling using pre-computed bounding sphere
-        if (do_frustum_cull) {
-            Model* model = get_model_cached(frame_model_cache_, *model_manager_, h);
+        glm::vec3 world_center{};
+        float world_radius = 0.0f;
+        bool have_bounds = false;
+        if (do_frustum_cull || active_cascades > 0) {
+            Model* model = (handle != INVALID_MODEL_HANDLE) ? model_manager_->get_model(handle) : nullptr;
+            if (!model && !cmd.model_name.empty()) {
+                model = model_manager_->get_model(cmd.model_name);
+            }
             if (model) {
-                glm::vec3 world_center = glm::vec3(t * glm::vec4(model->bounding_center, 1.0f));
-                float max_scale = std::max({
-                    glm::length(glm::vec3(t[0])),
-                    glm::length(glm::vec3(t[1])),
-                    glm::length(glm::vec3(t[2]))
-                });
-                if (!frustum.intersects_sphere(world_center, model->bounding_half_diag * max_scale)) {
-                    if (collect_stats_) render_stats_.entities_frustum_culled++;
-                    continue;
-                }
+                world_center = glm::vec3(t * glm::vec4(model->bounding_center, 1.0f));
+                world_radius = model->bounding_half_diag * max_scale_factor(t);
+                have_bounds = true;
             }
         }
 
-        if (collect_stats_) render_stats_.entities_rendered++;
+        bool main_visible = true;
+        if (do_frustum_cull && have_bounds) {
+            if (!frustum.intersects_sphere(world_center, world_radius)) {
+                main_visible = false;
+            }
+        }
 
-        // Models flagged for individual draws (e.g. per-instance transform variation).
+        if (!main_visible) {
+            if (collect_stats_) render_stats_.entities_frustum_culled++;
+            if (!cmd.force_non_instanced && have_bounds) {
+                gpu::ShadowInstanceData shadow_instance{};
+                shadow_instance.model = cmd.transform;
+                for (int c = 0; c < active_cascades; ++c) {
+                    if (shadow_cascade_frustums_[c].intersects_sphere(world_center, world_radius)) {
+                        shadow_instance_batches_[c][handle].push_back(shadow_instance);
+                    }
+                }
+            }
+            continue;
+        }
+
         if (cmd.force_non_instanced) {
+            if (collect_stats_) render_stats_.entities_rendered++;
             non_instanced_commands_.push_back(&cmd);
             continue;
         }
 
-        gpu::InstanceData inst;
-        inst.model = cmd.transform;
-        inst.normalMatrix = glm::transpose(glm::inverse(cmd.transform));
-        inst.tint = cmd.tint;
-        inst.noFog = cmd.no_fog ? 1.0f : 0.0f;
-        instance_batches_[h].push_back(inst);
+        if (collect_stats_) render_stats_.entities_rendered++;
 
-        gpu::ShadowInstanceData shadow_inst;
-        shadow_inst.model = cmd.transform;
-        shadow_instance_batches_[h].push_back(shadow_inst);
+        gpu::InstanceData instance{};
+        instance.model = cmd.transform;
+        instance.normalMatrix = compute_normal_matrix(cmd.transform);
+        instance.tint = cmd.tint;
+        instance.noFog = cmd.no_fog ? 1.0f : 0.0f;
+        instance_batches_[handle].push_back(instance);
+
+        gpu::ShadowInstanceData shadow_instance{};
+        shadow_instance.model = cmd.transform;
+        for (int c = 0; c < active_cascades; ++c) {
+            if (!have_bounds ||
+                shadow_cascade_frustums_[c].intersects_sphere(world_center, world_radius)) {
+                shadow_instance_batches_[c][handle].push_back(shadow_instance);
+            }
+        }
     }
 }
 
@@ -892,20 +1059,22 @@ void SceneRenderer::upload_instance_buffers() {
                 context_->device(), gpu::GPUBuffer::Type::Storage, instance_storage_capacity_);
         }
 
-        // Pack all batches contiguously into reusable buffer
         packed_instances_.clear();
         packed_instances_.reserve(total_instances);
         for (const auto& [name, instances] : instance_batches_) {
             packed_instances_.insert(packed_instances_.end(), instances.begin(), instances.end());
         }
 
-        instance_storage_buffer_->update(cmd, packed_instances_.data(), packed_instances_.size() * sizeof(gpu::InstanceData));
+        instance_storage_buffer_->update(cmd, packed_instances_.data(), required_size);
     }
 
-    // Upload shadow instance buffer
+    // Upload shadow instance buffer (per-cascade sections packed contiguously).
+    // Layout: [cascade 0 instances][cascade 1 instances]... each cascade orders by ModelHandle.
     size_t total_shadow = 0;
-    for (const auto& [name, instances] : shadow_instance_batches_) {
-        total_shadow += instances.size();
+    for (int c = 0; c < 4; ++c) {
+        for (const auto& [name, instances] : shadow_instance_batches_[c]) {
+            total_shadow += instances.size();
+        }
     }
 
     if (total_shadow > 0) {
@@ -919,11 +1088,17 @@ void SceneRenderer::upload_instance_buffers() {
 
         packed_shadow_instances_.clear();
         packed_shadow_instances_.reserve(total_shadow);
-        for (const auto& [name, instances] : shadow_instance_batches_) {
-            packed_shadow_instances_.insert(packed_shadow_instances_.end(), instances.begin(), instances.end());
+        for (int c = 0; c < 4; ++c) {
+            shadow_cascade_base_instance_[c] = static_cast<uint32_t>(packed_shadow_instances_.size());
+            for (const auto& [name, instances] : shadow_instance_batches_[c]) {
+                packed_shadow_instances_.insert(packed_shadow_instances_.end(),
+                                                instances.begin(), instances.end());
+            }
         }
 
-        shadow_instance_storage_buffer_->update(cmd, packed_shadow_instances_.data(), packed_shadow_instances_.size() * sizeof(gpu::ShadowInstanceData));
+        shadow_instance_storage_buffer_->update(cmd, packed_shadow_instances_.data(), required_size);
+    } else {
+        shadow_cascade_base_instance_ = {0, 0, 0, 0};
     }
 }
 
@@ -945,6 +1120,7 @@ void SceneRenderer::render_instanced_models(const CameraState& camera) {
     camera_uniforms.cameraPos = camera.position;
 
     // Push shared lighting uniforms
+    const GraphicsSettings& gfx_inst = graphics_ ? *graphics_ : default_graphics_;
     gpu::InstancedLightingUniforms lighting_uniforms = {};
     lighting_uniforms.lightDir = light_dir_;
     lighting_uniforms.lightColor = lighting::LIGHT_COLOR;
@@ -954,6 +1130,8 @@ void SceneRenderer::render_instanced_models(const CameraState& camera) {
     lighting_uniforms.fogEnd = fog_active ? fog::END : fog::DISTANT_END;
     lighting_uniforms.fogEnabled = fog_active ? 1 : 0;
     lighting_uniforms.cameraPos = camera.position;
+    lighting_uniforms.ambientStrength = gfx_inst.ambient_strength;
+    lighting_uniforms.sunIntensity = gfx_inst.sun_intensity;
 
     pipeline->bind(main_render_pass_);
     SDL_PushGPUVertexUniformData(gpu_cmd, 0, &camera_uniforms, sizeof(camera_uniforms));
@@ -964,6 +1142,7 @@ void SceneRenderer::render_instanced_models(const CameraState& camera) {
 
     // Bind shadow map data
     bind_shadow_data(main_render_pass_, gpu_cmd, 1);
+    bind_cluster_lights(main_render_pass_, gpu_cmd, 2);
 
     // Push lighting uniforms once (only hasTexture varies per mesh)
     SDL_PushGPUFragmentUniformData(gpu_cmd, 0, &lighting_uniforms, sizeof(lighting_uniforms));
@@ -977,7 +1156,7 @@ void SceneRenderer::render_instanced_models(const CameraState& camera) {
     for (const auto& [batch_handle, instances] : instance_batches_) {
         if (instances.empty()) continue;
 
-        Model* model = get_model_cached(frame_model_cache_, *model_manager_, batch_handle);
+        Model* model = (batch_handle != INVALID_MODEL_HANDLE) ? model_manager_->get_model(batch_handle) : nullptr;
         if (!model) {
             base_instance += static_cast<uint32_t>(instances.size());
             continue;
@@ -986,14 +1165,19 @@ void SceneRenderer::render_instanced_models(const CameraState& camera) {
         uint32_t instance_count = static_cast<uint32_t>(instances.size());
 
         for (auto& mesh : model->meshes) {
-            if (!mesh.uploaded) {
-                ModelLoader::upload_to_gpu(context_->device(), *model);
-            }
+            if (mesh.shadow_only) continue;
+            ENGINE_ASSERT(mesh.uploaded, "Mesh not uploaded before instanced render");
+            if (!mesh.uploaded) continue;
             if (!mesh.vertex_buffer || !mesh.index_buffer || mesh.index_count() == 0) continue;
 
             int has_tex = (mesh.has_texture && mesh.texture) ? 1 : 0;
-            if (has_tex != last_has_texture) {
+            bool has_nm = mesh.material.normal_texture != nullptr;
+            if (has_tex != last_has_texture
+                || lighting_uniforms.hasNormalMap != (has_nm ? 1 : 0)
+                || lighting_uniforms.normalScale != mesh.material.normal_scale) {
                 lighting_uniforms.hasTexture = has_tex;
+                lighting_uniforms.hasNormalMap = has_nm ? 1 : 0;
+                lighting_uniforms.normalScale = mesh.material.normal_scale;
                 SDL_PushGPUFragmentUniformData(gpu_cmd, 0, &lighting_uniforms, sizeof(lighting_uniforms));
                 last_has_texture = has_tex;
             }
@@ -1004,6 +1188,15 @@ void SceneRenderer::render_instanced_models(const CameraState& camera) {
                     SDL_GPUTextureSamplerBinding tex_binding = { tex_handle, default_sampler_ };
                     SDL_BindGPUFragmentSamplers(main_render_pass_, 0, &tex_binding, 1);
                     last_bound_texture = tex_handle;
+                }
+            }
+
+            if (default_sampler_) {
+                SDL_GPUTexture* nm_tex = has_nm ? mesh.material.normal_texture->handle()
+                                                : (default_normal_texture_ ? default_normal_texture_->handle() : nullptr);
+                if (nm_tex) {
+                    SDL_GPUTextureSamplerBinding nm_binding = { nm_tex, default_sampler_ };
+                    SDL_BindGPUFragmentSamplers(main_render_pass_, 5, &nm_binding, 1);
                 }
             }
 
@@ -1022,8 +1215,10 @@ void SceneRenderer::render_instanced_models(const CameraState& camera) {
 }
 
 void SceneRenderer::render_instanced_shadow_models(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                                                     const glm::mat4& light_view_projection) {
-    if (shadow_instance_batches_.empty() || !pass || !shadow_instance_storage_buffer_) return;
+                                                     const glm::mat4& light_view_projection, int cascade) {
+    if (cascade < 0 || cascade >= 4) return;
+    const auto& cascade_batches = shadow_instance_batches_[cascade];
+    if (cascade_batches.empty() || !pass || !shadow_instance_storage_buffer_) return;
 
     auto* pipeline = pipeline_registry_->get_instanced_shadow_model_pipeline();
     if (!pipeline) return;
@@ -1037,11 +1232,15 @@ void SceneRenderer::render_instanced_shadow_models(SDL_GPURenderPass* pass, SDL_
     SDL_GPUBuffer* storage_buf = shadow_instance_storage_buffer_->handle();
     SDL_BindGPUVertexStorageBuffers(pass, 0, &storage_buf, 1);
 
-    uint32_t base_instance = 0;
-    for (const auto& [batch_handle, instances] : shadow_instance_batches_) {
+    // Track last state to skip redundant pushes/binds for back-to-back meshes.
+    SDL_GPUTexture* last_tex = nullptr;
+    int last_has_tex = -1;
+
+    uint32_t base_instance = shadow_cascade_base_instance_[cascade];
+    for (const auto& [batch_handle, instances] : cascade_batches) {
         if (instances.empty()) continue;
 
-        Model* model = get_model_cached(frame_model_cache_, *model_manager_, batch_handle);
+        Model* model = (batch_handle != INVALID_MODEL_HANDLE) ? model_manager_->get_model(batch_handle) : nullptr;
         if (!model) {
             base_instance += static_cast<uint32_t>(instances.size());
             continue;
@@ -1050,21 +1249,31 @@ void SceneRenderer::render_instanced_shadow_models(SDL_GPURenderPass* pass, SDL_
         uint32_t instance_count = static_cast<uint32_t>(instances.size());
 
         for (auto& mesh : model->meshes) {
-            if (!mesh.uploaded) ModelLoader::upload_to_gpu(context_->device(), *model);
+            if (!mesh.cast_shadows) continue;  // skip leaves / transparent fluff
+            ENGINE_ASSERT(mesh.uploaded, "Mesh not uploaded before instanced shadow render");
+            if (!mesh.uploaded) continue;
             if (!mesh.vertex_buffer || !mesh.index_buffer || mesh.index_count() == 0) continue;
 
-            // Push alpha test state for transparent shadow support
-            struct { int hasTexture; float _pad[3]; } shadow_frag = {};
-            shadow_frag.hasTexture = (mesh.has_texture && mesh.texture) ? 1 : 0;
-            SDL_PushGPUFragmentUniformData(cmd, 0, &shadow_frag, sizeof(shadow_frag));
+            int has_tex = (mesh.has_texture && mesh.texture) ? 1 : 0;
+            if (has_tex != last_has_tex) {
+                struct { int hasTexture; float _pad[3]; } shadow_frag = {};
+                shadow_frag.hasTexture = has_tex;
+                SDL_PushGPUFragmentUniformData(cmd, 0, &shadow_frag, sizeof(shadow_frag));
+                last_has_tex = has_tex;
+            }
 
-            // Must always bind a sampler (SDL3 GPU validates all declared bindings)
-            if (mesh.has_texture && mesh.texture && default_sampler_) {
-                SDL_GPUTextureSamplerBinding tex_binding = { mesh.texture->handle(), default_sampler_ };
-                SDL_BindGPUFragmentSamplers(pass, 0, &tex_binding, 1);
-            } else if (default_sampler_ && dummy_white_texture_) {
+            if (has_tex && default_sampler_) {
+                SDL_GPUTexture* th = mesh.texture->handle();
+                if (th != last_tex) {
+                    SDL_GPUTextureSamplerBinding tb = { th, default_sampler_ };
+                    SDL_BindGPUFragmentSamplers(pass, 0, &tb, 1);
+                    last_tex = th;
+                }
+            } else if (default_sampler_ && dummy_white_texture_ &&
+                       last_tex != dummy_white_texture_->handle()) {
                 SDL_GPUTextureSamplerBinding dummy = { dummy_white_texture_->handle(), default_sampler_ };
                 SDL_BindGPUFragmentSamplers(pass, 0, &dummy, 1);
+                last_tex = dummy_white_texture_->handle();
             }
 
             mesh.bind_buffers(pass);
@@ -1088,6 +1297,7 @@ void SceneRenderer::render_skinned_model_command(const SkinnedModelCommand& cmd,
     if (!pipeline) return;
     pipeline->bind(main_render_pass_);
     bind_shadow_data(main_render_pass_, context_->current_command_buffer(), 1);
+    bind_cluster_lights(main_render_pass_, context_->current_command_buffer(), 2);
     SDL_GPUTexture* unused_tex = nullptr;
     int unused_has = -1;
     render_skinned_model_command_inner(cmd, camera, unused_tex, unused_has);
@@ -1095,7 +1305,7 @@ void SceneRenderer::render_skinned_model_command(const SkinnedModelCommand& cmd,
 
 void SceneRenderer::render_skinned_model_command_inner(const SkinnedModelCommand& cmd, const CameraState& camera,
                                                         SDL_GPUTexture*& last_texture, int& last_has_texture) {
-    Model* model = resolve_model(frame_model_cache_, frame_model_name_cache_, *model_manager_, cmd.model_handle, cmd.model_name);
+    Model* model = resolve_model(*model_manager_, cmd.model_handle, cmd.model_name);
     if (!model || !main_render_pass_) return;
 
     SDL_GPUCommandBuffer* gpu_cmd = context_->current_command_buffer();
@@ -1108,11 +1318,12 @@ void SceneRenderer::render_skinned_model_command_inner(const SkinnedModelCommand
     transform_uniforms.view = camera.view;
     transform_uniforms.projection = camera.projection;
     transform_uniforms.cameraPos = camera.position;
-    transform_uniforms.normalMatrix = glm::transpose(glm::inverse(model_mat));
+    transform_uniforms.normalMatrix = compute_normal_matrix(model_mat);
     transform_uniforms.useSkinning = 1;
 
     bool fog_active = frame_fog_active_;
 
+    const GraphicsSettings& gfx_skinned = graphics_ ? *graphics_ : default_graphics_;
     gpu::ModelLightingUniforms lighting_uniforms = {};
     lighting_uniforms.lightDir = light_dir_;
     lighting_uniforms.lightColor = lighting::LIGHT_COLOR;
@@ -1123,22 +1334,29 @@ void SceneRenderer::render_skinned_model_command_inner(const SkinnedModelCommand
     lighting_uniforms.fogEnd = fog_active ? fog::END : fog::DISTANT_END;
     lighting_uniforms.fogEnabled = fog_active ? 1 : 0;
     lighting_uniforms.cameraPos = camera.position;
+    lighting_uniforms.ambientStrength = gfx_skinned.ambient_strength;
+    lighting_uniforms.sunIntensity = gfx_skinned.sun_intensity;
 
     SDL_PushGPUVertexUniformData(gpu_cmd, 0, &transform_uniforms, sizeof(transform_uniforms));
     SDL_PushGPUVertexUniformData(gpu_cmd, 1, cmd.bone_matrices->data(),
-                                  MAX_BONES * sizeof(glm::mat4));
+                                  mmo::engine::animation::MAX_BONES * sizeof(glm::mat4));
 
     for (auto& mesh : model->meshes) {
-        if (!mesh.uploaded) {
-            ModelLoader::upload_to_gpu(context_->device(), *model);
-        }
+        if (mesh.shadow_only) continue;
+        ENGINE_ASSERT(mesh.uploaded, "Mesh not uploaded before skinned render");
+        if (!mesh.uploaded) continue;
 
         if (!mesh.vertex_buffer || !mesh.index_buffer) continue;
         if (mesh.index_count() == 0) continue;
 
         int has_tex = (mesh.has_texture && mesh.texture) ? 1 : 0;
-        if (has_tex != last_has_texture) {
+        bool has_nm = mesh.material.normal_texture != nullptr;
+        if (has_tex != last_has_texture
+            || lighting_uniforms.hasNormalMap != (has_nm ? 1 : 0)
+            || lighting_uniforms.normalScale != mesh.material.normal_scale) {
             lighting_uniforms.hasTexture = has_tex;
+            lighting_uniforms.hasNormalMap = has_nm ? 1 : 0;
+            lighting_uniforms.normalScale = mesh.material.normal_scale;
             SDL_PushGPUFragmentUniformData(gpu_cmd, 0, &lighting_uniforms, sizeof(lighting_uniforms));
             last_has_texture = has_tex;
         }
@@ -1149,6 +1367,15 @@ void SceneRenderer::render_skinned_model_command_inner(const SkinnedModelCommand
                 SDL_GPUTextureSamplerBinding tex_binding = { tex_handle, default_sampler_ };
                 SDL_BindGPUFragmentSamplers(main_render_pass_, 0, &tex_binding, 1);
                 last_texture = tex_handle;
+            }
+        }
+
+        if (default_sampler_) {
+            SDL_GPUTexture* nm_tex = has_nm ? mesh.material.normal_texture->handle()
+                                            : (default_normal_texture_ ? default_normal_texture_->handle() : nullptr);
+            if (nm_tex) {
+                SDL_GPUTextureSamplerBinding nm_binding = { nm_tex, default_sampler_ };
+                SDL_BindGPUFragmentSamplers(main_render_pass_, 5, &nm_binding, 1);
             }
         }
 
@@ -1261,9 +1488,9 @@ void SceneRenderer::render_debug_lines(const RenderScene& scene, const CameraSta
     }
 
     // Build vertex data: position(3) + color(4) per vertex
-    // Unpack RGBA packed uint32 to float4
-    std::vector<float> vertices(vertex_count * 7);
-    float* dst = vertices.data();
+    // Unpack RGBA packed uint32 to float4. Reuse scratch buffer to avoid per-frame alloc.
+    debug_line_scratch_.resize(vertex_count * 7);
+    float* dst = debug_line_scratch_.data();
     for (const auto& line : lines) {
         float r = static_cast<float>((line.color >> 24) & 0xFF) / 255.0f;
         float g = static_cast<float>((line.color >> 16) & 0xFF) / 255.0f;
@@ -1280,7 +1507,7 @@ void SceneRenderer::render_debug_lines(const RenderScene& scene, const CameraSta
     }
 
     // Upload vertex data
-    debug_line_vertex_buffer_->update(cmd, vertices.data(), buffer_size);
+    debug_line_vertex_buffer_->update(cmd, debug_line_scratch_.data(), buffer_size);
 
     // Bind pipeline and draw
     pipeline->bind(main_render_pass_);
@@ -1311,115 +1538,198 @@ void SceneRenderer::render_shadow_passes(const RenderScene& scene, const CameraS
     SDL_GPUCommandBuffer* cmd = context_->current_command_buffer();
     if (!cmd) return;
 
-    // Update cascade matrices
-    shadow_map_->update(camera.view, camera.projection, light_dir_, 5.0f, 2000.0f);
+    ENGINE_GPU_SCOPE(cmd, "ShadowPass");
+    ENGINE_GPU_TIMER(gpu_timer_pool_, cmd, "ShadowPass");
 
-    // Pre-collect skinned model commands for shadow rendering
-    shadow_skinned_commands_.clear();
+    // Note: shadow_map_->update() was already called in render_frame() so that the
+    // per-cascade light frustums could be used during build_instance_batches.
+
+    // Pre-resolve Model* + world bounds once per skinned entity (outside the cascade loop).
+    // Avoids N cascades * M entities hash lookups per frame.
+    struct ResolvedSkinned {
+        const SkinnedModelCommand* cmd;
+        Model* model;
+        glm::vec3 world_center;
+        float world_radius;
+    };
+    static thread_local std::vector<ResolvedSkinned> skinned_scratch;
+    skinned_scratch.clear();
+    skinned_scratch.reserve(scene.skinned_commands().size());
     for (const auto& skinned_cmd : scene.skinned_commands()) {
-        shadow_skinned_commands_.push_back(&skinned_cmd);
+        Model* model = resolve_model(*model_manager_,
+                                     skinned_cmd.model_handle, skinned_cmd.model_name);
+        if (!model) continue;
+        const glm::mat4& t = skinned_cmd.transform;
+        glm::vec3 wc = glm::vec3(t * glm::vec4(model->bounding_center, 1.0f));
+        float wr = model->bounding_half_diag * max_scale_factor(t);
+        skinned_scratch.push_back({&skinned_cmd, model, wc, wr});
     }
 
+    // Pre-resolve Model* for non-instanced static commands too.
+    struct ResolvedStatic { const ModelCommand* cmd; Model* model; };
+    static thread_local std::vector<ResolvedStatic> static_scratch;
+    static_scratch.clear();
+    static_scratch.reserve(non_instanced_commands_.size());
+    for (const auto* model_cmd : non_instanced_commands_) {
+        Model* model = resolve_model(*model_manager_,
+                                     model_cmd->model_handle, model_cmd->model_name);
+        if (model) static_scratch.push_back({model_cmd, model});
+    }
+
+    SDL_GPUTextureSamplerBinding dummy_binding = {};
+    if (default_sampler_ && dummy_white_texture_) {
+        dummy_binding = { dummy_white_texture_->handle(), default_sampler_ };
+    }
+
+    struct ShadowFragConst { int hasTexture; float _pad[3]; };
+    const ShadowFragConst frag_notex = {0, {}};
+    const ShadowFragConst frag_tex   = {1, {}};
+
+    auto cascade_label = [](int c) -> const char* {
+        switch (c & 3) {
+            case 0: return "ShadowPass:Cascade0";
+            case 1: return "ShadowPass:Cascade1";
+            case 2: return "ShadowPass:Cascade2";
+            default: return "ShadowPass:Cascade3";
+        }
+    };
+
     for (int cascade = 0; cascade < shadow_map_->active_cascades(); ++cascade) {
+        const char* cascade_name = cascade_label(cascade);
+        ENGINE_GPU_SCOPE(cmd, cascade_name);
+        ENGINE_GPU_TIMER(gpu_timer_pool_, cmd, cascade_name);
         SDL_GPURenderPass* shadow_pass = shadow_map_->begin_shadow_pass(cmd, cascade);
         if (!shadow_pass) continue;
 
         const auto& cascade_data = shadow_map_->cascades()[cascade];
 
-        // Render static models into shadow map (instanced)
-        render_instanced_shadow_models(shadow_pass, cmd, cascade_data.light_view_projection);
+        // All cascades now draw entities — trees use a 20-triangle canopy proxy
+        // (instead of 2000 leaf quads) so even the far cascade cost is trivial.
+        // Per-cascade frustum culling below still skips anything outside the
+        // cascade's light frustum.
 
-        // Render non-instanced static models into shadow map
-        if (!non_instanced_commands_.empty()) {
+        // Render static models into shadow map (instanced)
+        render_instanced_shadow_models(shadow_pass, cmd, cascade_data.light_view_projection, cascade);
+
+        // Render non-instanced static models into shadow map.
+        // Per-cascade frustum cull so near cascades don't draw distant casters.
+        if (!static_scratch.empty()) {
             auto* shadow_pipeline = pipeline_registry_->get_shadow_model_pipeline();
             if (shadow_pipeline) {
                 shadow_pipeline->bind(shadow_pass);
-                for (const auto* model_cmd : non_instanced_commands_) {
-                    Model* model = resolve_model(frame_model_cache_, frame_model_name_cache_, *model_manager_, model_cmd->model_handle, model_cmd->model_name);
-                    if (!model) continue;
+                SDL_GPUTexture* last_tex = nullptr;
+                int last_has_tex = -1;
+                for (const auto& rs : static_scratch) {
+                    // Per-cascade cull: skip if not in this cascade's light frustum.
+                    const glm::mat4& t = rs.cmd->transform;
+                    glm::vec3 wc = glm::vec3(t * glm::vec4(rs.model->bounding_center, 1.0f));
+                    float wr = rs.model->bounding_half_diag * max_scale_factor(t);
+                    if (!shadow_cascade_frustums_[cascade].intersects_sphere(wc, wr)) continue;
 
                     gpu::ShadowTransformUniforms shadow_uniforms = {};
                     shadow_uniforms.lightViewProjection = cascade_data.light_view_projection;
-                    shadow_uniforms.model = model_cmd->transform;
+                    shadow_uniforms.model = rs.cmd->transform;
                     SDL_PushGPUVertexUniformData(cmd, 0, &shadow_uniforms, sizeof(shadow_uniforms));
 
-                    for (auto& mesh : model->meshes) {
-                        if (!mesh.uploaded) ModelLoader::upload_to_gpu(context_->device(), *model);
+                    for (auto& mesh : rs.model->meshes) {
+                        if (!mesh.cast_shadows) continue;
+                        ENGINE_ASSERT(mesh.uploaded, "Mesh not uploaded before non-instanced shadow render");
+                        if (!mesh.uploaded) continue;
                         if (!mesh.vertex_buffer || !mesh.index_buffer || mesh.index_count() == 0) continue;
 
-                        struct { int hasTexture; float _pad[3]; } shadow_frag = {};
-                        shadow_frag.hasTexture = (mesh.has_texture && mesh.texture) ? 1 : 0;
-                        SDL_PushGPUFragmentUniformData(cmd, 0, &shadow_frag, sizeof(shadow_frag));
-                        if (mesh.has_texture && mesh.texture && default_sampler_) {
-                            SDL_GPUTextureSamplerBinding tex_binding = { mesh.texture->handle(), default_sampler_ };
-                            SDL_BindGPUFragmentSamplers(shadow_pass, 0, &tex_binding, 1);
-                        } else if (default_sampler_ && dummy_white_texture_) {
-                            SDL_GPUTextureSamplerBinding dummy = { dummy_white_texture_->handle(), default_sampler_ };
-                            SDL_BindGPUFragmentSamplers(shadow_pass, 0, &dummy, 1);
+                        int has_tex = (mesh.has_texture && mesh.texture) ? 1 : 0;
+                        if (has_tex != last_has_tex) {
+                            SDL_PushGPUFragmentUniformData(cmd, 0,
+                                has_tex ? &frag_tex : &frag_notex, sizeof(ShadowFragConst));
+                            last_has_tex = has_tex;
+                        }
+
+                        if (has_tex && default_sampler_) {
+                            SDL_GPUTexture* th = mesh.texture->handle();
+                            if (th != last_tex) {
+                                SDL_GPUTextureSamplerBinding tb = { th, default_sampler_ };
+                                SDL_BindGPUFragmentSamplers(shadow_pass, 0, &tb, 1);
+                                last_tex = th;
+                            }
+                        } else if (default_sampler_ && dummy_white_texture_ &&
+                                   last_tex != dummy_binding.texture) {
+                            SDL_BindGPUFragmentSamplers(shadow_pass, 0, &dummy_binding, 1);
+                            last_tex = dummy_binding.texture;
                         }
 
                         mesh.bind_buffers(shadow_pass);
                         if (collect_stats_) { render_stats_.draw_calls++; render_stats_.triangle_count += mesh.index_count() / 3; }
-                        SDL_DrawGPUIndexedPrimitives(shadow_pass,
-                                                      mesh.index_count(),
-                                                      1, 0, 0, 0);
+                        SDL_DrawGPUIndexedPrimitives(shadow_pass, mesh.index_count(), 1, 0, 0, 0);
                     }
                 }
             }
         }
 
-        // Render skinned models into shadow map
-        if (!shadow_skinned_commands_.empty()) {
+        // Render skinned models into shadow map.
+        if (!skinned_scratch.empty()) {
             auto* shadow_skinned_pipeline = pipeline_registry_->get_shadow_skinned_model_pipeline();
             if (shadow_skinned_pipeline) {
                 shadow_skinned_pipeline->bind(shadow_pass);
 
-                for (const auto* data : shadow_skinned_commands_) {
-                    Model* model = resolve_model(frame_model_cache_, frame_model_name_cache_, *model_manager_, data->model_handle, data->model_name);
-                    if (!model) continue;
+                SDL_GPUTexture* last_tex = nullptr;
+                int last_has_tex = -1;
+                for (const auto& rs : skinned_scratch) {
+                    // Per-cascade cull: skip if not in this cascade's light frustum.
+                    if (!shadow_cascade_frustums_[cascade].intersects_sphere(rs.world_center, rs.world_radius))
+                        continue;
+
+                    const SkinnedModelCommand* data = rs.cmd;
+                    Model* model = rs.model;
 
                     gpu::ShadowTransformUniforms shadow_uniforms = {};
                     shadow_uniforms.lightViewProjection = cascade_data.light_view_projection;
                     shadow_uniforms.model = data->transform;
                     SDL_PushGPUVertexUniformData(cmd, 0, &shadow_uniforms, sizeof(shadow_uniforms));
                     SDL_PushGPUVertexUniformData(cmd, 1, data->bone_matrices->data(),
-                                                  MAX_BONES * sizeof(glm::mat4));
+                                                  mmo::engine::animation::MAX_BONES * sizeof(glm::mat4));
 
                     for (auto& mesh : model->meshes) {
-                        if (!mesh.uploaded) ModelLoader::upload_to_gpu(context_->device(), *model);
+                        if (!mesh.cast_shadows) continue;
+                        ENGINE_ASSERT(mesh.uploaded, "Mesh not uploaded before skinned shadow render");
+                        if (!mesh.uploaded) continue;
                         if (!mesh.vertex_buffer || !mesh.index_buffer || mesh.index_count() == 0) continue;
 
-                        struct { int hasTexture; float _pad[3]; } shadow_frag = {};
-                        shadow_frag.hasTexture = (mesh.has_texture && mesh.texture) ? 1 : 0;
-                        SDL_PushGPUFragmentUniformData(cmd, 0, &shadow_frag, sizeof(shadow_frag));
-                        if (mesh.has_texture && mesh.texture && default_sampler_) {
-                            SDL_GPUTextureSamplerBinding tex_binding = { mesh.texture->handle(), default_sampler_ };
-                            SDL_BindGPUFragmentSamplers(shadow_pass, 0, &tex_binding, 1);
-                        } else if (default_sampler_ && dummy_white_texture_) {
-                            SDL_GPUTextureSamplerBinding dummy = { dummy_white_texture_->handle(), default_sampler_ };
-                            SDL_BindGPUFragmentSamplers(shadow_pass, 0, &dummy, 1);
+                        int has_tex = (mesh.has_texture && mesh.texture) ? 1 : 0;
+                        if (has_tex != last_has_tex) {
+                            SDL_PushGPUFragmentUniformData(cmd, 0,
+                                has_tex ? &frag_tex : &frag_notex, sizeof(ShadowFragConst));
+                            last_has_tex = has_tex;
+                        }
+
+                        if (has_tex && default_sampler_) {
+                            SDL_GPUTexture* th = mesh.texture->handle();
+                            if (th != last_tex) {
+                                SDL_GPUTextureSamplerBinding tb = { th, default_sampler_ };
+                                SDL_BindGPUFragmentSamplers(shadow_pass, 0, &tb, 1);
+                                last_tex = th;
+                            }
+                        } else if (default_sampler_ && dummy_white_texture_ &&
+                                   last_tex != dummy_binding.texture) {
+                            SDL_BindGPUFragmentSamplers(shadow_pass, 0, &dummy_binding, 1);
+                            last_tex = dummy_binding.texture;
                         }
 
                         mesh.bind_buffers(shadow_pass);
                         if (collect_stats_) { render_stats_.draw_calls++; render_stats_.triangle_count += mesh.index_count() / 3; }
-                        SDL_DrawGPUIndexedPrimitives(shadow_pass,
-                                                      mesh.index_count(),
-                                                      1, 0, 0, 0);
+                        SDL_DrawGPUIndexedPrimitives(shadow_pass, mesh.index_count(), 1, 0, 0, 0);
                     }
                 }
             }
         }
 
-        // Render terrain into shadow map (push no-texture fragment state)
-        {
-            struct { int ht; float _p[3]; } tf = {0, {}};
-            SDL_PushGPUFragmentUniformData(cmd, 0, &tf, sizeof(tf));
-            if (default_sampler_ && dummy_white_texture_) {
-                SDL_GPUTextureSamplerBinding db = { dummy_white_texture_->handle(), default_sampler_ };
-                SDL_BindGPUFragmentSamplers(shadow_pass, 0, &db, 1);
-            }
+        // Render terrain into shadow map (push no-texture fragment state).
+        // Terrain is the last thing drawn in this cascade — set no-texture state once.
+        SDL_PushGPUFragmentUniformData(cmd, 0, &frag_notex, sizeof(ShadowFragConst));
+        if (default_sampler_ && dummy_white_texture_) {
+            SDL_BindGPUFragmentSamplers(shadow_pass, 0, &dummy_binding, 1);
         }
-        terrain_->render_shadow(shadow_pass, cmd, cascade_data.light_view_projection);
+        terrain_->render_shadow(shadow_pass, cmd, cascade_data.light_view_projection,
+                                &shadow_cascade_frustums_[cascade]);
 
         shadow_map_->end_shadow_pass();
     }
@@ -1439,6 +1749,19 @@ void SceneRenderer::bind_shadow_data(SDL_GPURenderPass* pass, SDL_GPUCommandBuff
 
     // Use frame-cached shadow uniforms (computed once in render_frame)
     SDL_PushGPUFragmentUniformData(cmd, 1, &frame_shadow_uniforms_, sizeof(frame_shadow_uniforms_));
+}
+
+void SceneRenderer::bind_cluster_lights(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd, int uniform_slot) {
+    if (!cluster_grid_ready_) return;
+    SDL_GPUBuffer* bufs[3] = {
+        cluster_grid_.light_data_buffer(),
+        cluster_grid_.cluster_offsets_buffer(),
+        cluster_grid_.light_indices_buffer(),
+    };
+    if (!bufs[0] || !bufs[1] || !bufs[2]) return;
+    SDL_BindGPUFragmentStorageBuffers(pass, 0, bufs, 3);
+    const auto& p = cluster_grid_.params();
+    SDL_PushGPUFragmentUniformData(cmd, uniform_slot, &p, sizeof(p));
 }
 
 } // namespace mmo::engine::scene

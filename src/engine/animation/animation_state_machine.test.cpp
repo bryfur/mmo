@@ -170,17 +170,25 @@ TEST_F(StateMachineTest, UnboundMachineIsNotBound) {
 // TransitionCondition
 // ============================================================================
 
+static std::vector<ParamValue> fparams(float v) {
+    std::vector<ParamValue> out;
+    out.push_back(ParamValue{v});
+    return out;
+}
+static std::vector<ParamValue> bparams(bool v) {
+    std::vector<ParamValue> out;
+    out.push_back(ParamValue{v});
+    return out;
+}
+
 TEST(TransitionCondition, EvaluateGT) {
     TransitionCondition cond;
     cond.param_index = 0;
     cond.op = TransitionCondition::Op::GT;
     cond.threshold = 1.0f;
 
-    std::vector<ParamValue> params = {2.0f};
-    EXPECT_TRUE(cond.evaluate(params));
-
-    params = {0.5f};
-    EXPECT_FALSE(cond.evaluate(params));
+    EXPECT_TRUE(cond.evaluate(fparams(2.0f)));
+    EXPECT_FALSE(cond.evaluate(fparams(0.5f)));
 }
 
 TEST(TransitionCondition, EvaluateLT) {
@@ -189,11 +197,8 @@ TEST(TransitionCondition, EvaluateLT) {
     cond.op = TransitionCondition::Op::LT;
     cond.threshold = 1.0f;
 
-    std::vector<ParamValue> params = {0.5f};
-    EXPECT_TRUE(cond.evaluate(params));
-
-    params = {1.5f};
-    EXPECT_FALSE(cond.evaluate(params));
+    EXPECT_TRUE(cond.evaluate(fparams(0.5f)));
+    EXPECT_FALSE(cond.evaluate(fparams(1.5f)));
 }
 
 TEST(TransitionCondition, EvaluateIsTrue) {
@@ -201,11 +206,8 @@ TEST(TransitionCondition, EvaluateIsTrue) {
     cond.param_index = 0;
     cond.op = TransitionCondition::Op::IS_TRUE;
 
-    std::vector<ParamValue> params = {true};
-    EXPECT_TRUE(cond.evaluate(params));
-
-    params = {false};
-    EXPECT_FALSE(cond.evaluate(params));
+    EXPECT_TRUE(cond.evaluate(bparams(true)));
+    EXPECT_FALSE(cond.evaluate(bparams(false)));
 }
 
 TEST(TransitionCondition, EvaluateIsFalse) {
@@ -213,11 +215,8 @@ TEST(TransitionCondition, EvaluateIsFalse) {
     cond.param_index = 0;
     cond.op = TransitionCondition::Op::IS_FALSE;
 
-    std::vector<ParamValue> params = {false};
-    EXPECT_TRUE(cond.evaluate(params));
-
-    params = {true};
-    EXPECT_FALSE(cond.evaluate(params));
+    EXPECT_TRUE(cond.evaluate(bparams(false)));
+    EXPECT_FALSE(cond.evaluate(bparams(true)));
 }
 
 TEST(TransitionCondition, InvalidIndexReturnsFalse) {
@@ -226,8 +225,7 @@ TEST(TransitionCondition, InvalidIndexReturnsFalse) {
     cond.op = TransitionCondition::Op::GT;
     cond.threshold = 0.0f;
 
-    std::vector<ParamValue> params = {1.0f};
-    EXPECT_FALSE(cond.evaluate(params));
+    EXPECT_FALSE(cond.evaluate(fparams(1.0f)));
 }
 
 TEST(TransitionCondition, EvaluateEQ) {
@@ -236,17 +234,10 @@ TEST(TransitionCondition, EvaluateEQ) {
     cond.op = TransitionCondition::Op::EQ;
     cond.threshold = 5.0f;
 
-    std::vector<ParamValue> params = {5.0f};
-    EXPECT_TRUE(cond.evaluate(params));
-
-    params = {5.0005f};  // within 0.001 epsilon
-    EXPECT_TRUE(cond.evaluate(params));
-
-    params = {5.01f};  // outside epsilon
-    EXPECT_FALSE(cond.evaluate(params));
-
-    params = {4.0f};
-    EXPECT_FALSE(cond.evaluate(params));
+    EXPECT_TRUE(cond.evaluate(fparams(5.0f)));
+    EXPECT_TRUE(cond.evaluate(fparams(5.0005f)));
+    EXPECT_FALSE(cond.evaluate(fparams(5.01f)));
+    EXPECT_FALSE(cond.evaluate(fparams(4.0f)));
 }
 
 TEST(TransitionCondition, EvaluateNE) {
@@ -255,17 +246,10 @@ TEST(TransitionCondition, EvaluateNE) {
     cond.op = TransitionCondition::Op::NE;
     cond.threshold = 5.0f;
 
-    std::vector<ParamValue> params = {5.0f};
-    EXPECT_FALSE(cond.evaluate(params));
-
-    params = {5.0005f};  // within epsilon, so considered equal -> NE is false
-    EXPECT_FALSE(cond.evaluate(params));
-
-    params = {6.0f};
-    EXPECT_TRUE(cond.evaluate(params));
-
-    params = {0.0f};
-    EXPECT_TRUE(cond.evaluate(params));
+    EXPECT_FALSE(cond.evaluate(fparams(5.0f)));
+    EXPECT_FALSE(cond.evaluate(fparams(5.0005f)));
+    EXPECT_TRUE(cond.evaluate(fparams(6.0f)));
+    EXPECT_TRUE(cond.evaluate(fparams(0.0f)));
 }
 
 // ============================================================================

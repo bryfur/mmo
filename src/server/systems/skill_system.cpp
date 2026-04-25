@@ -2,6 +2,8 @@
 #include "buff_system.hpp"
 #include "combat_system.hpp"
 #include "leveling_system.hpp"
+#include "server/math/combat_targeting.hpp"
+#include "server/rules/skill_gate.hpp"
 #include "protocol/protocol.hpp"
 #include "server/ecs/game_components.hpp"
 #include "server/game_config.hpp"
@@ -14,15 +16,11 @@ namespace mmo::server::systems {
 
 using namespace mmo::protocol;
 
-namespace {
+// Hoist rule + math class names into systems:: so call sites stay readable.
+using mmo::server::rules::SkillGate;
+using mmo::server::math::CombatTargeting;
 
-float distance_xz(float x1, float z1, float x2, float z2) {
-    float dx = x2 - x1;
-    float dz = z2 - z1;
-    return std::sqrt(dx * dx + dz * dz);
-}
-
-} // anonymous namespace
+// distance_xz/can_target/in_range/in_cone live in combat_targeting.hpp.
 
 SkillUseResult use_skill(entt::registry& registry, entt::entity player, const std::string& skill_id,
                float dir_x, float dir_z, const GameConfig& config) {
@@ -43,37 +41,37 @@ SkillUseResult use_skill(entt::registry& registry, entt::entity player, const st
     const auto& info = registry.get<ecs::EntityInfo>(player);
     const auto& transform = registry.get<ecs::Transform>(player);
 
-    if (!health.is_alive()) return result;
-
-    // Check skill class matches player class
-    const char* player_class_name = class_name_for_index(info.player_class);
-    if (skill->class_name != player_class_name) return result;
-
-    // Check player level
-    if (player_level.level < skill->unlock_level) return result;
-
-    // Check cooldown
-    if (skill_state.get_cooldown(skill_id) > 0.0f) return result;
-
-    // Check mana (apply mana_cost_mult from talents)
-    float effective_mana_cost = skill->mana_cost;
+    // Precondition check via the SkillGate rule (see skill_gate.hpp).
+    // Every failure branch is pinned down by a unit test without needing
+    // an ECS fixture.
+    SkillGate::Inputs gate;
+    gate.skill_exists = true;  // we already null-checked `skill`
+    gate.caster_alive = health.is_alive();
+    gate.caster_class = class_name_for_index(info.player_class);
+    gate.skill_class = skill->class_name;
+    gate.caster_level = player_level.level;
+    gate.skill_unlock_level = skill->unlock_level;
+    gate.current_cooldown = skill_state.get_cooldown(skill_id);
+    gate.caster_mana = player_level.mana;
+    gate.mana_cost = skill->mana_cost;
     if (registry.all_of<ecs::TalentPassiveState>(player)) {
-        effective_mana_cost *= registry.get<ecs::TalentPassiveState>(player).mana_cost_mult;
+        gate.mana_cost = SkillGate::effective_mana_cost(
+            skill->mana_cost,
+            registry.get<ecs::TalentPassiveState>(player).mana_cost_mult);
     }
-    if (player_level.mana < effective_mana_cost) return result;
+    if (SkillGate::check(gate) != SkillGate::Result::Ok) return result;
 
-    // Deduct mana
-    player_level.mana -= effective_mana_cost;
+    // Deduct mana (gate already verified sufficiency).
+    player_level.mana -= gate.mana_cost;
 
     // Set cooldown (apply global_cdr and cooldown_mult from talents)
     {
-        float effective_cooldown = skill->cooldown;
+        float cd = skill->cooldown;
         if (registry.all_of<ecs::TalentPassiveState>(player)) {
             const auto& tp = registry.get<ecs::TalentPassiveState>(player);
-            effective_cooldown = std::max(0.5f,
-                effective_cooldown * tp.cooldown_mult * (1.0f - tp.global_cdr));
+            cd = SkillGate::effective_cooldown(skill->cooldown, tp.cooldown_mult, tp.global_cdr);
         }
-        skill_state.set_cooldown(skill_id, effective_cooldown);
+        skill_state.set_cooldown(skill_id, cd);
     }
 
     // Get player's network ID for status effect source tracking
@@ -121,7 +119,19 @@ SkillUseResult use_skill(entt::registry& registry, entt::entity player, const st
 
         auto view = registry.view<ecs::Transform, ecs::Health, ecs::EntityInfo>();
         int num_passes = do_spell_echo ? 2 : 1;
-        int max_targets = skill->projectile_count > 1 ? skill->projectile_count : 9999;
+        // Piercing ignores the projectile cap and sweeps a line forward.
+        int max_targets = skill->piercing ? 9999
+                        : (skill->projectile_count > 1 ? skill->projectile_count : 9999);
+        // If the JSON defined spread_angle but no cone, promote it so the
+        // targeting loop filters properly (multi-shot, arrow_storm).
+        float effective_cone = skill->cone_angle;
+        if (effective_cone <= 0.0f && skill->spread_angle > 0.0f) {
+            effective_cone = skill->spread_angle * 0.5f;
+        }
+        // Piercing: use a narrow cone (forward line). 0.35 rad ~= 20°.
+        if (skill->piercing && effective_cone <= 0.0f) {
+            effective_cone = 0.35f;
+        }
         for (int echo_pass = 0; echo_pass < num_passes; ++echo_pass) {
         int targets_hit = 0;
         for (auto entity : view) {
@@ -135,19 +145,24 @@ SkillUseResult use_skill(entt::registry& registry, entt::entity player, const st
             if (!target_health.is_alive()) continue;
 
             const auto& target_transform = view.get<ecs::Transform>(entity);
-            float dist = distance_xz(transform.x, transform.z,
-                                      target_transform.x, target_transform.z);
+            float dist = CombatTargeting::distance_xz(transform.x, transform.z,
+                                                        target_transform.x, target_transform.z);
             if (dist > skill->range) continue;
 
-            // Check cone direction if cone_angle is set
-            if (skill->cone_angle > 0.0f && dist > 0.001f) {
+            // Check cone direction if a cone or spread angle was set.
+            if (effective_cone > 0.0f && dist > 0.001f) {
                 float dx = target_transform.x - transform.x;
                 float dz = target_transform.z - transform.z;
                 float nx = dx / dist;
                 float nz = dz / dist;
                 float dot = nx * dir_x + nz * dir_z;
-                if (dot < std::cos(skill->cone_angle)) continue;
+                if (dot < std::cos(effective_cone)) continue;
             }
+
+            // Target-HP threshold (hammer_of_wrath style): skill only damages
+            // enemies whose HP ratio is below the threshold.
+            if (skill->target_health_threshold > 0.0f
+                && target_health.ratio() > skill->target_health_threshold) continue;
 
             // Compute pre-mitigation damage
             float actual_damage = total_damage;
@@ -237,7 +252,7 @@ SkillUseResult use_skill(entt::registry& registry, entt::entity player, const st
                     auto& aoe_hp = view.get<ecs::Health>(aoe_target);
                     if (!aoe_hp.is_alive()) continue;
                     const auto& aoe_t = view.get<ecs::Transform>(aoe_target);
-                    float aoe_dist = distance_xz(impact_pos.x, impact_pos.z, aoe_t.x, aoe_t.z);
+                    float aoe_dist = CombatTargeting::distance_xz(impact_pos.x, impact_pos.z, aoe_t.x, aoe_t.z);
                     if (aoe_dist <= skill->aoe_radius) {
                         bool aoe_died = apply_damage(registry, aoe_target, aoe_damage, player);
                         CombatHit aoe_hit;
@@ -271,7 +286,7 @@ SkillUseResult use_skill(entt::registry& registry, entt::entity player, const st
                         auto& ch = view.get<ecs::Health>(chain_target);
                         if (!ch.is_alive()) continue;
                         const auto& ct = view.get<ecs::Transform>(chain_target);
-                        float cd = distance_xz(src_t.x, src_t.z, ct.x, ct.z);
+                        float cd = CombatTargeting::distance_xz(src_t.x, src_t.z, ct.x, ct.z);
                         if (cd < best_chain_dist) {
                             best_chain_dist = cd;
                             best_chain = chain_target;
@@ -351,6 +366,79 @@ SkillUseResult use_skill(entt::registry& registry, entt::entity player, const st
         }
     }
 
+    // Movement skills: dash and teleport. Applied after damage/effects so
+    // visuals land on the origin first, then the caster relocates.
+    if (skill->effect_type == "dash" || skill->effect_type == "blink"
+        || skill->teleport_behind) {
+        auto* ptx = registry.try_get<ecs::Transform>(player);
+        if (ptx) {
+            float new_x = ptx->x;
+            float new_z = ptx->z;
+
+            if (skill->teleport_behind) {
+                // Find the first enemy in the cone/range and teleport 80u past them.
+                float best_dist = skill->range > 0.0f ? skill->range : 400.0f;
+                entt::entity best = entt::null;
+                auto ev = registry.view<ecs::Transform, ecs::Health, ecs::EntityInfo>();
+                for (auto ent : ev) {
+                    if (ent == player) continue;
+                    if (ev.get<ecs::EntityInfo>(ent).type != EntityType::NPC) continue;
+                    auto& eh = ev.get<ecs::Health>(ent);
+                    if (!eh.is_alive()) continue;
+                    auto& etx = ev.get<ecs::Transform>(ent);
+                    float dx = etx.x - ptx->x, dz = etx.z - ptx->z;
+                    float d = std::sqrt(dx * dx + dz * dz);
+                    if (d > best_dist) continue;
+                    // Cone filter (reuse direction)
+                    if (d > 0.001f) {
+                        float dot = (dx / d) * dir_x + (dz / d) * dir_z;
+                        if (dot < std::cos(0.6f)) continue;
+                    }
+                    best_dist = d;
+                    best = ent;
+                }
+                if (best != entt::null) {
+                    auto& etx = registry.get<ecs::Transform>(best);
+                    float dx = etx.x - ptx->x, dz = etx.z - ptx->z;
+                    float d = std::sqrt(dx * dx + dz * dz);
+                    if (d > 0.001f) {
+                        float nx = dx / d, nz = dz / d;
+                        new_x = etx.x + nx * 80.0f;
+                        new_z = etx.z + nz * 80.0f;
+                    }
+                }
+            } else {
+                // Plain dash: move forward along attack direction by `range`.
+                float r = skill->range > 0.0f ? skill->range : 300.0f;
+                new_x += dir_x * r;
+                new_z += dir_z * r;
+            }
+
+            ptx->x = new_x;
+            ptx->z = new_z;
+            // Also stop velocity so the player doesn't overshoot.
+            if (auto* vel = registry.try_get<ecs::Velocity>(player)) {
+                vel->x = 0.0f; vel->z = 0.0f;
+            }
+            // Mark physics body for teleport so Jolt resyncs.
+            if (auto* pb = registry.try_get<ecs::PhysicsBody>(player)) {
+                pb->needs_teleport = true;
+            }
+        }
+    }
+
+    // Channeled / ticking skills: queue a ChannelingSkill that the server
+    // ticks each frame. Whirlwind, arcane_rain, consecrate, etc.
+    if (skill->channeled && skill->duration > 0.0f && skill->tick_rate > 0.0f) {
+        auto& ch = registry.get_or_emplace<ecs::ChannelingSkill>(player);
+        ch.skill_id = skill_id;
+        ch.time_remaining = skill->duration;
+        ch.tick_interval = skill->tick_rate;
+        ch.tick_timer = skill->tick_rate;  // first re-tick after one interval
+        ch.dir_x = dir_x;
+        ch.dir_z = dir_z;
+    }
+
     // Set attacking flag for visual feedback
     combat.is_attacking = true;
 
@@ -362,8 +450,91 @@ void update_skill_cooldowns(entt::registry& registry, float dt) {
     auto view = registry.view<ecs::SkillState>();
     for (auto entity : view) {
         auto& skill_state = view.get<ecs::SkillState>(entity);
-        skill_state.update(dt);
+        skill_state.tick(dt);
     }
+}
+
+std::vector<CombatHit> update_channeled_skills(entt::registry& registry, float dt,
+                                                const GameConfig& config) {
+    std::vector<CombatHit> hits;
+    std::vector<entt::entity> expired;
+
+    auto view = registry.view<ecs::ChannelingSkill, ecs::Transform, ecs::Combat, ecs::Health>();
+    for (auto player : view) {
+        auto& ch = view.get<ecs::ChannelingSkill>(player);
+        auto& health = view.get<ecs::Health>(player);
+        if (!health.is_alive()) { expired.push_back(player); continue; }
+
+        ch.time_remaining -= dt;
+        ch.tick_timer -= dt;
+        if (ch.time_remaining <= 0.0f) { expired.push_back(player); continue; }
+        if (ch.tick_timer > 0.0f) continue;
+        ch.tick_timer = ch.tick_interval;
+
+        const SkillConfig* skill = config.find_skill(ch.skill_id);
+        if (!skill) { expired.push_back(player); continue; }
+
+        const auto& transform = view.get<ecs::Transform>(player);
+        const auto& combat = view.get<ecs::Combat>(player);
+
+        // Per-tick damage. Keep simple: use skill->damage_multiplier against
+        // enemies in range (and cone if set). Honor target_health_threshold.
+        float base = combat.damage * skill->damage_multiplier;
+        if (registry.all_of<ecs::BuffState>(player))
+            base *= registry.get<ecs::BuffState>(player).get_damage_multiplier();
+
+        float cone = skill->cone_angle;
+        if (cone <= 0.0f && skill->spread_angle > 0.0f) cone = skill->spread_angle * 0.5f;
+
+        uint32_t pid = registry.all_of<ecs::NetworkId>(player)
+                        ? registry.get<ecs::NetworkId>(player).id : 0u;
+
+        auto ev = registry.view<ecs::Transform, ecs::Health, ecs::EntityInfo>();
+        for (auto ent : ev) {
+            if (ent == player) continue;
+            if (ev.get<ecs::EntityInfo>(ent).type != EntityType::NPC) continue;
+            auto& eh = ev.get<ecs::Health>(ent);
+            if (!eh.is_alive()) continue;
+            if (skill->target_health_threshold > 0.0f
+                && eh.ratio() > skill->target_health_threshold) continue;
+            auto& etx = ev.get<ecs::Transform>(ent);
+            float dx = etx.x - transform.x, dz = etx.z - transform.z;
+            float d = std::sqrt(dx * dx + dz * dz);
+            if (d > skill->range) continue;
+            if (cone > 0.0f && d > 0.001f) {
+                float dot = (dx / d) * ch.dir_x + (dz / d) * ch.dir_z;
+                if (dot < std::cos(cone)) continue;
+            }
+            bool died = apply_damage(registry, ent, base, player);
+            CombatHit hit;
+            hit.attacker = player;
+            hit.target = ent;
+            hit.damage = base;
+            hit.target_died = died;
+            hits.push_back(hit);
+
+            // Re-apply per-tick status effects (burn, slow).
+            if (skill->burn_damage > 0.0f && skill->burn_duration > 0.0f) {
+                apply_effect(registry, ent,
+                    ecs::make_status_effect(ecs::StatusEffect::Type::Burn,
+                                            skill->burn_duration, skill->burn_damage, pid));
+            }
+            if (skill->slow_percent > 0.0f && skill->slow_duration > 0.0f) {
+                apply_effect(registry, ent,
+                    ecs::make_status_effect(ecs::StatusEffect::Type::Slow,
+                                            skill->slow_duration, skill->slow_percent, pid));
+            }
+        }
+
+        // Heal-per-tick aura (healing_aura, consecrate-with-heal variants).
+        if (skill->heal_percent_per_tick > 0.0f && registry.all_of<ecs::Health>(player)) {
+            auto& h = registry.get<ecs::Health>(player);
+            h.current = std::min(h.max, h.current + h.max * skill->heal_percent_per_tick);
+        }
+    }
+
+    for (auto e : expired) registry.remove<ecs::ChannelingSkill>(e);
+    return hits;
 }
 
 std::vector<const SkillConfig*> get_unlocked_skills(entt::registry& registry, entt::entity player,

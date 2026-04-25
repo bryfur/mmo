@@ -5,7 +5,6 @@
 
 namespace mmo::engine::systems {
 
-using mmo::engine::SpawnMode;
 using mmo::engine::VelocityType;
 
 namespace {
@@ -55,72 +54,11 @@ int EffectSystem::spawn_effect(
     return static_cast<int>(effects_.size() - 1);
 }
 
-void EffectSystem::update(float dt, const std::function<float(float, float)>& get_terrain_height) {
-    // Update all effects
-    for (auto& effect : effects_) {
-        effect.age += dt;
-
-        // Update each emitter in the effect
-        for (auto& emitter : effect.emitters) {
-            update_emitter(emitter, dt, get_terrain_height);
-        }
-    }
-
-    // Remove completed effects
+void EffectSystem::compact_effects() {
     effects_.erase(
         std::remove_if(effects_.begin(), effects_.end(),
             [](const EffectInstance& e) { return e.is_complete(); }),
         effects_.end()
-    );
-}
-
-void EffectSystem::update_emitter(
-    EmitterInstance& emitter,
-    float dt,
-    const std::function<float(float, float)>& get_terrain_height
-) {
-    if (!emitter.definition) return;
-
-    const auto& def = *emitter.definition;
-    emitter.age += dt;
-
-    // Check if emitter should spawn particles
-    if (emitter.is_active()) {
-        // Handle burst spawning
-        if (def.spawn_mode == SpawnMode::BURST && !emitter.has_spawned_burst) {
-            if (emitter.age >= def.delay) {
-                spawn_particles(emitter, def.spawn_count);
-                emitter.has_spawned_burst = true;
-            }
-        }
-        // Handle continuous spawning
-        else if (def.spawn_mode == SpawnMode::CONTINUOUS) {
-            while (emitter.age >= emitter.next_spawn_time) {
-                float spawn_interval = 1.0f / def.spawn_rate;
-                spawn_particles(emitter, 1);
-                emitter.next_spawn_time += spawn_interval;
-            }
-        }
-    }
-
-    // Update all particles
-    for (auto& particle : emitter.particles) {
-        update_particle(particle, def, dt);
-
-        // Apply terrain height if callback provided
-        if (get_terrain_height) {
-            float terrain_h = get_terrain_height(particle.position.x, particle.position.z);
-            if (particle.position.y < terrain_h) {
-                particle.position.y = terrain_h;
-            }
-        }
-    }
-
-    // Remove dead particles
-    emitter.particles.erase(
-        std::remove_if(emitter.particles.begin(), emitter.particles.end(),
-            [](const Particle& p) { return p.age >= p.lifetime; }),
-        emitter.particles.end()
     );
 }
 

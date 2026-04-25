@@ -11,12 +11,12 @@
 #include "../gpu/gpu_pipeline.hpp"
 #include "../gpu/gpu_uniforms.hpp"
 #include "../gpu/pipeline_registry.hpp"
+#include "engine/core/logger.hpp"
 #include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
 #include <cmath>
-#include <iostream>
 #include <cstdio>
 
 namespace mmo::engine::render {
@@ -45,7 +45,7 @@ bool UIRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_re
     );
     
     if (!vertex_buffer_) {
-        std::cerr << "Failed to create UI vertex buffer" << std::endl;
+        ENGINE_LOG_ERROR("ui", "Failed to create UI vertex buffer");
         return false;
     }
     
@@ -66,7 +66,7 @@ bool UIRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_re
 
         dummy_texture_ = SDL_CreateGPUTexture(device.handle(), &tex_info);
         if (!dummy_texture_) {
-            std::cerr << "Failed to create UI dummy texture" << std::endl;
+            ENGINE_LOG_ERROR("ui", "Failed to create UI dummy texture");
             return false;
         }
 
@@ -115,7 +115,7 @@ bool UIRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_re
 
         dummy_sampler_ = SDL_CreateGPUSampler(device.handle(), &samp_info);
         if (!dummy_sampler_) {
-            std::cerr << "Failed to create UI dummy sampler" << std::endl;
+            ENGINE_LOG_ERROR("ui", "Failed to create UI dummy sampler");
             return false;
         }
     }
@@ -123,9 +123,9 @@ bool UIRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_re
     // Initialize text renderer
     text_renderer_ = std::make_unique<TextRenderer>();
     if (text_renderer_->init(device, pipeline_registry)) {
-        std::cout << "UI text renderer initialized" << std::endl;
+        ENGINE_LOG_INFO("ui", "Text renderer initialized");
     } else {
-        std::cerr << "Failed to initialize text renderer" << std::endl;
+        ENGINE_LOG_ERROR("ui", "Failed to initialize text renderer");
     }
 
     // Set up projection
@@ -230,7 +230,7 @@ void UIRenderer::execute(SDL_GPUCommandBuffer* cmd, SDL_GPUTexture* swapchain, b
 
     SDL_GPURenderPass* render_pass = SDL_BeginGPURenderPass(cmd, &color_target, 1, nullptr);
     if (!render_pass) {
-        std::cerr << "UIRenderer::execute: Failed to begin render pass" << std::endl;
+        ENGINE_LOG_ERROR("ui", "execute: Failed to begin render pass");
         return;
     }
 

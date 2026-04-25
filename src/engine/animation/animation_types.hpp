@@ -2,15 +2,17 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <string>
 #include <type_traits>
 #include <vector>
 #include <glm/glm.hpp>
+#include <glm/gtc/constants.hpp>
 #include <glm/gtc/quaternion.hpp>
 
 namespace mmo::engine::animation {
 
-constexpr int MAX_BONES = 64;
+constexpr int MAX_BONES = 128;
 constexpr int MAX_BONE_INFLUENCES = 4;
 
 struct AnimationKeyframe {
@@ -28,11 +30,14 @@ struct AnimationChannel {
     std::vector<glm::quat> rotations;
     std::vector<float> scale_times;
     std::vector<glm::vec3> scales;
+};
 
-    // Per-channel keyframe cursor caches (mutable so const channels can be sampled)
-    mutable size_t pos_cursor = 0;
-    mutable size_t rot_cursor = 0;
-    mutable size_t scale_cursor = 0;
+// Per-channel playback cursor. Lives on the player side so multiple instances
+// can share clip data without racing on mutable state.
+struct ChannelCursors {
+    size_t pos = 0;
+    size_t rot = 0;
+    size_t scale = 0;
 };
 
 struct AnimationClip {
@@ -43,7 +48,7 @@ struct AnimationClip {
 
 struct Joint {
     std::string name;
-    int parent_index;  // -1 for root
+    int parent_index;
     glm::mat4 inverse_bind_matrix;
     glm::vec3 local_translation;
     glm::quat local_rotation;
@@ -52,21 +57,32 @@ struct Joint {
 
 struct Skeleton {
     std::vector<Joint> joints;
-    std::vector<int> joint_node_indices;  // Map from joint index to glTF node index
+    std::vector<int> joint_node_indices;
 };
 
-// Per-entity smoothed foot IK offsets to eliminate jitter from terrain sampling.
 struct FootIKSmoother {
     float smoothed_left_offset = 0.0f;
     float smoothed_right_offset = 0.0f;
-    float smooth_rate = 15.0f;  // higher = more responsive, lower = smoother
+    float smooth_rate = 15.0f;
 
-    // Smooth raw terrain offsets toward targets. Call once per frame.
     void update(float left_target, float right_target, float dt) {
         float blend = std::min(1.0f, dt * smooth_rate);
         smoothed_left_offset += (left_target - smoothed_left_offset) * blend;
         smoothed_right_offset += (right_target - smoothed_right_offset) * blend;
     }
+};
+
+// Configurable bone names for foot IK. Defaults match Mixamo conventions;
+// rigs from other DCCs can override.
+struct FootIKBoneNames {
+    std::string hips       = "Hips";
+    std::string spine      = "Spine";
+    std::string left_hip   = "LeftUpperLeg";
+    std::string left_knee  = "LeftLowerLeg";
+    std::string left_foot  = "LeftFoot";
+    std::string right_hip  = "RightUpperLeg";
+    std::string right_knee = "RightLowerLeg";
+    std::string right_foot = "RightFoot";
 };
 
 struct FootIKData {
@@ -76,17 +92,18 @@ struct FootIKData {
     int right_upper = -1, right_lower = -1, right_foot = -1;
     bool valid = false;
 
-    void init(const Skeleton& skel) {
+    void init(const Skeleton& skel, const FootIKBoneNames& names = {}) {
         for (size_t i = 0; i < skel.joints.size(); i++) {
             const auto& name = skel.joints[i].name;
-            if (name == "Hips") hips = static_cast<int>(i);
-            else if (name == "Spine") spine = static_cast<int>(i);
-            else if (name == "LeftUpperLeg") left_upper = static_cast<int>(i);
-            else if (name == "LeftLowerLeg") left_lower = static_cast<int>(i);
-            else if (name == "LeftFoot") left_foot = static_cast<int>(i);
-            else if (name == "RightUpperLeg") right_upper = static_cast<int>(i);
-            else if (name == "RightLowerLeg") right_lower = static_cast<int>(i);
-            else if (name == "RightFoot") right_foot = static_cast<int>(i);
+            int idx = static_cast<int>(i);
+            if (name == names.hips) hips = idx;
+            else if (name == names.spine) spine = idx;
+            else if (name == names.left_hip) left_upper = idx;
+            else if (name == names.left_knee) left_lower = idx;
+            else if (name == names.left_foot) left_foot = idx;
+            else if (name == names.right_hip) right_upper = idx;
+            else if (name == names.right_knee) right_lower = idx;
+            else if (name == names.right_foot) right_foot = idx;
         }
         valid = (hips >= 0 && spine >= 0 &&
                  left_upper >= 0 && left_lower >= 0 && left_foot >= 0 &&
@@ -94,7 +111,6 @@ struct FootIKData {
     }
 };
 
-// Exponential angle smoother with turn-rate tracking (for body lean).
 struct RotationSmoother {
     float current = 0.0f;
     float turn_rate = 0.0f;
@@ -107,7 +123,8 @@ struct RotationSmoother {
             return;
         }
         float blend = 1.0f - std::exp(-speed * dt);
-        float diff = std::fmod(target - current + 3.14159265f, 6.28318530f) - 3.14159265f;
+        float diff = std::fmod(target - current + glm::pi<float>(), glm::two_pi<float>())
+                     - glm::pi<float>();
         float step = diff * blend;
         current += step;
         turn_rate = (dt > 0.0001f) ? (step / dt) : 0.0f;
@@ -118,7 +135,6 @@ struct RotationSmoother {
     }
 };
 
-// Per-archetype procedural animation tuning (lean, tilt, etc.)
 struct ProceduralConfig {
     bool foot_ik = true;
     bool lean = true;
@@ -130,8 +146,22 @@ struct ProceduralConfig {
     float attack_tilt_cooldown = 0.5f;
 };
 
-// Helper to interpolate between keyframes (linear for vec3, slerp for quat)
-// last_cursor is a per-channel cache that avoids binary search when playback is sequential.
+// Parameter value for state-machine transition conditions. A tagged union
+// avoids the per-frame std::variant overhead on the transition hot path.
+enum class ParamType : uint8_t { Float, Bool };
+
+struct ParamValue {
+    ParamType type = ParamType::Float;
+    union { float f; bool b; };
+
+    ParamValue() : type(ParamType::Float), f(0.0f) {}
+    explicit ParamValue(float v) : type(ParamType::Float), f(v) {}
+    explicit ParamValue(bool v) : type(ParamType::Bool), b(v) {}
+
+    float as_float() const { return type == ParamType::Float ? f : 0.0f; }
+    bool as_bool() const { return type == ParamType::Bool ? b : false; }
+};
+
 template<typename T>
 T interpolate_keyframes(const std::vector<float>& times, const std::vector<T>& values,
                         float t, size_t& last_cursor) {
@@ -140,12 +170,10 @@ T interpolate_keyframes(const std::vector<float>& times, const std::vector<T>& v
     if (t >= times.back()) { last_cursor = times.size() - 2; return values.back(); }
 
     size_t i = 0;
-    // Fast path: check if cached cursor still brackets the current time (O(1))
     if (last_cursor < times.size() - 1 &&
         times[last_cursor] <= t && t < times[last_cursor + 1]) {
         i = last_cursor;
     } else {
-        // Fallback: binary search and update cursor
         auto it = std::upper_bound(times.begin(), times.end(), t);
         i = static_cast<size_t>(std::distance(times.begin(), it)) - 1;
         last_cursor = i;
@@ -161,7 +189,6 @@ T interpolate_keyframes(const std::vector<float>& times, const std::vector<T>& v
     }
 }
 
-// Convenience overload without cursor (for callers that don't need caching)
 template<typename T>
 T interpolate_keyframes(const std::vector<float>& times, const std::vector<T>& values, float t) {
     size_t cursor = 0;

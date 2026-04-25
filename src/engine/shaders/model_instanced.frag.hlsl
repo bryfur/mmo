@@ -1,9 +1,5 @@
-/**
- * Instanced Model Fragment Shader - SDL3 GPU API
- *
- * Renders 3D models with diffuse lighting, PCSS shadows, and fog.
- * Receives per-instance tint from vertex shader instead of uniform.
- */
+// Instanced Model Fragment Shader.
+// Linear HDR output, sRGB sampler on base color. Per-instance tint is linear.
 
 struct PSInput {
     float4 position : SV_Position;
@@ -15,6 +11,7 @@ struct PSInput {
     float viewDepth : TEXCOORD5;
     float4 instanceTint : TEXCOORD6;
     float noFog : TEXCOORD7;
+    float4 tangent : TEXCOORD8;  // xyz = world-space tangent, w = bitangent sign
 };
 
 [[vk::binding(0, 3)]]
@@ -30,8 +27,12 @@ cbuffer LightingUniforms {
     float fogEnd;
     int hasTexture;
     int fogEnabled;
-    float _padding3;
+    int hasNormalMap;
     float3 cameraPos;
+    float normalScale;
+    float ambientStrength;
+    float sunIntensity;
+    float _padding3;
     float _padding4;
 };
 
@@ -45,13 +46,11 @@ cbuffer ShadowUniforms {
     float _shadowPad0;
 };
 
-// Base color texture - sampler slot 0
 [[vk::combinedImageSampler]][[vk::binding(0, 2)]]
 Texture2D baseColorTexture;
 [[vk::combinedImageSampler]][[vk::binding(0, 2)]]
 SamplerState baseColorSampler;
 
-// Shadow cascade textures - sampler slots 1-4
 [[vk::combinedImageSampler]][[vk::binding(1, 2)]]
 Texture2D shadowMap0;
 [[vk::combinedImageSampler]][[vk::binding(1, 2)]]
@@ -72,6 +71,11 @@ Texture2D shadowMap3;
 [[vk::combinedImageSampler]][[vk::binding(4, 2)]]
 SamplerState shadowSampler3;
 
+[[vk::combinedImageSampler]][[vk::binding(5, 2)]]
+Texture2D normalMapTexture;
+[[vk::combinedImageSampler]][[vk::binding(5, 2)]]
+SamplerState normalMapSampler;
+
 float sampleShadowMap(int cascade, float2 uv) {
     if (cascade == 0) return shadowMap0.SampleLevel(shadowSampler0, uv, 0).r;
     if (cascade == 1) return shadowMap1.SampleLevel(shadowSampler1, uv, 0).r;
@@ -80,17 +84,27 @@ float sampleShadowMap(int cascade, float2 uv) {
 }
 
 #include "shadow_common.hlsli"
+#include "fog.hlsli"
+#include "lighting.hlsli"
+#include "cluster_lighting.hlsli"
+
+static const float DEFAULT_METALLIC  = 0.0;
+static const float DEFAULT_ROUGHNESS = 0.85;
+static const float DEFAULT_AO        = 1.0;
 
 float4 PSMain(PSInput input) : SV_Target {
-    float3 norm = normalize(input.normal);
-    float3 lightDirection = -lightDir;
+    float3 N_geo = normalize(input.normal);
+    float3 V = normalize(cameraPos - input.fragPos);
+    float3 L = normalize(-lightDir);
 
-    float diff = max(dot(norm, lightDirection), 0.0);
-    float3 diffuse = diff * lightColor;
-
-    float shadow = calcShadow(input.fragPos, input.viewDepth);
-
-    float3 lighting = ambientColor * lerp(0.5, 1.0, shadow) + diffuse * shadow;
+    float3 N = N_geo;
+    if (hasNormalMap == 1) {
+        float3 Nts = normalMapTexture.Sample(normalMapSampler, input.texCoord).xyz * 2.0 - 1.0;
+        Nts.xy *= normalScale;
+        float3 T_ws = normalize(input.tangent.xyz);
+        float3 B_ws = cross(N_geo, T_ws) * input.tangent.w;
+        N = normalize(T_ws * Nts.x + B_ws * Nts.y + N_geo * Nts.z);
+    }
 
     float4 baseColor;
     if (hasTexture == 1) {
@@ -100,16 +114,27 @@ float4 PSMain(PSInput input) : SV_Target {
         baseColor = input.vertexColor * input.instanceTint;
     }
 
-    float3 result = lighting * baseColor.rgb;
+    float shadow = calcShadow(input.fragPos, input.viewDepth);
+    float3 directLight = lightColor * sunIntensity * shadow;
 
-    float3 viewDir = normalize(cameraPos - input.fragPos);
-    float rim = 1.0 - max(dot(viewDir, norm), 0.0);
-    rim = smoothstep(0.6, 1.0, rim);
-    result += rim * 0.3 * baseColor.rgb;
+    float3 direct = evaluatePBR(N, V, L, directLight,
+                                 baseColor.rgb,
+                                 DEFAULT_METALLIC, DEFAULT_ROUGHNESS, DEFAULT_AO);
+
+    float3 ambient = iblAmbient(baseColor.rgb, DEFAULT_METALLIC, DEFAULT_AO,
+                                 ambientColor * lerp(ambientStrength, 1.0, shadow));
+
+    float3 result = direct + ambient;
+
+    if (clusterParams.gridDim.w > 0u) {
+        float2 screen_uv = input.position.xy * clusterParams.screenSize.zw;
+        result += accumulateClusterLights(input.fragPos, N, V,
+                                          baseColor.rgb, DEFAULT_METALLIC, DEFAULT_ROUGHNESS, DEFAULT_AO,
+                                          input.viewDepth, screen_uv);
+    }
 
     if (fogEnabled == 1 && input.noFog < 0.5) {
-        float fogFactor = saturate((input.fogDistance - fogStart) / (fogEnd - fogStart));
-        fogFactor = 1.0 - exp(-fogFactor * 2.0);
+        float fogFactor = distanceFogFactor(input.fogDistance, fogStart, fogEnd);
         result = lerp(result, fogColor, fogFactor);
     }
 

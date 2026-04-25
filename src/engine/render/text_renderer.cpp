@@ -9,10 +9,10 @@
 #include "SDL3/SDL_stdinc.h"
 #include "SDL3/SDL_surface.h"
 #include "SDL3_ttf/SDL_ttf.h"
+#include "engine/core/logger.hpp"
 #include "glm/ext/matrix_float4x4.hpp"
 #include "glm/ext/vector_float4.hpp"
 #include <cstdint>
-#include <iostream>
 #include <cstring>
 #include <algorithm>
 #include <string>
@@ -35,7 +35,7 @@ bool TextRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_
     pipeline_registry_ = &pipeline_registry;
     
     if (!TTF_Init()) {
-        std::cerr << "Failed to initialize SDL_ttf: " << SDL_GetError() << std::endl;
+        ENGINE_LOG_ERROR("text", "Failed to initialize SDL_ttf: {}", SDL_GetError());
         return false;
     }
     
@@ -53,13 +53,13 @@ bool TextRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_
     for (const char* path : font_paths) {
         font_ = TTF_OpenFont(path, font_size_);
         if (font_) {
-            std::cout << "Loaded font: " << path << std::endl;
+            ENGINE_LOG_INFO("text", "Loaded font: {}", path);
             break;
         }
     }
     
     if (!font_) {
-        std::cerr << "Warning: Could not load any font, text rendering disabled" << std::endl;
+        ENGINE_LOG_WARN("text", "Could not load any font, text rendering disabled");
         // Continue without font - not fatal
     }
     
@@ -73,7 +73,7 @@ bool TextRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_
     );
     
     if (!vertex_buffer_) {
-        std::cerr << "Failed to create text vertex buffer" << std::endl;
+        ENGINE_LOG_ERROR("text", "Failed to create text vertex buffer");
         return false;
     }
     
@@ -88,7 +88,7 @@ bool TextRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipeline_
     
     sampler_ = SDL_CreateGPUSampler(device.handle(), &sampler_info);
     if (!sampler_) {
-        std::cerr << "Failed to create text sampler: " << SDL_GetError() << std::endl;
+        ENGINE_LOG_ERROR("text", "Failed to create text sampler: {}", SDL_GetError());
         return false;
     }
     
@@ -422,9 +422,11 @@ void TextRenderer::queue_text_draw(const std::string& text, float x, float y,
     // Add vertices to batch
     batch_vertices_.insert(batch_vertices_.end(), std::begin(vertices), std::end(vertices));
 
-    // Queue the text draw
+    // Queue the text draw with cached pointer to avoid a second hash lookup in draw_queued_text.
+    // unordered_map pointer stability holds across insertions, and we never erase during a frame
+    // (release_pending_resources runs at frame boundary).
     QueuedText qt;
-    qt.text = text;
+    qt.cached = &cached;
     qt.x = x;
     qt.y = y;
     qt.color = color;
@@ -449,29 +451,36 @@ void TextRenderer::draw_queued_text(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass
     if (!text_pipeline) return;
     text_pipeline->bind(render_pass);
 
+    // Hoist projection push outside loop - it's invariant across all queued text.
+    SDL_PushGPUVertexUniformData(cmd, 0, &projection_, sizeof(glm::mat4));
+
+    SDL_GPUTexture* last_texture = nullptr;
+    uint32_t last_color = 0;
+    bool first = true;
+
     for (const auto& qt : queued_texts_) {
-        // Get cached texture
-        auto it = text_cache_.find(qt.text);
-        if (it == text_cache_.end() || !it->second.texture) continue;
+        if (!qt.cached || !qt.cached->texture) continue;
+        const CachedText& cached = *qt.cached;
 
-        CachedText& cached = it->second;
+        // Push color only when it changes (common case: same color for many labels).
+        if (first || qt.color != last_color) {
+            float r = (qt.color & 0xFF) / 255.0f;
+            float g = ((qt.color >> 8) & 0xFF) / 255.0f;
+            float b = ((qt.color >> 16) & 0xFF) / 255.0f;
+            float a = ((qt.color >> 24) & 0xFF) / 255.0f;
+            glm::vec4 text_color(r, g, b, a);
+            SDL_PushGPUFragmentUniformData(cmd, 0, &text_color, sizeof(glm::vec4));
+            last_color = qt.color;
+        }
 
-        // Extract color components (ABGR format)
-        float r = (qt.color & 0xFF) / 255.0f;
-        float g = ((qt.color >> 8) & 0xFF) / 255.0f;
-        float b = ((qt.color >> 16) & 0xFF) / 255.0f;
-        float a = ((qt.color >> 24) & 0xFF) / 255.0f;
-
-        // Push uniforms
-        SDL_PushGPUVertexUniformData(cmd, 0, &projection_, sizeof(glm::mat4));
-        glm::vec4 text_color(r, g, b, a);
-        SDL_PushGPUFragmentUniformData(cmd, 0, &text_color, sizeof(glm::vec4));
-
-        // Bind texture and sampler
-        SDL_GPUTextureSamplerBinding tex_binding = {};
-        tex_binding.texture = cached.texture;
-        tex_binding.sampler = sampler_;
-        SDL_BindGPUFragmentSamplers(render_pass, 0, &tex_binding, 1);
+        // Bind texture/sampler only when texture changes.
+        if (cached.texture != last_texture) {
+            SDL_GPUTextureSamplerBinding tex_binding = {};
+            tex_binding.texture = cached.texture;
+            tex_binding.sampler = sampler_;
+            SDL_BindGPUFragmentSamplers(render_pass, 0, &tex_binding, 1);
+            last_texture = cached.texture;
+        }
 
         // Bind vertex buffer at the correct offset
         SDL_GPUBufferBinding vb_binding = {};
@@ -481,6 +490,7 @@ void TextRenderer::draw_queued_text(SDL_GPUCommandBuffer* cmd, SDL_GPURenderPass
 
         // Draw quad
         SDL_DrawGPUPrimitives(render_pass, 6, 1, 0, 0);
+        first = false;
     }
 
     // Clear queued data for next frame

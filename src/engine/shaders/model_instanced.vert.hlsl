@@ -11,6 +11,7 @@ struct VSInput {
     [[vk::location(1)]] float3 normal : NORMAL;
     [[vk::location(2)]] float2 texCoord : TEXCOORD0;
     [[vk::location(3)]] float4 color : COLOR0;
+    [[vk::location(4)]] float4 tangent : TANGENT;
 };
 
 struct VSOutput {
@@ -23,6 +24,7 @@ struct VSOutput {
     float viewDepth : TEXCOORD5;
     float4 instanceTint : TEXCOORD6;
     float noFog : TEXCOORD7;
+    float4 tangent : TEXCOORD8;  // xyz = world-space tangent, w = bitangent sign
 };
 
 // Shared camera uniforms (pushed once per frame)
@@ -58,6 +60,9 @@ VSOutput VSMain(VSInput input, uint instanceID : SV_InstanceID) {
 
     float3x3 normalMat3x3 = (float3x3)inst.normalMatrix;
     output.normal = normalize(mul(normalMat3x3, input.normal));
+
+    float3 tangentWS = normalize(mul((float3x3)inst.model, input.tangent.xyz));
+    output.tangent = float4(tangentWS, input.tangent.w);
 
     output.texCoord = input.texCoord;
     output.vertexColor = input.color;

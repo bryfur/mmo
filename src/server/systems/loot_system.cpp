@@ -19,7 +19,9 @@ std::mt19937& rng() {
 
 } // anonymous namespace
 
-LootResult roll_loot(const std::string& monster_type_id, const GameConfig& config) {
+// Seeded overload - tests inject a std::mt19937 to get deterministic rolls.
+LootResult roll_loot(const std::string& monster_type_id, const GameConfig& config,
+                     std::mt19937& rng_) {
     LootResult result;
 
     const LootTableConfig* table = config.find_loot_table(monster_type_id);
@@ -28,7 +30,7 @@ LootResult roll_loot(const std::string& monster_type_id, const GameConfig& confi
     // Roll gold
     if (table->gold_max > table->gold_min) {
         std::uniform_int_distribution<int> gold_dist(table->gold_min, table->gold_max);
-        result.gold = gold_dist(rng());
+        result.gold = gold_dist(rng_);
     } else {
         result.gold = table->gold_min;
     }
@@ -36,11 +38,11 @@ LootResult roll_loot(const std::string& monster_type_id, const GameConfig& confi
     // Roll each drop
     std::uniform_real_distribution<float> chance_dist(0.0f, 1.0f);
     for (const auto& drop : table->drops) {
-        if (chance_dist(rng()) < drop.chance) {
+        if (chance_dist(rng_) < drop.chance) {
             int count = drop.count_min;
             if (drop.count_max > drop.count_min) {
                 std::uniform_int_distribution<int> count_dist(drop.count_min, drop.count_max);
-                count = count_dist(rng());
+                count = count_dist(rng_);
             }
             result.items.emplace_back(drop.item_id, count);
         }
@@ -49,18 +51,33 @@ LootResult roll_loot(const std::string& monster_type_id, const GameConfig& confi
     return result;
 }
 
-void give_loot(entt::registry& registry, entt::entity player, const LootResult& loot) {
-    // Add gold
+LootResult roll_loot(const std::string& monster_type_id, const GameConfig& config) {
+    return roll_loot(monster_type_id, config, rng());
+}
+
+std::vector<std::pair<std::string, int>>
+give_loot(entt::registry& registry, entt::entity player, const LootResult& loot) {
+    std::vector<std::pair<std::string, int>> overflow;
+
+    // Add gold (no inventory cap on gold in this design).
     if (auto* level = registry.try_get<ecs::PlayerLevel>(player)) {
         level->gold += loot.gold;
     }
 
-    // Add items to inventory
+    // Add items to inventory; surface any that didn't fit so the caller can
+    // show a "Inventory Full" notification or spawn a ground drop.
     if (auto* inv = registry.try_get<ecs::Inventory>(player)) {
         for (const auto& [item_id, count] : loot.items) {
-            inv->add_item(item_id, count);
+            int before = inv->count_item(item_id);
+            if (!inv->add_item(item_id, count)) {
+                int after = inv->count_item(item_id);
+                int added = after - before;
+                int lost = count - added;
+                if (lost > 0) overflow.emplace_back(item_id, lost);
+            }
         }
     }
+    return overflow;
 }
 
 bool equip_item(entt::registry& registry, entt::entity player, const std::string& item_id, const GameConfig& config) {
@@ -94,31 +111,36 @@ bool equip_item(entt::registry& registry, entt::entity player, const std::string
         if (!class_allowed) return false;
     }
 
-    // Determine slot
+    // Remove the new item from inventory FIRST so the slot it occupied is
+    // available for the old item being unequipped. This avoids the edge
+    // case where inventory is exactly full and the swap would otherwise
+    // fail despite there being a natural swap slot.
+    inv->remove_item(item_id);
+
+    // Determine slot and put old item back (if any).
     if (item->type == "weapon") {
-        // Fix #7: Check if old weapon can be returned to inventory before swapping
         if (!equip->weapon_id.empty()) {
-            if (inv->used_slots >= ecs::Inventory::MAX_SLOTS) {
-                return false; // Inventory full, can't swap
+            if (!inv->add_item(equip->weapon_id, 1, 1)) {
+                // Truly no room (old item needed a slot and inventory was
+                // already full with other items). Restore state and fail.
+                inv->add_item(item_id, 1, item->stack_size);
+                return false;
             }
-            inv->add_item(equip->weapon_id, 1, 1);
         }
         equip->weapon_id = item_id;
     } else if (item->type == "armor") {
-        // Fix #7: Check if old armor can be returned to inventory before swapping
         if (!equip->armor_id.empty()) {
-            if (inv->used_slots >= ecs::Inventory::MAX_SLOTS) {
-                return false; // Inventory full, can't swap
+            if (!inv->add_item(equip->armor_id, 1, 1)) {
+                inv->add_item(item_id, 1, item->stack_size);
+                return false;
             }
-            inv->add_item(equip->armor_id, 1, 1);
         }
         equip->armor_id = item_id;
     } else {
-        return false; // Not equippable
+        // Not equippable: restore and fail.
+        inv->add_item(item_id, 1, item->stack_size);
+        return false;
     }
-
-    // Remove from inventory
-    inv->remove_item(item_id);
 
     // Recalculate bonuses
     recalc_equipment(registry, player, config);
@@ -159,6 +181,15 @@ bool use_consumable(entt::registry& registry, entt::entity player, const std::st
 
     // Must be consumable
     if (item->type != "consumable") return false;
+
+    // Per-item cooldown (potion spam guard). Heal potions share a 6s
+    // cooldown, mana potions 6s, stat elixirs 60s, scrolls 15s.
+    auto& cd = registry.get_or_emplace<ecs::ConsumableCooldowns>(player);
+    if (cd.remaining(item_id) > 0.0f) return false;
+    float cooldown_seconds = 6.0f;
+    if (item->subtype == "elixir" || item->stats.buff_duration > 20.0f) cooldown_seconds = 60.0f;
+    else if (item->subtype == "scroll") cooldown_seconds = 15.0f;
+    cd.set(item_id, cooldown_seconds);
 
     // Apply heal
     if (item->stats.heal_amount > 0.0f) {
@@ -216,6 +247,20 @@ void recalc_equipment(entt::registry& registry, entt::entity player, const GameC
             equip->speed_bonus += armor->stats.speed_bonus;
             equip->defense += armor->stats.defense;
         }
+    }
+
+    // Apply the health_bonus delta to the player's current Health.max so
+    // stat bonuses are actually reflected in combat numbers. Track what we
+    // applied so future recalc calls only shift by the difference.
+    if (auto* hp = registry.try_get<ecs::Health>(player)) {
+        float delta = equip->health_bonus - equip->applied_health_bonus;
+        if (delta != 0.0f) {
+            hp->max = std::max(1.0f, hp->max + delta);
+            // Don't over-heal: clamp current, but extend if we grew.
+            if (hp->current > hp->max) hp->current = hp->max;
+            else if (delta > 0.0f) hp->current = std::min(hp->max, hp->current + delta);
+        }
+        equip->applied_health_bonus = equip->health_bonus;
     }
 }
 

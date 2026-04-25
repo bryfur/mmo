@@ -149,6 +149,11 @@ bool apply_damage(entt::registry& registry, entt::entity target, float damage,
 
     bool died = was_alive && !health.is_alive();
 
+    // Mark with Dead tag so systems can iterate dead entities directly.
+    if (died && !registry.all_of<ecs::Dead>(target)) {
+        registry.emplace<ecs::Dead>(target);
+    }
+
     // Clear all status effects on death
     if (died && registry.all_of<ecs::BuffState>(target)) {
         registry.get<ecs::BuffState>(target).effects.clear();

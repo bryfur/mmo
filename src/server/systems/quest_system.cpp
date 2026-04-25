@@ -1,15 +1,13 @@
 #include "quest_system.hpp"
-#include <cmath>
+#include "server/rules/kill_objective.hpp"
+#include "server/rules/location_objective.hpp"
 
 namespace mmo::server::systems {
 
-namespace {
+using mmo::server::rules::KillObjective;
+using mmo::server::rules::LocationObjective;
 
-float distance_xz(float x1, float z1, float x2, float z2) {
-    float dx = x2 - x1;
-    float dz = z2 - z1;
-    return std::sqrt(dx * dx + dz * dz);
-}
+namespace {
 
 void check_all_complete(ecs::ActiveQuest& quest) {
     quest.all_complete = true;
@@ -75,7 +73,8 @@ bool accept_quest(entt::registry& registry, entt::entity player, const std::stri
 }
 
 std::vector<QuestChange> on_monster_killed(entt::registry& registry, entt::entity player,
-                                            const std::string& monster_type_id, const GameConfig& config) {
+                                            const std::string& monster_type_id, const GameConfig& config,
+                                            float kill_x, float kill_z) {
     std::vector<QuestChange> changes;
     auto* quest_state = registry.try_get<ecs::QuestState>(player);
     if (!quest_state) return changes;
@@ -83,38 +82,53 @@ std::vector<QuestChange> on_monster_killed(entt::registry& registry, entt::entit
     for (auto& active : quest_state->active_quests) {
         if (active.all_complete) continue;
 
+        const QuestConfig* quest = config.find_quest(active.quest_id);
+
         bool was_complete_before = active.all_complete;
+
         for (size_t idx = 0; idx < active.objectives.size(); ++idx) {
-            auto& obj = active.objectives[idx];
-            if (obj.complete) continue;
-            if (obj.type != "kill") continue;
+            auto& obj_state = active.objectives[idx];
 
-            // Match specific monster type, or "monster" for any kill
-            if (obj.target == monster_type_id || obj.target == "monster") {
-                ++obj.current;
-                if (obj.current >= obj.required) {
-                    obj.complete = true;
-                }
-
-                QuestChange change;
-                change.quest_id = active.quest_id;
-                change.objective_index = static_cast<uint8_t>(idx);
-                change.current = obj.current;
-                change.required = obj.required;
-                change.objective_complete = obj.complete;
-                changes.push_back(change);
+            KillObjective::Inputs in;
+            in.def.type = obj_state.type;
+            in.def.target = obj_state.target;
+            in.def.required = obj_state.required;
+            if (quest && idx < quest->objectives.size()) {
+                const auto& oc = quest->objectives[idx];
+                in.def.location_x = oc.location_x;
+                in.def.location_z = oc.location_z;
+                in.def.radius = oc.radius;
             }
+            in.state.current = obj_state.current;
+            in.state.complete = obj_state.complete;
+            in.monster_type_id = monster_type_id;
+            in.kill_x = kill_x;
+            in.kill_z = kill_z;
+
+            if (KillObjective::check(in) != KillObjective::Result::Ok) continue;
+
+            obj_state.current += KillObjective::progress_delta_on_ok();
+            if (obj_state.current >= obj_state.required) {
+                obj_state.complete = true;
+            }
+
+            QuestChange change;
+            change.quest_id = active.quest_id;
+            change.objective_index = static_cast<uint8_t>(idx);
+            change.current = obj_state.current;
+            change.required = obj_state.required;
+            change.objective_complete = obj_state.complete;
+            changes.push_back(change);
         }
 
         check_all_complete(active);
 
         // If quest just became complete, mark it
         if (active.all_complete && !was_complete_before) {
-            const QuestConfig* qcfg = config.find_quest(active.quest_id);
             QuestChange complete_change;
             complete_change.quest_id = active.quest_id;
             complete_change.quest_complete = true;
-            complete_change.quest_name = qcfg ? qcfg->name : active.quest_id;
+            complete_change.quest_name = quest ? quest->name : active.quest_id;
             changes.push_back(complete_change);
         }
     }
@@ -138,24 +152,33 @@ std::vector<QuestChange> update_visit_objectives(entt::registry& registry, entt:
 
         bool was_complete_before = active.all_complete;
         for (size_t i = 0; i < active.objectives.size() && i < quest->objectives.size(); ++i) {
-            auto& obj = active.objectives[i];
-            if (obj.complete) continue;
-            if (obj.type != "visit") continue;
-
+            auto& obj_state = active.objectives[i];
             const auto& obj_config = quest->objectives[i];
-            float dist = distance_xz(transform->x, transform->z, obj_config.location_x, obj_config.location_z);
-            if (dist < obj_config.radius) {
-                obj.current = obj.required;
-                obj.complete = true;
 
-                QuestChange change;
-                change.quest_id = active.quest_id;
-                change.objective_index = static_cast<uint8_t>(i);
-                change.current = obj.current;
-                change.required = obj.required;
-                change.objective_complete = true;
-                changes.push_back(change);
-            }
+            LocationObjective::Inputs in;
+            in.def.type = obj_state.type;
+            in.def.target = obj_state.target;
+            in.def.required = obj_state.required;
+            in.def.location_x = obj_config.location_x;
+            in.def.location_z = obj_config.location_z;
+            in.def.radius = obj_config.radius;
+            in.state.current = obj_state.current;
+            in.state.complete = obj_state.complete;
+            in.player_x = transform->x;
+            in.player_z = transform->z;
+
+            if (LocationObjective::check(in) != LocationObjective::Result::Ok) continue;
+
+            obj_state.current = obj_state.required;
+            obj_state.complete = true;
+
+            QuestChange change;
+            change.quest_id = active.quest_id;
+            change.objective_index = static_cast<uint8_t>(i);
+            change.current = obj_state.current;
+            change.required = obj_state.required;
+            change.objective_complete = true;
+            changes.push_back(change);
         }
 
         check_all_complete(active);

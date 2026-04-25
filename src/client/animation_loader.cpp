@@ -37,9 +37,21 @@ StateTransition parse_transition(const json& j) {
     t.crossfade_duration = j.value("crossfade", 0.2f);
     t.priority = j.value("priority", 0);
 
+    // Legacy: "conditions" is the AND array.
     if (j.contains("conditions") && j["conditions"].is_array()) {
         for (const auto& cj : j["conditions"]) {
             t.conditions.push_back(parse_condition(cj));
+        }
+    }
+    // Explicit AND array (same semantics as "conditions", for clarity).
+    if (j.contains("all_of") && j["all_of"].is_array()) {
+        for (const auto& cj : j["all_of"]) {
+            t.conditions.push_back(parse_condition(cj));
+        }
+    }
+    if (j.contains("any_of") && j["any_of"].is_array()) {
+        for (const auto& cj : j["any_of"]) {
+            t.any_of.push_back(parse_condition(cj));
         }
     }
     return t;

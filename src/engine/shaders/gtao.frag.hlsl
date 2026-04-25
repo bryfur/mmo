@@ -21,6 +21,8 @@ cbuffer GTAOUniforms : register(b0, space3) {
     float bias;
     int numDirections;
     int numSteps;
+    float radiusScale;
+    float _padding[3];
 };
 
 [[vk::combinedImageSampler]][[vk::binding(0, 2)]]
@@ -63,9 +65,10 @@ float PSMain(PSInput input) : SV_Target {
 
     float occlusion = 0.0;
     float sampleCount = 0.0;
+    float effectiveRadius = radius * radiusScale;
 
     // Screen-space radius scaled by projection
-    float screenRadius = radius * projection[0][0] * 0.5 / max(-viewPos.z, 0.1);
+    float screenRadius = effectiveRadius * projection[0][0] * 0.5 / max(-viewPos.z, 0.1);
     // Clamp to avoid too large or too small radii
     screenRadius = clamp(screenRadius, 2.0 * invScreenSize.x, 0.2);
 
@@ -98,7 +101,7 @@ float PSMain(PSInput input) : SV_Target {
             float cosAngle = max(0.0, dot(viewNormal, sampleDir) - bias);
 
             // Distance falloff
-            float falloff = 1.0 - smoothstep(0.0, radius, sampleDist);
+            float falloff = 1.0 - smoothstep(0.0, effectiveRadius, sampleDist);
 
             occlusion += cosAngle * falloff;
             sampleCount += 1.0;

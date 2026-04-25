@@ -23,13 +23,19 @@ Texture2D srcTexture : register(t0, space2);
 [[vk::combinedImageSampler]][[vk::binding(0, 2)]]
 SamplerState srcSampler : register(s0, space2);
 
-float luminance(float3 c) {
+float bloomLuminance(float3 c) {
     return dot(c, float3(0.2126, 0.7152, 0.0722));
 }
 
-// Soft threshold: smooth knee around the threshold value
+// Karis-average tap weight: stabilizes fireflies in HDR bloom prefilter.
+float karisWeight(float3 c) {
+    return 1.0 / (1.0 + max(max(c.r, c.g), c.b));
+}
+
+// Soft threshold: smooth knee around the threshold value, then keep only the
+// part above the threshold (max-component cut for HDR robustness).
 float3 applyThreshold(float3 color) {
-    float lum = luminance(color);
+    float lum = bloomLuminance(color);
     float knee = threshold * 0.5;
     float soft = lum - threshold + knee;
     soft = clamp(soft, 0.0, 2.0 * knee);
@@ -62,17 +68,34 @@ float4 PSMain(PSInput input) : SV_Target {
     float3 l = srcTexture.SampleLevel(srcSampler, uv + float2( 0.0,  1.0) * ts, 0).rgb;
     float3 m = srcTexture.SampleLevel(srcSampler, uv + float2( 1.0,  1.0) * ts, 0).rgb;
 
-    // Weighted combination (anti-firefly: weighted average of groups)
-    float3 color = a * 0.125;
-    color += (b + c + d + e) * 0.125;
-    color += (f + g + i) * 0.03125 * 2.0;
-    color += (g + h + j) * 0.03125 * 2.0;
-    color += (i + k + l) * 0.03125 * 2.0;
-    color += (j + l + m) * 0.03125 * 2.0;
-
-    // Apply threshold on first pass only
+    float3 color;
     if (isFirstPass > 0.5) {
+        // Karis-average the five 2x2 groups (firefly suppression for HDR).
+        float3 group_center = (b + c + d + e) * 0.25;
+        float3 group_tl = (a + g + f + i) * 0.25;
+        float3 group_tr = (a + h + g + j) * 0.25;
+        float3 group_bl = (a + i + k + l) * 0.25;
+        float3 group_br = (a + j + l + m) * 0.25;
+
+        float w_center = karisWeight(group_center) * 0.5;
+        float w_tl     = karisWeight(group_tl)     * 0.125;
+        float w_tr     = karisWeight(group_tr)     * 0.125;
+        float w_bl     = karisWeight(group_bl)     * 0.125;
+        float w_br     = karisWeight(group_br)     * 0.125;
+
+        float w_sum = w_center + w_tl + w_tr + w_bl + w_br;
+        color = (group_center * w_center + group_tl * w_tl + group_tr * w_tr +
+                 group_bl * w_bl + group_br * w_br) / max(w_sum, 1e-5);
+
         color = applyThreshold(color);
+    } else {
+        // Standard Jimenez weights for subsequent mips.
+        float3 group_center = (b + c + d + e) * 0.25;
+        float3 group_tl = (a + g + f + i) * 0.25;
+        float3 group_tr = (a + h + g + j) * 0.25;
+        float3 group_bl = (a + i + k + l) * 0.25;
+        float3 group_br = (a + j + l + m) * 0.25;
+        color = group_center * 0.5 + (group_tl + group_tr + group_bl + group_br) * 0.125;
     }
 
     return float4(color, 1.0);

@@ -15,6 +15,7 @@ void RenderScene::clear() {
     skinned_commands_.clear();
     billboards_.clear();
     debug_lines_.clear();
+    clear_lights();
     // NOTE: particle_effect_spawns_ is NOT cleared here - it's cleared by the renderer
     // after consuming the commands, so they persist from update to render
 
@@ -49,7 +50,7 @@ void RenderScene::add_model(std::string model_name, const glm::mat4& transform,
 }
 
 void RenderScene::add_skinned_model(mmo::engine::ModelHandle handle, const glm::mat4& transform,
-                                    const std::array<glm::mat4, 64>& bone_matrices,
+                                    const std::array<glm::mat4, 128>& bone_matrices,
                                     const glm::vec4& tint) {
     SkinnedModelCommand cmd;
     cmd.model_handle = handle;
@@ -60,7 +61,7 @@ void RenderScene::add_skinned_model(mmo::engine::ModelHandle handle, const glm::
 }
 
 void RenderScene::add_skinned_model(std::string model_name, const glm::mat4& transform,
-                                    const std::array<glm::mat4, 64>& bone_matrices,
+                                    const std::array<glm::mat4, 128>& bone_matrices,
                                     const glm::vec4& tint) {
     SkinnedModelCommand cmd;
     cmd.model_name = std::move(model_name);
@@ -80,6 +81,19 @@ void RenderScene::add_particle_effect_spawn(const mmo::engine::EffectDefinition*
     cmd.direction = direction;
     cmd.range = range;
     particle_effect_spawns_.push_back(cmd);
+}
+
+void RenderScene::add_point_light(const mmo::engine::render::lighting::PointLight& l) {
+    point_lights_.push_back(l);
+}
+
+void RenderScene::add_spot_light(const mmo::engine::render::lighting::SpotLight& l) {
+    spot_lights_.push_back(l);
+}
+
+void RenderScene::clear_lights() {
+    point_lights_.clear();
+    spot_lights_.clear();
 }
 
 void RenderScene::add_billboard_3d(float world_x, float world_y, float world_z,

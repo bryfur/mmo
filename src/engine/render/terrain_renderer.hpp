@@ -7,6 +7,11 @@
 #include "engine/gpu/pipeline_registry.hpp"
 #include <glm/glm.hpp>
 #include <memory>
+#include <vector>
+
+namespace mmo::engine::scene {
+    class Frustum;
+}
 
 namespace mmo::engine::render {
 
@@ -48,6 +53,9 @@ struct alignas(16) TerrainLightingUniforms {
     float _padding0[2];    // offset 24 — pad to 32 so lightDir aligns to 16-byte boundary
     glm::vec3 lightDir;    // offset 32
     float _padding1;       // offset 44
+    float ambientStrength; // offset 48
+    float sunIntensity;    // offset 52
+    float _padding2[2];    // offset 56 — pad to 64 (16-byte aligned struct end)
 };
 
 /**
@@ -104,13 +112,22 @@ public:
                 const glm::vec3& camera_pos,
                 const glm::vec3& light_dir,
                 const SDL_GPUTextureSamplerBinding* shadow_bindings = nullptr,
-                int shadow_binding_count = 0);
+                int shadow_binding_count = 0,
+                const scene::Frustum* frustum = nullptr);
+
+    // Per-frame cluster lighting plumbing. Buffers and uniform are owned by
+    // the SceneRenderer's ClusterGrid; nullptr disables clustered lighting.
+    void set_cluster_lighting(SDL_GPUBuffer* light_data,
+                              SDL_GPUBuffer* cluster_offsets,
+                              SDL_GPUBuffer* light_indices,
+                              const void* params, size_t params_size);
 
     /**
      * Render terrain into a shadow depth map.
      */
     void render_shadow(SDL_GPURenderPass* pass, SDL_GPUCommandBuffer* cmd,
-                       const glm::mat4& light_view_projection);
+                       const glm::mat4& light_view_projection,
+                       const scene::Frustum* frustum = nullptr);
 
     /**
      * Get terrain height at any world position.
@@ -133,6 +150,10 @@ public:
     // Settings
     void set_fog_color(const glm::vec3& color) { fog_color_ = color; }
     void set_fog_range(float start, float end) { fog_start_ = start; fog_end_ = end; }
+    void set_lighting_tunables(float ambient_strength, float sun_intensity) {
+        ambient_strength_ = ambient_strength;
+        sun_intensity_ = sun_intensity;
+    }
     
     /**
      * Set anisotropic filter level for terrain textures.
@@ -142,11 +163,18 @@ public:
     
 private:
     void generate_terrain_mesh();
+    void generate_shadow_terrain_mesh();  // low-LOD mesh for shadow passes
     void load_terrain_textures();
     void upload_heightmap_texture();
-    
+
     gpu::GPUDevice* device_ = nullptr;
     gpu::PipelineRegistry* pipeline_registry_ = nullptr;
+
+    SDL_GPUBuffer* cluster_light_data_ = nullptr;
+    SDL_GPUBuffer* cluster_offsets_ = nullptr;
+    SDL_GPUBuffer* cluster_indices_ = nullptr;
+    const void* cluster_params_ = nullptr;
+    size_t cluster_params_size_ = 0;
     
     float world_width_ = 0.0f;
     float world_height_ = 0.0f;
@@ -165,11 +193,33 @@ private:
     std::unique_ptr<gpu::GPUBuffer> vertex_buffer_;
     std::unique_ptr<gpu::GPUBuffer> index_buffer_;
     uint32_t index_count_ = 0;
+
+    // Low-LOD mesh used only for shadow passes. Coarser cell size -> ~16x fewer triangles.
+    // Shadow resolution already smooths over the mesh detail, so visual impact is negligible.
+    std::unique_ptr<gpu::GPUBuffer> shadow_vertex_buffer_;
+    std::unique_ptr<gpu::GPUBuffer> shadow_index_buffer_;
+    uint32_t shadow_index_count_ = 0;
+
+    // Terrain tiling: each tile is a rectangular region of cells with its own
+    // index range and world-space AABB. Per-frame frustum culling skips tiles
+    // outside the view frustum — typically 80–95% are culled per pass.
+    struct TerrainTile {
+        uint32_t first_index = 0;
+        uint32_t index_count = 0;
+        glm::vec3 aabb_min = glm::vec3(0.0f);
+        glm::vec3 aabb_max = glm::vec3(0.0f);
+    };
+    std::vector<TerrainTile> tiles_;
+    std::vector<TerrainTile> shadow_tiles_;
     
     // Fog settings
     glm::vec3 fog_color_ = glm::vec3(0.35f, 0.45f, 0.6f);
     float fog_start_ = 1600.0f;
     float fog_end_ = 12000.0f;
+
+    // Lighting tunables (per-frame from GraphicsSettings)
+    float ambient_strength_ = 0.5f;
+    float sun_intensity_ = 1.0f;
 };
 
 } // namespace mmo::engine::render

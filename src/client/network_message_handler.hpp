@@ -2,8 +2,8 @@
 
 #include "protocol/message_type.hpp"
 #include "protocol/gameplay_msgs.hpp"
-#include "client/gameplay_hud.hpp"
-#include "client/gameplay_panels.hpp"
+#include "client/hud/hud_state.hpp"
+#include "client/hud/panel_state.hpp"
 #include "client/game_state.hpp"
 #include <entt/entt.hpp>
 #include <unordered_map>

@@ -23,15 +23,17 @@ struct CameraModeConfig {
 
 // Camera shake types for different feedback
 enum class ShakeType {
-    Impact,        // Quick punch - enemy hit
-    Heavy,         // Sustained rumble - big explosion
-    Directional,   // Shake toward a direction - getting hit
-    Subtle         // Breathing/idle micro-movements
+    Impact,        // Quick punch
+    Heavy,         // Sustained rumble
+    Directional,   // Shake along a direction
+    Subtle         // Idle micro-movements
 };
 
 /**
  * Abstract camera interface exposed to game/client code.
- * Hides internal camera implementation details.
+ * Engine cameras only know about framing, smoothing, and generic
+ * shake/trauma primitives. Game-specific feel (combat, hit-reactions)
+ * is layered on top by client wrappers via add_shake/add_directional_shake.
  */
 class CameraController {
 public:
@@ -48,19 +50,21 @@ public:
     virtual void rotate_pitch(float delta_degrees) = 0;
     virtual void adjust_zoom(float delta) = 0;
 
+    // Optional soft-focus target. Implementations may bias framing toward
+    // this point (e.g. action-cam soft-lock). Pass nullptr to clear.
+    virtual void set_focus_target(const glm::vec3* target) = 0;
+    virtual void set_focus_strength(float strength_0_1) = 0;
+
     // Configuration
     virtual void set_config(const CameraModeConfig& config) = 0;
     virtual const CameraModeConfig& get_config() const = 0;
 
-    // Combat
-    virtual void set_in_combat(bool in_combat) = 0;
-    virtual void set_combat_target(const glm::vec3* target) = 0;
-    virtual void notify_attack() = 0;
-    virtual void notify_hit(const glm::vec3& hit_direction, float damage) = 0;
-
-    // Camera shake
+    // Generic shake / kick / trauma primitives. Combat feel is composed on top.
     virtual void add_shake(ShakeType type, float intensity, float duration = 0.3f) = 0;
     virtual void add_directional_shake(const glm::vec3& direction, float intensity, float duration = 0.2f) = 0;
+
+    // FOV bias hooks (unitless deltas summed onto base FOV by the camera).
+    virtual void set_fov_bias(float fov_delta) = 0;
 
     // Environment callbacks
     using TerrainHeightFunc = std::function<float(float x, float z)>;

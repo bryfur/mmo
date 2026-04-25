@@ -266,6 +266,97 @@ void MenuSystem::init_graphics_menu() {
     debug_hud.toggle_value = &graphics_settings_.show_debug_hud;
     menu_items_.push_back(debug_hud);
 
+    // -- Tunable visual knobs (added) --
+    MenuItem exposure;
+    exposure.label = "Exposure";
+    exposure.type = MenuItemType::FloatSlider;
+    exposure.float_value = &graphics_settings_.exposure;
+    exposure.float_min = 0.1f;
+    exposure.float_max = 3.0f;
+    exposure.float_step = 0.05f;
+    menu_items_.push_back(exposure);
+
+    MenuItem tonemap;
+    tonemap.label = "Tonemap";
+    tonemap.type = MenuItemType::Slider;
+    tonemap.slider_value = &graphics_settings_.tonemap_mode;
+    tonemap.slider_min = 0;
+    tonemap.slider_max = 3;
+    tonemap.slider_labels = {"ACES Fitted", "ACES Narkowicz", "Reinhard", "None"};
+    menu_items_.push_back(tonemap);
+
+    MenuItem contrast;
+    contrast.label = "Contrast";
+    contrast.type = MenuItemType::FloatSlider;
+    contrast.float_value = &graphics_settings_.contrast;
+    contrast.float_min = 0.0f;
+    contrast.float_max = 2.0f;
+    contrast.float_step = 0.05f;
+    menu_items_.push_back(contrast);
+
+    MenuItem saturation;
+    saturation.label = "Saturation";
+    saturation.type = MenuItemType::FloatSlider;
+    saturation.float_value = &graphics_settings_.saturation;
+    saturation.float_min = 0.0f;
+    saturation.float_max = 2.0f;
+    saturation.float_step = 0.05f;
+    menu_items_.push_back(saturation);
+
+    MenuItem ambient_strength;
+    ambient_strength.label = "Ambient Strength";
+    ambient_strength.type = MenuItemType::FloatSlider;
+    ambient_strength.float_value = &graphics_settings_.ambient_strength;
+    ambient_strength.float_min = 0.0f;
+    ambient_strength.float_max = 1.0f;
+    ambient_strength.float_step = 0.05f;
+    menu_items_.push_back(ambient_strength);
+
+    MenuItem sun_intensity;
+    sun_intensity.label = "Sun Intensity";
+    sun_intensity.type = MenuItemType::FloatSlider;
+    sun_intensity.float_value = &graphics_settings_.sun_intensity;
+    sun_intensity.float_min = 0.0f;
+    sun_intensity.float_max = 2.0f;
+    sun_intensity.float_step = 0.05f;
+    menu_items_.push_back(sun_intensity);
+
+    MenuItem bloom_threshold;
+    bloom_threshold.label = "Bloom Threshold";
+    bloom_threshold.type = MenuItemType::FloatSlider;
+    bloom_threshold.float_value = &graphics_settings_.bloom_threshold;
+    bloom_threshold.float_min = 0.0f;
+    bloom_threshold.float_max = 2.0f;
+    bloom_threshold.float_step = 0.05f;
+    menu_items_.push_back(bloom_threshold);
+
+    MenuItem ao_strength;
+    ao_strength.label = "AO Strength";
+    ao_strength.type = MenuItemType::FloatSlider;
+    ao_strength.float_value = &graphics_settings_.ao_strength;
+    ao_strength.float_min = 0.0f;
+    ao_strength.float_max = 2.0f;
+    ao_strength.float_step = 0.05f;
+    menu_items_.push_back(ao_strength);
+
+    MenuItem ao_radius;
+    ao_radius.label = "AO Radius";
+    ao_radius.type = MenuItemType::FloatSlider;
+    ao_radius.float_value = &graphics_settings_.ao_radius;
+    ao_radius.float_min = 0.0f;
+    ao_radius.float_max = 2.0f;
+    ao_radius.float_step = 0.05f;
+    menu_items_.push_back(ao_radius);
+
+    MenuItem fog_density;
+    fog_density.label = "Fog Density";
+    fog_density.type = MenuItemType::FloatSlider;
+    fog_density.float_value = &graphics_settings_.fog_density;
+    fog_density.float_min = 0.0f;
+    fog_density.float_max = 2.0f;
+    fog_density.float_step = 0.01f;
+    menu_items_.push_back(fog_density);
+
     MenuItem back_item;
     back_item.label = "< Back";
     back_item.type = MenuItemType::Submenu;

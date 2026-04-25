@@ -31,6 +31,13 @@ struct Health {
     float ratio() const { return max > 0 ? current / max : 0.0f; }
 };
 
+// Mirror of NetEntityState::effects_mask so other client systems (HUD,
+// renderer) can read active buff/debuff state per entity. See
+// NetEntityState::EffectBit in src/protocol/entity_state.hpp for bit values.
+struct StatusEffects {
+    uint16_t mask = 0;
+};
+
 struct Combat {
     float damage = 0.0f;
     float attack_range = 0.0f;

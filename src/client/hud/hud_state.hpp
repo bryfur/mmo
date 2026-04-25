@@ -1,12 +1,15 @@
 #pragma once
 
-#include "engine/scene/ui_scene.hpp"
+// HUD state types — everything the persistent HUD reads/writes per frame:
+// player stats, skill bar, quest tracker, damage numbers, notifications, NPC
+// dialogue, minimap, chat, vendor, party, crafting. Widget builder
+// declarations live in client/hud/widgets.hpp.
+
 #include "client/ui_colors.hpp"
 #include <cstdint>
 #include <string>
 #include <vector>
 #include <algorithm>
-#include <cmath>
 
 namespace mmo::client {
 
@@ -239,9 +242,13 @@ struct PartyState {
     uint32_t leader_id = 0;
     std::vector<PartyMember> members;
 
-    // Pending invite shown as a popup
+    // Pending invite shown as a popup. Auto-dismissed client-side after
+    // INVITE_POPUP_DURATION so a lost accept/decline message doesn't leave
+    // the popup hanging forever.
     uint32_t pending_inviter_id = 0;
     std::string pending_inviter_name;
+    float pending_invite_timer = 0.0f;
+    static constexpr float INVITE_POPUP_DURATION = 45.0f;
 
     bool has_party() const { return !members.empty(); }
     void clear() { leader_id = 0; members.clear(); }
@@ -260,6 +267,21 @@ struct VendorState {
 
     void close() { visible = false; stock.clear(); cursor = 0; sell_cursor = -1; }
 };
+
+// Bit flags mirrored from NetEntityState::EffectBit for HUD rendering.
+// Kept here so HUDState carries the same compact representation as the
+// network protocol without needing to include protocol headers.
+namespace status_bits {
+    constexpr uint16_t STUN         = 1 << 0;
+    constexpr uint16_t SLOW         = 1 << 1;
+    constexpr uint16_t ROOT         = 1 << 2;
+    constexpr uint16_t BURN         = 1 << 3;
+    constexpr uint16_t SHIELD       = 1 << 4;
+    constexpr uint16_t DAMAGE_BOOST = 1 << 5;
+    constexpr uint16_t SPEED_BOOST  = 1 << 6;
+    constexpr uint16_t INVULN       = 1 << 7;
+    constexpr uint16_t DEF_BOOST    = 1 << 8;
+}
 
 struct HUDState {
     // Player stats
@@ -339,6 +361,9 @@ struct HUDState {
     // Crafting
     CraftingState crafting;
 
+    // Active status effect bitmask for the local player (see status_bits).
+    uint16_t effects_mask = 0;
+
     void update(float dt) {
         if (zone_display_timer > 0) zone_display_timer -= dt;
         if (level_up_timer > 0) level_up_timer -= dt;
@@ -353,6 +378,16 @@ struct HUDState {
             std::remove_if(loot_feed.begin(), loot_feed.end(),
                 [](const LootFeedEntry& e) { return e.timer <= 0; }),
             loot_feed.end());
+
+        // Expire pending party-invite popup so it can't linger if the
+        // server response never arrives.
+        if (party.pending_inviter_id != 0) {
+            party.pending_invite_timer -= dt;
+            if (party.pending_invite_timer <= 0.0f) {
+                party.pending_inviter_id = 0;
+                party.pending_inviter_name.clear();
+            }
+        }
     }
 
     void add_loot(const std::string& text, uint32_t color = 0xFFFFFFFF) {
@@ -372,27 +407,5 @@ struct HUDState {
         }
     }
 };
-
-// ============================================================================
-// Function declarations
-// ============================================================================
-
-uint32_t fade_color(uint32_t color, float alpha);
-
-void build_health_bar(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
-void build_xp_bar(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
-void build_mana_bar(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
-void build_gold_display(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
-void build_skill_bar(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
-void build_quest_tracker(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
-void build_zone_name(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
-void build_level_up_notification(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
-void build_loot_feed(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
-void build_minimap(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
-void build_chat_window(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
-void build_vendor_window(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
-void build_party_frames(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
-void build_party_invite_popup(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
-void build_gameplay_hud(engine::scene::UIScene& ui, const HUDState& hud, float screen_w, float screen_h);
 
 } // namespace mmo::client

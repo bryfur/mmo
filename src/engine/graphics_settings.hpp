@@ -33,6 +33,26 @@ struct GraphicsSettings {
     int window_mode = 0;     // 0=windowed, 1=borderless fullscreen, 2=exclusive fullscreen
     int resolution_index = 0; // index into available native display modes
 
+    // Tone, exposure, color grading
+    float exposure = 1.0f;          // linear scene multiplier before tonemap; 1.0 = neutral
+    int   tonemap_mode = 0;         // 0=ACES Fitted, 1=ACES Narkowicz, 2=Reinhard, 3=None
+    float contrast = 1.0f;          // post-tonemap contrast; 1.0 = neutral, 1.2 = punchy
+    float saturation = 1.0f;        // post-tonemap saturation; 1.0 = neutral, 0.0 = grayscale
+
+    // Lighting feel
+    float ambient_strength = 0.5f;  // shadow-region lift; 0.0 = full black in shadow, 1.0 = fully lit
+    float sun_intensity = 1.0f;     // multiplier on directional sun light
+
+    // Bloom
+    float bloom_threshold = 1.0f;   // HDR luminance above which bloom contributes
+
+    // AO
+    float ao_strength = 1.0f;       // AO darkening intensity (0..1+, 1 = stock)
+    float ao_radius = 1.0f;         // multiplier on AO sample radius
+
+    // Volumetric fog
+    float fog_density = 0.05f;      // density multiplier
+
     float get_draw_distance() const {
         constexpr float distances[] = {500.0f, 1000.0f, 2000.0f, 4000.0f, 8000.0f, 16000.0f, 32000.0f};
         return distances[draw_distance];
@@ -63,6 +83,16 @@ struct GraphicsSettings {
         out << "god_rays=" << god_rays << "\n";
         out << "window_mode=" << window_mode << "\n";
         out << "resolution_index=" << resolution_index << "\n";
+        out << "exposure=" << exposure << "\n";
+        out << "tonemap_mode=" << tonemap_mode << "\n";
+        out << "contrast=" << contrast << "\n";
+        out << "saturation=" << saturation << "\n";
+        out << "ambient_strength=" << ambient_strength << "\n";
+        out << "sun_intensity=" << sun_intensity << "\n";
+        out << "bloom_threshold=" << bloom_threshold << "\n";
+        out << "ao_strength=" << ao_strength << "\n";
+        out << "ao_radius=" << ao_radius << "\n";
+        out << "fog_density=" << fog_density << "\n";
 
         return out.good();
     }
@@ -119,6 +149,16 @@ struct GraphicsSettings {
         read_bool("god_rays", god_rays);
         read_int("window_mode", window_mode);
         read_int("resolution_index", resolution_index);
+        read_float("exposure", exposure);
+        read_int("tonemap_mode", tonemap_mode);
+        read_float("contrast", contrast);
+        read_float("saturation", saturation);
+        read_float("ambient_strength", ambient_strength);
+        read_float("sun_intensity", sun_intensity);
+        read_float("bloom_threshold", bloom_threshold);
+        read_float("ao_strength", ao_strength);
+        read_float("ao_radius", ao_radius);
+        read_float("fog_density", fog_density);
 
         return true;
     }

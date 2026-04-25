@@ -244,6 +244,35 @@ struct SkillConfig {
     float damage_bonus = 0.0f;
     float attack_speed_bonus = 0.0f;
     float self_shield_percent = 0.0f;
+
+    // Projectile/spread fields (multi-shot, arrow_storm)
+    float spread_angle = 0.0f;       // total cone angle in radians for N projectiles
+    bool  piercing = false;          // single straight line, hits multiple enemies
+    float armor_ignore_percent = 0.0f; // % of target defense to ignore
+    bool  teleport_behind = false;   // move caster behind target (shadow_step)
+    float crit_bonus = 0.0f;         // flat bonus crit chance for next attack
+    float crit_bonus_duration = 0.0f;
+
+    // Channeled / ticking AoE (whirlwind, arcane_rain, rain_of_arrows, consecrate, healing_aura)
+    bool  channeled = false;
+    float tick_rate = 0.0f;          // seconds between ticks
+    float heal_percent_per_tick = 0.0f;
+    bool  affects_allies = false;
+    float cast_delay = 0.0f;         // delay before damage resolves (meteor)
+    bool  disables_attack = false;
+    bool  invulnerable_during = false;
+    bool  interrupts = false;
+    bool  slow_immunity = false;
+    float taunt_duration = 0.0f;
+    float cooldown_reduction = 0.0f;
+    float cast_speed_bonus = 0.0f;
+
+    // Traps
+    float trap_lifetime = 0.0f;
+    float trap_radius = 0.0f;
+
+    // Execute-style conditional damage on target's HP
+    float target_health_threshold = 0.0f;
 };
 
 // ============================================================================
@@ -515,6 +544,7 @@ struct NetworkConfig {
     float building_view_distance = 3000.0f;
     float environment_view_distance = 2000.0f;
     float spatial_grid_cell_size = 500.0f;
+    float delta_rate_hz = 20.0f;
 
     float max_view_distance() const {
         return std::max({player_view_distance, npc_view_distance, town_npc_view_distance,

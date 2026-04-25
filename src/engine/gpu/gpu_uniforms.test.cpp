@@ -87,22 +87,28 @@ TEST(ModelLightingUniformsLayout, FieldOffsets) {
     EXPECT_EQ(offsetof(ModelLightingUniforms, fogEnd), 80u);
     EXPECT_EQ(offsetof(ModelLightingUniforms, hasTexture), 84u);
     EXPECT_EQ(offsetof(ModelLightingUniforms, fogEnabled), 88u);
+    EXPECT_EQ(offsetof(ModelLightingUniforms, hasNormalMap), 92u);
     EXPECT_EQ(offsetof(ModelLightingUniforms, cameraPos), 96u);
+    EXPECT_EQ(offsetof(ModelLightingUniforms, normalScale), 108u);
 }
 
 // =============================================================================
 // CompositeUniforms - matches composite.frag.hlsl
 // =============================================================================
 
-TEST(CompositeUniformsLayout, SizeIs16Bytes) {
-    // 4 floats = 16 bytes
-    EXPECT_EQ(sizeof(CompositeUniforms), 16u);
+TEST(CompositeUniformsLayout, SizeIs32Bytes) {
+    // 8 floats = 32 bytes (2 16-byte blocks: ao/bloom/fog + exposure/tonemap/contrast/saturation)
+    EXPECT_EQ(sizeof(CompositeUniforms), 32u);
 }
 
 TEST(CompositeUniformsLayout, FieldOffsets) {
     EXPECT_EQ(offsetof(CompositeUniforms, aoStrength), 0u);
     EXPECT_EQ(offsetof(CompositeUniforms, bloomStrength), 4u);
     EXPECT_EQ(offsetof(CompositeUniforms, volumetricFogEnabled), 8u);
+    EXPECT_EQ(offsetof(CompositeUniforms, exposure), 16u);
+    EXPECT_EQ(offsetof(CompositeUniforms, tonemapMode), 20u);
+    EXPECT_EQ(offsetof(CompositeUniforms, contrast), 24u);
+    EXPECT_EQ(offsetof(CompositeUniforms, saturation), 28u);
 }
 
 TEST(CompositeUniformsLayout, DefaultValues) {
@@ -110,6 +116,10 @@ TEST(CompositeUniformsLayout, DefaultValues) {
     EXPECT_FLOAT_EQ(u.aoStrength, 1.0f);
     EXPECT_FLOAT_EQ(u.bloomStrength, 0.35f);
     EXPECT_FLOAT_EQ(u.volumetricFogEnabled, 0.0f);
+    EXPECT_FLOAT_EQ(u.exposure, 1.0f);
+    EXPECT_EQ(u.tonemapMode, 0);
+    EXPECT_FLOAT_EQ(u.contrast, 1.0f);
+    EXPECT_FLOAT_EQ(u.saturation, 1.0f);
 }
 
 // =============================================================================
@@ -134,8 +144,7 @@ TEST(VolumetricFogUniformsLayout, FieldOffsets) {
     EXPECT_EQ(offsetof(VolumetricFogUniforms, fogFalloff), 188u);
     EXPECT_EQ(offsetof(VolumetricFogUniforms, nearPlane), 192u);
     EXPECT_EQ(offsetof(VolumetricFogUniforms, farPlane), 196u);
-    EXPECT_EQ(offsetof(VolumetricFogUniforms, shadowMapResolution), 200u);
-    EXPECT_EQ(offsetof(VolumetricFogUniforms, godRaysEnabled), 204u);
+    EXPECT_EQ(offsetof(VolumetricFogUniforms, godRaysEnabled), 200u);
 }
 
 TEST(VolumetricFogUniformsLayout, DefaultValues) {
@@ -146,7 +155,6 @@ TEST(VolumetricFogUniformsLayout, DefaultValues) {
     EXPECT_FLOAT_EQ(u.fogFalloff, 0.01f);
     EXPECT_FLOAT_EQ(u.nearPlane, 0.1f);
     EXPECT_FLOAT_EQ(u.farPlane, 5000.0f);
-    EXPECT_FLOAT_EQ(u.shadowMapResolution, 2048.0f);
     EXPECT_FLOAT_EQ(u.godRaysEnabled, 1.0f);
 }
 

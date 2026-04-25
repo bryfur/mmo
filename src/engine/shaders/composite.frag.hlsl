@@ -1,9 +1,8 @@
-/**
- * Composite Fragment Shader
- *
- * Combines the offscreen color buffer with the blurred AO texture.
- * Outputs color * lerp(1.0, ao, aoStrength) to the swapchain.
- */
+// Composite Fragment Shader.
+// Input: linear HDR scene color + (optional) AO / bloom / volumetric fog.
+// Output: gamma-encoded LDR to the swapchain (UNORM).
+// All math runs in linear light; tonemapping (ACES fitted) is applied once,
+// then gamma 2.2 is encoded explicitly because the swapchain is plain UNORM.
 
 struct PSInput {
     float4 position : SV_Position;
@@ -16,6 +15,10 @@ cbuffer CompositeUniforms : register(b0, space3) {
     float bloomStrength;
     float volumetricFogEnabled;
     float _padding;
+    float exposure;
+    int tonemapMode;
+    float contrast;
+    float saturation;
 };
 
 [[vk::combinedImageSampler]][[vk::binding(0, 2)]]
@@ -38,35 +41,54 @@ Texture2D fogTexture : register(t3, space2);
 [[vk::combinedImageSampler]][[vk::binding(3, 2)]]
 SamplerState fogSampler : register(s3, space2);
 
-// ACES filmic tone mapping (fitted curve)
-float3 acesToneMap(float3 x) {
-    float a = 2.51;
-    float b = 0.03;
-    float c = 2.43;
-    float d = 0.59;
-    float e = 0.14;
-    return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
+#include "lighting.hlsli"
+
+float3 reinhard(float3 c) {
+    return c / (c + 1.0);
 }
 
 float4 PSMain(PSInput input) : SV_Target {
     float3 color = colorTexture.Sample(colorSampler, input.texCoord).rgb;
-    float ao = aoTexture.Sample(aoSampler, input.texCoord).r;
 
+    float ao = aoTexture.Sample(aoSampler, input.texCoord).r;
     float aoFactor = lerp(1.0, ao, aoStrength);
     color *= aoFactor;
 
-    // Apply volumetric fog (premultiplied alpha blend: scene * transmittance + inscattered)
+    // Premultiplied fog blend (scene * transmittance + inscattered) stays linear.
     if (volumetricFogEnabled > 0.5) {
         float4 vfog = fogTexture.Sample(fogSampler, input.texCoord);
         color = color * (1.0 - vfog.a) + vfog.rgb;
     }
 
-    // Add bloom contribution
+    // Bloom is additive in linear HDR.
     float3 bloom = bloomTexture.Sample(bloomSampler, input.texCoord).rgb;
     color += bloom * bloomStrength;
 
-    // Tone map HDR values (e.g., sun disc at 5x intensity)
-    color = acesToneMap(color);
+    // Exposure scales linear HDR before tonemap.
+    color *= exposure;
+
+    // Tonemap linear HDR -> [0,1] LDR.
+    if (tonemapMode == 0) {
+        color = acesFitted(color);
+    } else if (tonemapMode == 1) {
+        color = acesNarkowicz(color);
+    } else if (tonemapMode == 2) {
+        color = reinhard(color);
+    } else {
+        color = saturate(color);
+    }
+
+    // Post-tonemap contrast around mid-grey (0.5).
+    color = (color - 0.5) * contrast + 0.5;
+
+    // Saturation: blend between luminance and color.
+    float lum = luminance(color);
+    color = lerp(float3(lum, lum, lum), color, saturation);
+
+    color = saturate(color);
+
+    // Gamma-encode for UNORM swapchain.
+    color = linearToSrgb(color);
 
     return float4(color, 1.0);
 }

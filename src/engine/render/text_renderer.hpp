@@ -167,7 +167,7 @@ private:
 
     // Batched text rendering data
     struct QueuedText {
-        std::string text;
+        CachedText* cached;    // cached pointer into text_cache_ (pointer stable per frame)
         float x, y;
         uint32_t color;
         float scale;

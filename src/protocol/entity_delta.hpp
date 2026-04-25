@@ -7,7 +7,7 @@ namespace mmo::protocol {
 // Compact delta update for frequently-changing fields
 struct EntityDeltaUpdate : Serializable<EntityDeltaUpdate> {
     uint32_t id = 0;
-    uint8_t flags = 0;  // Bit flags for which fields are present
+    uint16_t flags = 0;  // Bit flags for which fields are present
 
     // Optional fields (only included if flag is set)
     float x = 0.0f, y = 0.0f, z = 0.0f;
@@ -18,19 +18,20 @@ struct EntityDeltaUpdate : Serializable<EntityDeltaUpdate> {
     float attack_dir_x = 0.0f, attack_dir_y = 0.0f;
     float rotation = 0.0f;
     float mana = 0.0f;
+    uint16_t effects_mask = 0;  // See NetEntityState::EffectBit
 
-    static constexpr uint8_t FLAG_POSITION = 0x01;
-    static constexpr uint8_t FLAG_VELOCITY = 0x02;
-    static constexpr uint8_t FLAG_HEALTH = 0x04;
-    static constexpr uint8_t FLAG_ATTACKING = 0x08;
-    static constexpr uint8_t FLAG_ATTACK_DIR = 0x10;
-    static constexpr uint8_t FLAG_ROTATION = 0x20;
-    static constexpr uint8_t FLAG_MANA = 0x40;
-    static constexpr uint8_t FLAG_MAX_HEALTH = 0x80;
+    static constexpr uint16_t FLAG_POSITION   = 0x0001;
+    static constexpr uint16_t FLAG_VELOCITY   = 0x0002;
+    static constexpr uint16_t FLAG_HEALTH     = 0x0004;
+    static constexpr uint16_t FLAG_ATTACKING  = 0x0008;
+    static constexpr uint16_t FLAG_ATTACK_DIR = 0x0010;
+    static constexpr uint16_t FLAG_ROTATION   = 0x0020;
+    static constexpr uint16_t FLAG_MANA       = 0x0040;
+    static constexpr uint16_t FLAG_MAX_HEALTH = 0x0080;
+    static constexpr uint16_t FLAG_EFFECTS    = 0x0100;
 
-    // Variable size based on flags: min 5 bytes (id+flags), max 5+3*4+2*4+4+4+1+2*4+4+4 = 50 bytes
-    static size_t serialized_size(uint8_t flags) {
-        size_t size = sizeof(uint32_t) + sizeof(uint8_t);  // id + flags
+    static size_t serialized_size(uint16_t flags) {
+        size_t size = sizeof(uint32_t) + sizeof(uint16_t);  // id + flags
         if (flags & FLAG_POSITION) size += sizeof(float) * 3;
         if (flags & FLAG_VELOCITY) size += sizeof(float) * 2;
         if (flags & FLAG_HEALTH) size += sizeof(float);
@@ -39,6 +40,7 @@ struct EntityDeltaUpdate : Serializable<EntityDeltaUpdate> {
         if (flags & FLAG_ATTACK_DIR) size += sizeof(float) * 2;
         if (flags & FLAG_ROTATION) size += sizeof(float);
         if (flags & FLAG_MANA) size += sizeof(float);
+        if (flags & FLAG_EFFECTS) size += sizeof(uint16_t);
         return size;
     }
 
@@ -56,11 +58,12 @@ struct EntityDeltaUpdate : Serializable<EntityDeltaUpdate> {
         if (flags & FLAG_ATTACK_DIR) { w.write(attack_dir_x); w.write(attack_dir_y); }
         if (flags & FLAG_ROTATION) { w.write(rotation); }
         if (flags & FLAG_MANA) { w.write(mana); }
+        if (flags & FLAG_EFFECTS) { w.write(effects_mask); }
     }
 
     void deserialize_impl(BufferReader& r) {
         id = r.read<uint32_t>();
-        flags = r.read<uint8_t>();
+        flags = r.read<uint16_t>();
 
         if (flags & FLAG_POSITION) { x = r.read<float>(); y = r.read<float>(); z = r.read<float>(); }
         if (flags & FLAG_VELOCITY) { vx = r.read<float>(); vy = r.read<float>(); }
@@ -70,6 +73,7 @@ struct EntityDeltaUpdate : Serializable<EntityDeltaUpdate> {
         if (flags & FLAG_ATTACK_DIR) { attack_dir_x = r.read<float>(); attack_dir_y = r.read<float>(); }
         if (flags & FLAG_ROTATION) { rotation = r.read<float>(); }
         if (flags & FLAG_MANA) { mana = r.read<float>(); }
+        if (flags & FLAG_EFFECTS) { effects_mask = r.read<uint16_t>(); }
     }
 
     // Bounds-checked deserialize via span — reader throws on overrun

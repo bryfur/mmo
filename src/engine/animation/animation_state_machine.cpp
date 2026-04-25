@@ -12,30 +12,28 @@ bool TransitionCondition::evaluate(const std::vector<ParamValue>& params) const 
 
     switch (op) {
         case Op::IS_TRUE:
-            return std::holds_alternative<bool>(val) && std::get<bool>(val);
+            return val.type == ParamType::Bool && val.b;
         case Op::IS_FALSE:
-            return std::holds_alternative<bool>(val) && !std::get<bool>(val);
+            return val.type == ParamType::Bool && !val.b;
         case Op::GT:
-            return std::holds_alternative<float>(val) && std::get<float>(val) > threshold;
+            return val.type == ParamType::Float && val.f > threshold;
         case Op::LT:
-            return std::holds_alternative<float>(val) && std::get<float>(val) < threshold;
+            return val.type == ParamType::Float && val.f < threshold;
         case Op::EQ:
-            return std::holds_alternative<float>(val) && std::abs(std::get<float>(val) - threshold) < 0.001f;
+            return val.type == ParamType::Float && std::abs(val.f - threshold) < 0.001f;
         case Op::NE:
-            return std::holds_alternative<float>(val) && std::abs(std::get<float>(val) - threshold) >= 0.001f;
+            return val.type == ParamType::Float && std::abs(val.f - threshold) >= 0.001f;
     }
     return false;
 }
 
 void AnimationStateMachine::add_state(AnimState state) {
     std::string name = state.name;
-    // Pre-sort transitions by priority (highest first) so update() doesn't need to sort
     std::sort(state.transitions.begin(), state.transitions.end(),
               [](const StateTransition& a, const StateTransition& b) {
                   return a.priority > b.priority;
               });
 
-    // Check if state already exists (replace it)
     auto it = state_name_to_index_.find(name);
     if (it != state_name_to_index_.end()) {
         states_[it->second] = std::move(state);
@@ -55,7 +53,7 @@ int AnimationStateMachine::ensure_param(const std::string& name) {
     if (it != param_name_to_index_.end()) return it->second;
     int index = static_cast<int>(params_.size());
     param_name_to_index_[name] = index;
-    params_.emplace_back(0.0f);  // default float 0
+    params_.emplace_back(0.0f);
     return index;
 }
 
@@ -78,16 +76,15 @@ bool AnimationStateMachine::bind_clips(const std::vector<AnimationClip>& clips) 
         if (state.clip_index < 0) all_found = false;
     }
 
-    // Resolve all string references to integer indices
-    // 1. Resolve transition target states and condition param names
     for (auto& state : states_) {
         for (auto& transition : state.transitions) {
-            // Resolve target state name to index
             auto sit = state_name_to_index_.find(transition.target_state);
             transition.target_index = (sit != state_name_to_index_.end()) ? sit->second : -1;
 
-            // Resolve condition param names to indices
             for (auto& cond : transition.conditions) {
+                cond.param_index = ensure_param(cond.param_name);
+            }
+            for (auto& cond : transition.any_of) {
                 cond.param_index = ensure_param(cond.param_name);
             }
         }
@@ -95,7 +92,6 @@ bool AnimationStateMachine::bind_clips(const std::vector<AnimationClip>& clips) 
 
     bound_ = true;
 
-    // Enter default state
     if (!default_state_.empty()) {
         auto it = state_name_to_index_.find(default_state_);
         if (it != state_name_to_index_.end()) {
@@ -108,25 +104,25 @@ bool AnimationStateMachine::bind_clips(const std::vector<AnimationClip>& clips) 
 
 void AnimationStateMachine::set_float(const std::string& name, float v) {
     int idx = ensure_param(name);
-    params_[idx] = v;
+    params_[idx] = ParamValue{v};
 }
 
 void AnimationStateMachine::set_bool(const std::string& name, bool v) {
     int idx = ensure_param(name);
-    params_[idx] = v;
+    params_[idx] = ParamValue{v};
 }
 
 float AnimationStateMachine::get_float(const std::string& name) const {
     int idx = find_param(name);
-    if (idx >= 0 && std::holds_alternative<float>(params_[idx]))
-        return std::get<float>(params_[idx]);
+    if (idx >= 0 && params_[idx].type == ParamType::Float)
+        return params_[idx].f;
     return 0.0f;
 }
 
 bool AnimationStateMachine::get_bool(const std::string& name) const {
     int idx = find_param(name);
-    if (idx >= 0 && std::holds_alternative<bool>(params_[idx]))
-        return std::get<bool>(params_[idx]);
+    if (idx >= 0 && params_[idx].type == ParamType::Bool)
+        return params_[idx].b;
     return false;
 }
 
@@ -147,9 +143,9 @@ void AnimationStateMachine::enter_state(int state_index,
 
     current_state_ = state_index;
     player.crossfade_to(state.clip_index, crossfade);
-    player.playing = true;
-    player.loop = state.loop;
-    player.speed = state.speed;
+    player.set_playing(true);
+    player.set_loop(state.loop);
+    player.set_speed(state.speed);
 }
 
 void AnimationStateMachine::update(AnimationPlayer& player) {
@@ -158,24 +154,28 @@ void AnimationStateMachine::update(AnimationPlayer& player) {
 
     const auto& state = states_[current_state_];
 
-    // For non-looping states that have finished playing, force transition out
-    bool clip_ended = !state.loop && !player.playing;
+    bool clip_ended = !state.loop && !player.is_playing();
 
-    // Transitions are pre-sorted by priority at add_state() time
     for (const auto& transition : state.transitions) {
-        // If clip ended, accept any transition (ignore conditions)
-        bool all_pass = clip_ended;
-        if (!all_pass) {
-            all_pass = true;
+        bool passes = clip_ended;
+        if (!passes) {
+            passes = true;
             for (const auto& cond : transition.conditions) {
                 if (!cond.evaluate(params_)) {
-                    all_pass = false;
+                    passes = false;
                     break;
                 }
             }
+            if (passes && !transition.any_of.empty()) {
+                bool any = false;
+                for (const auto& cond : transition.any_of) {
+                    if (cond.evaluate(params_)) { any = true; break; }
+                }
+                passes = any;
+            }
         }
 
-        if (all_pass) {
+        if (passes) {
             enter_state(transition.target_index, player, transition.crossfade_duration);
             return;
         }

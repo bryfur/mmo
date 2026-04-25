@@ -4,6 +4,7 @@
 #include "../render_constants.hpp"
 #include "SDL3/SDL_error.h"
 #include "SDL3/SDL_gpu.h"
+#include "engine/core/logger.hpp"
 #include "engine/gpu/gpu_device.hpp"
 #include "engine/gpu/pipeline_registry.hpp"
 #include "engine/model_loader.hpp"
@@ -14,7 +15,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <iostream>
 #include <string>
 
 namespace mmo::engine::render {
@@ -45,7 +45,7 @@ bool EffectRenderer::init(gpu::GPUDevice& device, gpu::PipelineRegistry& pipelin
     sampler_info.enable_anisotropy = true;
     sampler_ = SDL_CreateGPUSampler(device_->handle(), &sampler_info);
     if (!sampler_) {
-        std::cerr << "EffectRenderer: Failed to create sampler: " << SDL_GetError() << std::endl;
+        ENGINE_LOG_ERROR("effect", "Failed to create sampler: {}", SDL_GetError());
         return false;
     }
     

@@ -105,10 +105,8 @@ bool check_level_up(entt::registry& registry, entt::entity player, const GameCon
             talents->talent_points++;
         }
 
-        // Get player name for log message
-        auto* name = registry.try_get<ecs::Name>(player);
-        const char* player_name = name ? name->value.c_str() : "Unknown";
-        std::printf("[Leveling] %s reached level %d!\n", player_name, player_level->level);
+        // Level-up is also broadcast through a ChatBroadcastMsg / LevelUpMsg
+        // so there is no need for a server-side log per level.
     }
 
     return leveled;
@@ -127,9 +125,10 @@ void apply_death_penalty(entt::registry& registry, entt::entity player, const Ga
         current_level_threshold = xp_curve[player_level->level];
     }
 
-    // Previous level threshold (floor)
+    // Previous level threshold (floor). Use >= 0 so level-1 players correctly
+    // read xp_curve[0] as their floor instead of silently losing nothing.
     int prev_threshold = 0;
-    if (player_level->level - 1 > 0 && player_level->level - 1 < static_cast<int>(xp_curve.size())) {
+    if (player_level->level - 1 >= 0 && player_level->level - 1 < static_cast<int>(xp_curve.size())) {
         prev_threshold = xp_curve[player_level->level - 1];
     }
 
@@ -149,6 +148,12 @@ void update_mana_regen(entt::registry& registry, float dt) {
     for (auto entity : view) {
         auto& pl = view.get<ecs::PlayerLevel>(entity);
         pl.mana = std::min(pl.mana + pl.mana_regen * dt, pl.max_mana);
+    }
+    // Tick consumable cooldowns in the same pass so potions can't be
+    // spammed. No-op for players without the component.
+    auto cd_view = registry.view<ecs::ConsumableCooldowns>();
+    for (auto entity : cd_view) {
+        cd_view.get<ecs::ConsumableCooldowns>(entity).tick(dt);
     }
 }
 

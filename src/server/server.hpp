@@ -5,6 +5,8 @@
 #include "world.hpp"
 #include "session.hpp"
 #include "client_view_state.hpp"
+#include "persistence/database.hpp"
+#include "persistence/player_repository.hpp"
 #include <asio.hpp>
 #include <memory>
 #include <unordered_map>
@@ -54,11 +56,10 @@ public:
     void broadcast_system_chat(const std::string& message);
     
     World& world() { return world_; }
-    
+
 private:
     void accept();
     void game_loop();
-    void broadcast_world_state();
     void send_entity_deltas();
     void send_progression_updates();
     void send_heightmap(std::shared_ptr<Session> session);
@@ -96,10 +97,23 @@ private:
     mmo::protocol::EntityDeltaUpdate create_delta(const mmo::protocol::NetEntityState& current,
                                                    const mmo::protocol::NetEntityState& last) const;
 
+    // Persistence helpers used by on_class_select / on_player_disconnect /
+    // periodic autosave.
+    void persist_player(uint32_t player_id);
+    void persist_all_players();
+
     asio::io_context& io_context_;
     tcp::acceptor acceptor_;
     const GameConfig& config_;
+    persistence::Database db_;
+    persistence::PlayerRepository player_repo_;
     World world_;
+
+    // Track player display name per session so we can save by name even after
+    // disconnect cleanup runs. (sessions_ entry is already gone by then.)
+    std::unordered_map<uint32_t, std::string> player_names_;
+    float autosave_timer_ = 0.0f;
+    static constexpr float AUTOSAVE_INTERVAL = 60.0f;
 
     std::unordered_map<uint32_t, std::shared_ptr<Session>> sessions_;
     std::mutex sessions_mutex_;
@@ -114,21 +128,42 @@ private:
     std::chrono::steady_clock::time_point last_tick_;
     std::chrono::steady_clock::time_point next_tick_time_{};
 
+    // Fixed-timestep physics accumulator. Physics steps at kFixedDt regardless
+    // of wall-clock jitter; gameplay systems still consume the wall-clock dt.
+    static constexpr float kFixedDt = 1.0f / 60.0f;
+    static constexpr int kMaxFixedSubSteps = 5;
+    float physics_accumulator_ = 0.0f;
+
     // Heartbeat: send Ping every 5s, disconnect if no Pong within 15s
     float ping_timer_ = 0.0f;
     static constexpr float PING_INTERVAL = 5.0f;
     static constexpr float PONG_TIMEOUT = 15.0f;
 
+    // Entity-delta build cadence (Hz). Game ticks at config tick_rate (60),
+    // but per-client delta computation only runs at delta_rate_hz to cut
+    // CPU; clients interpolate between snapshots.
+    float delta_timer_ = 0.0f;
+    float delta_interval_seconds_ = 1.0f / 20.0f;
+
     // Party membership
     std::unordered_map<uint32_t, Party> parties_;        // party_id -> Party
     std::unordered_map<uint32_t, uint32_t> player_party_;  // player_id -> party_id
     uint32_t next_party_id_ = 1;
-    // Pending invites: inviter_id -> invitee_id (one pending per pair)
-    std::unordered_map<uint32_t, uint32_t> pending_invites_;
+    // Pending party invites, one outstanding per inviter. TTL counts down
+    // each tick; expired entries are dropped.
+    struct PendingInvite { uint32_t target_id = 0; float ttl_seconds = 0.0f; };
+    std::unordered_map<uint32_t, PendingInvite> pending_invites_;
+    static constexpr float INVITE_TIMEOUT = 60.0f;
 
     // Party state broadcast cadence
     float party_broadcast_timer_ = 0.0f;
     static constexpr float PARTY_BROADCAST_INTERVAL = 1.0f;
+
+    // Active vendor sessions: player_id -> npc_id currently shopping with.
+    std::unordered_map<uint32_t, uint32_t> active_vendors_;
+    float vendor_distance_timer_ = 0.0f;
+    static constexpr float VENDOR_DISTANCE_INTERVAL = 0.5f;
+    static constexpr float VENDOR_MAX_RANGE = 260.0f;
 };
 
 } // namespace mmo::server

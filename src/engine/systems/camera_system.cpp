@@ -132,30 +132,24 @@ void CameraSystem::update_auto_centering(float dt) {
 }
 
 void CameraSystem::update_soft_lock(float dt) {
-    // Soft-lock: gently bias camera toward combat target
-    if (!in_combat_ || combat_target_ == nullptr) {
-        soft_lock_strength_ = smooth_damp_float(soft_lock_strength_, 0.0f, 
+    if (focus_target_ == nullptr || focus_strength_ <= 0.0f) {
+        soft_lock_strength_ = smooth_damp_float(soft_lock_strength_, 0.0f,
                                                  fov_velocity_, 0.3f, dt);
         return;
     }
-    
-    // Increase soft-lock strength
-    soft_lock_strength_ = smooth_damp_float(soft_lock_strength_, 0.6f,
+
+    soft_lock_strength_ = smooth_damp_float(soft_lock_strength_, focus_strength_,
                                              fov_velocity_, soft_lock_blend_speed_, dt);
-    
-    // Calculate angle to target
-    glm::vec3 to_target = *combat_target_ - target_position_;
+
+    glm::vec3 to_target = *focus_target_ - target_position_;
     float target_yaw = std::atan2(-to_target.x, -to_target.z) * 180.0f / 3.14159f;
-    
-    // Find shortest angle difference
+
     float diff = target_yaw - input_yaw_;
     while (diff > 180.0f) diff -= 360.0f;
     while (diff < -180.0f) diff += 360.0f;
-    
-    // Apply soft lock bias
+
     input_yaw_ += diff * soft_lock_strength_ * dt * 2.0f;
-    
-    // Normalize
+
     while (input_yaw_ < 0.0f) input_yaw_ += 360.0f;
     while (input_yaw_ >= 360.0f) input_yaw_ -= 360.0f;
 }
@@ -346,10 +340,7 @@ void CameraSystem::update_dynamic_fov(float dt) {
     float speed_factor = std::min(speed / 400.0f, 1.0f);
     target_fov += sprint_fov_bonus_ * speed_factor * speed_factor;
     
-    // Combat FOV reduction (focus)
-    if (in_combat_) {
-        target_fov += combat_fov_reduction_;
-    }
+    target_fov += fov_bias_;
     
     // Smooth FOV changes
     current_fov_ = smooth_damp_float(current_fov_, target_fov, fov_velocity_, 0.2f, dt);
@@ -468,25 +459,6 @@ void CameraSystem::set_config(const CameraModeConfig& config) {
 
     // Update distance to match new config
     input_distance_ = config.distance;
-}
-
-void CameraSystem::set_combat_target(const glm::vec3* target) {
-    combat_target_ = target;
-}
-
-void CameraSystem::set_in_combat(bool in_combat) {
-    in_combat_ = in_combat;
-}
-
-void CameraSystem::notify_attack() {
-    // Very small punch when player attacks
-    add_shake(ShakeType::Impact, 0.3f, 0.08f);
-}
-
-void CameraSystem::notify_hit(const glm::vec3& hit_direction, float damage) {
-    // Directional shake when hit - very subtle
-    float intensity = std::min(damage / 100.0f, 1.5f);
-    add_directional_shake(hit_direction, intensity, 0.15f);
 }
 
 void CameraSystem::add_shake(ShakeType type, float intensity, float duration) {

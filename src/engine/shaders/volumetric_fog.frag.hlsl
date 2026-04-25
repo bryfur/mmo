@@ -28,8 +28,8 @@ cbuffer VolumetricFogUniforms : register(b0, space3) {
     float fogFalloff;
     float nearPlane;
     float farPlane;
-    float shadowMapResolution;
     float godRaysEnabled;
+    float densityMultiplier;
 };
 
 // Depth texture
@@ -61,8 +61,23 @@ float sampleShadow(float3 worldPos) {
         projCoords.y < 0.0 || projCoords.y > 1.0)
         return 1.0;
 
-    float shadowDepth = shadowMap.SampleLevel(shadowSampler, projCoords.xy, 0).r;
-    return (shadowDepth < projCoords.z - 0.005) ? 0.0 : 1.0;
+    static const float2 pcfOffsets[4] = {
+        float2(-0.7071, -0.7071),
+        float2( 0.7071, -0.7071),
+        float2(-0.7071,  0.7071),
+        float2( 0.7071,  0.7071)
+    };
+
+    float2 texelSize = float2(1.0, 1.0) / 2048.0;
+    float bias = 0.0015;
+    float visibility = 0.0;
+    [unroll]
+    for (int i = 0; i < 4; i++) {
+        float2 uv = projCoords.xy + pcfOffsets[i] * texelSize;
+        float shadowDepth = shadowMap.SampleLevel(shadowSampler, uv, 0).r;
+        visibility += (shadowDepth < projCoords.z - bias) ? 0.0 : 1.0;
+    }
+    return visibility * 0.25;
 }
 
 // Height-based fog density - smooth exponential falloff from ground level
@@ -72,7 +87,7 @@ float getFogDensity(float3 pos) {
     // No hard cutoff - just a continuous gradient
     float normalizedHeight = pos.y / max(fogHeight, 1.0);
     float heightFactor = exp(-normalizedHeight * normalizedHeight * fogFalloff * 10.0);
-    return fogDensity * heightFactor;
+    return fogDensity * densityMultiplier * heightFactor;
 }
 
 float4 PSMain(PSInput input) : SV_Target {

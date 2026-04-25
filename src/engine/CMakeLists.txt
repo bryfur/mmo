@@ -96,6 +96,11 @@ target_link_libraries(mmo_engine PUBLIC
     glm::glm
 )
 
+if(MMO_ENABLE_TRACY)
+    target_link_libraries(mmo_engine PUBLIC TracyClient)
+    target_compile_definitions(mmo_engine PUBLIC MMO_ENABLE_TRACY=1)
+endif()
+
 # Ensure shaders are compiled before engine
 add_dependencies(mmo_engine compile_shaders)
 

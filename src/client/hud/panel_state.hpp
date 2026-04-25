@@ -1,7 +1,8 @@
 #pragma once
 
-#include "engine/scene/ui_scene.hpp"
-#include "client/ui_colors.hpp"
+// Modal panel state types — inventory, talent tree, quest log, world-map.
+// Builder declarations live in client/hud/panels.hpp.
+
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -150,6 +151,7 @@ struct PanelState {
         std::string branch_name;
     };
     std::vector<ClientTalent> talent_tree;  // Full list for player's class
+    float talent_scroll_offset = 0.0f;      // Pixel scroll for talent tree view
 
     // Quest log cursor (client branch)
     int quest_cursor = 0;
@@ -183,15 +185,5 @@ inline uint32_t rarity_color(const std::string& rarity) {
     if (rarity == "legendary") return 0xFF00AAFF;
     return 0xFF888888; // common
 }
-
-// ============================================================================
-// Function declarations
-// ============================================================================
-
-void build_world_map_panel(engine::scene::UIScene& ui, const PanelState& state,
-                           float screen_w, float screen_h);
-
-void build_gameplay_panels(engine::scene::UIScene& ui, const PanelState& state,
-                           float screen_w, float screen_h);
 
 } // namespace mmo::client

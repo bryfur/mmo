@@ -9,15 +9,21 @@
 #include "systems/physics_system.hpp"
 #include "systems/zone_system.hpp"
 #include "spatial_grid.hpp"
+#include "gameplay_events.hpp"
 #include <entt/entt.hpp>
 #include <glm/vec2.hpp>
 #include <unordered_map>
 #include <vector>
-#include <mutex>
 #include <random>
 
 namespace mmo::server {
 
+// Threading contract: all World operations (and all Server/registry access)
+// run on the asio::io_context thread. The server is single-threaded by
+// design — handlers, the tick loop, and physics all execute serially via
+// the io_context. No locks are required for registry access; do NOT call
+// these methods from another thread without first introducing a posting
+// mechanism (asio::post) onto the io_context.
 class World {
 public:
     explicit World(const GameConfig& config);
@@ -27,10 +33,20 @@ public:
     void remove_player(uint32_t player_id);
     void update_player_input(uint32_t player_id, const mmo::protocol::PlayerInput& input);
 
+    /// Run non-physics gameplay systems with wall-clock dt.
     void update(float dt);
+
+    /// Advance the physics simulation by a fixed timestep. Call one or more
+    /// times per frame from the server tick loop's accumulator. Thread-safe
+    /// with respect to other World operations.
+    void update_physics_step(float fixed_dt);
 
     std::vector<mmo::protocol::NetEntityState> get_all_entities() const;
     mmo::protocol::NetEntityState get_entity_state(uint32_t network_id) const;
+    /// Like get_entity_state, but also fills static render fields (model_name,
+    /// target_size, effect_type, animation, cone_angle, shows_reticle).
+    /// Use only for the initial EntityEnter; per-tick deltas don't need them.
+    mmo::protocol::NetEntityState get_entity_state_full(uint32_t network_id) const;
     entt::entity find_entity_by_network_id(uint32_t id) const;
 
     // Spatial queries
@@ -39,51 +55,9 @@ public:
     size_t player_count() const;
     size_t npc_count() const;
 
-    // Gameplay events (consumed by Server each tick to send to clients)
-    struct GameplayEvent {
-        enum class Type {
-            XPGain, LevelUp, LootDrop, ZoneChange,
-            QuestProgress, QuestComplete, InventoryUpdate,
-            CombatEvent, EntityDeath
-        };
-        Type type;
-        uint32_t player_id = 0;
-
-        // XP/Level data
-        int xp_gained = 0;
-        int total_xp = 0;
-        int xp_to_next = 0;
-        int new_level = 0;
-        float new_max_health = 0;
-        float new_damage = 0;
-
-        // Loot
-        struct LootItem { std::string name; std::string rarity; int count; };
-        std::vector<LootItem> loot_items;
-        int loot_gold = 0;
-        int total_gold = 0;
-
-        // Zone
-        std::string zone_name;
-
-        // Quest progress
-        std::string quest_id;
-        std::string quest_name;
-        uint8_t objective_index = 0;
-        int obj_current = 0;
-        int obj_required = 0;
-        bool obj_complete = false;
-
-        // Combat event (damage dealt)
-        uint32_t attacker_id = 0;
-        uint32_t target_id = 0;
-        float damage_amount = 0;
-
-        // Entity death
-        uint32_t dead_entity_id = 0;
-        uint32_t killer_entity_id = 0;
-    };
-
+    // Gameplay events flow Server-side: World produces, Server consumes per
+    // tick. See gameplay_events.hpp for the variant alternatives.
+    using GameplayEvent = events::GameplayEvent;
     std::vector<GameplayEvent> take_events();
 
     /// Inject combat hits (e.g. from skills) to generate CombatEvent/EntityDeath events
@@ -98,7 +72,7 @@ public:
     
     // Heightmap access
     const mmo::protocol::HeightmapChunk& heightmap() const { return heightmap_; }
-    float get_terrain_height(float x, float z) const { return heightmap_get_world(heightmap_, x, z); }
+    float get_terrain_height(float x, float z) const { return physics_.terrain_height(x, z); }
 
     // Cached town center position (from "town_safe_zone" config)
     const glm::vec2& town_center() const { return town_center_; }
@@ -108,12 +82,11 @@ private:
     bool spawn_from_world_data();
     void setup_collision_callbacks();
     void populate_render_data(mmo::protocol::NetEntityState& state, const ecs::EntityInfo& info, const ecs::Combat& combat) const;
-    mmo::protocol::NetEntityState build_entity_state(entt::entity entity) const;
+    mmo::protocol::NetEntityState build_entity_state(entt::entity entity, bool include_render_static) const;
     uint32_t generate_color(PlayerClass player_class);
     uint32_t next_network_id();
     
     const GameConfig* config_ = nullptr;
-    mutable std::mutex mutex_;
     entt::registry registry_;
     systems::PhysicsSystem physics_;
     systems::ZoneSystem zone_system_;
